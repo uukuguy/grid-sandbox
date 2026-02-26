@@ -5,6 +5,9 @@ pub mod file_write;
 pub mod find;
 pub mod glob;
 pub mod grep;
+pub mod memory_search;
+pub mod memory_store;
+pub mod memory_update;
 pub mod traits;
 
 use std::collections::HashMap;
@@ -19,6 +22,11 @@ use self::file_write::FileWriteTool;
 use self::find::FindTool;
 use self::glob::GlobTool;
 use self::grep::GrepTool;
+use self::memory_search::MemorySearchTool;
+use self::memory_store::MemoryStoreTool;
+use self::memory_update::MemoryUpdateTool;
+use crate::memory::store_traits::MemoryStore;
+use crate::providers::Provider;
 use octo_types::ToolSpec;
 
 pub struct ToolRegistry {
@@ -66,4 +74,14 @@ pub fn default_tools() -> ToolRegistry {
     registry.register(GlobTool::new());
     registry.register(FindTool::new());
     registry
+}
+
+pub fn register_memory_tools(
+    registry: &mut ToolRegistry,
+    store: Arc<dyn MemoryStore>,
+    provider: Arc<dyn Provider>,
+) {
+    registry.register(MemoryStoreTool::new(store.clone(), provider.clone()));
+    registry.register(MemorySearchTool::new(store.clone(), provider));
+    registry.register(MemoryUpdateTool::new(store));
 }
