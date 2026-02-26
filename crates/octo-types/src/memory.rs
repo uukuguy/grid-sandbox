@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+// ============================================================
+// Working Memory (Layer 0)
+// ============================================================
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryBlockKind {
@@ -20,6 +24,8 @@ pub struct MemoryBlock {
     pub priority: u8,
     pub max_age_turns: Option<u32>,
     pub last_updated_turn: u32,
+    pub char_limit: usize,
+    pub is_readonly: bool,
 }
 
 impl MemoryBlock {
@@ -40,6 +46,8 @@ impl MemoryBlock {
             priority: 128,
             max_age_turns: None,
             last_updated_turn: 0,
+            char_limit: 2000,
+            is_readonly: false,
         }
     }
 
@@ -70,6 +78,10 @@ impl MemoryBlock {
     }
 }
 
+// ============================================================
+// Token Budget
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub struct TokenBudget {
     pub total: u32,
@@ -87,6 +99,209 @@ impl Default for TokenBudget {
             memory: 2_000,
             messages: 180_000,
             completion: 4_096,
+        }
+    }
+}
+
+// ============================================================
+// Persistent Memory (Layer 2)
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryId(pub String);
+
+impl MemoryId {
+    pub fn new() -> Self {
+        Self(ulid::Ulid::new().to_string())
+    }
+
+    pub fn from_string(s: impl Into<String>) -> Self {
+        Self(s.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for MemoryId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for MemoryId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryCategory {
+    Profile,
+    Preferences,
+    Tools,
+    Debug,
+    Patterns,
+}
+
+impl MemoryCategory {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Profile => "profile",
+            Self::Preferences => "preferences",
+            Self::Tools => "tools",
+            Self::Debug => "debug",
+            Self::Patterns => "patterns",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "profile" => Some(Self::Profile),
+            "preferences" => Some(Self::Preferences),
+            "tools" => Some(Self::Tools),
+            "debug" => Some(Self::Debug),
+            "patterns" => Some(Self::Patterns),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySource {
+    Extracted,
+    Manual,
+    System,
+}
+
+impl MemorySource {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Extracted => "extracted",
+            Self::Manual => "manual",
+            Self::System => "system",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "extracted" => Self::Extracted,
+            "manual" => Self::Manual,
+            "system" => Self::System,
+            _ => Self::Manual,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryTimestamps {
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub accessed_at: i64,
+}
+
+impl Default for MemoryTimestamps {
+    fn default() -> Self {
+        let now = chrono::Utc::now().timestamp();
+        Self {
+            created_at: now,
+            updated_at: now,
+            accessed_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryEntry {
+    pub id: MemoryId,
+    pub user_id: String,
+    pub sandbox_id: String,
+    pub category: MemoryCategory,
+    pub content: String,
+    pub metadata: serde_json::Value,
+    pub embedding: Option<Vec<f32>>,
+    pub importance: f32,
+    pub access_count: u32,
+    pub source_type: MemorySource,
+    pub source_ref: String,
+    pub ttl: Option<i64>,
+    pub timestamps: MemoryTimestamps,
+}
+
+impl MemoryEntry {
+    pub fn new(user_id: impl Into<String>, category: MemoryCategory, content: impl Into<String>) -> Self {
+        Self {
+            id: MemoryId::new(),
+            user_id: user_id.into(),
+            sandbox_id: String::new(),
+            category,
+            content: content.into(),
+            metadata: serde_json::json!({}),
+            embedding: None,
+            importance: 0.5,
+            access_count: 0,
+            source_type: MemorySource::Manual,
+            source_ref: String::new(),
+            ttl: None,
+            timestamps: MemoryTimestamps::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchOptions {
+    pub user_id: String,
+    pub sandbox_id: Option<String>,
+    pub categories: Option<Vec<MemoryCategory>>,
+    pub limit: usize,
+    pub token_budget: usize,
+    pub min_score: Option<f32>,
+    pub time_decay: bool,
+    pub query_embedding: Option<Vec<f32>>,
+}
+
+impl Default for SearchOptions {
+    fn default() -> Self {
+        Self {
+            user_id: String::new(),
+            sandbox_id: None,
+            categories: None,
+            limit: 20,
+            token_budget: 8000,
+            min_score: None,
+            time_decay: true,
+            query_embedding: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryResult {
+    pub entry: MemoryEntry,
+    pub score: f32,
+    pub match_source: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryFilter {
+    pub user_id: String,
+    pub sandbox_id: Option<String>,
+    pub categories: Option<Vec<MemoryCategory>>,
+    pub source_types: Option<Vec<MemorySource>>,
+    pub limit: usize,
+}
+
+impl Default for MemoryFilter {
+    fn default() -> Self {
+        Self {
+            user_id: String::new(),
+            sandbox_id: None,
+            categories: None,
+            source_types: None,
+            limit: 50,
         }
     }
 }
