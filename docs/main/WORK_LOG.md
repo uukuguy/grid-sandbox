@@ -182,5 +182,65 @@ Phase 1 核心引擎全部代码提交到 git，阶段正式关闭。
 
 ### 下一步
 
-- **执行 Phase 2 Batch 1 实施计划** — 14 任务覆盖上下文工程核心 + 5 新工具 + 集成收尾
-- **选择执行方式** — Subagent-Driven（当前会话逐任务派发）或 Parallel Session（新会话批量执行）
+- ~~执行 Phase 2 Batch 1 实施计划~~ → **已完成**（见下方 Phase 2 Batch 1 记录）
+
+---
+
+## 2026-02-26 — Phase 2 Batch 1 编码完成
+
+### 会话概要
+
+执行 Phase 2 Batch 1 全部 14 个任务。实现上下文工程核心模块（三区分配、渐进式降级、Token 预算管理）+ 5 个新工具 + 集成收尾。6 个 git 提交。
+
+### 提交记录
+
+| 提交 | 内容 |
+|------|------|
+| `8943ffa` | feat(types): MemoryBlock 新增 priority/max_age_turns/last_updated_turn + AutoExtracted/Custom 变体 |
+| `1854397` | feat(engine): context 模块 — SystemPromptBuilder + ContextBudgetManager + ContextPruner |
+| `de47c3f` | feat(engine): AgentLoop 集成 Budget+Pruner + 工具结果软裁剪(30K) |
+| `f8ffdbb` | feat(tools): 5 个新工具 — file_write/file_edit/grep/glob/find |
+| `0bfe864` | feat(memory): 优先级排序 + 预算限制(12K) + add/remove/expire 方法 |
+
+### 新增/修改文件
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `crates/octo-types/src/memory.rs` | 修改 | MemoryBlock 扩展 |
+| `crates/octo-engine/src/context/mod.rs` | 新增 | context 模块入口 |
+| `crates/octo-engine/src/context/builder.rs` | 新增 | SystemPromptBuilder + Bootstrap 文件发现 |
+| `crates/octo-engine/src/context/budget.rs` | 新增 | ContextBudgetManager 双轨估算 |
+| `crates/octo-engine/src/context/pruner.rs` | 新增 | ContextPruner 三级降级 |
+| `crates/octo-engine/src/tools/file_write.rs` | 新增 | FileWriteTool |
+| `crates/octo-engine/src/tools/file_edit.rs` | 新增 | FileEditTool |
+| `crates/octo-engine/src/tools/grep.rs` | 新增 | GrepTool |
+| `crates/octo-engine/src/tools/glob.rs` | 新增 | GlobTool |
+| `crates/octo-engine/src/tools/find.rs` | 新增 | FindTool |
+| `crates/octo-engine/src/tools/mod.rs` | 修改 | 7 工具注册 |
+| `crates/octo-engine/src/agent/loop_.rs` | 修改 | Budget+Pruner 集成 + 软裁剪 |
+| `crates/octo-engine/src/agent/context.rs` | 修改 | 向后兼容重导出 |
+| `crates/octo-engine/src/lib.rs` | 修改 | context 模块导出 |
+| `crates/octo-engine/src/memory/traits.rs` | 修改 | 新增 add/remove/expire 方法 |
+| `crates/octo-engine/src/memory/working.rs` | 修改 | 实现新方法 + 工具列表更新 |
+| `crates/octo-engine/src/memory/injector.rs` | 修改 | 优先级排序 + 12K 预算限制 |
+| `crates/octo-engine/Cargo.toml` | 修改 | 添加 glob 依赖 |
+| `crates/octo-server/src/state.rs` | 修改 | AppState 存储 model 替代 agent_loop |
+| `crates/octo-server/src/ws.rs` | 修改 | 每请求创建 AgentLoop |
+
+### 构建验证
+
+| 检查项 | 状态 |
+|--------|------|
+| `cargo check --workspace` | ✅ 通过 |
+| `cargo build` | ✅ 通过 |
+| `npx tsc --noEmit` | ✅ 通过 |
+
+### 架构变更说明
+
+- **AppState 重构**: `Arc<AgentLoop>` → 每请求创建新 `AgentLoop`（因 `ContextBudgetManager` 需要 `&mut self` 跟踪实际 token 使用量，每个请求独立预算状态）
+- **context 模块**: 从 `agent/context.rs` 提取为独立顶层模块 `context/`，旧路径保持向后兼容重导出
+
+### 下一步
+
+- **Phase 2 Batch 2 规划** — SQLite WAL 持久化 + Session Memory + 混合检索(70% 向量 + 30% FTS5) + Memory Flush
+- **Phase 2 Batch 3 规划** — Skill Loader + MCP 集成 + Debug Panel UI
