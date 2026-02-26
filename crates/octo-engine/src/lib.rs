@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod context;
 pub mod db;
+pub mod mcp;
 pub mod memory;
 pub mod providers;
 pub mod session;
@@ -12,6 +13,7 @@ pub use context::{
     BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,
 };
 pub use db::Database;
+pub use mcp::{McpClient, McpServerConfig, McpToolInfo, StdioMcpClient};
 pub use memory::{InMemoryWorkingMemory, MemoryStore, SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager, WorkingMemory};
 pub use providers::{create_anthropic_provider, create_openai_provider, create_provider, Provider};
 pub use session::{InMemorySessionStore, SessionData, SessionStore, SqliteSessionStore};
