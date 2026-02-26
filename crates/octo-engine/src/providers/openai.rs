@@ -386,6 +386,54 @@ impl Provider for OpenAIProvider {
         })
     }
 
+    async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let body = serde_json::json!({
+            "model": "text-embedding-3-small",
+            "input": texts,
+        });
+
+        let resp = self
+            .client
+            .post(format!("{}/v1/embeddings", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow!("OpenAI Embeddings API error {status}: {body}"));
+        }
+
+        let json: Value = resp.json().await?;
+        let data = json["data"]
+            .as_array()
+            .ok_or_else(|| anyhow!("Missing 'data' in embeddings response"))?;
+
+        let mut embeddings: Vec<(usize, Vec<f32>)> = Vec::with_capacity(data.len());
+        for item in data {
+            let index = item["index"].as_u64().unwrap_or(0) as usize;
+            let embedding: Vec<f32> = item["embedding"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_f64().map(|f| f as f32))
+                        .collect()
+                })
+                .unwrap_or_default();
+            embeddings.push((index, embedding));
+        }
+
+        embeddings.sort_by_key(|(idx, _)| *idx);
+        Ok(embeddings.into_iter().map(|(_, emb)| emb).collect())
+    }
+
     async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
         let api_req = ApiRequest {
             model: request.model,
