@@ -12,6 +12,13 @@ pub trait WorkingMemory: Send + Sync {
 
     async fn update_block(&self, block_id: &str, value: &str) -> Result<()>;
 
+    async fn add_block(&self, block: MemoryBlock) -> Result<()>;
+
+    async fn remove_block(&self, block_id: &str) -> Result<bool>;
+
+    /// Expire blocks that have exceeded max_age_turns. Returns removed count.
+    async fn expire_blocks(&self, current_turn: u32) -> Result<usize>;
+
     async fn compile(
         &self,
         user_id: &UserId,

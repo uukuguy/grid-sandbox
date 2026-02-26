@@ -76,6 +76,24 @@ impl WorkingMemory for InMemoryWorkingMemory {
         Ok(())
     }
 
+    async fn add_block(&self, block: MemoryBlock) -> Result<()> {
+        let mut blocks = self.blocks.write().map_err(|e| anyhow::anyhow!("{e}"))?;
+        blocks.insert(block.id.clone(), block);
+        Ok(())
+    }
+
+    async fn remove_block(&self, block_id: &str) -> Result<bool> {
+        let mut blocks = self.blocks.write().map_err(|e| anyhow::anyhow!("{e}"))?;
+        Ok(blocks.remove(block_id).is_some())
+    }
+
+    async fn expire_blocks(&self, current_turn: u32) -> Result<usize> {
+        let mut blocks = self.blocks.write().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let before = blocks.len();
+        blocks.retain(|_, b| !b.is_expired(current_turn));
+        Ok(before - blocks.len())
+    }
+
     async fn compile(
         &self,
         user_id: &UserId,
