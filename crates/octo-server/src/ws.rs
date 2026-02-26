@@ -175,7 +175,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 // Ensure working dir exists
                 let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
 
-                let agent_loop = state.agent_loop.clone();
+                // Create a fresh AgentLoop per invocation (owns its own budget state)
+                let provider = state.provider.clone();
+                let tools = state.tools.clone();
+                let memory = state.memory.clone();
+                let mut agent_loop = octo_engine::AgentLoop::new(provider, tools, memory);
+                if let Some(ref m) = state.model {
+                    agent_loop = agent_loop.with_model(m.clone());
+                }
                 let session_id_clone = session.session_id.clone();
                 let user_id = session.user_id.clone();
                 let sandbox_id = session.sandbox_id.clone();

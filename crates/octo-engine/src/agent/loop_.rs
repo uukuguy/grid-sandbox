@@ -10,6 +10,7 @@ use octo_types::{
     StopReason, StreamEvent, ToolContext, UserId,
 };
 
+use crate::context::{ContextBudgetManager, ContextPruner, DegradationLevel};
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
 use crate::tools::ToolRegistry;
@@ -18,6 +19,7 @@ use super::context::ContextBuilder;
 
 const MAX_ROUNDS: u32 = 10;
 const MAX_RETRIES: u32 = 3;
+const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
 
 /// Events sent from AgentLoop to consumers (WebSocket handler)
 #[derive(Debug, Clone)]
@@ -56,6 +58,8 @@ pub struct AgentLoop {
     memory: Arc<dyn WorkingMemory>,
     model: String,
     max_tokens: u32,
+    budget: ContextBudgetManager,
+    pruner: ContextPruner,
 }
 
 impl AgentLoop {
@@ -74,6 +78,8 @@ impl AgentLoop {
             memory,
             model,
             max_tokens: 4096,
+            budget: ContextBudgetManager::default(),
+            pruner: ContextPruner::new(),
         }
     }
 
@@ -83,7 +89,7 @@ impl AgentLoop {
     }
 
     pub async fn run(
-        &self,
+        &mut self,
         session_id: &SessionId,
         user_id: &UserId,
         sandbox_id: &SandboxId,
@@ -115,6 +121,17 @@ impl AgentLoop {
 
         for round in 0..MAX_ROUNDS {
             debug!(round, "Agent round starting");
+
+            // Apply context pruning based on budget
+            let level = self.budget.compute_degradation_level(
+                &system_prompt,
+                messages,
+                &tool_specs,
+            );
+            if level != DegradationLevel::None {
+                debug!(?level, "Applying context degradation");
+                self.pruner.apply(messages, level);
+            }
 
             let request = CompletionRequest {
                 model: self.model.clone(),
@@ -212,6 +229,9 @@ impl AgentLoop {
                             output_tokens = usage.output_tokens,
                             "Message complete"
                         );
+
+                        // Update budget with actual usage
+                        self.budget.update_actual_usage(usage.input_tokens, messages.len());
 
                         // If there's thinking but no text, the model put everything
                         // in thinking blocks (common with proxy/relay models like MiniMax).
@@ -311,9 +331,12 @@ impl AgentLoop {
                     success: !result.is_error,
                 });
 
+                // Soft-trim large tool results before injecting into messages
+                let trimmed_output = maybe_trim_tool_result(&result.output);
+
                 tool_results.push(ContentBlock::ToolResult {
                     tool_use_id: tu.id.clone(),
-                    content: result.output,
+                    content: trimmed_output,
                     is_error: result.is_error,
                 });
             }
@@ -340,4 +363,29 @@ struct PendingToolUse {
     id: String,
     name: String,
     input_json: String,
+}
+
+/// Soft-trim tool result if it exceeds the limit (67% head + 27% tail).
+fn maybe_trim_tool_result(result: &str) -> String {
+    if result.len() <= TOOL_RESULT_SOFT_LIMIT {
+        return result.to_string();
+    }
+    let head_end = result
+        .char_indices()
+        .nth(20_000)
+        .map(|(idx, _)| idx)
+        .unwrap_or(result.len());
+    let char_count = result.chars().count();
+    let tail_start = result
+        .char_indices()
+        .nth(char_count.saturating_sub(8_000))
+        .map(|(idx, _)| idx)
+        .unwrap_or(result.len());
+    let omitted = result.len().saturating_sub(20_000 + 8_000);
+    format!(
+        "{}\n\n[... omitted {} chars ...]\n\n{}",
+        &result[..head_end],
+        omitted,
+        &result[tail_start..]
+    )
 }
