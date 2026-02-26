@@ -1,5 +1,10 @@
 pub mod bash;
+pub mod file_edit;
 pub mod file_read;
+pub mod file_write;
+pub mod find;
+pub mod glob;
+pub mod grep;
 pub mod traits;
 
 use std::collections::HashMap;
@@ -8,7 +13,12 @@ use std::sync::Arc;
 pub use traits::Tool;
 
 use self::bash::BashTool;
+use self::file_edit::FileEditTool;
 use self::file_read::FileReadTool;
+use self::file_write::FileWriteTool;
+use self::find::FindTool;
+use self::glob::GlobTool;
+use self::grep::GrepTool;
 use octo_types::ToolSpec;
 
 pub struct ToolRegistry {
@@ -50,5 +60,10 @@ pub fn default_tools() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
     registry.register(BashTool::new());
     registry.register(FileReadTool::new());
+    registry.register(FileWriteTool::new());
+    registry.register(FileEditTool::new());
+    registry.register(GrepTool::new());
+    registry.register(GlobTool::new());
+    registry.register(FindTool::new());
     registry
 }

@@ -20,7 +20,7 @@ impl InMemoryWorkingMemory {
             MemoryBlock::new(
                 MemoryBlockKind::SandboxContext,
                 "Sandbox Context",
-                "Runtime: Native | Tools: bash, file_read",
+                "Runtime: Native | Tools: bash, file_read, file_write, file_edit, grep, glob, find",
             ),
             MemoryBlock::new(
                 MemoryBlockKind::AgentPersona,
