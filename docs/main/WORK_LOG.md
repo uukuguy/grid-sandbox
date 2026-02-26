@@ -101,3 +101,43 @@
 - **运行时验证**: 需要 `ANTHROPIC_API_KEY` 环境变量才能启动 `cargo run -p octo-server` 进行端到端测试
 - **前端开发服务器**: `cd web && npm run dev` 启动 Vite dev server
 - **端到端测试**: 打开浏览器连接 WebSocket, 发送消息验证流式响应 + 工具调用
+
+---
+
+## 2026-02-26 — Phase 1 收尾与提交
+
+### 会话概要
+
+Phase 1 核心引擎全部代码提交到 git，阶段正式关闭。
+
+### 操作记录
+
+1. **代码提交** — `2c9ca43 feat: Phase 1 core engine - full-stack AI agent sandbox`
+   - 73 个文件，13,431 行新增
+   - 覆盖：4 个 Rust crates + React 前端 + 构建配置 + 设计文档
+   - 排除：`.env`（含密钥）、`node_modules/`、`dist/`
+
+2. **阶段关闭** — Phase 1 正式标记为 ✅ 已完成并提交
+   - CHECKPOINT_PLAN.md 更新状态
+   - MEMORY_INDEX.md 归档 Phase 1 记录
+   - MCP memory 保存阶段完成摘要
+
+### Phase 1 交付物总结
+
+| 类别 | 数量 | 说明 |
+|------|------|------|
+| Rust 源文件 | 32 | octo-types(8) + octo-engine(14) + octo-sandbox(3) + octo-server(5) + Cargo.toml(4) |
+| TS/React 源文件 | 16 | atoms(2) + ws(3) + components(7) + pages(1) + 基础设施(3) |
+| 设计文档 | 7 | 架构设计(1) + brainstorming(2) + checkpoint(1) + 工作日志(1) + 记忆索引(1) + 构建优化(2) |
+| 构建配置 | 6 | Cargo.toml, .cargo/config.toml, Makefile, .env.example, package.json, vite.config.ts |
+| 运行时验证 | 10/10 | 服务器启动→健康检查→WS连接→Session→AgentLoop→Working Memory→API→流式传输→错误传播→重试 |
+
+### Phase 1 遗留问题（移交 Phase 2）
+
+1. **Cancel 功能** — WebSocket cancel 消息需要 CancellationToken 支持
+2. **Dead code warnings** — AppState 字段间接使用，compiler 无法追踪，低优先级
+3. **SSE bugfix 运行时验证** — pending_events VecDeque 修复已编译通过，待实际多 chunk 场景验证
+
+### 下一步
+
+- **Phase 2 规划** — 调试面板、MCP 集成、SQLite 持久化、Session Memory
