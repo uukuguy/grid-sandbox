@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use tracing::info;
 
-const CURRENT_VERSION: u32 = 1;
+const CURRENT_VERSION: u32 = 2;
 
 const MIGRATION_V1: &str = "
 -- Working Memory blocks persistence
@@ -91,12 +91,46 @@ CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
 END;
 ";
 
+const MIGRATION_V2: &str = "
+-- Tool execution records
+CREATE TABLE IF NOT EXISTS tool_executions (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    tool_name   TEXT NOT NULL,
+    source      TEXT NOT NULL,
+    input       TEXT NOT NULL,
+    output      TEXT,
+    status      TEXT NOT NULL DEFAULT 'running',
+    started_at  INTEGER NOT NULL,
+    duration_ms INTEGER,
+    error       TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_executions_session
+    ON tool_executions(session_id);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_tool
+    ON tool_executions(tool_name);
+CREATE INDEX IF NOT EXISTS idx_tool_executions_started
+    ON tool_executions(started_at DESC);
+";
+
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
     if version < CURRENT_VERSION {
         info!(from = version, to = CURRENT_VERSION, "Running database migration");
-        conn.execute_batch(MIGRATION_V1)?;
+
+        if version < 1 {
+            conn.execute_batch(MIGRATION_V1)?;
+            info!("Applied migration v1");
+        }
+
+        if version < 2 {
+            conn.execute_batch(MIGRATION_V2)?;
+            info!("Applied migration v2");
+        }
+
         conn.pragma_update(None, "user_version", CURRENT_VERSION)?;
         info!("Migration to v{CURRENT_VERSION} complete");
     }

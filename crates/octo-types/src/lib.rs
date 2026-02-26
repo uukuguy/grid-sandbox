@@ -1,4 +1,5 @@
 pub mod error;
+pub mod execution;
 pub mod id;
 pub mod memory;
 pub mod message;
@@ -8,6 +9,7 @@ pub mod skill;
 pub mod tool;
 
 pub use error::*;
+pub use execution::*;
 pub use id::*;
 pub use memory::*;
 pub use message::*;
