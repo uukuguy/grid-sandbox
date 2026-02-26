@@ -47,6 +47,12 @@ pub enum AgentEvent {
         output: String,
         success: bool,
     },
+    ToolExecution {
+        execution: octo_types::ToolExecution,
+    },
+    TokenBudgetUpdate {
+        budget: octo_types::TokenBudgetSnapshot,
+    },
     Error {
         message: String,
     },
@@ -366,7 +372,7 @@ impl AgentLoop {
                 let exec_start = std::time::Instant::now();
 
                 let result = if let Some(tool) = self.tools.get(&tu.name) {
-                    match tool.execute(input, &tool_ctx).await {
+                    match tool.execute(input.clone(), &tool_ctx).await {
                         Ok(r) => r,
                         Err(e) => octo_types::ToolResult::error(format!("Tool error: {e}")),
                     }
@@ -382,6 +388,28 @@ impl AgentLoop {
                         let output_val = serde_json::Value::String(result.output.clone());
                         let _ = recorder.record_complete(eid, &output_val, exec_duration).await;
                     }
+                }
+
+                if let Some(ref eid) = exec_id {
+                    let exec = octo_types::ToolExecution {
+                        id: eid.clone(),
+                        session_id: session_id.as_str().to_string(),
+                        tool_name: tu.name.clone(),
+                        source: self.tools.get(&tu.name)
+                            .map(|t| t.source())
+                            .unwrap_or(ToolSource::BuiltIn),
+                        input: input.clone(),
+                        output: Some(serde_json::Value::String(result.output.clone())),
+                        status: if result.is_error {
+                            octo_types::ExecutionStatus::Failed
+                        } else {
+                            octo_types::ExecutionStatus::Success
+                        },
+                        started_at: chrono::Utc::now().timestamp_millis(),
+                        duration_ms: Some(exec_duration),
+                        error: if result.is_error { Some(result.output.clone()) } else { None },
+                    };
+                    let _ = tx.send(AgentEvent::ToolExecution { execution: exec });
                 }
 
                 let _ = tx.send(AgentEvent::ToolResult {

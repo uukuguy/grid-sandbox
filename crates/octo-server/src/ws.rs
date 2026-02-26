@@ -66,6 +66,18 @@ enum ServerMessage {
         success: bool,
     },
 
+    #[serde(rename = "tool_execution")]
+    ToolExecutionEvent {
+        session_id: String,
+        execution: octo_types::ToolExecution,
+    },
+
+    #[serde(rename = "token_budget_update")]
+    TokenBudgetUpdate {
+        session_id: String,
+        budget: octo_types::TokenBudgetSnapshot,
+    },
+
     #[serde(rename = "error")]
     Error { session_id: String, message: String },
 
@@ -257,6 +269,18 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                     output,
                                     success,
                                 },
+                                AgentEvent::ToolExecution { execution } => {
+                                    ServerMessage::ToolExecutionEvent {
+                                        session_id: sid_str.clone(),
+                                        execution,
+                                    }
+                                }
+                                AgentEvent::TokenBudgetUpdate { budget } => {
+                                    ServerMessage::TokenBudgetUpdate {
+                                        session_id: sid_str.clone(),
+                                        budget,
+                                    }
+                                }
                                 AgentEvent::Error { message } => ServerMessage::Error {
                                     session_id: sid_str.clone(),
                                     message,

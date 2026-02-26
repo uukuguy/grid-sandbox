@@ -152,6 +152,32 @@ impl ContextBudgetManager {
     pub fn context_window(&self) -> u32 {
         self.context_window
     }
+
+    /// Produce a snapshot of the current token budget state.
+    pub fn snapshot(
+        &self,
+        system_prompt: &str,
+        messages: &[ChatMessage],
+        tools: &[ToolSpec],
+    ) -> octo_types::TokenBudgetSnapshot {
+        let sys_tokens = Self::estimate_tokens(system_prompt) as usize;
+        let history_tokens = Self::estimate_messages_tokens(messages) as usize;
+        let tool_tokens = Self::estimate_tool_specs_tokens(tools) as usize;
+        let total = self.context_window as usize;
+        let used = sys_tokens + history_tokens + tool_tokens;
+        let free = total.saturating_sub(used);
+        let usage_pct = if total > 0 { (used as f32 / total as f32) * 100.0 } else { 0.0 };
+
+        octo_types::TokenBudgetSnapshot {
+            total,
+            system_prompt: sys_tokens,
+            dynamic_context: 0,
+            history: history_tokens,
+            free,
+            usage_percent: usage_pct,
+            degradation_level: 0,
+        }
+    }
 }
 
 impl Default for ContextBudgetManager {
