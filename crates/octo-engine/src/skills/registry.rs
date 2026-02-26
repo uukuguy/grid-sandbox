@@ -25,7 +25,7 @@ impl SkillRegistry {
     /// Load all skills from the given SkillLoader.
     pub fn load_from(&self, loader: &SkillLoader) -> Result<()> {
         let loaded = loader.load_all()?;
-        let mut skills = self.skills.write().unwrap();
+        let mut skills = self.skills.write().unwrap_or_else(|e| e.into_inner());
         skills.clear();
         for skill in loaded {
             skills.insert(skill.name.clone(), skill);
@@ -37,7 +37,7 @@ impl SkillRegistry {
     /// Reload all skills (for hot-reload).
     pub fn reload(&self, loader: &SkillLoader) -> Result<()> {
         let loaded = loader.load_all()?;
-        let mut skills = self.skills.write().unwrap();
+        let mut skills = self.skills.write().unwrap_or_else(|e| e.into_inner());
         let old_count = skills.len();
         skills.clear();
         for skill in loaded {
@@ -53,7 +53,7 @@ impl SkillRegistry {
 
     /// Generate system prompt section listing available skills.
     pub fn prompt_section(&self) -> String {
-        let skills = self.skills.read().unwrap();
+        let skills = self.skills.read().unwrap_or_else(|e| e.into_inner());
         if skills.is_empty() {
             return String::new();
         }
@@ -84,7 +84,7 @@ impl SkillRegistry {
 
     /// Get all user-invocable skills (for registering as tools).
     pub fn invocable_skills(&self) -> Vec<SkillDefinition> {
-        let skills = self.skills.read().unwrap();
+        let skills = self.skills.read().unwrap_or_else(|e| e.into_inner());
         skills
             .values()
             .filter(|s| s.user_invocable)
@@ -94,13 +94,13 @@ impl SkillRegistry {
 
     /// Get a skill by name.
     pub fn get(&self, name: &str) -> Option<SkillDefinition> {
-        let skills = self.skills.read().unwrap();
+        let skills = self.skills.read().unwrap_or_else(|e| e.into_inner());
         skills.get(name).cloned()
     }
 
     /// Number of loaded skills.
     pub fn len(&self) -> usize {
-        self.skills.read().unwrap().len()
+        self.skills.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -159,7 +159,7 @@ impl SkillRegistry {
                             info!("SKILL.md changed, reloading skills");
                             match loader.load_all() {
                                 Ok(loaded) => {
-                                    let mut map = skills.write().unwrap();
+                                    let mut map = skills.write().unwrap_or_else(|e| e.into_inner());
                                     map.clear();
                                     for skill in loaded {
                                         map.insert(skill.name.clone(), skill);

@@ -369,6 +369,7 @@ impl AgentLoop {
                     None
                 };
 
+                let started_at_ms = chrono::Utc::now().timestamp_millis();
                 let exec_start = std::time::Instant::now();
 
                 let result = if let Some(tool) = self.tools.get(&tu.name) {
@@ -405,7 +406,7 @@ impl AgentLoop {
                         } else {
                             octo_types::ExecutionStatus::Success
                         },
-                        started_at: chrono::Utc::now().timestamp_millis(),
+                        started_at: started_at_ms,
                         duration_ms: Some(exec_duration),
                         error: if result.is_error { Some(result.output.clone()) } else { None },
                     };
