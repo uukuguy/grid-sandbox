@@ -180,7 +180,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 let provider = state.provider.clone();
                 let tools = state.tools.clone();
                 let memory = state.memory.clone();
-                let mut agent_loop = octo_engine::AgentLoop::new(provider, tools, memory);
+                let mut agent_loop = octo_engine::AgentLoop::new(provider, tools, memory)
+                    .with_memory_store(state.memory_store.clone());
                 if let Some(ref m) = state.model {
                     agent_loop = agent_loop.with_model(m.clone());
                 }

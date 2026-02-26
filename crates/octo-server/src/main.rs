@@ -8,7 +8,10 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use octo_engine::{create_provider, default_tools, InMemorySessionStore, InMemoryWorkingMemory, SessionStore};
+use octo_engine::{
+    create_provider, default_tools, register_memory_tools, Database, MemoryStore,
+    SessionStore, SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory, WorkingMemory,
+};
 use state::AppState;
 
 #[tokio::main]
@@ -32,8 +35,8 @@ async fn main() -> Result<()> {
             (key, url)
         }
         _ => {
-            let key = std::env::var("ANTHROPIC_API_KEY")
-                .expect("ANTHROPIC_API_KEY must be set");
+            let key =
+                std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
             let url = std::env::var("ANTHROPIC_BASE_URL").ok();
             (key, url)
         }
@@ -46,12 +49,39 @@ async fn main() -> Result<()> {
     tracing::info!("Using provider: {provider_name}");
     let model = std::env::var("OPENAI_MODEL_NAME").ok();
 
-    let provider = Arc::from(create_provider(&provider_name, api_key, base_url));
-    let tools = Arc::new(default_tools());
-    let memory: Arc<dyn octo_engine::WorkingMemory> = Arc::new(InMemoryWorkingMemory::new());
-    let sessions: Arc<dyn SessionStore> = Arc::new(InMemorySessionStore::new());
+    // Database: SQLite with WAL mode
+    let db_path =
+        std::env::var("OCTO_DB_PATH").unwrap_or_else(|_| "./data/octo.db".into());
+    let db = Database::open(&db_path).await?;
+    let conn = db.conn().clone();
 
-    let state = Arc::new(AppState::new(provider, tools, memory, sessions, model));
+    let provider: Arc<dyn octo_engine::Provider> =
+        Arc::from(create_provider(&provider_name, api_key, base_url));
+
+    // Working memory (Layer 0) — SQLite-backed
+    let memory: Arc<dyn WorkingMemory> =
+        Arc::new(SqliteWorkingMemory::new(conn.clone()).await?);
+
+    // Session store — SQLite-backed with DashMap cache
+    let sessions: Arc<dyn SessionStore> =
+        Arc::new(SqliteSessionStore::new(conn.clone()).await?);
+
+    // Persistent memory store (Layer 2) — SQLite-backed
+    let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn));
+
+    // Tool registry: built-in + memory tools
+    let mut tools = default_tools();
+    register_memory_tools(&mut tools, memory_store.clone(), provider.clone());
+    let tools = Arc::new(tools);
+
+    let state = Arc::new(AppState::new(
+        provider,
+        tools,
+        memory,
+        sessions,
+        memory_store,
+        model,
+    ));
 
     let app = router::build_router(state);
 
