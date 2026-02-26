@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use octo_engine::{Provider, ToolRegistry, WorkingMemory};
-
-use crate::session::SessionStore;
+use octo_engine::{Provider, SessionStore, ToolRegistry, WorkingMemory};
 
 pub struct AppState {
     pub provider: Arc<dyn Provider>,

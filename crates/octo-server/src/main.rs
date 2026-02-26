@@ -8,9 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use octo_engine::{create_provider, default_tools, InMemoryWorkingMemory};
-
-use session::InMemorySessionStore;
+use octo_engine::{create_provider, default_tools, InMemorySessionStore, InMemoryWorkingMemory, SessionStore};
 use state::AppState;
 
 #[tokio::main]
@@ -51,7 +49,7 @@ async fn main() -> Result<()> {
     let provider = Arc::from(create_provider(&provider_name, api_key, base_url));
     let tools = Arc::new(default_tools());
     let memory: Arc<dyn octo_engine::WorkingMemory> = Arc::new(InMemoryWorkingMemory::new());
-    let sessions: Arc<dyn session::SessionStore> = Arc::new(InMemorySessionStore::new());
+    let sessions: Arc<dyn SessionStore> = Arc::new(InMemorySessionStore::new());
 
     let state = Arc::new(AppState::new(provider, tools, memory, sessions, model));
 

@@ -121,14 +121,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 // Get or create session
                 let session = if let Some(sid) = session_id {
                     let session_id_obj = SessionId::from_string(&sid);
-                    if state.sessions.get_messages(&session_id_obj).is_some() {
+                    if state.sessions.get_messages(&session_id_obj).await.is_some() {
                         crate::session::SessionData {
                             session_id: session_id_obj,
                             user_id: UserId::from_string("default"),
                             sandbox_id: SandboxId::new(),
                         }
                     } else {
-                        let s = state.sessions.create_session();
+                        let s = state.sessions.create_session().await;
                         let msg = ServerMessage::SessionCreated {
                             session_id: s.session_id.as_str().to_string(),
                         };
@@ -140,7 +140,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         s
                     }
                 } else {
-                    let s = state.sessions.create_session();
+                    let s = state.sessions.create_session().await;
                     let msg = ServerMessage::SessionCreated {
                         session_id: s.session_id.as_str().to_string(),
                     };
@@ -156,12 +156,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
                 // Add user message to history
                 let user_msg = ChatMessage::user(&content);
-                state.sessions.push_message(&session.session_id, user_msg);
+                state.sessions.push_message(&session.session_id, user_msg).await;
 
                 // Get current messages
                 let mut messages = state
                     .sessions
                     .get_messages(&session.session_id)
+                    .await
                     .unwrap_or_default();
 
                 // Create broadcast channel for agent events
@@ -286,7 +287,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 if let Ok(updated_messages) = agent_handle.await {
                     state
                         .sessions
-                        .set_messages(&session.session_id, updated_messages);
+                        .set_messages(&session.session_id, updated_messages)
+                        .await;
                 }
             }
             ClientMessage::Cancel { session_id: _ } => {
