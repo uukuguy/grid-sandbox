@@ -4,6 +4,7 @@ pub mod memory;
 pub mod message;
 pub mod provider;
 pub mod sandbox;
+pub mod skill;
 pub mod tool;
 
 pub use error::*;
@@ -12,4 +13,5 @@ pub use memory::*;
 pub use message::*;
 pub use provider::*;
 pub use sandbox::*;
+pub use skill::*;
 pub use tool::*;

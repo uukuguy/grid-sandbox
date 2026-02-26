@@ -4,6 +4,7 @@ pub mod db;
 pub mod memory;
 pub mod providers;
 pub mod session;
+pub mod skills;
 pub mod tools;
 
 pub use agent::{AgentEvent, AgentLoop};
