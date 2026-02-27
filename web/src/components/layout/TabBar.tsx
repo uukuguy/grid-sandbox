@@ -1,12 +1,14 @@
 import { useAtom } from "jotai";
 import { cn } from "@/lib/utils";
 import { activeTabAtom, type TabId } from "@/atoms/ui";
+import { Server } from "lucide-react";
 
-const tabs: { id: TabId; label: string }[] = [
+const tabs: { id: TabId; label: string; icon?: React.ComponentType<{ className?: string }> }[] = [
   { id: "chat", label: "Chat" },
   { id: "tools", label: "Tools" },
   { id: "memory", label: "Memory" },
   { id: "debug", label: "Debug" },
+  { id: "mcp", label: "MCP", icon: Server },
 ];
 
 export function TabBar() {
@@ -25,7 +27,10 @@ export function TabBar() {
               : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
           )}
         >
-          {tab.label}
+          <span className="flex items-center gap-1.5">
+            {tab.icon && <tab.icon className="h-4 w-4" />}
+            {tab.label}
+          </span>
         </button>
       ))}
     </div>

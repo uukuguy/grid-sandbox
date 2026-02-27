@@ -19,6 +19,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dotenvy = { workspace = true }
 dashmap = { workspace = true }
-uuid = { workspace = true }
+uuid.workspace = true
 futures-util = { workspace = true }
 tokio-stream = { workspace = true }
+chrono.workspace = true

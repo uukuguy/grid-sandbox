@@ -22,6 +22,30 @@ pub struct McpServerConfig {
     pub env: HashMap<String, String>,
 }
 
+/// Configuration for an MCP server (persisted version with ID).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfigV2 {
+    pub id: String,
+    pub name: String,
+    pub source: String,
+    pub command: String,
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    pub enabled: bool,
+}
+
+impl From<McpServerConfigV2> for McpServerConfig {
+    fn from(v2: McpServerConfigV2) -> Self {
+        Self {
+            name: v2.name,
+            command: v2.command,
+            args: v2.args,
+            env: v2.env,
+        }
+    }
+}
+
 /// Abstraction over MCP protocol client.
 #[async_trait]
 pub trait McpClient: Send + Sync {

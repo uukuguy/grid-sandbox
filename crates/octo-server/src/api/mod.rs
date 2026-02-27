@@ -1,6 +1,9 @@
 pub mod budget;
 pub mod executions;
 pub mod memories;
+pub mod mcp_logs;
+pub mod mcp_servers;
+pub mod mcp_tools;
 pub mod sessions;
 pub mod tools;
 
@@ -42,4 +45,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/memories/working", get(memories::get_working_memory))
         .route("/memories/{id}", get(memories::get_memory).delete(memories::delete_memory))
         .route("/budget", get(budget::get_budget))
+        // MCP servers
+        .merge(mcp_servers::routes())
+        .merge(mcp_tools::routes())
+        .merge(mcp_logs::routes())
 }

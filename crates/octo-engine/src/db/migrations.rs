@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use tracing::info;
 
-const CURRENT_VERSION: u32 = 2;
+const CURRENT_VERSION: u32 = 3;
 
 const MIGRATION_V1: &str = "
 -- Working Memory blocks persistence
@@ -115,6 +115,57 @@ CREATE INDEX IF NOT EXISTS idx_tool_executions_started
     ON tool_executions(started_at DESC);
 ";
 
+const MIGRATION_V3: &str = "
+-- MCP Server configurations
+CREATE TABLE IF NOT EXISTS mcp_servers (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'manual',
+    command     TEXT NOT NULL,
+    args        TEXT NOT NULL DEFAULT '[]',
+    env         TEXT NOT NULL DEFAULT '{}',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- MCP tool execution history
+CREATE TABLE IF NOT EXISTS mcp_executions (
+    id          TEXT PRIMARY KEY,
+    server_id   TEXT NOT NULL,
+    tool_name   TEXT NOT NULL,
+    params      TEXT NOT NULL,
+    result      TEXT,
+    error       TEXT,
+    duration_ms INTEGER,
+    executed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (server_id) REFERENCES mcp_servers(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_executions_server
+    ON mcp_executions(server_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_executions_time
+    ON mcp_executions(executed_at DESC);
+
+-- MCP communication logs
+CREATE TABLE IF NOT EXISTS mcp_logs (
+    id          TEXT PRIMARY KEY,
+    server_id   TEXT NOT NULL,
+    level       TEXT NOT NULL,
+    direction   TEXT NOT NULL,
+    method      TEXT,
+    params      TEXT,
+    result      TEXT,
+    raw_data    TEXT,
+    duration_ms INTEGER,
+    logged_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (server_id) REFERENCES mcp_servers(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_logs_server_time
+    ON mcp_logs(server_id, logged_at);
+";
+
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
@@ -129,6 +180,11 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         if version < 2 {
             conn.execute_batch(MIGRATION_V2)?;
             info!("Applied migration v2");
+        }
+
+        if version < 3 {
+            conn.execute_batch(MIGRATION_V3)?;
+            info!("Applied migration v3");
         }
 
         conn.pragma_update(None, "user_version", CURRENT_VERSION)?;

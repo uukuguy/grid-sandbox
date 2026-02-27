@@ -10,7 +10,8 @@ use crate::tools::ToolRegistry;
 
 use super::bridge::McpToolBridge;
 use super::stdio::StdioMcpClient;
-use super::traits::{McpClient, McpServerConfig, McpToolInfo};
+use super::storage::McpStorage;
+use super::traits::{McpClient, McpServerConfig, McpServerConfigV2, McpToolInfo};
 
 /// MCP config file format (.octo/mcp.json).
 #[derive(Debug, serde::Deserialize)]
@@ -26,10 +27,21 @@ struct McpServerEntry {
     env: HashMap<String, String>,
 }
 
+/// Runtime state of an MCP server.
+#[derive(Debug, Clone)]
+pub enum ServerRuntimeState {
+    Stopped,
+    Starting,
+    Running { pid: u32 },
+    Error { message: String },
+}
+
 /// Manages multiple MCP server connections.
 pub struct McpManager {
     clients: HashMap<String, Arc<RwLock<Box<dyn McpClient>>>>,
     tool_infos: HashMap<String, Vec<McpToolInfo>>,
+    runtime_states: HashMap<String, ServerRuntimeState>,
+    storage: Option<Arc<McpStorage>>,
 }
 
 impl McpManager {
@@ -37,7 +49,58 @@ impl McpManager {
         Self {
             clients: HashMap::new(),
             tool_infos: HashMap::new(),
+            runtime_states: HashMap::new(),
+            storage: None,
         }
+    }
+
+    /// Create with storage for persistence.
+    pub fn with_storage(storage: Arc<McpStorage>) -> Self {
+        Self {
+            clients: HashMap::new(),
+            tool_infos: HashMap::new(),
+            runtime_states: HashMap::new(),
+            storage: Some(storage),
+        }
+    }
+
+    /// Get all server configs from storage.
+    pub async fn load_servers(&self) -> Result<Vec<McpServerConfigV2>> {
+        if let Some(storage) = &self.storage {
+            let records = storage.list_servers()?;
+            Ok(records
+                .into_iter()
+                .map(|r| McpServerConfigV2 {
+                    id: r.id,
+                    name: r.name,
+                    source: r.source,
+                    command: r.command,
+                    args: serde_json::from_str(&r.args).unwrap_or_default(),
+                    env: serde_json::from_str(&r.env).unwrap_or_default(),
+                    enabled: r.enabled,
+                })
+                .collect())
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    /// Set runtime state.
+    pub fn set_runtime_state(&mut self, name: &str, state: ServerRuntimeState) {
+        self.runtime_states.insert(name.to_string(), state);
+    }
+
+    /// Get runtime state.
+    pub fn get_runtime_state(&self, name: &str) -> ServerRuntimeState {
+        self.runtime_states
+            .get(name)
+            .cloned()
+            .unwrap_or(ServerRuntimeState::Stopped)
+    }
+
+    /// Get all runtime states.
+    pub fn all_runtime_states(&self) -> HashMap<String, ServerRuntimeState> {
+        self.runtime_states.clone()
     }
 
     /// Load MCP server configs from a JSON file.
