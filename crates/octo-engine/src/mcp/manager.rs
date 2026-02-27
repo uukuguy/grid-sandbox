@@ -9,9 +9,10 @@ use tracing::{debug, info, warn};
 use crate::tools::ToolRegistry;
 
 use super::bridge::McpToolBridge;
+use super::sse::SseMcpClient;
 use super::stdio::StdioMcpClient;
 use super::storage::McpStorage;
-use super::traits::{McpClient, McpServerConfig, McpServerConfigV2, McpToolInfo};
+use super::traits::{McpClient, McpServerConfig, McpServerConfigV2, McpToolInfo, McpTransport};
 
 /// MCP config file format (.octo/mcp.json).
 #[derive(Debug, serde::Deserialize)]
@@ -139,6 +140,41 @@ impl McpManager {
 
         let client: Arc<RwLock<Box<dyn McpClient>>> =
             Arc::new(RwLock::new(Box::new(client)));
+        self.clients.insert(name.clone(), client);
+        self.tool_infos.insert(name, tools.clone());
+        Ok(tools)
+    }
+
+    /// Add and connect a new MCP server, supporting both Stdio and SSE transports.
+    pub async fn add_server_v2(&mut self, config: McpServerConfigV2) -> Result<Vec<McpToolInfo>> {
+        let name = config.name.clone();
+
+        let mut client: Box<dyn McpClient> = match config.transport {
+            McpTransport::Stdio => Box::new(StdioMcpClient::new(McpServerConfig {
+                name: config.name.clone(),
+                command: config.command.clone(),
+                args: config.args.clone(),
+                env: config.env.clone(),
+            })),
+            McpTransport::Sse => {
+                let url = config.url.clone().ok_or_else(|| {
+                    anyhow::anyhow!("SSE transport requires 'url' field for server '{name}'")
+                })?;
+                Box::new(SseMcpClient::new(config.name.clone(), url))
+            }
+        };
+
+        client.connect().await?;
+        let tools = client.list_tools().await?;
+
+        info!(
+            server = %name,
+            transport = ?config.transport,
+            tool_count = tools.len(),
+            "MCP server connected with tools"
+        );
+
+        let client: Arc<RwLock<Box<dyn McpClient>>> = Arc::new(RwLock::new(client));
         self.clients.insert(name.clone(), client);
         self.tool_infos.insert(name, tools.clone());
         Ok(tools)
