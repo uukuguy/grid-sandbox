@@ -1,10 +1,19 @@
 use octo_types::{ChatMessage, ContentBlock, MessageRole};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::budget::DegradationLevel;
 
 const SOFT_TRIM_HEAD: usize = 1_500;
 const SOFT_TRIM_TAIL: usize = 500;
+
+/// 工具结果截断上限（ToolResultTruncation 阶段）
+const TOOL_RESULT_TRUNCATION_CHARS: usize = 8_000;
+
+/// AutoCompaction 阶段保留的最近消息数量
+const AUTO_COMPACTION_KEEP: usize = 10;
+
+/// OverflowCompaction 阶段保留的最近消息数量
+const OVERFLOW_COMPACTION_KEEP: usize = 4;
 
 /// Prunes conversation history based on degradation level.
 /// Does NOT modify the most recent `protect_recent_rounds` rounds.
@@ -22,20 +31,29 @@ impl ContextPruner {
 
     /// Apply degradation to messages in-place.
     /// Returns the number of content blocks modified.
+    ///
+    /// 4+1 阶段：
+    /// 1. None              → 无操作
+    /// 2. SoftTrim          → 对 2 轮前的工具结果做头/尾裁剪
+    /// 3. AutoCompaction    → 保留最近 10 条消息，其余工具结果替换为占位符
+    /// 4. OverflowCompaction → 保留最近 4 条消息（drain 旧消息）
+    /// +1. ToolResultTruncation → 截断最后一条工具结果至 8000 chars
+    /// FinalError           → 不修改（由调用方处理为错误）
     pub fn apply(&self, messages: &mut Vec<ChatMessage>, level: DegradationLevel) -> usize {
         match level {
             DegradationLevel::None => 0,
             DegradationLevel::SoftTrim => self.soft_trim(messages),
-            DegradationLevel::HardClear => self.hard_clear(messages),
-            DegradationLevel::Compact => {
-                // Compact is handled externally (requires LLM call for summarization).
-                // Here we just do HardClear as a pre-step.
-                self.hard_clear(messages)
+            DegradationLevel::AutoCompaction => self.auto_compaction(messages),
+            DegradationLevel::OverflowCompaction => self.overflow_compaction(messages),
+            DegradationLevel::ToolResultTruncation => self.tool_result_truncation(messages),
+            DegradationLevel::FinalError => {
+                // 不修改消息，由调用方返回结构化错误
+                0
             }
         }
     }
 
-    /// Level 1: Soft-trim old tool results (keep head + tail).
+    /// 阶段 1: Soft-trim —— 对 2 轮前的工具结果做头尾裁剪（保留 head + tail）
     fn soft_trim(&self, messages: &mut Vec<ChatMessage>) -> usize {
         let boundary = self.find_protection_boundary(messages);
         let mut modified = 0;
@@ -58,29 +76,28 @@ impl ContextPruner {
         }
 
         if modified > 0 {
-            debug!(modified, "Soft-trimmed tool results");
+            debug!(modified, "SoftTrim: trimmed tool results head/tail");
         }
         modified
     }
 
-    /// Level 2: Hard-clear old tool results (replace with placeholder).
-    fn hard_clear(&self, messages: &mut Vec<ChatMessage>) -> usize {
-        let boundary = self.find_protection_boundary(messages);
+    /// 阶段 2: AutoCompaction —— 保留最近 10 条消息，其余工具结果替换为占位符
+    fn auto_compaction(&self, messages: &mut Vec<ChatMessage>) -> usize {
+        let keep = AUTO_COMPACTION_KEEP;
+        let boundary = if messages.len() > keep {
+            messages.len() - keep
+        } else {
+            0
+        };
+
         let mut modified = 0;
 
         for msg in messages[..boundary].iter_mut() {
             for block in msg.content.iter_mut() {
-                if let ContentBlock::ToolResult {
-                    content,
-                    tool_use_id,
-                    ..
-                } = block
-                {
+                if let ContentBlock::ToolResult { content, tool_use_id, .. } = block {
                     if content.len() > 100 {
-                        *content = format!(
-                            "[Tool result omitted, tool_use_id={}]",
-                            tool_use_id
-                        );
+                        *content =
+                            format!("[Tool result omitted (AutoCompaction), tool_use_id={}]", tool_use_id);
                         modified += 1;
                     }
                 }
@@ -88,9 +105,49 @@ impl ContextPruner {
         }
 
         if modified > 0 {
-            info!(modified, "Hard-cleared tool results");
+            info!(modified, boundary, "AutoCompaction: replaced old tool results with placeholders");
         }
         modified
+    }
+
+    /// 阶段 3: OverflowCompaction —— 保留最近 4 条消息，drain 旧消息
+    fn overflow_compaction(&self, messages: &mut Vec<ChatMessage>) -> usize {
+        let keep = OVERFLOW_COMPACTION_KEEP;
+        if messages.len() <= keep {
+            return 0;
+        }
+
+        let drain_count = messages.len() - keep;
+        messages.drain(..drain_count);
+
+        warn!(drain_count, "OverflowCompaction: drained old messages, kept last {}", keep);
+        drain_count
+    }
+
+    /// 阶段 +1: ToolResultTruncation —— 截断最后一条工具结果至 8000 chars
+    fn tool_result_truncation(&self, messages: &mut Vec<ChatMessage>) -> usize {
+        // 从末尾向前找最后一条包含 ToolResult 的消息
+        for msg in messages.iter_mut().rev() {
+            for block in msg.content.iter_mut() {
+                if let ContentBlock::ToolResult { content, .. } = block {
+                    if content.len() > TOOL_RESULT_TRUNCATION_CHARS {
+                        let truncated = Self::truncate_utf8(content, TOOL_RESULT_TRUNCATION_CHARS);
+                        let omitted = content.len() - TOOL_RESULT_TRUNCATION_CHARS;
+                        *content = format!(
+                            "{}\n\n[... truncated {} chars (ToolResultTruncation) ...]",
+                            truncated, omitted
+                        );
+                        warn!(
+                            original_len = content.len(),
+                            "ToolResultTruncation: truncated last tool result to {} chars",
+                            TOOL_RESULT_TRUNCATION_CHARS
+                        );
+                        return 1;
+                    }
+                }
+            }
+        }
+        0
     }
 
     /// Find the message index before which we can prune.
@@ -193,6 +250,16 @@ impl ContextPruner {
             .unwrap_or(s.len());
 
         (s[..head_end].to_string(), s[tail_start..].to_string())
+    }
+
+    /// UTF-8 safe truncation to max_chars.
+    fn truncate_utf8(s: &str, max_chars: usize) -> String {
+        let end = s
+            .char_indices()
+            .nth(max_chars)
+            .map(|(idx, _)| idx)
+            .unwrap_or(s.len());
+        s[..end].to_string()
     }
 }
 

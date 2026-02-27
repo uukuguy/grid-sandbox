@@ -13,13 +13,12 @@ use octo_types::{
 use crate::context::{ContextBudgetManager, ContextPruner, DegradationLevel, MemoryFlusher};
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
-use crate::providers::Provider;
+use crate::providers::{LlmErrorKind, Provider, RetryPolicy};
 use crate::tools::ToolRegistry;
 
 use super::context::ContextBuilder;
 
 const MAX_ROUNDS: u32 = 10;
-const MAX_RETRIES: u32 = 3;
 const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
 
 /// Events sent from AgentLoop to consumers (WebSocket handler)
@@ -70,6 +69,7 @@ pub struct AgentLoop {
     pruner: ContextPruner,
     recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
     loop_guard: super::loop_guard::LoopGuard,
+    event_bus: Option<Arc<crate::event::EventBus>>,
 }
 
 impl AgentLoop {
@@ -93,6 +93,7 @@ impl AgentLoop {
             pruner: ContextPruner::new(),
             recorder: None,
             loop_guard: super::loop_guard::LoopGuard::new(),
+            event_bus: None,
         }
     }
 
@@ -103,6 +104,11 @@ impl AgentLoop {
 
     pub fn with_memory_store(mut self, store: Arc<dyn MemoryStore>) -> Self {
         self.memory_store = Some(store);
+        self
+    }
+
+    pub fn with_event_bus(mut self, bus: Arc<crate::event::EventBus>) -> Self {
+        self.event_bus = Some(bus);
         self
     }
 
@@ -154,8 +160,8 @@ impl AgentLoop {
             if level != DegradationLevel::None {
                 debug!(?level, "Applying context degradation");
 
-                // At Compact level: flush facts before pruning to prevent info loss
-                if level == DegradationLevel::Compact {
+                // At OverflowCompaction level: flush facts before pruning to prevent info loss
+                if level >= DegradationLevel::OverflowCompaction && level != DegradationLevel::FinalError {
                     let boundary = ContextPruner::find_compaction_boundary(messages, 20_000);
                     if boundary > 0 {
                         let _ = MemoryFlusher::flush(
@@ -184,31 +190,39 @@ impl AgentLoop {
                 stream: true,
             };
 
-            // Retry on transient API errors (5xx)
+            // Retry on transient API errors using LlmErrorKind classification + exponential backoff
+            let retry_policy = RetryPolicy::default();
             let mut stream = None;
             let mut last_err = None;
-            for attempt in 0..MAX_RETRIES {
+            let mut attempt = 0u32;
+            loop {
                 match self.provider.stream(request.clone()).await {
                     Ok(s) => {
                         stream = Some(s);
                         break;
                     }
                     Err(e) => {
-                        let err_str = e.to_string();
-                        let is_retryable = err_str.contains("500")
-                            || err_str.contains("502")
-                            || err_str.contains("503")
-                            || err_str.contains("520")
-                            || err_str.contains("529");
-                        if is_retryable && attempt < MAX_RETRIES - 1 {
-                            let delay = std::time::Duration::from_millis(1000 * (attempt as u64 + 1));
-                            warn!("API error (attempt {}), retrying in {:?}: {}", attempt + 1, delay, err_str);
+                        let err_str = e.to_string().to_lowercase();
+                        if retry_policy.should_retry_str(&err_str, attempt) {
+                            let delay = retry_policy.delay_for(attempt);
+                            let kind = LlmErrorKind::classify_from_str(&err_str);
+                            warn!(
+                                "LLM stream failed (attempt {}/{}, kind={:?}), retrying in {:?}: {}",
+                                attempt + 1, retry_policy.max_retries, kind, delay, e
+                            );
                             tokio::time::sleep(delay).await;
                             last_err = Some(e);
+                            attempt += 1;
                             continue;
+                        } else {
+                            let kind = LlmErrorKind::classify_from_str(&err_str);
+                            tracing::error!(
+                                "LLM stream failed (non-retryable, kind={:?}): {}",
+                                kind, e
+                            );
+                            last_err = Some(e);
+                            break;
                         }
-                        last_err = Some(e);
-                        break;
                     }
                 }
             }

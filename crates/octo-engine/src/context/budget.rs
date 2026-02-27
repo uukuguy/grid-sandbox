@@ -2,16 +2,21 @@ use octo_types::{ChatMessage, ContentBlock, ToolSpec};
 
 const CHARS_PER_TOKEN: usize = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// 上下文降级级别（4+1 阶段，参考 CONTEXT_ENGINEERING_DESIGN.md §7.1）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DegradationLevel {
-    /// < 60% usage: no pruning needed
+    /// 使用率 < 60%：无需降级
     None,
-    /// 60%-80%: soft-trim old tool results (head+tail)
+    /// 使用率 60%-70%：工具结果头尾裁剪（预警性轻度干预）
     SoftTrim,
-    /// 80%-90%: hard-clear old tool results (placeholder only)
-    HardClear,
-    /// > 90%: full compaction (memory flush + summarize + replace)
-    Compact,
+    /// 使用率 70%-90%：保留最近 10 条消息
+    AutoCompaction,
+    /// 使用率 > 90%：保留最近 4 条消息，触发 Memory Flush
+    OverflowCompaction,
+    /// 压缩后仍超限：截断当前工具结果至 8000 chars
+    ToolResultTruncation,
+    /// 全部手段失效：返回结构化错误，终止 Agent Loop
+    FinalError,
 }
 
 pub struct ContextBudgetManager {
@@ -134,6 +139,8 @@ impl ContextBudgetManager {
     }
 
     /// Determine the degradation level based on current usage.
+    ///
+    /// 注意：ToolResultTruncation 和 FinalError 是升级触发的，不在此函数中返回。
     pub fn compute_degradation_level(
         &self,
         system_prompt: &str,
@@ -143,9 +150,9 @@ impl ContextBudgetManager {
         let ratio = self.usage_ratio(system_prompt, messages, tools);
         match ratio {
             r if r < 0.60 => DegradationLevel::None,
-            r if r < 0.80 => DegradationLevel::SoftTrim,
-            r if r < 0.90 => DegradationLevel::HardClear,
-            _ => DegradationLevel::Compact,
+            r if r < 0.70 => DegradationLevel::SoftTrim,
+            r if r < 0.90 => DegradationLevel::AutoCompaction,
+            _ => DegradationLevel::OverflowCompaction,
         }
     }
 
@@ -171,8 +178,10 @@ impl ContextBudgetManager {
         let degradation = match self.compute_degradation_level(system_prompt, messages, tools) {
             DegradationLevel::None => 0,
             DegradationLevel::SoftTrim => 1,
-            DegradationLevel::HardClear => 2,
-            DegradationLevel::Compact => 3,
+            DegradationLevel::AutoCompaction => 2,
+            DegradationLevel::OverflowCompaction => 3,
+            DegradationLevel::ToolResultTruncation => 4,
+            DegradationLevel::FinalError => 5,
         };
 
         octo_types::TokenBudgetSnapshot {
