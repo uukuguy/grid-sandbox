@@ -560,3 +560,73 @@ Phase 1 核心引擎全部代码提交到 git，阶段正式关闭。
 - **Phase 2 Batch 4 规划** — 完整 Debug Panel UI（日志面板、网络面板）、Context Viewer、性能优化
 - **运行时验证** — 启动服务器验证 REST API + WebSocket 事件 + MCP 连接
 - **Skill 测试** — 创建 `.octo/skills/` 目录并验证加载 + 热重载
+
+---
+
+## Phase 2.4: Engine Hardening（2026-02-27）
+
+### 变更概述
+
+**任务 1: Loop Guard / Circuit Breaker**（`90443f8`）
+- 新增 `crates/octo-engine/src/agent/loop_guard.rs`（~120 行）
+- 三层保护：重复调用检测（≥5次阻断）/ 乒乓检测（A-B-A-B 模式）/ 全局断路器（≥30次终止）
+- 集成到 `AgentLoop`，每次工具调用前执行 `check()` 验证
+
+**任务 2: Context Overflow 4+1 阶段 + 任务 3: LLM 错误分类**（`2b413be`）
+- `context/budget.rs`：`DegradationLevel` 扩展为 6 变体（None/SoftTrim/AutoCompaction/OverflowCompaction/ToolResultTruncation/FinalError）
+- 阈值更新：60%/70%/90% 双阈值触发机制
+- `context/pruner.rs`：实现 5 个降级执行函数
+- 新增 `providers/retry.rs`：`LlmErrorKind` 8 类分类（RateLimit/AuthError/ServerError/NetworkError/ContextTooLong/InvalidRequest/ContentFilter/Unknown）
+- `RetryPolicy` 指数退避（含 13 个单元测试，`cargo test` 通过）
+- 替换 `AgentLoop` 原始的线性重试逻辑
+
+**任务 4: EventBus**（`11fae33`）
+- 新增 `event/mod.rs` 和 `event/bus.rs`（73 行）：`tokio::sync::broadcast::Sender` + 环形缓冲区历史（1000 条）
+- `AgentEvent` 枚举扩展：`ToolCallStarted` / `ToolCallCompleted` 事件类型
+- `AgentLoop` 完整集成：工具调用前后自动发布事件
+
+**任务 5: 工具执行安全**（`4d9b153`）
+- `BashTool`：新增 `ExecSecurityMode` 枚举（Strict/Relaxed/Disabled）+ `ExecPolicy` 结构体
+- `env_clear()` 调用 + 10 个白名单环境变量（含 CARGO_HOME/RUSTUP_HOME/HOME/PATH/USER）
+- 路径遍历检测（`../` 模式识别，阻断目录穿越攻击）
+
+**任务 6: Batch 3 Bugfix 验证**（`7a86985`）
+- 审查并确认 5 项已存在修复：
+  - TokenBudgetUpdate 事件发射 ✅（MessageStop 后已调用 snapshot() + emit）
+  - snapshot() dynamic_context 填充 ✅（estimate_tool_specs_tokens() 已实现）
+  - Recorder 共享 DB 连接 ✅（ToolExecutionRecorder::new(conn.clone()) 已实现）
+  - list_sessions 返回实际数据 ✅（SqliteSessionStore + InMemorySessionStore 均实现）
+  - get_working_memory 使用正确 SandboxId ✅（sandbox_id query param 已实现）
+
+### 验证结果
+
+| 检查项 | 状态 |
+|--------|------|
+| `cargo check --workspace` | ✅ 通过（0 errors，仅 warnings）|
+| `npx tsc --noEmit` | ✅ 通过（0 errors）|
+| `npx vite build` | ✅ 通过（265.66 kB JS，19.52 kB CSS）|
+
+### 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `crates/octo-engine/src/agent/loop_guard.rs` | Loop Guard / Circuit Breaker 实现 |
+| `crates/octo-engine/src/providers/retry.rs` | LLM 错误分类 + 指数退避重试（含 13 单元测试）|
+| `crates/octo-engine/src/event/mod.rs` | EventBus 模块声明 |
+| `crates/octo-engine/src/event/bus.rs` | EventBus 广播通道 + 历史缓冲区 |
+
+### Git 提交历史（Phase 2.4）
+
+| SHA | 提交信息 |
+|-----|---------|
+| `90443f8` | feat(engine): add Loop Guard with repetitive/ping-pong/circuit-breaker detection |
+| `4d9b153` | feat(tools): add ExecSecurityMode + env_clear + path traversal protection to BashTool |
+| `2b413be` | feat(provider): add LLM error classification (8 types) + exponential backoff retry |
+| `11fae33` | feat(engine): add EventBus for internal event broadcasting (broadcast + ring buffer) |
+| `7a86985` | fix: verify and document Batch3 bugfixes as completed (Task 6) |
+
+### 下一步
+
+- **Phase 3 (octo-platform) 规划** — Docker 容器化 + 多用户支持 + 生产环境配置
+- **MCP SSE 传输支持** — 当前仅支持 Stdio，需增加 SSE transport
+- **运行时集成验证** — 启动完整服务端验证 Loop Guard + EventBus + 安全策略

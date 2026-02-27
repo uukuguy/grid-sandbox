@@ -1,11 +1,11 @@
 # octo-sandbox 计划执行状态 Checkpoint
 
 **日期**: 2026-02-27
-**最后更新**: 2026-02-27 23:30 GMT+8
-**当前阶段**: octo-workbench Phase 2.1 (核心闭环可用) ✅ 完成
+**最后更新**: 2026-02-27 19:30 GMT+8
+**当前阶段**: octo-workbench Phase 2.4 (Engine Hardening) ✅ 完成
 **git 分支**: octo-workbench
-**git 最新提交**: 6e33b3b fix(api): resolve route matching issue + add TimelineView/JsonViewer
-**实施规划**: docs/plans/2026-02-27-phase2-1-implementation.md
+**git 最新提交**: 7a86985 fix: verify and document Batch3 bugfixes as completed (Task 6)
+**实施规划**: docs/plans/2026-02-27-phase2-4-engine-hardening.md
 
 ---
 
@@ -24,9 +24,9 @@
 | Phase 2 Batch 2 编码 | ✅ 完成 | SQLite 持久化 + Session Memory + 混合检索 + Memory Flush + 3 Memory 工具（16 任务），8 个提交 |
 | Phase 2 Batch 3 编码 | ✅ 完成 | Skill Loader + MCP Client + Tool Execution Recording + REST API + Debug UI |
 | octo-workbench Phase 2.1 | ✅ 完成 | 核心闭环可用（运行时验证 + Timeline + JsonViewer + REST API） |
-| octo-workbench Phase 2.2 | ⏳ 待开始 | 记忆系统完整（5 memory tools + Explorer） |
-| octo-workbench Phase 2.3 | ⏳ 待开始 | 调试面板完善（MCP + Skill + 高级调试） |
-| octo-workbench Phase 2.4 | ⏳ 待开始 | Engine Hardening（Loop Guard / Context 4+1 / LLM Retry / EventBus / Tool Security） |
+| octo-workbench Phase 2.2 | ✅ 完成 | 记忆系统完整（5 memory tools + Explorer） |
+| octo-workbench Phase 2.3 | ✅ 完成 | 调试面板完善（MCP + Skill + 高级调试） |
+| octo-workbench Phase 2.4 | ✅ 完成（2026-02-27） | Engine Hardening（Loop Guard / Context 4+1 / LLM Retry / EventBus / Tool Security） |
 | octo-platform (Phase 3) | ⏳ 待开始 | Docker + 多用户 + 完整功能 |
 | Phase 4 编码 | ⏳ 待开始 | 生产就绪 |
 
@@ -525,12 +525,12 @@
 
 | 模块 | 优先级 | 状态 | 计划任务 |
 |------|--------|------|---------|
-| Loop Guard / Circuit Breaker | P0 | ⏳ | Task 1 |
-| Context Overflow 4+1 阶段 | P0 | ⏳ | Task 2 |
-| LLM 错误分类 + 重试 | P0 | ⏳ | Task 3 |
-| EventBus（广播通道） | P1 | ⏳ | Task 4 |
-| 工具执行安全（ExecSecurityMode / env_clear） | P1 | ⏳ | Task 5 |
-| Batch 3 遗留 Bugfix（5 项） | P0 | ⏳ | Task 6 |
+| Loop Guard / Circuit Breaker | P0 | ✅ | Task 1 |
+| Context Overflow 4+1 阶段 | P0 | ✅ | Task 2 |
+| LLM 错误分类 + 重试 | P0 | ✅ | Task 3 |
+| EventBus（广播通道） | P1 | ✅ | Task 4 |
+| 工具执行安全（ExecSecurityMode / env_clear） | P1 | ✅ | Task 5 |
+| Batch 3 遗留 Bugfix（5 项） | P0 | ✅ | Task 6 |
 | MCP SSE 传输支持 | P1 | ⏳ | 后续批次 |
 
 ### Phase 3 (octo-platform) 目标
@@ -623,11 +623,12 @@
    - list_sessions 返回实际数据（SqliteSessionStore + InMemorySessionStore）
    - get_working_memory 接受 sandbox_id 参数
 
-2. **Phase 2.4 Engine Hardening**（下一步）
-   - Loop Guard / Circuit Breaker
-   - Context 4+1 阶段（70%/90% 双阈值）
-   - LLM 错误分类 + 指数退避重试
-   - EventBus 广播通道
+2. **Phase 2.4 Engine Hardening** ✅ 已完成（2026-02-27）
+   - Loop Guard / Circuit Breaker（`90443f8`）
+   - Context 4+1 阶段 + LLM 错误分类 + 重试（`2b413be`）
+   - EventBus 广播通道（`11fae33`）
+   - 工具执行安全 BashTool（`4d9b153`）
+   - Batch 3 Bugfix 验证（`7a86985`）
 
 3. **Phase 2 Batch 4 规划**（待开始）
    - 完整 Debug Panel UI（日志面板、网络面板）
