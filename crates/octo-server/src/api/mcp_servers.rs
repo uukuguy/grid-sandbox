@@ -14,9 +14,13 @@ use crate::state::AppState;
 pub struct McpServerConfigRequest {
     pub name: String,
     pub source: Option<String>,
-    pub command: String,
-    pub args: Vec<String>,
+    // Stdio transport fields
+    pub command: Option<String>,
+    pub args: Option<Vec<String>>,
     pub env: Option<std::collections::HashMap<String, String>>,
+    // SSE transport fields
+    pub transport: Option<String>, // "stdio" | "sse", defaults to "stdio"
+    pub url: Option<String>,       // SSE only
     pub enabled: Option<bool>,
 }
 
@@ -28,6 +32,8 @@ pub struct McpServerResponse {
     pub command: String,
     pub args: Vec<String>,
     pub env: std::collections::HashMap<String, String>,
+    pub transport: String,   // "stdio" | "sse"
+    pub url: Option<String>, // SSE only
     pub enabled: bool,
     pub runtime_status: String,
     pub tool_count: usize,
@@ -69,14 +75,17 @@ pub async fn create_server(
 ) -> Json<McpServerResponse> {
     let now = Utc::now().to_rfc3339();
     let id = uuid::Uuid::new_v4().to_string();
+    let transport = req.transport.as_deref().unwrap_or("stdio").to_string();
 
     Json(McpServerResponse {
         id,
         name: req.name,
         source: req.source.unwrap_or_else(|| "manual".to_string()),
-        command: req.command,
-        args: req.args,
+        command: req.command.unwrap_or_default(),
+        args: req.args.unwrap_or_default(),
         env: req.env.unwrap_or_default(),
+        transport,
+        url: req.url,
         enabled: req.enabled.unwrap_or(true),
         runtime_status: "stopped".to_string(),
         tool_count: 0,
