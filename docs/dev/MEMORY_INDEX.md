@@ -65,6 +65,11 @@
 ## [Active Work]
 
 - 20:15 | MCP SSE Transport 阶段归档完成
+- 20:45 | 竞争力分析完成: 7项目代码级对比 (docs/design/COMPETITIVE_ANALYSIS.md)
+  - 对比项目: OpenFang(137K), Craft-Agents(145K), pi_agent_rust(278K), OpenClaw(289K), ZeroClaw(37K), HappyClaw(18K)
+  - 核心优势: 6级Context降级精细度领先、Debug面板可观测性最好、代码密度高
+  - 关键差距: 沙箱隔离(NativeRuntime)、定时任务(空白)、企业安全(零)、工具数(12 vs 54)
+  - v1.0 方案A(单用户): 需补齐~5,150 LOC; 方案B(企业级): 额外15-20K LOC
 
 ---
 
