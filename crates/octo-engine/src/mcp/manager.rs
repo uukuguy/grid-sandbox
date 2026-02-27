@@ -78,6 +78,8 @@ impl McpManager {
                     args: serde_json::from_str(&r.args).unwrap_or_default(),
                     env: serde_json::from_str(&r.env).unwrap_or_default(),
                     enabled: r.enabled,
+                    transport: Default::default(),
+                    url: None,
                 })
                 .collect())
         } else {

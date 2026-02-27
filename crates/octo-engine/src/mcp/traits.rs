@@ -4,6 +4,17 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+/// MCP 服务器传输方式
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum McpTransport {
+    /// 本地进程 stdin/stdout（默认）
+    #[default]
+    Stdio,
+    /// Streamable HTTP / SSE（远程服务器）
+    Sse,
+}
+
 /// Info about a tool provided by an MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolInfo {
@@ -33,6 +44,11 @@ pub struct McpServerConfigV2 {
     #[serde(default)]
     pub env: HashMap<String, String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub transport: McpTransport,
+    /// SSE transport 专用：服务器 URL（如 "http://localhost:8080/mcp"）
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 impl From<McpServerConfigV2> for McpServerConfig {
