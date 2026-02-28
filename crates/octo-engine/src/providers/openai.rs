@@ -8,7 +8,7 @@ use futures_util::stream::Stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use octo_types::{
     ChatMessage, CompletionRequest, CompletionResponse, ContentBlock, MessageRole, StopReason,
@@ -68,11 +68,38 @@ struct ApiRequest {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
+    // Reasoning support for OpenRouter and Claude models via OpenAI-compatible APIs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<ReasoningConfig>,
+}
+
+#[derive(Serialize)]
+struct ReasoningConfig {
+    #[serde(rename = "effort")]
+    effort: String,
 }
 
 #[derive(Serialize)]
 struct StreamOptions {
     include_usage: bool,
+}
+
+/// Create reasoning configuration for models that support it (Claude via OpenRouter, etc.)
+fn create_thinking_config(model: &str) -> Option<ReasoningConfig> {
+    // Enable reasoning for Claude models through OpenAI-compatible APIs (OpenRouter)
+    let model_lower = model.to_lowercase();
+    if model_lower.contains("claude")
+        || model_lower.contains("anthropic")
+        || model_lower.contains("sonnet")
+        || model_lower.contains("opus")
+        || model_lower.contains("haiku")
+    {
+        Some(ReasoningConfig {
+            effort: "high".to_string(),
+        })
+    } else {
+        None
+    }
 }
 
 #[derive(Serialize)]
@@ -316,6 +343,7 @@ impl Provider for OpenAIProvider {
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let reasoning = create_thinking_config(&request.model);
         let api_req = ApiRequest {
             model: request.model,
             messages: convert_messages(&request.messages, request.system.as_deref()),
@@ -324,6 +352,7 @@ impl Provider for OpenAIProvider {
             tools: convert_tools(&request.tools),
             stream: false,
             stream_options: None,
+            reasoning,
         };
 
         let resp = self
@@ -435,6 +464,7 @@ impl Provider for OpenAIProvider {
     }
 
     async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+        let reasoning = create_thinking_config(&request.model);
         let api_req = ApiRequest {
             model: request.model,
             messages: convert_messages(&request.messages, request.system.as_deref()),
@@ -445,6 +475,7 @@ impl Provider for OpenAIProvider {
             stream_options: Some(StreamOptions {
                 include_usage: true,
             }),
+            reasoning,
         };
 
         let url = format!("{}/v1/chat/completions", self.base_url);
@@ -590,7 +621,7 @@ impl<S> OpenAISseStream<S> {
             }
 
             // Parse JSON chunk
-            trace!("SSE chunk: {data}");
+            debug!("SSE chunk: {data}");
             let chunk: Value = match serde_json::from_str(&data) {
                 Ok(v) => v,
                 Err(e) => {
@@ -650,6 +681,7 @@ impl<S> OpenAISseStream<S> {
                 // Reasoning/thinking content - support multiple field names
                 // across different providers: reasoning_content (OpenAI, DeepSeek),
                 // thinking (MiniMax, SiliconFlow, etc.), reasoning (some models)
+                // Also check for thinking in content array blocks (OpenRouter Claude)
                 let thinking_fields = ["reasoning_content", "thinking", "reasoning"];
                 for field in thinking_fields {
                     if let Some(reasoning) = delta[field].as_str() {
@@ -657,7 +689,24 @@ impl<S> OpenAISseStream<S> {
                             events.push(Ok(StreamEvent::ThinkingDelta {
                                 text: reasoning.to_string(),
                             }));
-                            break; // Only emit once even if multiple fields present
+                            break;
+                        }
+                    }
+                }
+
+                // Also check content array for thinking blocks (OpenRouter Claude models)
+                if let Some(content_array) = delta["content"].as_array() {
+                    for block in content_array {
+                        if let Some(block_type) = block["type"].as_str() {
+                            if block_type == "thinking" || block_type == "reasoning" {
+                                if let Some(text) = block["thinking"].as_str().or(block["text"].as_str()) {
+                                    if !text.is_empty() {
+                                        events.push(Ok(StreamEvent::ThinkingDelta {
+                                            text: text.to_string(),
+                                        }));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
