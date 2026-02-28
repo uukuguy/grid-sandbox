@@ -193,3 +193,27 @@ octo-sandbox/
 - Layer 0: Working memory (current conversation)
 - Layer 1: Session memory (per-session)
 - Layer 2: Persistent memory (long-term)
+
+---
+
+## Git Commit Guidelines
+
+**IMPORTANT**: Commit frequently to maintain traceable history.
+
+### When to Commit
+
+1. **After Phase Management**
+   - After `/end-phase` or `/checkpoint-progress`: **ALWAYS commit**
+
+2. **After Task Completion**
+   - After completing a bug fix
+   - After implementing a feature or subtask
+
+3. **Before Context Clear**
+   - Before `/clear`: Always commit or at least checkpoint-progress
+
+### Commit Frequency Rule
+
+- **Minimum**: Once per session (before clear)
+- **Recommended**: After each completed task/subtask
+- **Trigger**: When `git status` shows >5 modified files
