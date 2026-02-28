@@ -64,6 +64,11 @@
 
 ## [Active Work]
 
+- 04:00 | octo-workbench v1.0 方案设计完成
+  - 方案: 33 测试案例, 4 阶段 (A-D), 12 天
+  - MCP: 6 servers (filesystem, fetch, sqlite, github, notion, brave-search)
+  - Skills: 6 skills (code-debugger, git-helper, readme-writer, test-generator, code-review, file-organizer)
+  - 文档: docs/plans/2026-03-01-octo-workbench-v1-0-tasks.md
 - 00:30 | OpenAI Thinking 修复: 添加多字段支持 (reasoning_content, thinking, reasoning)
   - 问题: provider=openai 时 Thinking 不显示，只解析 reasoning_content 字段
   - 修复: openai.rs 增加 thinking_fields 数组遍历匹配 [claude-mem #2998]
