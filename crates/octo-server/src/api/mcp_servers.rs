@@ -5,8 +5,11 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use octo_engine::mcp::{
+    manager::ServerRuntimeState, traits::McpServerConfigV2, traits::McpTransport, McpManager,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
 
@@ -53,40 +56,152 @@ pub struct McpServerStatusResponse {
 
 // List all MCP servers
 pub async fn list_servers(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Json<Vec<McpServerResponse>> {
-    // TODO: Implement with storage
-    Json(vec![])
+    let Some(storage) = state.mcp_storage() else {
+        return Json(vec![]);
+    };
+
+    let manager = state.mcp_manager.lock().await;
+
+    match storage.list_servers() {
+        Ok(records) => {
+            let responses: Vec<McpServerResponse> = records
+                .into_iter()
+                .map(|r| {
+                    let runtime_state = manager.get_runtime_state(&r.id);
+                    let runtime_status = match runtime_state {
+                        ServerRuntimeState::Running { .. } => "running",
+                        ServerRuntimeState::Stopped => "stopped",
+                        ServerRuntimeState::Starting => "starting",
+                        ServerRuntimeState::Error { .. } => "error",
+                    };
+                    let tool_count = manager.get_tool_count(&r.id);
+
+                    // Default to stdio transport for backward compatibility
+                    let transport = r.transport.unwrap_or_else(|| "stdio".to_string());
+
+                    McpServerResponse {
+                        id: r.id,
+                        name: r.name,
+                        source: r.source,
+                        command: r.command,
+                        args: r.args.split_whitespace().map(String::from).collect(),
+                        env: serde_json::from_str(&r.env).unwrap_or_default(),
+                        transport,
+                        url: r.url,
+                        enabled: r.enabled,
+                        runtime_status: runtime_status.to_string(),
+                        tool_count,
+                        created_at: r.created_at,
+                        updated_at: r.updated_at,
+                    }
+                })
+                .collect();
+            Json(responses)
+        }
+        Err(e) => {
+            tracing::error!("Failed to list MCP servers: {e}");
+            Json(vec![])
+        }
+    }
 }
 
 // Get single server
 pub async fn get_server(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Json<Option<McpServerResponse>> {
-    // TODO: Implement with storage
-    Json(None)
+    let Some(storage) = state.mcp_storage() else {
+        return Json(None);
+    };
+
+    match storage.get_server(&id) {
+        Ok(Some(r)) => Json(Some(McpServerResponse {
+            id: r.id,
+            name: r.name,
+            source: r.source,
+            command: r.command,
+            args: r.args.split_whitespace().map(String::from).collect(),
+            env: serde_json::from_str(&r.env).unwrap_or_default(),
+            transport: "stdio".to_string(),
+            url: None,
+            enabled: r.enabled,
+            runtime_status: "stopped".to_string(),
+            tool_count: 0,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        })),
+        Ok(None) => Json(None),
+        Err(e) => {
+            tracing::error!("Failed to get MCP server: {e}");
+            Json(None)
+        }
+    }
 }
 
 // Create new server
 pub async fn create_server(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(req): Json<McpServerConfigRequest>,
 ) -> Json<McpServerResponse> {
+    let Some(storage) = state.mcp_storage() else {
+        return Json(McpServerResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: req.name,
+            source: req.source.unwrap_or_else(|| "manual".to_string()),
+            command: req.command.unwrap_or_default(),
+            args: req.args.unwrap_or_default(),
+            env: req.env.unwrap_or_default(),
+            transport: req.transport.unwrap_or_else(|| "stdio".to_string()),
+            url: req.url,
+            enabled: req.enabled.unwrap_or(true),
+            runtime_status: "stopped".to_string(),
+            tool_count: 0,
+            created_at: Utc::now().to_rfc3339(),
+            updated_at: Utc::now().to_rfc3339(),
+        });
+    };
+
     let now = Utc::now().to_rfc3339();
     let id = uuid::Uuid::new_v4().to_string();
     let transport = req.transport.as_deref().unwrap_or("stdio").to_string();
+    let source = req.source.unwrap_or_else(|| "manual".to_string());
+    let command = req.command.unwrap_or_default();
+    let args_vec = req.args.unwrap_or_default();
+    let args_str = args_vec.join(" ");
+    let env_map = req.env.unwrap_or_default();
+    let env_str = serde_json::to_string(&env_map).unwrap_or_default();
+    let enabled = req.enabled.unwrap_or(true);
+
+    let record = octo_engine::mcp::storage::McpServerRecord {
+        id: id.clone(),
+        name: req.name.clone(),
+        source: source.clone(),
+        command: command.clone(),
+        args: args_str.clone(),
+        env: env_str,
+        enabled,
+        transport: Some(transport.clone()),
+        url: req.url.clone(),
+        created_at: now.clone(),
+        updated_at: now.clone(),
+    };
+
+    if let Err(e) = storage.insert_server(&record) {
+        tracing::error!("Failed to create MCP server: {e}");
+    }
 
     Json(McpServerResponse {
         id,
         name: req.name,
-        source: req.source.unwrap_or_else(|| "manual".to_string()),
-        command: req.command.unwrap_or_default(),
-        args: req.args.unwrap_or_default(),
-        env: req.env.unwrap_or_default(),
+        source,
+        command,
+        args: args_vec,
+        env: env_map,
         transport,
         url: req.url,
-        enabled: req.enabled.unwrap_or(true),
+        enabled,
         runtime_status: "stopped".to_string(),
         tool_count: 0,
         created_at: now.clone(),
@@ -106,38 +221,122 @@ pub async fn update_server(
 
 // Delete server
 pub async fn delete_server(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Json<serde_json::Value> {
-    // TODO: Implement with storage
+    if let Some(storage) = state.mcp_storage() {
+        if let Err(e) = storage.delete_server(&id) {
+            tracing::error!("Failed to delete MCP server: {e}");
+            return Json(serde_json::json!({"error": e.to_string()}));
+        }
+    }
     Json(serde_json::json!({"deleted": id}))
 }
 
 // Start server
 pub async fn start_server(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Json<serde_json::Value> {
-    // TODO: Implement with McpManager
-    Json(serde_json::json!({"started": id}))
+    // Get server config from storage
+    let Some(storage) = state.mcp_storage() else {
+        return Json(serde_json::json!({"error": "MCP storage not available"}));
+    };
+
+    let server_record = match storage.get_server(&id) {
+        Ok(Some(record)) => record,
+        Ok(None) => {
+            return Json(serde_json::json!({"error": "Server not found"}));
+        }
+        Err(e) => {
+            return Json(serde_json::json!({"error": format!("Failed to get server: {}", e)}));
+        }
+    };
+
+    // Create McpServerConfigV2 from storage record
+    let transport = server_record
+        .transport
+        .as_deref()
+        .unwrap_or("stdio")
+        .parse::<McpTransport>()
+        .unwrap_or(McpTransport::Stdio);
+
+    let config = McpServerConfigV2 {
+        id: server_record.id.clone(),
+        name: server_record.name.clone(),
+        source: server_record.source.clone(),
+        command: server_record.command.clone(),
+        args: serde_json::from_str(&server_record.args).unwrap_or_default(),
+        env: serde_json::from_str(&server_record.env).unwrap_or_default(),
+        enabled: server_record.enabled,
+        transport,
+        url: server_record.url,
+    };
+
+    // Add and connect the server via McpManager
+    let mut manager = state.mcp_manager.lock().await;
+    tracing::debug!("MCP Manager runtime states before start: {:?}", manager.all_runtime_states());
+    match manager.add_server_v2(config).await {
+        Ok(tools) => {
+            manager.set_runtime_state(&id, ServerRuntimeState::Running { pid: 0 });
+            tracing::debug!("MCP Manager runtime states after start: {:?}", manager.all_runtime_states());
+            tracing::info!(server = %id, tool_count = tools.len(), "MCP server started");
+            Json(serde_json::json!({
+                "started": id,
+                "tool_count": tools.len()
+            }))
+        }
+        Err(e) => {
+            tracing::error!(server = %id, error = %e, "Failed to start MCP server");
+            Json(serde_json::json!({"error": format!("Failed to start server: {}", e)}))
+        }
+    }
 }
 
 // Stop server
 pub async fn stop_server(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Json<serde_json::Value> {
-    // TODO: Implement with McpManager
-    Json(serde_json::json!({"stopped": id}))
+    let mut manager = state.mcp_manager.lock().await;
+
+    match manager.remove_server(&id).await {
+        Ok(()) => {
+            manager.set_runtime_state(&id, ServerRuntimeState::Stopped);
+            tracing::info!(server = %id, "MCP server stopped");
+            Json(serde_json::json!({"stopped": id}))
+        }
+        Err(e) => {
+            tracing::error!(server = %id, error = %e, "Failed to stop MCP server");
+            Json(serde_json::json!({"error": format!("Failed to stop server: {}", e)}))
+        }
+    }
 }
 
 // Get server status
 pub async fn get_server_status(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Json<Option<McpServerStatusResponse>> {
-    // TODO: Implement with McpManager
-    Json(None)
+    let manager = state.mcp_manager.lock().await;
+    let runtime_state = manager.get_runtime_state(&id);
+    let tool_count = manager.get_tool_count(&id);
+
+    let (status, pid, error) = match runtime_state {
+        ServerRuntimeState::Running { pid: p } => ("running", Some(p), None),
+        ServerRuntimeState::Stopped => ("stopped", None, None),
+        ServerRuntimeState::Starting => ("starting", None, None),
+        ServerRuntimeState::Error { message } => ("error", None, Some(message)),
+    };
+
+    Json(Some(McpServerStatusResponse {
+        id: id.clone(),
+        name: id,
+        status: status.to_string(),
+        pid,
+        error,
+        tool_count,
+    }))
 }
 
 pub fn routes() -> Router<Arc<AppState>> {

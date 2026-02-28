@@ -73,21 +73,18 @@ pub struct AgentLoop {
 }
 
 impl AgentLoop {
+    /// Create new AgentLoop - model must be set via with_model() before use
     pub fn new(
         provider: Arc<dyn Provider>,
         tools: Arc<ToolRegistry>,
         memory: Arc<dyn WorkingMemory>,
     ) -> Self {
-        let model = match provider.id() {
-            "openai" => "gpt-4o".into(),
-            _ => "claude-sonnet-4-20250514".into(),
-        };
         Self {
             provider,
             tools,
             memory,
             memory_store: None,
-            model,
+            model: "".into(), // Must call with_model() before running
             max_tokens: 4096,
             budget: ContextBudgetManager::default(),
             pruner: ContextPruner::new(),
@@ -126,6 +123,9 @@ impl AgentLoop {
         tx: broadcast::Sender<AgentEvent>,
         tool_ctx: ToolContext,
     ) -> Result<()> {
+        // Panic if model not set - must call with_model() first
+        assert!(!self.model.is_empty(), "Model not set: call with_model() before run()");
+
         info!(
             session = %session_id,
             "AgentLoop starting, {} messages in history",
@@ -311,6 +311,11 @@ impl AgentLoop {
 
                         // If no tool uses, this is final response
                         if stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
+                            // Always append an assistant message so the conversation history
+                            // stays well-formed (no two consecutive user messages).
+                            messages.push(ChatMessage::assistant(
+                                if full_text.is_empty() { "(no response)" } else { &full_text },
+                            ));
                             if !full_text.is_empty() {
                                 let _ = tx.send(AgentEvent::TextComplete {
                                     text: full_text.clone(),
@@ -332,7 +337,11 @@ impl AgentLoop {
 
             // If we have tool uses, execute them
             if tool_uses.is_empty() {
-                // Stream ended without explicit MessageStop with tool_use
+                // Stream ended without explicit MessageStop with tool_use.
+                // Ensure an assistant message is always appended.
+                messages.push(ChatMessage::assistant(
+                    if full_text.is_empty() { "(no response)" } else { &full_text },
+                ));
                 if !full_text.is_empty() {
                     let _ = tx.send(AgentEvent::TextComplete {
                         text: full_text.clone(),
@@ -478,6 +487,11 @@ impl AgentLoop {
         }
 
         warn!("Max rounds ({MAX_ROUNDS}) exceeded");
+        // Append a sentinel assistant message so history stays well-formed.
+        messages.push(ChatMessage::assistant(format!(
+            "(max rounds {} exceeded)",
+            MAX_ROUNDS
+        )));
         let _ = tx.send(AgentEvent::Error {
             message: format!("Max rounds ({MAX_ROUNDS}) exceeded"),
         });

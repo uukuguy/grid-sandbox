@@ -1,21 +1,38 @@
 import type { ClientMessage, ServerMessage } from "./types";
+import { isConfigReady, getWsUrl } from "../config";
 
 type MessageHandler = (msg: ServerMessage) => void;
 
 class WsManager {
   private ws: WebSocket | null = null;
-  private url: string;
+  private url: string = '';
   private handler: MessageHandler | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor() {
+  constructor() {}
+
+  /**
+   * Get WebSocket URL from config or fallback
+   */
+  private getUrl(): string {
+    if (isConfigReady()) {
+      try {
+        return getWsUrl() + '/ws';
+      } catch {
+        // Config not ready, use fallback
+      }
+    }
+    // Fallback to window.location if config not ready
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    this.url = `${proto}//${window.location.host}/ws`;
+    return `${proto}//${window.location.host}/ws`;
   }
 
   connect() {
+    // Get URL on each connect to support dynamic config
+    this.url = this.getUrl();
+
     if (this.ws?.readyState === WebSocket.OPEN) return;
 
     this.ws = new WebSocket(this.url);

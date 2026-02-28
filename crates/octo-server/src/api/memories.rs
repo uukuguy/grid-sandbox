@@ -8,6 +8,8 @@ use octo_types::{MemoryCategory, MemoryFilter, MemoryId, SandboxId, SearchOption
 
 use crate::state::AppState;
 
+const DEFAULT_USER_ID: &str = "default";
+
 #[derive(Deserialize)]
 pub struct MemorySearchParams {
     pub q: Option<String>,
@@ -24,19 +26,30 @@ pub async fn search_memories(
     Query(params): Query<MemorySearchParams>,
 ) -> Json<serde_json::Value> {
     let query = params.q.unwrap_or_default();
+
+    // No query: list all memories for the default user
     if query.is_empty() {
-        return Json(serde_json::json!([]));
+        let filter = MemoryFilter {
+            user_id: DEFAULT_USER_ID.to_string(),
+            limit: params.limit.min(100),
+            ..Default::default()
+        };
+        return match state.memory_store.list(filter).await {
+            Ok(entries) => Json(serde_json::json!({ "results": entries })),
+            Err(_) => Json(serde_json::json!({ "results": [] })),
+        };
     }
 
+    // With query: FTS search
     let opts = SearchOptions {
-        user_id: "default".to_string(),
+        user_id: DEFAULT_USER_ID.to_string(),
         limit: params.limit.min(100),
         ..Default::default()
     };
 
     match state.memory_store.search(&query, opts).await {
-        Ok(entries) => Json(serde_json::to_value(entries).unwrap_or_default()),
-        Err(_) => Json(serde_json::json!([])),
+        Ok(entries) => Json(serde_json::json!({ "results": entries })),
+        Err(_) => Json(serde_json::json!({ "results": [] })),
     }
 }
 
@@ -49,13 +62,13 @@ pub async fn get_working_memory(
     State(state): State<Arc<AppState>>,
     Query(params): Query<WorkingMemoryParams>,
 ) -> Json<serde_json::Value> {
-    let user_id = UserId::from_string("default");
+    let user_id = UserId::from_string(DEFAULT_USER_ID);
     let sandbox_id = SandboxId::from_string(
-        params.sandbox_id.as_deref().unwrap_or("default"),
+        params.sandbox_id.as_deref().unwrap_or(DEFAULT_USER_ID),
     );
     match state.memory.get_blocks(&user_id, &sandbox_id).await {
-        Ok(blocks) => Json(serde_json::to_value(blocks).unwrap_or_default()),
-        Err(_) => Json(serde_json::json!([])),
+        Ok(blocks) => Json(serde_json::json!({ "blocks": blocks })),
+        Err(_) => Json(serde_json::json!({ "blocks": [] })),
     }
 }
 
@@ -99,7 +112,7 @@ pub async fn delete_memories_by_filter(
         .map(|c| vec![c]);
 
     let filter = MemoryFilter {
-        user_id: "default".to_string(),
+        user_id: DEFAULT_USER_ID.to_string(),
         sandbox_id: params.sandbox_id,
         categories,
         ..Default::default()

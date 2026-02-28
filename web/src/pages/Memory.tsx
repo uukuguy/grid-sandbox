@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
+import { useAtomValue } from "jotai";
+import { sessionIdAtom } from "@/atoms/session";
 
 interface MemoryBlock {
   id: string;
-  content: string;
-  role: string;
-  token_count: number;
+  kind: string;
+  label: string;
+  value: string;
+  priority: number;
+  char_limit: number;
+  is_readonly: boolean;
 }
 
 interface PersistentMemory {
@@ -15,19 +20,46 @@ interface PersistentMemory {
   created_at: string;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: Array<{ type: string; text?: string }>;
+}
+
 type MemoryType = "working" | "session" | "persistent";
 
 export default function Memory() {
   const [activeMemory, setActiveMemory] = useState<MemoryType>("working");
   const [workingMemory, setWorkingMemory] = useState<MemoryBlock[]>([]);
   const [persistentMemory, setPersistentMemory] = useState<PersistentMemory[]>([]);
+  const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const sessionId = useAtomValue(sessionIdAtom);
 
   useEffect(() => {
     fetchWorkingMemory();
     fetchPersistentMemory();
   }, []);
+
+  useEffect(() => {
+    if (activeMemory === "session" && sessionId) {
+      fetchSessionMessages();
+    }
+  }, [activeMemory, sessionId]);
+
+  const fetchSessionMessages = async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`);
+      const data = await res.json();
+      setSessionMessages(data.messages || []);
+    } catch (error) {
+      console.error("Failed to fetch session messages:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchWorkingMemory = async () => {
     setLoading(true);
@@ -56,7 +88,7 @@ export default function Memory() {
   };
 
   const filteredWorkingMemory = workingMemory.filter((block) =>
-    block.content.toLowerCase().includes(searchQuery.toLowerCase())
+    (block.value + " " + block.label).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredPersistentMemory = persistentMemory.filter((mem) =>
@@ -72,11 +104,23 @@ export default function Memory() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border">
-        <h2 className="text-lg font-semibold">Memory Explorer</h2>
-        <p className="text-sm text-muted-foreground">
-          View and manage AI memory across different layers
-        </p>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Memory Explorer</h2>
+          <p className="text-sm text-muted-foreground">
+            View and manage AI memory across different layers
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            fetchWorkingMemory();
+            fetchPersistentMemory();
+            if (sessionId) fetchSessionMessages();
+          }}
+          className="text-xs px-2 py-1 rounded border border-border hover:bg-secondary/50"
+        >
+          Refresh
+        </button>
       </div>
 
       {/* Memory Type Tabs */}
@@ -116,7 +160,7 @@ export default function Memory() {
         ) : activeMemory === "working" ? (
           <WorkingMemoryView blocks={filteredWorkingMemory} />
         ) : activeMemory === "session" ? (
-          <SessionMemoryView />
+          <SessionMemoryView messages={sessionMessages} />
         ) : (
           <PersistentMemoryView memories={filteredPersistentMemory} />
         )}
@@ -128,6 +172,9 @@ export default function Memory() {
           Working: {workingMemory.length} blocks
         </span>
         <span className="mr-4">
+          Session: {sessionMessages.length} messages
+        </span>
+        <span className="mr-4">
           Persistent: {persistentMemory.length} memories
         </span>
       </div>
@@ -136,8 +183,6 @@ export default function Memory() {
 }
 
 function WorkingMemoryView({ blocks }: { blocks: MemoryBlock[] }) {
-  const totalTokens = blocks.reduce((sum, b) => sum + b.token_count, 0);
-
   if (blocks.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8">
@@ -151,25 +196,30 @@ function WorkingMemoryView({ blocks }: { blocks: MemoryBlock[] }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="font-medium">Context Blocks</h3>
-        <span className="text-sm text-muted-foreground">
-          {totalTokens} tokens
-        </span>
+        <span className="text-sm text-muted-foreground">{blocks.length} blocks</span>
       </div>
       <div className="space-y-2">
-        {blocks.map((block, index) => (
+        {blocks.map((block) => (
           <div
-            key={block.id || index}
+            key={block.id}
             className="p-3 bg-secondary rounded-lg border border-border"
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium px-2 py-0.5 bg-primary/10 rounded">
-                {block.role}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium px-2 py-0.5 bg-primary/10 rounded font-mono">
+                  {block.kind}
+                </span>
+                <span className="text-xs text-muted-foreground">{block.label}</span>
+              </div>
               <span className="text-xs text-muted-foreground">
-                {block.token_count} tokens
+                {block.char_limit} char limit
               </span>
             </div>
-            <p className="text-sm line-clamp-3">{block.content}</p>
+            {block.value ? (
+              <p className="text-sm">{block.value}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">empty</p>
+            )}
           </div>
         ))}
       </div>
@@ -177,36 +227,49 @@ function WorkingMemoryView({ blocks }: { blocks: MemoryBlock[] }) {
   );
 }
 
-function SessionMemoryView() {
-  const [sessionMemories] = useState<PersistentMemory[]>([]);
-
-  if (sessionMemories.length === 0) {
+function SessionMemoryView({ messages }: { messages: ChatMessage[] }) {
+  if (messages.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-8">
-        <p>No session memories</p>
+        <p>No session messages</p>
         <p className="text-sm mt-2">
-          Session memories are accumulated during this conversation
+          Start a conversation to see messages here
         </p>
       </div>
     );
   }
 
+  // Extract text content from message
+  const getTextContent = (msg: ChatMessage): string => {
+    return msg.content
+      .filter((c) => c.type === "text" && c.text)
+      .map((c) => c.text)
+      .join("");
+  };
+
   return (
     <div className="space-y-4">
-      {sessionMemories.map((mem) => (
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium">Conversation History</h3>
+        <span className="text-sm text-muted-foreground">{messages.length} messages</span>
+      </div>
+      {messages.map((msg, idx) => (
         <div
-          key={mem.id}
-          className="p-3 bg-secondary rounded-lg border border-border"
+          key={idx}
+          className={`p-3 rounded-lg border ${
+            msg.role === "user"
+              ? "bg-primary/5 border-border"
+              : msg.role === "assistant"
+              ? "bg-secondary border-border"
+              : "bg-muted border-border"
+          }`}
         >
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium px-2 py-0.5 bg-primary/10 rounded">
-              {mem.category}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {mem.created_at}
+              {msg.role}
             </span>
           </div>
-          <p className="text-sm">{mem.content}</p>
+          <p className="text-sm whitespace-pre-wrap">{getTextContent(msg)}</p>
         </div>
       ))}
     </div>

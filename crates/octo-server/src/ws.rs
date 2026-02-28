@@ -10,7 +10,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
 use octo_engine::AgentEvent;
-use octo_types::{ChatMessage, SandboxId, SessionId, ToolContext, UserId};
+use octo_types::{ChatMessage, SessionId, ToolContext};
 
 use crate::state::AppState;
 
@@ -133,12 +133,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 // Get or create session
                 let session = if let Some(sid) = session_id {
                     let session_id_obj = SessionId::from_string(&sid);
-                    if state.sessions.get_messages(&session_id_obj).await.is_some() {
-                        crate::session::SessionData {
-                            session_id: session_id_obj,
-                            user_id: UserId::from_string("default"),
-                            sandbox_id: SandboxId::new(),
-                        }
+                    if let Some(existing) = state.sessions.get_session(&session_id_obj).await {
+                        existing
                     } else {
                         let s = state.sessions.create_session().await;
                         let msg = ServerMessage::SessionCreated {

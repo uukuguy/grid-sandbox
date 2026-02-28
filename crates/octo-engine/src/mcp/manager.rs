@@ -11,7 +11,6 @@ use crate::tools::ToolRegistry;
 use super::bridge::McpToolBridge;
 use super::sse::SseMcpClient;
 use super::stdio::StdioMcpClient;
-use super::storage::McpStorage;
 use super::traits::{McpClient, McpServerConfig, McpServerConfigV2, McpToolInfo, McpTransport};
 
 /// MCP config file format (.octo/mcp.json).
@@ -42,7 +41,6 @@ pub struct McpManager {
     clients: HashMap<String, Arc<RwLock<Box<dyn McpClient>>>>,
     tool_infos: HashMap<String, Vec<McpToolInfo>>,
     runtime_states: HashMap<String, ServerRuntimeState>,
-    storage: Option<Arc<McpStorage>>,
 }
 
 impl McpManager {
@@ -51,40 +49,6 @@ impl McpManager {
             clients: HashMap::new(),
             tool_infos: HashMap::new(),
             runtime_states: HashMap::new(),
-            storage: None,
-        }
-    }
-
-    /// Create with storage for persistence.
-    pub fn with_storage(storage: Arc<McpStorage>) -> Self {
-        Self {
-            clients: HashMap::new(),
-            tool_infos: HashMap::new(),
-            runtime_states: HashMap::new(),
-            storage: Some(storage),
-        }
-    }
-
-    /// Get all server configs from storage.
-    pub async fn load_servers(&self) -> Result<Vec<McpServerConfigV2>> {
-        if let Some(storage) = &self.storage {
-            let records = storage.list_servers()?;
-            Ok(records
-                .into_iter()
-                .map(|r| McpServerConfigV2 {
-                    id: r.id,
-                    name: r.name,
-                    source: r.source,
-                    command: r.command,
-                    args: serde_json::from_str(&r.args).unwrap_or_default(),
-                    env: serde_json::from_str(&r.env).unwrap_or_default(),
-                    enabled: r.enabled,
-                    transport: Default::default(),
-                    url: None,
-                })
-                .collect())
-        } else {
-            Ok(vec![])
         }
     }
 
@@ -229,6 +193,11 @@ impl McpManager {
     /// Get number of connected servers.
     pub fn server_count(&self) -> usize {
         self.clients.len()
+    }
+
+    /// Get tool count for a server.
+    pub fn get_tool_count(&self, name: &str) -> usize {
+        self.tool_infos.get(name).map(|t| t.len()).unwrap_or(0)
     }
 }
 

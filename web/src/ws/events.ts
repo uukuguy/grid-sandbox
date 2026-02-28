@@ -101,6 +101,7 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
       thinkingBuffer = "";
       set(isStreamingAtom, false);
       set(streamingThinkingAtom, "");
+      // Do NOT clear executionRecordsAtom here — Tools tab shows accumulated history
       set(toolExecutionsAtom, []);
       break;
 

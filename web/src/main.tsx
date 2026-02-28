@@ -2,12 +2,25 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Provider } from "jotai";
 import App from "./App";
+import { initConfig } from "./config";
 import "./globals.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <Provider>
-      <App />
-    </Provider>
-  </StrictMode>,
-);
+// Initialize configuration before rendering
+async function main() {
+  try {
+    await initConfig();
+    console.log('[App] Config initialized, rendering...');
+  } catch (err) {
+    console.error('[App] Failed to initialize config:', err);
+  }
+
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <Provider>
+        <App />
+      </Provider>
+    </StrictMode>,
+  );
+}
+
+main();

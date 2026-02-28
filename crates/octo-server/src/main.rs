@@ -1,4 +1,5 @@
 mod api;
+mod config;
 mod router;
 mod session;
 mod state;
@@ -11,50 +12,115 @@ use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use octo_engine::{
-    create_provider, default_tools, register_memory_tools, Database, MemoryStore, SessionStore,
-    SkillLoader, SkillRegistry, SkillTool, SqliteMemoryStore, SqliteSessionStore,
-    SqliteWorkingMemory, ToolExecutionRecorder, WorkingMemory,
+    create_provider, default_tools, register_memory_tools, Database, mcp::McpManager,
+    MemoryStore, SessionStore, SkillLoader, SkillRegistry, SkillTool,
+    SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory, ToolExecutionRecorder,
+    WorkingMemory,
 };
 use state::AppState;
 
+fn print_default_config() {
+    println!("{}", config::Config::generate_default_yaml());
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Handle CLI arguments
+    let args: Vec<String> = std::env::args().collect();
+    let mut cli_port: Option<u16> = None;
+    let mut cli_host: Option<&str> = None;
+    let mut config_path: Option<PathBuf> = None;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "config-gen" | "gen-config" => {
+                print_default_config();
+                return Ok(());
+            }
+            "--port" | "-p" => {
+                if i + 1 < args.len() {
+                    cli_port = args[i + 1].parse().ok();
+                    i += 2;
+                    continue;
+                }
+            }
+            "--host" | "-h" => {
+                if i + 1 < args.len() {
+                    cli_host = Some(&args[i + 1]);
+                    i += 2;
+                    continue;
+                }
+            }
+            "--config" | "-c" => {
+                if i + 1 < args.len() {
+                    config_path = Some(PathBuf::from(&args[i + 1]));
+                    i += 2;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    // Load .env FIRST (before config loading)
     dotenvy::dotenv_override().ok();
 
+    // Load configuration: config.yaml < CLI args < .env
+    let cfg = config::Config::load(config_path.as_ref(), cli_port, cli_host);
+
+    // Apply logging config (clone to avoid moving)
+    let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| cfg.logging.level.clone());
     fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("octo_server=info,tower_http=debug")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new(&log_filter)
+        }))
         .init();
 
-    let provider_name = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "anthropic".into());
+    let addr = format!("{}:{}", cfg.server.host, cfg.server.port);
+    tracing::info!("Using provider: {}", cfg.provider.name);
 
-    let (api_key, base_url) = match provider_name.as_str() {
-        "openai" => {
-            let key = std::env::var("OPENAI_API_KEY")
-                .expect("OPENAI_API_KEY must be set when PROVIDER=openai");
-            let url = std::env::var("OPENAI_BASE_URL").ok();
-            (key, url)
+    let provider_config = cfg.provider.clone();
+
+    let api_key = if provider_config.api_key.is_empty() {
+        // Fall back to env var if not in config
+        match provider_config.name.as_str() {
+            "openai" => std::env::var("OPENAI_API_KEY")
+                .expect("OPENAI_API_KEY must be set in config.yaml or .env"),
+            _ => std::env::var("ANTHROPIC_API_KEY")
+                .expect("ANTHROPIC_API_KEY must be set in config.yaml or .env"),
         }
-        _ => {
-            let key =
-                std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
-            let url = std::env::var("ANTHROPIC_BASE_URL").ok();
-            (key, url)
+    } else {
+        provider_config.api_key
+    };
+
+    let base_url = provider_config.base_url.clone().or_else(|| {
+        match provider_config.name.as_str() {
+            "openai" => std::env::var("OPENAI_BASE_URL").ok(),
+            _ => std::env::var("ANTHROPIC_BASE_URL").ok(),
+        }
+    });
+
+    // Read model based on provider - panic if not set
+    let model = match provider_config.model.clone() {
+        Some(m) => Some(m),
+        None => {
+            let env_var = match provider_config.name.as_str() {
+                "openai" => "OPENAI_MODEL_NAME",
+                _ => "ANTHROPIC_MODEL_NAME",
+            };
+            Some(std::env::var(env_var).expect(&format!(
+                "{} must be set in .env when LLM_PROVIDER={}",
+                env_var, provider_config.name
+            )))
         }
     };
 
-    let host = std::env::var("OCTO_HOST").unwrap_or_else(|_| "127.0.0.1".into());
-    let port = std::env::var("OCTO_PORT").unwrap_or_else(|_| "3001".into());
-    let addr = format!("{host}:{port}");
+    let provider_name = provider_config.name.clone();
 
-    tracing::info!("Using provider: {provider_name}");
-    let model = std::env::var("OPENAI_MODEL_NAME").ok();
-
-    // Database: SQLite with WAL mode
-    let db_path =
-        std::env::var("OCTO_DB_PATH").unwrap_or_else(|_| "./data/octo.db".into());
+    // Database: SQLite with WAL mode (use config, with env override already applied)
+    let db_path = cfg.database.path.clone();
     let db = Database::open(&db_path).await?;
     let conn = db.conn().clone();
 
@@ -71,6 +137,9 @@ async fn main() -> Result<()> {
 
     // Persistent memory store (Layer 2) -- SQLite-backed
     let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn.clone()));
+
+    // MCP manager (for runtime server management)
+    let mcp_manager = Arc::new(tokio::sync::Mutex::new(McpManager::new()));
 
     // Tool execution recorder (shares the same connection)
     let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
@@ -115,9 +184,12 @@ async fn main() -> Result<()> {
         memory,
         sessions,
         memory_store,
+        std::path::PathBuf::from(&db_path),
+        mcp_manager,
         model,
         Some(recorder),
         skill_registry,
+        cfg.clone(),
     ));
 
     let app = router::build_router(state);

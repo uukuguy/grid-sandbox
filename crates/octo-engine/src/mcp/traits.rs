@@ -15,6 +15,17 @@ pub enum McpTransport {
     Sse,
 }
 
+impl std::str::FromStr for McpTransport {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "sse" => Ok(McpTransport::Sse),
+            "stdio" | _ => Ok(McpTransport::Stdio),
+        }
+    }
+}
+
 /// Info about a tool provided by an MCP server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolInfo {
