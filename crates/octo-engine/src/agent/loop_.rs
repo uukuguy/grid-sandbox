@@ -18,7 +18,7 @@ use crate::tools::ToolRegistry;
 
 use super::context::ContextBuilder;
 
-const MAX_ROUNDS: u32 = 10;
+const MAX_ROUNDS: u32 = 30;
 const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
 
 /// Events sent from AgentLoop to consumers (WebSocket handler)
