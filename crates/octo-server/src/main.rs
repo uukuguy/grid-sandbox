@@ -1,5 +1,6 @@
 mod api;
 mod config;
+mod middleware;
 mod router;
 mod session;
 mod state;
