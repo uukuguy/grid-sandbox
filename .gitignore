@@ -28,4 +28,5 @@ tmp/
 data/
 
 .playwright-cli/
+.playwright-mcp/
 tests/
