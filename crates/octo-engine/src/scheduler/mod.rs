@@ -180,12 +180,13 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub fn new(config: SchedulerConfig, storage: Arc<dyn SchedulerStorage>) -> Self {
+        let max_concurrent = config.max_concurrent;
         Self {
             config,
             storage,
             cron_parser: CronParser::new(),
             running: Arc::new(AtomicBool::new(false)),
-            semaphore: Arc::new(Semaphore::new(config.max_concurrent)),
+            semaphore: Arc::new(Semaphore::new(max_concurrent)),
         }
     }
 
