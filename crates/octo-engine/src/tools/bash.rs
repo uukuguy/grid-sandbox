@@ -8,6 +8,10 @@ use octo_types::{ToolContext, ToolResult, ToolSource};
 
 use super::traits::Tool;
 
+// Sandbox imports - feature-gated
+#[cfg(feature = "sandbox-wasm")]
+use crate::sandbox::{AdapterEnum, SandboxRouter, SubprocessAdapter, ToolCategory, SandboxType};
+
 /// Shell 命令执行安全模式（参考 ARCHITECTURE_DESIGN.md §5.5.1）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecSecurityMode {
@@ -79,18 +83,88 @@ const SAFE_ENV_VARS: &[&str] = &[
 
 pub struct BashTool {
     exec_policy: Option<ExecPolicy>,
+    /// Sandbox router for secure execution (feature-gated)
+    #[cfg(feature = "sandbox-wasm")]
+    router: Option<SandboxRouter>,
 }
 
 impl BashTool {
     pub fn new() -> Self {
-        Self { exec_policy: None }
+        #[cfg(feature = "sandbox-wasm")]
+        let router = Some(SandboxRouter::new());
+        Self {
+            exec_policy: None,
+            #[cfg(feature = "sandbox-wasm")]
+            router,
+        }
     }
 
     /// 创建带安全策略的 BashTool
     pub fn with_policy(policy: ExecPolicy) -> Self {
+        #[cfg(feature = "sandbox-wasm")]
+        let router = Some(SandboxRouter::new());
         Self {
             exec_policy: Some(policy),
+            #[cfg(feature = "sandbox-wasm")]
+            router,
         }
+    }
+
+    /// 执行命令 - 优先使用沙箱，失败则回退到直接执行
+    #[cfg(feature = "sandbox-wasm")]
+    async fn execute_via_sandbox(
+        &self,
+        command: &str,
+        working_dir: &std::path::Path,
+    ) -> Result<(String, i32), String> {
+        use crate::sandbox::ExecResult;
+
+        if let Some(router) = &self.router {
+            // Clone the router to allow mutation
+            let mut router = router.clone();
+            // 注册 subprocess 适配器
+            router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
+            // 使用 subprocess 作为默认执行器
+            router.set_mapping(ToolCategory::Shell, SandboxType::Subprocess);
+
+            // 在指定工作目录中执行
+            let full_command = format!(
+                "cd {} && {}",
+                working_dir.display(),
+                command
+            );
+
+            match router.execute(ToolCategory::Shell, &full_command, "bash").await {
+                Ok(ExecResult { stdout, stderr, success, exit_code, .. }) => {
+                    let combined = if stderr.is_empty() {
+                        stdout
+                    } else if stdout.is_empty() {
+                        format!("STDERR:\n{stderr}")
+                    } else {
+                        format!("{stdout}\nSTDERR:\n{stderr}")
+                    };
+                    let code = if success { 0 } else { exit_code };
+                    return Ok((combined, code));
+                }
+                Err(e) => {
+                    // 沙箱执行失败，回退到直接执行
+                    tracing::warn!("Sandbox execution failed, falling back to direct execution: {}", e);
+                }
+            }
+        }
+        Err("Sandbox not available".to_string())
+    }
+
+    /// 克隆路由器（用于测试）
+    #[cfg(feature = "sandbox-wasm")]
+    pub fn router(&self) -> Option<&SandboxRouter> {
+        self.router.as_ref()
+    }
+
+    /// 设置自定义沙箱路由器（用于测试或高级配置）
+    #[cfg(feature = "sandbox-wasm")]
+    pub fn set_router(&mut self, router: SandboxRouter) {
+        self.router = Some(router);
     }
 }
 
@@ -153,6 +227,38 @@ impl Tool for BashTool {
 
         debug!(command, timeout_secs, "executing bash command");
 
+        // 尝试沙箱执行（如果启用）
+        #[cfg(feature = "sandbox-wasm")]
+        {
+            match self.execute_via_sandbox(command, &ctx.working_dir).await {
+                Ok((output_text, exit_code)) => {
+                    // 截断过长输出
+                    let output_text = if output_text.len() > 100_000 {
+                        format!(
+                            "{}...\n[output truncated, {} bytes total]",
+                            &output_text[..100_000],
+                            output_text.len()
+                        )
+                    } else {
+                        output_text
+                    };
+
+                    if exit_code == 0 {
+                        return Ok(ToolResult::success(output_text));
+                    } else {
+                        return Ok(ToolResult::error(format!(
+                            "Exit code: {exit_code}\n{output_text}"
+                        )));
+                    }
+                }
+                Err(_) => {
+                    // 沙箱不可用或失败，继续使用直接执行
+                    tracing::debug!("Falling back to direct command execution");
+                }
+            }
+        }
+
+        // 直接执行（默认行为或沙箱回退）
         // 收集安全环境变量白名单
         let safe_env: Vec<(String, String)> = std::env::vars()
             .filter(|(k, _)| SAFE_ENV_VARS.contains(&k.as_str()))

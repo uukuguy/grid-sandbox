@@ -3,6 +3,11 @@ name = "octo-server"
 edition.workspace = true
 version.workspace = true
 
+[features]
+default = []
+sandbox-wasm = ["octo-engine/sandbox-wasm"]
+sandbox-docker = ["octo-engine/sandbox-docker"]
+
 [dependencies]
 octo-types = { workspace = true }
 octo-engine = { workspace = true }

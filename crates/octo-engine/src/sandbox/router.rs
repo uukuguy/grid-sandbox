@@ -83,6 +83,7 @@ impl AdapterEnum {
 ///
 /// Routes tool execution requests to the appropriate sandbox adapter
 /// based on the tool category.
+#[derive(Clone)]
 pub struct SandboxRouter {
     /// Registered adapters by sandbox type
     adapters: HashMap<SandboxType, Arc<AdapterEnum>>,

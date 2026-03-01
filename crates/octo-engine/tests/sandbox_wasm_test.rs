@@ -2,6 +2,8 @@
 //!
 //! These tests require the `sandbox-wasm` feature to be enabled.
 
+#![cfg(feature = "sandbox-wasm")]
+
 use octo_engine::sandbox::{RuntimeAdapter, SandboxConfig, SandboxId, SandboxType, WasmAdapter};
 
 /// Test creating a WASM adapter
@@ -51,7 +53,6 @@ async fn test_wasm_adapter_type() {
 }
 
 /// Test is_available
-#[cfg(feature = "sandbox-wasm")]
 #[tokio::test]
 async fn test_wasm_adapter_available() {
     let adapter = WasmAdapter::new();
