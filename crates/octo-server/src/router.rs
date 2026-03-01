@@ -4,9 +4,11 @@ use std::sync::Arc;
 use axum::{
     body::Body,
     extract::Request,
+    http::StatusCode,
     routing::get,
     Router,
 };
+use octo_engine::auth::{auth_middleware, AuthConfig};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -57,6 +59,25 @@ async fn rate_limit_middleware(
     next.run(req).await
 }
 
+/// Auth middleware wrapper that extracts AuthConfig from AppState
+async fn auth_middleware_wrapper(
+    state: axum::extract::State<Arc<AppState>>,
+    req: Request<Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let config: &AuthConfig = &state.auth_config;
+    match auth_middleware(req, next, config).await {
+        Ok(response) => response,
+        Err(status) => {
+            tracing::debug!("Auth middleware rejected request: {}", status);
+            axum::response::Response::builder()
+                .status(status)
+                .body(Body::empty())
+                .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
+        }
+    }
+}
+
 pub fn build_router(state: Arc<AppState>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -66,25 +87,30 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // Rate limiter: 100 requests per minute per IP
     let rate_limiter = RateLimiter::new(100, 60);
 
-    // Note: Auth middleware is available in state.auth_config
-    // but not yet applied to routes. To enable auth:
-    // 1. Set auth.mode to "api_key" in config.yaml
-    // 2. Add API keys in auth.api_keys section
-    // 3. All API requests will then require X-API-Key header
+    // Clone state for auth middleware (we need to pass a separate Arc<AppState> for the middleware)
+    let auth_state = state.clone();
 
+    // Build router with middleware layers
     Router::new()
         // Health check is open (no auth required)
         .route("/api/health", get(health))
         // WebSocket endpoint (auth handled via WebSocket protocol)
         .route("/ws", get(ws_handler))
-        // API routes
+        // API routes - all protected by auth middleware
+        // Auth middleware injects UserContext into request extensions
         .nest("/api", api::routes())
         .with_state(state)
         .with_state(rate_limiter.clone())
         .layer(cors)
         .layer(TraceLayer::new_for_http())
+        // Rate limiting middleware
         .layer(axum::middleware::from_fn_with_state(
             rate_limiter,
             rate_limit_middleware,
+        ))
+        // Auth middleware - validates API keys and injects UserContext
+        .layer(axum::middleware::from_fn_with_state(
+            auth_state,
+            auth_middleware_wrapper,
         ))
 }

@@ -1,18 +1,27 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     routing::{delete, get, post, put},
     Json, Router,
 };
 use chrono::Utc;
+use octo_engine::auth::UserContext;
 use octo_engine::mcp::{
     manager::ServerRuntimeState, storage::McpServerRecord, traits::McpServerConfigV2,
-    traits::McpTransport, McpManager,
+    traits::McpTransport,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
+
+const DEFAULT_USER_ID: &str = "default";
+
+/// Get user_id from UserContext or use default
+fn get_user_id_from_context(ctx: Option<&UserContext>) -> String {
+    ctx.and_then(|c| c.user_id.clone())
+        .unwrap_or_else(|| DEFAULT_USER_ID.to_string())
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpServerConfigRequest {
@@ -55,17 +64,21 @@ pub struct McpServerStatusResponse {
     pub tool_count: usize,
 }
 
-// List all MCP servers
+// List all MCP servers for the current user
 pub async fn list_servers(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<Vec<McpServerResponse>> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     let Some(storage) = state.mcp_storage() else {
         return Json(vec![]);
     };
 
     let manager = state.mcp_manager.lock().await;
 
-    match storage.list_servers() {
+    // Use list_servers_for_user to filter by user_id
+    match storage.list_servers_for_user(&user_id) {
         Ok(records) => {
             let responses: Vec<McpServerResponse> = records
                 .into_iter()
@@ -112,12 +125,16 @@ pub async fn list_servers(
 pub async fn get_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<Option<McpServerResponse>> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     let Some(storage) = state.mcp_storage() else {
         return Json(None);
     };
 
-    match storage.get_server(&id) {
+    // Use get_server_for_user to filter by user_id
+    match storage.get_server_for_user(&id, &user_id) {
         Ok(Some(r)) => Json(Some(McpServerResponse {
             id: r.id,
             name: r.name,
@@ -144,8 +161,11 @@ pub async fn get_server(
 // Create new server
 pub async fn create_server(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<UserContext>,
     Json(req): Json<McpServerConfigRequest>,
 ) -> Json<McpServerResponse> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     let Some(storage) = state.mcp_storage() else {
         return Json(McpServerResponse {
             id: uuid::Uuid::new_v4().to_string(),
@@ -185,7 +205,7 @@ pub async fn create_server(
         enabled,
         transport: Some(transport.clone()),
         url: req.url.clone(),
-        user_id: "default".to_string(),
+        user_id: user_id.clone(),
         created_at: now.clone(),
         updated_at: now.clone(),
     };
@@ -215,16 +235,23 @@ pub async fn create_server(
 pub async fn update_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
     Json(req): Json<McpServerConfigRequest>,
 ) -> Json<Option<McpServerResponse>> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     let storage = match state.mcp_storage() {
         Some(s) => s,
         None => return Json(None),
     };
 
-    // Get existing server to preserve created_at
-    let existing = storage.get_server(&id).ok().flatten();
-    let created_at = existing.map(|r| r.created_at).unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+    // Get existing server to preserve created_at and verify ownership
+    let existing = storage.get_server_for_user(&id, &user_id).ok().flatten();
+    if existing.is_none() {
+        return Json(None);
+    }
+    let existing = existing.unwrap();
+    let created_at = existing.created_at;
 
     let now = chrono::Utc::now().to_rfc3339();
     let env_str = req.env.as_ref().map(|e| {
@@ -244,7 +271,7 @@ pub async fn update_server(
         enabled: req.enabled.unwrap_or(true),
         transport: req.transport.clone(),
         url: req.url.clone(),
-        user_id: "default".to_string(),
+        user_id: user_id.clone(),
         created_at,
         updated_at: now,
     };
@@ -284,8 +311,17 @@ pub async fn update_server(
 pub async fn delete_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     if let Some(storage) = state.mcp_storage() {
+        // First check if the server belongs to the user
+        let existing = storage.get_server_for_user(&id, &user_id).ok().flatten();
+        if existing.is_none() {
+            return Json(serde_json::json!({"error": "Server not found or access denied"}));
+        }
+
         if let Err(e) = storage.delete_server(&id) {
             tracing::error!("Failed to delete MCP server: {e}");
             return Json(serde_json::json!({"error": e.to_string()}));
@@ -298,16 +334,20 @@ pub async fn delete_server(
 pub async fn start_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     // Get server config from storage
     let Some(storage) = state.mcp_storage() else {
         return Json(serde_json::json!({"error": "MCP storage not available"}));
     };
 
-    let server_record = match storage.get_server(&id) {
+    // Verify server belongs to user
+    let server_record = match storage.get_server_for_user(&id, &user_id) {
         Ok(Some(record)) => record,
         Ok(None) => {
-            return Json(serde_json::json!({"error": "Server not found"}));
+            return Json(serde_json::json!({"error": "Server not found or access denied"}));
         }
         Err(e) => {
             return Json(serde_json::json!({"error": format!("Failed to get server: {}", e)}));
@@ -358,7 +398,18 @@ pub async fn start_server(
 pub async fn stop_server(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
+    // Verify server belongs to user before stopping
+    if let Some(storage) = state.mcp_storage() {
+        let existing = storage.get_server_for_user(&id, &user_id).ok().flatten();
+        if existing.is_none() {
+            return Json(serde_json::json!({"error": "Server not found or access denied"}));
+        }
+    }
+
     let mut manager = state.mcp_manager.lock().await;
 
     match manager.remove_server(&id).await {
@@ -378,7 +429,18 @@ pub async fn stop_server(
 pub async fn get_server_status(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<Option<McpServerStatusResponse>> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
+    // Verify server belongs to user before showing status
+    if let Some(storage) = state.mcp_storage() {
+        let existing = storage.get_server_for_user(&id, &user_id).ok().flatten();
+        if existing.is_none() {
+            return Json(None);
+        }
+    }
+
     let manager = state.mcp_manager.lock().await;
     let runtime_state = manager.get_runtime_state(&id);
     let tool_count = manager.get_tool_count(&id);

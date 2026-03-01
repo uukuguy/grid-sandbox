@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::Json;
+use octo_engine::auth::UserContext;
 use serde::Deserialize;
 
 use octo_types::{MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, SandboxId, SearchOptions, UserId};
@@ -9,6 +10,12 @@ use octo_types::{MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, SandboxId,
 use crate::state::AppState;
 
 const DEFAULT_USER_ID: &str = "default";
+
+/// Get user_id from UserContext or use default
+fn get_user_id_from_context(ctx: Option<&UserContext>) -> String {
+    ctx.and_then(|c| c.user_id.clone())
+        .unwrap_or_else(|| DEFAULT_USER_ID.to_string())
+}
 
 #[derive(Deserialize)]
 pub struct MemorySearchParams {
@@ -39,13 +46,15 @@ pub struct CreateMemoryRequest {
 pub async fn search_memories(
     State(state): State<Arc<AppState>>,
     Query(params): Query<MemorySearchParams>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
     let query = params.q.unwrap_or_default();
 
-    // No query: list all memories for the default user
+    // No query: list all memories for the current user
     if query.is_empty() {
         let filter = MemoryFilter {
-            user_id: DEFAULT_USER_ID.to_string(),
+            user_id,
             limit: params.limit.min(100),
             ..Default::default()
         };
@@ -57,7 +66,7 @@ pub async fn search_memories(
 
     // With query: FTS search
     let opts = SearchOptions {
-        user_id: DEFAULT_USER_ID.to_string(),
+        user_id,
         limit: params.limit.min(100),
         ..Default::default()
     };
@@ -76,10 +85,12 @@ pub struct WorkingMemoryParams {
 pub async fn get_working_memory(
     State(state): State<Arc<AppState>>,
     Query(params): Query<WorkingMemoryParams>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let user_id = UserId::from_string(DEFAULT_USER_ID);
+    let user_id_str = get_user_id_from_context(Some(&ctx));
+    let user_id = UserId::from_string(&user_id_str);
     let sandbox_id = SandboxId::from_string(
-        params.sandbox_id.as_deref().unwrap_or(DEFAULT_USER_ID),
+        params.sandbox_id.as_deref().unwrap_or(&user_id_str),
     );
     match state.memory.get_blocks(&user_id, &sandbox_id).await {
         Ok(blocks) => Json(serde_json::json!({ "blocks": blocks })),
@@ -90,10 +101,18 @@ pub async fn get_working_memory(
 pub async fn get_memory(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
     let mem_id = MemoryId::from_string(&id);
     match state.memory_store.get(&mem_id).await {
-        Ok(Some(entry)) => Json(serde_json::to_value(entry).unwrap_or_default()),
+        Ok(Some(entry)) => {
+            // Verify the entry belongs to the user
+            if entry.user_id != user_id {
+                return Json(serde_json::json!({"error": "not found or access denied"}));
+            }
+            Json(serde_json::to_value(entry).unwrap_or_default())
+        }
         Ok(None) => Json(serde_json::json!({"error": "not found"})),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
@@ -102,8 +121,18 @@ pub async fn get_memory(
 pub async fn delete_memory(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
     let mem_id = MemoryId::from_string(&id);
+
+    // Check ownership before deleting
+    if let Ok(Some(entry)) = state.memory_store.get(&mem_id).await {
+        if entry.user_id != user_id {
+            return Json(serde_json::json!({"error": "not found or access denied"}));
+        }
+    }
+
     match state.memory_store.delete(&mem_id).await {
         Ok(()) => Json(serde_json::json!({"deleted": id})),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
@@ -119,7 +148,9 @@ pub struct DeleteFilterParams {
 pub async fn delete_memories_by_filter(
     State(state): State<Arc<AppState>>,
     Query(params): Query<DeleteFilterParams>,
+    Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
     let categories = params
         .category
         .as_deref()
@@ -127,7 +158,7 @@ pub async fn delete_memories_by_filter(
         .map(|c| vec![c]);
 
     let filter = MemoryFilter {
-        user_id: DEFAULT_USER_ID.to_string(),
+        user_id,
         sandbox_id: params.sandbox_id,
         categories,
         ..Default::default()
@@ -142,8 +173,11 @@ pub async fn delete_memories_by_filter(
 /// Create a new memory entry
 pub async fn create_memory(
     State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<UserContext>,
     Json(req): Json<CreateMemoryRequest>,
 ) -> Json<serde_json::Value> {
+    let user_id = get_user_id_from_context(Some(&ctx));
+
     // Parse category or default to "profile"
     let category = req
         .category
@@ -153,11 +187,11 @@ pub async fn create_memory(
     // Use provided sandbox_id or default
     let sandbox_id = req
         .sandbox_id
-        .unwrap_or_else(|| DEFAULT_USER_ID.to_string());
+        .unwrap_or_else(|| user_id.clone());
 
     // Create memory entry with all fields
     let mut entry = MemoryEntry::new(
-        DEFAULT_USER_ID,
+        &user_id,
         category,
         &req.content,
     );
