@@ -30,6 +30,7 @@ notify-debouncer-mini = { workspace = true }
 rmcp = { workspace = true }
 hex = "0.4"
 sha2 = "0.10"
+axum = { version = "0.8", features = ["ws"] }
 
 [features]
 default = []

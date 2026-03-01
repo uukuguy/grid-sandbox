@@ -1,19 +1,11 @@
 {
-  "plan_file": "docs/plans/2026-03-01-phase2-5-1-sandbox.md",
-  "phase": "completed",
-  "phase_name": "Phase 2.5.1 - Sandbox System",
-  "created_at": "2026-03-01T10:14:00+08:00",
-  "updated_at": "2026-03-01T12:30:00+08:00",
-  "completed_tasks": [
-    "Task 1: Create sandbox module structure",
-    "Task 2: Define RuntimeAdapter Trait",
-    "Task 3: SubprocessAdapter implementation",
-    "Task 4: WasmAdapter implementation",
-    "Task 5: DockerAdapter implementation",
-    "Task 6: SandboxRouter implementation",
-    "Task 7: Integrate into tool system"
-  ],
-  "current_task": "Phase 2.5.1 completed - All 7 tasks finished",
+  "plan_file": "docs/plans/2026-03-01-phase2-5-2-auth.md",
+  "phase": "in_progress",
+  "phase_name": "Phase 2.5.2 - Simplified Auth System",
+  "created_at": "2026-03-01T12:45:00+08:00",
+  "updated_at": "2026-03-01T12:45:00+08:00",
+  "completed_tasks": [],
+  "current_task": "Task 1 - Create auth module structure",
   "execution_mode": "subagent-driven-development",
-  "notes": "Phase 2.5.1 Sandbox System fully implemented. RuntimeAdapter trait, SubprocessAdapter, WasmAdapter (wasmtime), DockerAdapter (bollard), SandboxRouter all complete. Bash tool integration working. 82 tests passing."
+  "notes": "Phase 2.5.2 starting - Simplified Auth System with API Key support. Backward compatible with no-auth mode."
 }

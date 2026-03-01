@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod auth;
 pub mod context;
 pub mod db;
 pub mod event;
@@ -13,6 +14,10 @@ pub mod skills;
 pub mod tools;
 
 pub use agent::{AgentEvent, AgentLoop};
+pub use auth::{
+    auth_middleware, get_user_context, ApiKey, ApiKeyConfig, AuthConfig, AuthConfigYaml, AuthMode,
+    Permission, UserContext,
+};
 pub use context::{
     BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,
 };
