@@ -102,9 +102,7 @@ impl Tool for GlobTool {
                     .join("\n");
 
                 let result_text = if total > MAX_RESULTS {
-                    format!(
-                        "{output}\n\n[... {total} total matches, showing first {MAX_RESULTS}]"
-                    )
+                    format!("{output}\n\n[... {total} total matches, showing first {MAX_RESULTS}]")
                 } else if total == 0 {
                     "No files found matching pattern.".to_string()
                 } else {

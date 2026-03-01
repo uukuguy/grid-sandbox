@@ -106,9 +106,7 @@ impl Tool for FileReadTool {
 
                 Ok(ToolResult::success(output))
             }
-            Err(e) => Ok(ToolResult::error(format!(
-                "Failed to read file: {e}"
-            ))),
+            Err(e) => Ok(ToolResult::error(format!("Failed to read file: {e}"))),
         }
     }
 

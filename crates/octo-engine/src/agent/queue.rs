@@ -74,12 +74,14 @@ impl MessageQueue {
 
     /// Push a steering message.
     pub fn push_steering(&mut self, message: String) {
-        self.steering.push_back(QueueEntry::new(message, QueueKind::Steering));
+        self.steering
+            .push_back(QueueEntry::new(message, QueueKind::Steering));
     }
 
     /// Push a follow-up message.
     pub fn push_followup(&mut self, message: String) {
-        self.follow_up.push_back(QueueEntry::new(message, QueueKind::FollowUp));
+        self.follow_up
+            .push_back(QueueEntry::new(message, QueueKind::FollowUp));
     }
 
     /// Push a message to a specific queue.
@@ -93,30 +95,30 @@ impl MessageQueue {
     /// Drain all steering messages.
     pub fn drain_steering(&mut self) -> Vec<String> {
         match self.steering_mode {
-            QueueMode::All => {
-                std::mem::take(&mut self.steering)
-                    .into_iter()
-                    .map(|e| e.content)
-                    .collect()
-            }
-            QueueMode::OneAtATime => {
-                self.steering.pop_front().map(|e| vec![e.content]).unwrap_or_default()
-            }
+            QueueMode::All => std::mem::take(&mut self.steering)
+                .into_iter()
+                .map(|e| e.content)
+                .collect(),
+            QueueMode::OneAtATime => self
+                .steering
+                .pop_front()
+                .map(|e| vec![e.content])
+                .unwrap_or_default(),
         }
     }
 
     /// Drain all follow-up messages.
     pub fn drain_followup(&mut self) -> Vec<String> {
         match self.follow_up_mode {
-            QueueMode::All => {
-                std::mem::take(&mut self.follow_up)
-                    .into_iter()
-                    .map(|e| e.content)
-                    .collect()
-            }
-            QueueMode::OneAtATime => {
-                self.follow_up.pop_front().map(|e| vec![e.content]).unwrap_or_default()
-            }
+            QueueMode::All => std::mem::take(&mut self.follow_up)
+                .into_iter()
+                .map(|e| e.content)
+                .collect(),
+            QueueMode::OneAtATime => self
+                .follow_up
+                .pop_front()
+                .map(|e| vec![e.content])
+                .unwrap_or_default(),
         }
     }
 

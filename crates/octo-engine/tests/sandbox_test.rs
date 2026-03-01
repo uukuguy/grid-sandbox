@@ -25,7 +25,10 @@ fn test_sandbox_config() {
         .with_memory_limit(1024 * 1024)
         .with_time_limit(60);
 
-    assert_eq!(config.sandbox_type, octo_engine::sandbox::SandboxType::Subprocess);
+    assert_eq!(
+        config.sandbox_type,
+        octo_engine::sandbox::SandboxType::Subprocess
+    );
     assert!(config.working_dir.is_some());
     assert_eq!(config.working_dir.unwrap().to_string_lossy(), "/tmp");
     assert!(config.env.contains_key("KEY"));

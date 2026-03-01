@@ -34,10 +34,9 @@ impl Default for ExecPolicy {
         Self {
             mode: ExecSecurityMode::Allowlist,
             safe_bins: vec![
-                "ls", "cat", "head", "tail", "grep", "find", "echo", "pwd",
-                "wc", "sort", "uniq", "cut", "awk", "sed", "tr", "diff",
-                "git", "cargo", "npm", "python3", "python", "node", "sh",
-                "bash", "touch", "mkdir", "cp", "mv", "rm", "curl", "wget",
+                "ls", "cat", "head", "tail", "grep", "find", "echo", "pwd", "wc", "sort", "uniq",
+                "cut", "awk", "sed", "tr", "diff", "git", "cargo", "npm", "python3", "python",
+                "node", "sh", "bash", "touch", "mkdir", "cp", "mv", "rm", "curl", "wget",
             ]
             .into_iter()
             .map(String::from)

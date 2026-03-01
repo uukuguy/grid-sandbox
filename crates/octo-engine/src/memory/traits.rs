@@ -19,9 +19,5 @@ pub trait WorkingMemory: Send + Sync {
     /// Expire blocks that have exceeded max_age_turns. Returns removed count.
     async fn expire_blocks(&self, current_turn: u32) -> Result<usize>;
 
-    async fn compile(
-        &self,
-        user_id: &UserId,
-        sandbox_id: &SandboxId,
-    ) -> Result<String>;
+    async fn compile(&self, user_id: &UserId, sandbox_id: &SandboxId) -> Result<String>;
 }

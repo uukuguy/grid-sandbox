@@ -1,19 +1,30 @@
 // SandboxRouter integration tests
 
-use octo_engine::sandbox::{AdapterEnum, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory};
+use octo_engine::sandbox::{
+    AdapterEnum, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory,
+};
 
 #[test]
 fn test_router_tool_mapping() {
     let router = SandboxRouter::new();
 
     // Default mappings
-    assert_eq!(router.get_sandbox_type(ToolCategory::Shell), SandboxType::Docker);
-    assert_eq!(router.get_sandbox_type(ToolCategory::Compute), SandboxType::Wasm);
+    assert_eq!(
+        router.get_sandbox_type(ToolCategory::Shell),
+        SandboxType::Docker
+    );
+    assert_eq!(
+        router.get_sandbox_type(ToolCategory::Compute),
+        SandboxType::Wasm
+    );
     assert_eq!(
         router.get_sandbox_type(ToolCategory::FileSystem),
         SandboxType::Docker
     );
-    assert_eq!(router.get_sandbox_type(ToolCategory::Network), SandboxType::Wasm);
+    assert_eq!(
+        router.get_sandbox_type(ToolCategory::Network),
+        SandboxType::Wasm
+    );
 }
 
 #[test]
@@ -40,7 +51,10 @@ fn test_router_set_default() {
     let mut router2 = SandboxRouter::new();
     router2.set_default(SandboxType::Wasm);
     // Shell has explicit mapping so still uses Docker
-    assert_eq!(router2.get_sandbox_type(ToolCategory::Shell), SandboxType::Docker);
+    assert_eq!(
+        router2.get_sandbox_type(ToolCategory::Shell),
+        SandboxType::Docker
+    );
 }
 
 #[tokio::test]

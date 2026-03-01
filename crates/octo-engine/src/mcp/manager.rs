@@ -102,8 +102,7 @@ impl McpManager {
             "MCP server connected with tools"
         );
 
-        let client: Arc<RwLock<Box<dyn McpClient>>> =
-            Arc::new(RwLock::new(Box::new(client)));
+        let client: Arc<RwLock<Box<dyn McpClient>>> = Arc::new(RwLock::new(Box::new(client)));
         self.clients.insert(name.clone(), client);
         self.tool_infos.insert(name, tools.clone());
         Ok(tools)
@@ -160,11 +159,8 @@ impl McpManager {
         for (server_name, tools) in &self.tool_infos {
             let client = self.clients.get(server_name).unwrap().clone();
             for tool_info in tools {
-                let bridge = McpToolBridge::new(
-                    client.clone(),
-                    server_name.clone(),
-                    tool_info.clone(),
-                );
+                let bridge =
+                    McpToolBridge::new(client.clone(), server_name.clone(), tool_info.clone());
                 registry.register(bridge);
                 debug!(
                     server = %server_name,

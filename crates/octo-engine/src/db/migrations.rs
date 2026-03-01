@@ -170,7 +170,11 @@ pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
     if version < CURRENT_VERSION {
-        info!(from = version, to = CURRENT_VERSION, "Running database migration");
+        info!(
+            from = version,
+            to = CURRENT_VERSION,
+            "Running database migration"
+        );
 
         if version < 1 {
             conn.execute_batch(MIGRATION_V1)?;

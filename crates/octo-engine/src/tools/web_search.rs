@@ -60,7 +60,10 @@ impl Tool for WebSearchTool {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'query' parameter"))?;
 
-        let max_results = params["max_results"].as_u64().map(|v| v as usize).unwrap_or(5);
+        let max_results = params["max_results"]
+            .as_u64()
+            .map(|v| v as usize)
+            .unwrap_or(5);
 
         debug!(query, max_results, "performing web search");
 
@@ -70,7 +73,8 @@ impl Tool for WebSearchTool {
             urlencoding::encode(query)
         );
 
-        let response = self.client
+        let response = self
+            .client
             .get(&search_url)
             .header("User-Agent", "Octo-Sandbox/1.0")
             .send()
@@ -81,7 +85,10 @@ impl Tool for WebSearchTool {
             return Ok(ToolResult::error(format!(
                 "HTTP error: {} - {}",
                 response.status().as_u16(),
-                response.status().canonical_reason().unwrap_or("Unknown error")
+                response
+                    .status()
+                    .canonical_reason()
+                    .unwrap_or("Unknown error")
             )));
         }
 
@@ -152,7 +159,10 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<(String, String, Str
         }
 
         // Look for snippet
-        if in_result && (line.contains("class=\"result__snippet\"") || line.contains("class='result__snippet'")) {
+        if in_result
+            && (line.contains("class=\"result__snippet\"")
+                || line.contains("class='result__snippet'"))
+        {
             // Extract snippet text
             if let Some(start) = line.find("result__snippet") {
                 let after_class = &line[start..];
@@ -174,7 +184,11 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<(String, String, Str
         }
 
         // End of result (when we see </a> closing the title link)
-        if in_result && line.contains("</a>") && !current_title.is_empty() && !current_url.is_empty() {
+        if in_result
+            && line.contains("</a>")
+            && !current_title.is_empty()
+            && !current_url.is_empty()
+        {
             if !current_snippet.is_empty() {
                 results.push((
                     current_title.clone(),

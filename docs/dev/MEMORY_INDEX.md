@@ -5,7 +5,17 @@
 
 ---
 
-## [Active Work] Enterprise Enhancements [2026-03-01]
+## [Active Work] Phase 2.5 - 核心基础设施 [2026-03-01]
+
+- 09:40 | Phase 2.5 设计文档更新 (docs/design/PHASE_2_5_DESIGN.md)
+  - 拆分为 4 个子阶段: 2.5(核心) / 2.6(Provider+Scheduler) / 2.7(可观测性) / 2.8(Agent增强)
+  - **Phase 2.5**: 沙箱 + 认证 + 用户隔离 (~1800 LOC)
+  - **Phase 2.6**: Provider 多实例 + Scheduler (~800 LOC)
+  - **Phase 2.7**: Metrics + 审计 (~500 LOC)
+  - **Phase 2.8**: Agent Loop + Secret (~400 LOC)
+  - 参考项目标注: openfang (auth/sandbox/scheduler/metrics/audit), openclaw (agent_loop)
+- 09:35 | Phase 2.5 设计文档更新
+- 09:30 | Phase 2.5 设计文档完成
 
 - 12:30 | octo-workbench v1.0 完成 + 4 个企业级增强模块
   - LoopGuard 增强: 结果感知、乒乓检测、轮询处理、警告升级 (14 tests)

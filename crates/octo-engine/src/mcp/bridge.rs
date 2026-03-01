@@ -6,8 +6,8 @@ use tokio::sync::RwLock;
 
 use octo_types::{ToolContext, ToolResult, ToolSource};
 
-use crate::tools::Tool;
 use super::traits::{McpClient, McpToolInfo};
+use crate::tools::Tool;
 
 /// Bridges an MCP server tool into the local ToolRegistry.
 pub struct McpToolBridge {
@@ -37,10 +37,7 @@ impl Tool for McpToolBridge {
     }
 
     fn description(&self) -> &str {
-        self.tool_info
-            .description
-            .as_deref()
-            .unwrap_or("")
+        self.tool_info.description.as_deref().unwrap_or("")
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -51,11 +48,7 @@ impl Tool for McpToolBridge {
         ToolSource::Mcp(self.server_name.clone())
     }
 
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<ToolResult> {
+    async fn execute(&self, params: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult> {
         let client = self.client.read().await;
         match client.call_tool(&self.tool_info.name, params).await {
             Ok(result) => {

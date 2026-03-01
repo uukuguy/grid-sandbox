@@ -15,7 +15,5 @@ pub mod wasm;
 pub use docker::DockerAdapter;
 pub use router::{AdapterEnum, SandboxRouter, ToolCategory};
 pub use subprocess::SubprocessAdapter;
-pub use traits::{
-    ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxType,
-};
+pub use traits::{ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxType};
 pub use wasm::WasmAdapter;

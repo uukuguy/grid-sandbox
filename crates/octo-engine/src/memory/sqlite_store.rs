@@ -103,7 +103,10 @@ impl MemoryStore for SqliteMemoryStore {
 
         self.conn
             .call(move |conn| {
-                conn.execute("DELETE FROM memories WHERE id = ?1", rusqlite::params![id_str])?;
+                conn.execute(
+                    "DELETE FROM memories WHERE id = ?1",
+                    rusqlite::params![id_str],
+                )?;
                 Ok(())
             })
             .await?;
@@ -149,10 +152,7 @@ impl MemoryStore for SqliteMemoryStore {
                             .enumerate()
                             .map(|(i, _)| format!("?{}", param_idx + i))
                             .collect();
-                        sql.push_str(&format!(
-                            " AND source_type IN ({})",
-                            placeholders.join(",")
-                        ));
+                        sql.push_str(&format!(" AND source_type IN ({})", placeholders.join(",")));
                         for src in sources {
                             params.push(Box::new(src.as_str().to_string()));
                         }
@@ -239,30 +239,48 @@ impl MemoryStore for SqliteMemoryStore {
     async fn batch_store(&self, entries: Vec<MemoryEntry>) -> Result<Vec<MemoryId>> {
         let ids: Vec<MemoryId> = entries.iter().map(|e| e.id.clone()).collect();
 
-        let entries_data: Vec<(String, String, String, String, String, String, Option<Vec<u8>>, f32, u32, i64, String, String, Option<i64>, i64, i64)> =
-            entries
-                .into_iter()
-                .map(|e| {
-                    let blob = e.embedding.as_ref().and_then(|emb| bincode::serialize(emb).ok());
-                    (
-                        e.id.as_str().to_string(),
-                        e.user_id,
-                        e.sandbox_id,
-                        e.category.as_str().to_string(),
-                        e.content,
-                        e.metadata.to_string(),
-                        blob,
-                        e.importance,
-                        e.access_count,
-                        e.timestamps.accessed_at,
-                        e.source_type.as_str().to_string(),
-                        e.source_ref,
-                        e.ttl,
-                        e.timestamps.created_at,
-                        e.timestamps.updated_at,
-                    )
-                })
-                .collect();
+        let entries_data: Vec<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<Vec<u8>>,
+            f32,
+            u32,
+            i64,
+            String,
+            String,
+            Option<i64>,
+            i64,
+            i64,
+        )> = entries
+            .into_iter()
+            .map(|e| {
+                let blob = e
+                    .embedding
+                    .as_ref()
+                    .and_then(|emb| bincode::serialize(emb).ok());
+                (
+                    e.id.as_str().to_string(),
+                    e.user_id,
+                    e.sandbox_id,
+                    e.category.as_str().to_string(),
+                    e.content,
+                    e.metadata.to_string(),
+                    blob,
+                    e.importance,
+                    e.access_count,
+                    e.timestamps.accessed_at,
+                    e.source_type.as_str().to_string(),
+                    e.source_ref,
+                    e.ttl,
+                    e.timestamps.created_at,
+                    e.timestamps.updated_at,
+                )
+            })
+            .collect();
 
         self.conn
             .call(move |conn| {
@@ -411,10 +429,7 @@ fn fts_search(
     limit: usize,
 ) -> rusqlite::Result<Vec<(MemoryEntry, f32)>> {
     // Build FTS match query: simple tokenization for FTS5
-    let fts_query = query
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" OR ");
+    let fts_query = query.split_whitespace().collect::<Vec<_>>().join(" OR ");
 
     if fts_query.is_empty() {
         return Ok(Vec::new());
@@ -500,8 +515,8 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
 
     let category = MemoryCategory::from_str(&category_str).unwrap_or(MemoryCategory::Profile);
     let source_type = MemorySource::from_str(&source_type_str);
-    let embedding: Option<Vec<f32>> = embedding_blob
-        .and_then(|blob| bincode::deserialize(&blob).ok());
+    let embedding: Option<Vec<f32>> =
+        embedding_blob.and_then(|blob| bincode::deserialize(&blob).ok());
     let metadata: serde_json::Value =
         serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({}));
 

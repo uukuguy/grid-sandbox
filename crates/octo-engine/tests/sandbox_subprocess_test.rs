@@ -1,6 +1,8 @@
 // SubprocessAdapter integration tests
 
-use octo_engine::sandbox::{RuntimeAdapter, SandboxConfig, SandboxId, SandboxType, SubprocessAdapter};
+use octo_engine::sandbox::{
+    RuntimeAdapter, SandboxConfig, SandboxId, SandboxType, SubprocessAdapter,
+};
 
 #[tokio::test]
 async fn test_subprocess_create() {
@@ -25,10 +27,7 @@ async fn test_subprocess_create_and_execute() {
     let id = adapter.create(&config).await.unwrap();
 
     // Execute command
-    let result = adapter
-        .execute(&id, "echo 'hello'", "bash")
-        .await
-        .unwrap();
+    let result = adapter.execute(&id, "echo 'hello'", "bash").await.unwrap();
 
     assert_eq!(result.stdout.trim(), "hello");
     assert_eq!(result.exit_code, 0);
@@ -66,10 +65,7 @@ async fn test_subprocess_failed_command() {
     let id = adapter.create(&config).await.unwrap();
 
     // Execute command that fails
-    let result = adapter
-        .execute(&id, "exit 1", "bash")
-        .await
-        .unwrap();
+    let result = adapter.execute(&id, "exit 1", "bash").await.unwrap();
 
     assert_eq!(result.exit_code, 1);
     assert!(!result.success);
@@ -99,8 +95,7 @@ async fn test_subprocess_destroy_not_found() {
 #[tokio::test]
 async fn test_subprocess_with_env_vars() {
     let adapter = SubprocessAdapter::new();
-    let config = SandboxConfig::new(SandboxType::Subprocess)
-        .with_env("TEST_VAR", "test_value");
+    let config = SandboxConfig::new(SandboxType::Subprocess).with_env("TEST_VAR", "test_value");
 
     let id = adapter.create(&config).await.unwrap();
 

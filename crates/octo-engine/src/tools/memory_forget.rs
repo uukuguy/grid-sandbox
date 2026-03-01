@@ -90,7 +90,9 @@ impl Tool for MemoryForgetTool {
             )));
         }
 
-        Ok(ToolResult::error("No valid delete criteria provided".to_string()))
+        Ok(ToolResult::error(
+            "No valid delete criteria provided".to_string(),
+        ))
     }
 
     fn source(&self) -> ToolSource {

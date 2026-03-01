@@ -372,9 +372,11 @@ impl Provider for OpenAIProvider {
 
         let api_resp: ApiResponse = resp.json().await?;
 
-        let choice = api_resp.choices.into_iter().next().ok_or_else(|| {
-            anyhow!("OpenAI API returned empty choices")
-        })?;
+        let choice = api_resp
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("OpenAI API returned empty choices"))?;
 
         let mut content = Vec::new();
 
@@ -386,10 +388,8 @@ impl Provider for OpenAIProvider {
 
         if let Some(tool_calls) = choice.message.tool_calls {
             for tc in tool_calls {
-                let input: Value =
-                    serde_json::from_str(&tc.function.arguments).unwrap_or(Value::Object(
-                        serde_json::Map::new(),
-                    ));
+                let input: Value = serde_json::from_str(&tc.function.arguments)
+                    .unwrap_or(Value::Object(serde_json::Map::new()));
                 content.push(ContentBlock::ToolUse {
                     id: tc.id,
                     name: tc.function.name,
@@ -398,9 +398,7 @@ impl Provider for OpenAIProvider {
             }
         }
 
-        let stop_reason = choice
-            .finish_reason
-            .map(|s| parse_finish_reason(&s));
+        let stop_reason = choice.finish_reason.map(|s| parse_finish_reason(&s));
 
         let usage = api_resp.usage.unwrap_or_default();
 
@@ -589,10 +587,8 @@ impl<S> OpenAISseStream<S> {
                 let has_pending_tools = !self.tool_calls.is_empty();
                 let pending: Vec<ToolCallAccum> = self.tool_calls.drain(..).collect();
                 for tc in pending {
-                    let input: Value =
-                        serde_json::from_str(&tc.arguments).unwrap_or(Value::Object(
-                            serde_json::Map::new(),
-                        ));
+                    let input: Value = serde_json::from_str(&tc.arguments)
+                        .unwrap_or(Value::Object(serde_json::Map::new()));
                     events.push(Ok(StreamEvent::ToolUseComplete {
                         index: tc.index,
                         id: tc.id,
@@ -699,7 +695,9 @@ impl<S> OpenAISseStream<S> {
                     for block in content_array {
                         if let Some(block_type) = block["type"].as_str() {
                             if block_type == "thinking" || block_type == "reasoning" {
-                                if let Some(text) = block["thinking"].as_str().or(block["text"].as_str()) {
+                                if let Some(text) =
+                                    block["thinking"].as_str().or(block["text"].as_str())
+                                {
                                     if !text.is_empty() {
                                         events.push(Ok(StreamEvent::ThinkingDelta {
                                             text: text.to_string(),

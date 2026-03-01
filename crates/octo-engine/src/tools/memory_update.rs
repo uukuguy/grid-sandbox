@@ -68,9 +68,7 @@ impl Tool for MemoryUpdateTool {
 
         self.store.update(&id, content).await?;
 
-        Ok(ToolResult::success(format!(
-            "Updated memory {id_str}"
-        )))
+        Ok(ToolResult::success(format!("Updated memory {id_str}")))
     }
 
     fn source(&self) -> ToolSource {

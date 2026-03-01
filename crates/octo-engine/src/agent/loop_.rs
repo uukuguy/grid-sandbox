@@ -7,8 +7,8 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
 use octo_types::{
-    ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, SessionId,
-    StopReason, StreamEvent, ToolContext, ToolSource, UserId,
+    ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, SessionId, StopReason,
+    StreamEvent, ToolContext, ToolSource, UserId,
 };
 
 use crate::context::{ContextBudgetManager, ContextPruner, DegradationLevel, MemoryFlusher};
@@ -110,7 +110,10 @@ impl AgentLoop {
         self
     }
 
-    pub fn with_recorder(mut self, recorder: Arc<crate::tools::recorder::ToolExecutionRecorder>) -> Self {
+    pub fn with_recorder(
+        mut self,
+        recorder: Arc<crate::tools::recorder::ToolExecutionRecorder>,
+    ) -> Self {
         self.recorder = Some(recorder);
         self
     }
@@ -126,7 +129,10 @@ impl AgentLoop {
         cancel_flag: Option<Arc<AtomicBool>>,
     ) -> Result<()> {
         // Panic if model not set - must call with_model() first
-        assert!(!self.model.is_empty(), "Model not set: call with_model() before run()");
+        assert!(
+            !self.model.is_empty(),
+            "Model not set: call with_model() before run()"
+        );
 
         info!(
             session = %session_id,
@@ -162,16 +168,16 @@ impl AgentLoop {
             }
 
             // Apply context pruning based on budget
-            let level = self.budget.compute_degradation_level(
-                &system_prompt,
-                messages,
-                &tool_specs,
-            );
+            let level =
+                self.budget
+                    .compute_degradation_level(&system_prompt, messages, &tool_specs);
             if level != DegradationLevel::None {
                 debug!(?level, "Applying context degradation");
 
                 // At OverflowCompaction level: flush facts before pruning to prevent info loss
-                if level >= DegradationLevel::OverflowCompaction && level != DegradationLevel::FinalError {
+                if level >= DegradationLevel::OverflowCompaction
+                    && level != DegradationLevel::FinalError
+                {
                     let boundary = ContextPruner::find_compaction_boundary(messages, 20_000);
                     if boundary > 0 {
                         let _ = MemoryFlusher::flush(
@@ -228,7 +234,8 @@ impl AgentLoop {
                             let kind = LlmErrorKind::classify_from_str(&err_str);
                             tracing::error!(
                                 "LLM stream failed (non-retryable, kind={:?}): {}",
-                                kind, e
+                                kind,
+                                e
                             );
                             last_err = Some(e);
                             break;
@@ -296,7 +303,8 @@ impl AgentLoop {
                         );
 
                         // Update budget with actual usage
-                        self.budget.update_actual_usage(usage.input_tokens, messages.len());
+                        self.budget
+                            .update_actual_usage(usage.input_tokens, messages.len());
 
                         // Emit budget snapshot to frontend
                         let snapshot = self.budget.snapshot(&system_prompt, messages, &tool_specs);
@@ -323,9 +331,11 @@ impl AgentLoop {
                         if stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
                             // Always append an assistant message so the conversation history
                             // stays well-formed (no two consecutive user messages).
-                            messages.push(ChatMessage::assistant(
-                                if full_text.is_empty() { "(no response)" } else { &full_text },
-                            ));
+                            messages.push(ChatMessage::assistant(if full_text.is_empty() {
+                                "(no response)"
+                            } else {
+                                &full_text
+                            }));
                             if !full_text.is_empty() {
                                 let _ = tx.send(AgentEvent::TextComplete {
                                     text: full_text.clone(),
@@ -349,9 +359,11 @@ impl AgentLoop {
             if tool_uses.is_empty() {
                 // Stream ended without explicit MessageStop with tool_use.
                 // Ensure an assistant message is always appended.
-                messages.push(ChatMessage::assistant(
-                    if full_text.is_empty() { "(no response)" } else { &full_text },
-                ));
+                messages.push(ChatMessage::assistant(if full_text.is_empty() {
+                    "(no response)"
+                } else {
+                    &full_text
+                }));
                 if !full_text.is_empty() {
                     let _ = tx.send(AgentEvent::TextComplete {
                         text: full_text.clone(),
@@ -412,19 +424,20 @@ impl AgentLoop {
                     bus.publish(crate::event::OctoEvent::ToolCallStarted {
                         session_id: session_id.as_str().to_string(),
                         tool_name: tu.name.clone(),
-                    }).await;
+                    })
+                    .await;
                 }
 
                 let exec_id = if let Some(ref recorder) = self.recorder {
-                    let source = self.tools.get(&tu.name)
+                    let source = self
+                        .tools
+                        .get(&tu.name)
                         .map(|t| t.source())
                         .unwrap_or(ToolSource::BuiltIn);
-                    recorder.record_start(
-                        session_id.as_str(),
-                        &tu.name,
-                        &source,
-                        &input,
-                    ).await.ok()
+                    recorder
+                        .record_start(session_id.as_str(), &tu.name, &source, &input)
+                        .await
+                        .ok()
                 } else {
                     None
                 };
@@ -447,14 +460,19 @@ impl AgentLoop {
                         session_id: session_id.as_str().to_string(),
                         tool_name: tu.name.clone(),
                         duration_ms: exec_duration,
-                    }).await;
+                    })
+                    .await;
                 }
                 if let (Some(ref recorder), Some(ref eid)) = (&self.recorder, &exec_id) {
                     if result.is_error {
-                        let _ = recorder.record_failed(eid, &result.output, exec_duration).await;
+                        let _ = recorder
+                            .record_failed(eid, &result.output, exec_duration)
+                            .await;
                     } else {
                         let output_val = serde_json::Value::String(result.output.clone());
-                        let _ = recorder.record_complete(eid, &output_val, exec_duration).await;
+                        let _ = recorder
+                            .record_complete(eid, &output_val, exec_duration)
+                            .await;
                     }
                 }
 
@@ -463,7 +481,9 @@ impl AgentLoop {
                         id: eid.clone(),
                         session_id: session_id.as_str().to_string(),
                         tool_name: tu.name.clone(),
-                        source: self.tools.get(&tu.name)
+                        source: self
+                            .tools
+                            .get(&tu.name)
                             .map(|t| t.source())
                             .unwrap_or(ToolSource::BuiltIn),
                         input: input.clone(),
@@ -475,7 +495,11 @@ impl AgentLoop {
                         },
                         started_at: started_at_ms,
                         duration_ms: Some(exec_duration),
-                        error: if result.is_error { Some(result.output.clone()) } else { None },
+                        error: if result.is_error {
+                            Some(result.output.clone())
+                        } else {
+                            None
+                        },
                     };
                     let _ = tx.send(AgentEvent::ToolExecution { execution: exec });
                 }
@@ -490,7 +514,10 @@ impl AgentLoop {
                 let trimmed_output = maybe_trim_tool_result(&result.output);
 
                 // Record outcome for result-aware loop detection
-                if let Some(outcome_warning) = self.loop_guard.record_outcome(&tu.name, &input, &result.output) {
+                if let Some(outcome_warning) =
+                    self.loop_guard
+                        .record_outcome(&tu.name, &input, &result.output)
+                {
                     tracing::warn!("Loop Guard outcome: {}", outcome_warning);
                 }
 

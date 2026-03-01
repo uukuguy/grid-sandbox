@@ -161,10 +161,16 @@ impl From<serde_json::Error> for SandboxError {
 /// Will be fully implemented in Task 2
 pub trait RuntimeAdapter: Send + Sync {
     /// Create a new sandbox instance
-    fn create(&self, config: &SandboxConfig) -> impl std::future::Future<Output = Result<SandboxId, SandboxError>> + Send;
+    fn create(
+        &self,
+        config: &SandboxConfig,
+    ) -> impl std::future::Future<Output = Result<SandboxId, SandboxError>> + Send;
 
     /// Destroy a sandbox instance
-    fn destroy(&self, id: &SandboxId) -> impl std::future::Future<Output = Result<(), SandboxError>> + Send;
+    fn destroy(
+        &self,
+        id: &SandboxId,
+    ) -> impl std::future::Future<Output = Result<(), SandboxError>> + Send;
 
     /// Execute code in a sandbox
     fn execute(

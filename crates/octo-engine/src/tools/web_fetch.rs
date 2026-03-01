@@ -64,7 +64,8 @@ impl Tool for WebFetchTool {
 
         debug!(url, max_length, "fetching web content");
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
             .header("User-Agent", "Octo-Sandbox/1.0")
             .send()
@@ -75,7 +76,10 @@ impl Tool for WebFetchTool {
             return Ok(ToolResult::error(format!(
                 "HTTP error: {} - {}",
                 response.status().as_u16(),
-                response.status().canonical_reason().unwrap_or("Unknown error")
+                response
+                    .status()
+                    .canonical_reason()
+                    .unwrap_or("Unknown error")
             )));
         }
 

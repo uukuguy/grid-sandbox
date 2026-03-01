@@ -68,7 +68,12 @@ impl Tool for FileEditTool {
             ctx.working_dir.join(path_str)
         };
 
-        debug!(?path, old_len = old_string.len(), new_len = new_string.len(), "editing file");
+        debug!(
+            ?path,
+            old_len = old_string.len(),
+            new_len = new_string.len(),
+            "editing file"
+        );
 
         if !path.exists() {
             return Ok(ToolResult::error(format!(

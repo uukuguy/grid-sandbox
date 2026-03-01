@@ -29,16 +29,8 @@ impl InMemoryWorkingMemory {
                  You can execute bash commands and read files to help users with their tasks. \
                  Be concise, accurate, and helpful.",
             ),
-            MemoryBlock::new(
-                MemoryBlockKind::UserProfile,
-                "User Profile",
-                "",
-            ),
-            MemoryBlock::new(
-                MemoryBlockKind::TaskContext,
-                "Task Context",
-                "",
-            ),
+            MemoryBlock::new(MemoryBlockKind::UserProfile, "User Profile", ""),
+            MemoryBlock::new(MemoryBlockKind::TaskContext, "Task Context", ""),
         ];
 
         for block in defaults {
@@ -94,11 +86,7 @@ impl WorkingMemory for InMemoryWorkingMemory {
         Ok(before - blocks.len())
     }
 
-    async fn compile(
-        &self,
-        user_id: &UserId,
-        sandbox_id: &SandboxId,
-    ) -> Result<String> {
+    async fn compile(&self, user_id: &UserId, sandbox_id: &SandboxId) -> Result<String> {
         let blocks = self.get_blocks(user_id, sandbox_id).await?;
         Ok(ContextInjector::compile(&blocks))
     }

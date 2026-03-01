@@ -142,17 +142,17 @@ impl SkillRegistry {
                 }
             }
 
-            info!("Skill hot-reload watcher started for {} directories", dirs.len());
+            info!(
+                "Skill hot-reload watcher started for {} directories",
+                dirs.len()
+            );
 
             for events in rx {
                 match events {
                     Ok(events) => {
                         let has_skill_change = events.iter().any(|e| {
                             e.kind == DebouncedEventKind::Any
-                                && e.path
-                                    .file_name()
-                                    .map(|f| f == "SKILL.md")
-                                    .unwrap_or(false)
+                                && e.path.file_name().map(|f| f == "SKILL.md").unwrap_or(false)
                         });
 
                         if has_skill_change {

@@ -94,7 +94,8 @@ impl SqliteWorkingMemory {
                 }
             }
             // Persist defaults (cache lock released before await)
-            self.persist_defaults(user_id, sandbox_id, &defaults).await?;
+            self.persist_defaults(user_id, sandbox_id, &defaults)
+                .await?;
         } else {
             let mut cache = self.cache.write().map_err(|e| anyhow::anyhow!("{e}"))?;
             for block in blocks {
@@ -107,7 +108,12 @@ impl SqliteWorkingMemory {
         Ok(())
     }
 
-    async fn persist_defaults(&self, user_id: &str, sandbox_id: &str, blocks: &[MemoryBlock]) -> Result<()> {
+    async fn persist_defaults(
+        &self,
+        user_id: &str,
+        sandbox_id: &str,
+        blocks: &[MemoryBlock],
+    ) -> Result<()> {
         let uid = user_id.to_string();
         let sid = sandbox_id.to_string();
         let blocks = blocks.to_vec();
@@ -148,7 +154,8 @@ impl WorkingMemory for SqliteWorkingMemory {
         user_id: &UserId,
         sandbox_id: &SandboxId,
     ) -> Result<Vec<MemoryBlock>> {
-        self.ensure_loaded(user_id.as_str(), sandbox_id.as_str()).await?;
+        self.ensure_loaded(user_id.as_str(), sandbox_id.as_str())
+            .await?;
         let cache = self.cache.read().map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(cache.values().cloned().collect())
     }
@@ -226,7 +233,10 @@ impl WorkingMemory for SqliteWorkingMemory {
             let bid = block_id.to_string();
             self.conn
                 .call(move |conn| {
-                    conn.execute("DELETE FROM memory_blocks WHERE id = ?1", rusqlite::params![bid])?;
+                    conn.execute(
+                        "DELETE FROM memory_blocks WHERE id = ?1",
+                        rusqlite::params![bid],
+                    )?;
                     Ok(())
                 })
                 .await?;
@@ -260,7 +270,10 @@ impl WorkingMemory for SqliteWorkingMemory {
                 .call(move |conn| {
                     let tx = conn.transaction()?;
                     for id in &ids {
-                        tx.execute("DELETE FROM memory_blocks WHERE id = ?1", rusqlite::params![id])?;
+                        tx.execute(
+                            "DELETE FROM memory_blocks WHERE id = ?1",
+                            rusqlite::params![id],
+                        )?;
                     }
                     tx.commit()?;
                     Ok(())
@@ -272,11 +285,7 @@ impl WorkingMemory for SqliteWorkingMemory {
         Ok(count)
     }
 
-    async fn compile(
-        &self,
-        user_id: &UserId,
-        sandbox_id: &SandboxId,
-    ) -> Result<String> {
+    async fn compile(&self, user_id: &UserId, sandbox_id: &SandboxId) -> Result<String> {
         let blocks = self.get_blocks(user_id, sandbox_id).await?;
         Ok(ContextInjector::compile(&blocks))
     }

@@ -55,8 +55,7 @@ impl RuntimeAdapter for SubprocessAdapter {
         };
 
         // Create working directory
-        std::fs::create_dir_all(&working_dir)
-            .map_err(|e| SandboxError::IoError(e))?;
+        std::fs::create_dir_all(&working_dir).map_err(|e| SandboxError::IoError(e))?;
 
         let instance = SubprocessInstance {
             config: config.clone(),
@@ -100,10 +99,7 @@ impl RuntimeAdapter for SubprocessAdapter {
 
         // Set default PATH if not specified
         if !instance.config.env.contains_key("PATH") {
-            cmd.env(
-                "PATH",
-                "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-            );
+            cmd.env("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin");
         }
 
         let output = cmd

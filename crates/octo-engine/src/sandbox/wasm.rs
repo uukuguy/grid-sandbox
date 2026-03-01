@@ -68,8 +68,9 @@ impl WasmAdapter {
             .ok_or_else(|| SandboxError::ExecutionFailed("WASM engine not initialized".into()))?;
 
         // Load the WASM module
-        let module = wasmtime::Module::from_binary(engine, wasm_bytes)
-            .map_err(|e| SandboxError::ExecutionFailed(format!("Failed to load WASM module: {}", e)))?;
+        let module = wasmtime::Module::from_binary(engine, wasm_bytes).map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to load WASM module: {}", e))
+        })?;
 
         // Create a basic store without WASI
         let mut store = wasmtime::Store::new(engine, ());
@@ -78,9 +79,9 @@ impl WasmAdapter {
         let mut linker = wasmtime::Linker::new(store.engine());
 
         // Try to instantiate the module
-        let instance = linker
-            .instantiate(&mut store, &module)
-            .map_err(|e| SandboxError::ExecutionFailed(format!("Failed to instantiate WASM: {}", e)))?;
+        let instance = linker.instantiate(&mut store, &module).map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to instantiate WASM: {}", e))
+        })?;
 
         // Try to get the requested function
         let duration_ms = start.elapsed().as_millis() as u64;

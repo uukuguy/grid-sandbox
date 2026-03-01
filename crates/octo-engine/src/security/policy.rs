@@ -154,9 +154,7 @@ impl SecurityPolicy {
                 .last()
                 .unwrap_or("");
 
-            if !self.allowed_commands.iter().any(|c| {
-                c == cmd_base
-            }) {
+            if !self.allowed_commands.iter().any(|c| c == cmd_base) {
                 return Err(format!(
                     "Command '{}' is not in the allowed commands list",
                     cmd_base
@@ -182,7 +180,10 @@ impl SecurityPolicy {
 
         // Check workspace restriction
         if self.workspace_only {
-            let workspace = self.workspace_dir.canonicalize().unwrap_or_else(|_| self.workspace_dir.clone());
+            let workspace = self
+                .workspace_dir
+                .canonicalize()
+                .unwrap_or_else(|_| self.workspace_dir.clone());
             let expanded_canonical = expanded.canonicalize().unwrap_or_else(|_| expanded.clone());
 
             if !expanded_canonical.starts_with(&workspace) {
@@ -211,9 +212,18 @@ impl SecurityPolicy {
 
         // High risk commands
         let high_risk = [
-            "rm -rf", "rm -r /", "mkfs", "dd", "> /dev/sd",
-            "curl | sh", "wget | sh", "chmod 777",
-            "kill -9", "pkill -9", "reboot", "shutdown",
+            "rm -rf",
+            "rm -r /",
+            "mkfs",
+            "dd",
+            "> /dev/sd",
+            "curl | sh",
+            "wget | sh",
+            "chmod 777",
+            "kill -9",
+            "pkill -9",
+            "reboot",
+            "shutdown",
         ];
         if high_risk.iter().any(|c| cmd_lower.contains(c)) {
             return CommandRiskLevel::High;
@@ -221,11 +231,21 @@ impl SecurityPolicy {
 
         // Medium risk commands
         let medium_risk = [
-            "rm -r", "rm -f", "chmod", "chown",
-            "sudo", "su", "apt", "yum", "dnf",
-            "pip install", "cargo install",
-            "npm install -g", "gem install",
-            "curl", "wget",
+            "rm -r",
+            "rm -f",
+            "chmod",
+            "chown",
+            "sudo",
+            "su",
+            "apt",
+            "yum",
+            "dnf",
+            "pip install",
+            "cargo install",
+            "npm install -g",
+            "gem install",
+            "curl",
+            "wget",
         ];
         if medium_risk.iter().any(|c| cmd_lower.contains(c)) {
             return CommandRiskLevel::Medium;
@@ -253,7 +273,11 @@ impl SecurityPolicy {
     }
 
     /// Validate a complete command execution request.
-    pub fn validate_execution(&self, command: &str, path: Option<&Path>) -> Result<CommandRiskLevel, String> {
+    pub fn validate_execution(
+        &self,
+        command: &str,
+        path: Option<&Path>,
+    ) -> Result<CommandRiskLevel, String> {
         // Check command
         self.check_command(command)?;
 
@@ -308,7 +332,10 @@ mod tests {
 
         assert_eq!(policy.assess_command_risk("ls"), CommandRiskLevel::Low);
         assert_eq!(policy.assess_command_risk("rm -rf"), CommandRiskLevel::High);
-        assert_eq!(policy.assess_command_risk("chmod 777"), CommandRiskLevel::High);
+        assert_eq!(
+            policy.assess_command_risk("chmod 777"),
+            CommandRiskLevel::High
+        );
         assert_eq!(policy.assess_command_risk("curl"), CommandRiskLevel::Medium);
     }
 

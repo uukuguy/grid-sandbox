@@ -149,10 +149,9 @@ impl SandboxRouter {
         language: &str,
     ) -> Result<ExecResult, SandboxError> {
         let sandbox_type = self.get_sandbox_type(category);
-        let adapter = self
-            .adapters
-            .get(&sandbox_type)
-            .ok_or_else(|| SandboxError::UnsupportedType(format!("{:?} adapter not registered", sandbox_type)))?;
+        let adapter = self.adapters.get(&sandbox_type).ok_or_else(|| {
+            SandboxError::UnsupportedType(format!("{:?} adapter not registered", sandbox_type))
+        })?;
 
         let config = SandboxConfig::new(sandbox_type);
         let id = adapter.create(&config).await?;
@@ -183,13 +182,22 @@ mod tests {
     fn test_router_default_mappings() {
         let router = SandboxRouter::new();
 
-        assert_eq!(router.get_sandbox_type(ToolCategory::Shell), SandboxType::Docker);
-        assert_eq!(router.get_sandbox_type(ToolCategory::Compute), SandboxType::Wasm);
+        assert_eq!(
+            router.get_sandbox_type(ToolCategory::Shell),
+            SandboxType::Docker
+        );
+        assert_eq!(
+            router.get_sandbox_type(ToolCategory::Compute),
+            SandboxType::Wasm
+        );
         assert_eq!(
             router.get_sandbox_type(ToolCategory::FileSystem),
             SandboxType::Docker
         );
-        assert_eq!(router.get_sandbox_type(ToolCategory::Network), SandboxType::Wasm);
+        assert_eq!(
+            router.get_sandbox_type(ToolCategory::Network),
+            SandboxType::Wasm
+        );
     }
 
     #[test]
@@ -198,7 +206,10 @@ mod tests {
 
         // Override default mapping
         router.set_mapping(ToolCategory::Shell, SandboxType::Subprocess);
-        assert_eq!(router.get_sandbox_type(ToolCategory::Shell), SandboxType::Subprocess);
+        assert_eq!(
+            router.get_sandbox_type(ToolCategory::Shell),
+            SandboxType::Subprocess
+        );
     }
 
     #[test]
@@ -212,7 +223,10 @@ mod tests {
         let mut router2 = SandboxRouter::new();
         router2.set_default(SandboxType::Wasm);
         // Shell has explicit mapping so still uses Docker
-        assert_eq!(router2.get_sandbox_type(ToolCategory::Shell), SandboxType::Docker);
+        assert_eq!(
+            router2.get_sandbox_type(ToolCategory::Shell),
+            SandboxType::Docker
+        );
     }
 
     #[tokio::test]

@@ -8,15 +8,27 @@ pub enum OctoEvent {
     /// Agent Loop 开始新一轮
     LoopTurnStarted { session_id: String, turn: u32 },
     /// 工具调用开始
-    ToolCallStarted { session_id: String, tool_name: String },
+    ToolCallStarted {
+        session_id: String,
+        tool_name: String,
+    },
     /// 工具调用完成
-    ToolCallCompleted { session_id: String, tool_name: String, duration_ms: u64 },
+    ToolCallCompleted {
+        session_id: String,
+        tool_name: String,
+        duration_ms: u64,
+    },
     /// 上下文降级触发
     ContextDegraded { session_id: String, level: String },
     /// Loop Guard 触发
     LoopGuardTriggered { session_id: String, reason: String },
     /// Token 预算快照
-    TokenBudgetUpdated { session_id: String, used: u64, total: u64, ratio: f64 },
+    TokenBudgetUpdated {
+        session_id: String,
+        used: u64,
+        total: u64,
+        ratio: f64,
+    },
 }
 
 /// 内部事件广播总线

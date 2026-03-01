@@ -124,40 +124,24 @@ impl ExtensionManager {
     }
 
     /// Call on_before_compaction for all extensions.
-    pub async fn notify_before_compaction(
-        &self,
-        ctx: &mut ExtensionContext,
-        messages_json: &str,
-    ) {
+    pub async fn notify_before_compaction(&self, ctx: &mut ExtensionContext, messages_json: &str) {
         for ext in &self.extensions {
             match ext.on_before_compaction(ctx, messages_json).await {
                 Ok(_) => {}
                 Err(e) => {
-                    tracing::warn!(
-                        "Extension {} before compaction failed: {}",
-                        ext.name(),
-                        e
-                    );
+                    tracing::warn!("Extension {} before compaction failed: {}", ext.name(), e);
                 }
             }
         }
     }
 
     /// Call on_after_compaction for all extensions.
-    pub async fn notify_after_compaction(
-        &self,
-        ctx: &mut ExtensionContext,
-        messages_json: &str,
-    ) {
+    pub async fn notify_after_compaction(&self, ctx: &mut ExtensionContext, messages_json: &str) {
         for ext in &self.extensions {
             match ext.on_after_compaction(ctx, messages_json).await {
                 Ok(_) => {}
                 Err(e) => {
-                    tracing::warn!(
-                        "Extension {} after compaction failed: {}",
-                        ext.name(),
-                        e
-                    );
+                    tracing::warn!("Extension {} after compaction failed: {}", ext.name(), e);
                 }
             }
         }
@@ -242,7 +226,11 @@ impl Extension for LoggingExtension {
         Ok(())
     }
 
-    async fn on_agent_end(&self, ctx: &ExtensionContext, result: &AgentResult) -> Result<(), String> {
+    async fn on_agent_end(
+        &self,
+        ctx: &ExtensionContext,
+        result: &AgentResult,
+    ) -> Result<(), String> {
         tracing::info!(
             "Agent ended: session={}, success={}, rounds={}",
             ctx.session_id,

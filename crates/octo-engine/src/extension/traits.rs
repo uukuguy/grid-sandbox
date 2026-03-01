@@ -19,17 +19,17 @@ pub enum ExtensionEvent {
         arguments: serde_json::Value,
     },
     /// Tool result intercepted.
-    ToolResult {
-        tool_name: String,
-        result: String,
-    },
+    ToolResult { tool_name: String, result: String },
     /// Context compaction happened.
     Compaction {
         before_tokens: u32,
         after_tokens: u32,
     },
     /// Custom event from extension.
-    Custom { name: String, data: serde_json::Value },
+    Custom {
+        name: String,
+        data: serde_json::Value,
+    },
 }
 
 /// Host actions available to extensions.

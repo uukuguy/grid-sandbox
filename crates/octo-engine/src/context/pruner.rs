@@ -94,10 +94,17 @@ impl ContextPruner {
 
         for msg in messages[..boundary].iter_mut() {
             for block in msg.content.iter_mut() {
-                if let ContentBlock::ToolResult { content, tool_use_id, .. } = block {
+                if let ContentBlock::ToolResult {
+                    content,
+                    tool_use_id,
+                    ..
+                } = block
+                {
                     if content.len() > 100 {
-                        *content =
-                            format!("[Tool result omitted (AutoCompaction), tool_use_id={}]", tool_use_id);
+                        *content = format!(
+                            "[Tool result omitted (AutoCompaction), tool_use_id={}]",
+                            tool_use_id
+                        );
                         modified += 1;
                     }
                 }
@@ -105,7 +112,10 @@ impl ContextPruner {
         }
 
         if modified > 0 {
-            info!(modified, boundary, "AutoCompaction: replaced old tool results with placeholders");
+            info!(
+                modified,
+                boundary, "AutoCompaction: replaced old tool results with placeholders"
+            );
         }
         modified
     }
@@ -120,7 +130,10 @@ impl ContextPruner {
         let drain_count = messages.len() - keep;
         messages.drain(..drain_count);
 
-        warn!(drain_count, "OverflowCompaction: drained old messages, kept last {}", keep);
+        warn!(
+            drain_count,
+            "OverflowCompaction: drained old messages, kept last {}", keep
+        );
         drain_count
     }
 

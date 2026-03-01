@@ -40,18 +40,17 @@ impl McpClient for StdioMcpClient {
         let env = config.env.clone();
         let args = config.args.clone();
 
-        let transport =
-            TokioChildProcess::new(tokio::process::Command::new(&config.command).configure(
-                move |c| {
-                    for arg in &args {
-                        c.arg(arg);
-                    }
-                    for (k, v) in &env {
-                        c.env(k, v);
-                    }
-                },
-            ))
-            .context("Failed to spawn MCP server process")?;
+        let transport = TokioChildProcess::new(
+            tokio::process::Command::new(&config.command).configure(move |c| {
+                for arg in &args {
+                    c.arg(arg);
+                }
+                for (k, v) in &env {
+                    c.env(k, v);
+                }
+            }),
+        )
+        .context("Failed to spawn MCP server process")?;
 
         let service = ()
             .serve(transport)

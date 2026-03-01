@@ -247,9 +247,7 @@ impl Provider for AnthropicProvider {
             })
             .collect();
 
-        let stop_reason = api_resp
-            .stop_reason
-            .map(|s| parse_stop_reason(&s));
+        let stop_reason = api_resp.stop_reason.map(|s| parse_stop_reason(&s));
 
         Ok(CompletionResponse {
             id: api_resp.id,
@@ -379,10 +377,7 @@ impl<S> SseStream<S> {
             match event_type.as_str() {
                 "message_start" => {
                     if let Ok(v) = serde_json::from_str::<Value>(&data) {
-                        let id = v["message"]["id"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
+                        let id = v["message"]["id"].as_str().unwrap_or("").to_string();
                         if let Some(usage) = v["message"]["usage"].as_object() {
                             let input_tokens = usage
                                 .get("input_tokens")
@@ -400,16 +395,12 @@ impl<S> SseStream<S> {
                     if let Ok(v) = serde_json::from_str::<Value>(&data) {
                         let index = v["index"].as_u64().unwrap_or(0) as usize;
                         self.current_block_index = index;
-                        let block_type = v["content_block"]["type"]
-                            .as_str()
-                            .unwrap_or("");
+                        let block_type = v["content_block"]["type"].as_str().unwrap_or("");
 
                         match block_type {
                             "tool_use" => {
-                                let id = v["content_block"]["id"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_string();
+                                let id =
+                                    v["content_block"]["id"].as_str().unwrap_or("").to_string();
                                 let name = v["content_block"]["name"]
                                     .as_str()
                                     .unwrap_or("")
@@ -423,11 +414,7 @@ impl<S> SseStream<S> {
                                 });
                                 self.block_types.push((index, BlockType::ToolUse));
 
-                                events.push(Ok(StreamEvent::ToolUseStart {
-                                    index,
-                                    id,
-                                    name,
-                                }));
+                                events.push(Ok(StreamEvent::ToolUseStart { index, id, name }));
                             }
                             "thinking" => {
                                 self.block_types.push((index, BlockType::Thinking));
@@ -448,19 +435,14 @@ impl<S> SseStream<S> {
 
                         match delta_type {
                             "text_delta" => {
-                                let text = v["delta"]["text"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_string();
+                                let text = v["delta"]["text"].as_str().unwrap_or("").to_string();
                                 if !text.is_empty() {
                                     events.push(Ok(StreamEvent::TextDelta { text }));
                                 }
                             }
                             "thinking_delta" => {
-                                let text = v["delta"]["thinking"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_string();
+                                let text =
+                                    v["delta"]["thinking"].as_str().unwrap_or("").to_string();
                                 if !text.is_empty() {
                                     events.push(Ok(StreamEvent::ThinkingDelta { text }));
                                 }
@@ -494,14 +476,10 @@ impl<S> SseStream<S> {
                         let index = v["index"].as_u64().unwrap_or(0) as usize;
 
                         // If this is a tool_use block, emit ToolUseComplete
-                        if let Some(pos) =
-                            self.tool_blocks.iter().position(|b| b.index == index)
-                        {
+                        if let Some(pos) = self.tool_blocks.iter().position(|b| b.index == index) {
                             let block = self.tool_blocks.remove(pos);
-                            let input: Value =
-                                serde_json::from_str(&block.input_json).unwrap_or(Value::Object(
-                                    serde_json::Map::new(),
-                                ));
+                            let input: Value = serde_json::from_str(&block.input_json)
+                                .unwrap_or(Value::Object(serde_json::Map::new()));
                             events.push(Ok(StreamEvent::ToolUseComplete {
                                 index,
                                 id: block.id,
@@ -513,12 +491,9 @@ impl<S> SseStream<S> {
                 }
                 "message_delta" => {
                     if let Ok(v) = serde_json::from_str::<Value>(&data) {
-                        let stop_reason = v["delta"]["stop_reason"]
-                            .as_str()
-                            .unwrap_or("end_turn");
-                        let output_tokens = v["usage"]["output_tokens"]
-                            .as_u64()
-                            .unwrap_or(0) as u32;
+                        let stop_reason = v["delta"]["stop_reason"].as_str().unwrap_or("end_turn");
+                        let output_tokens =
+                            v["usage"]["output_tokens"].as_u64().unwrap_or(0) as u32;
 
                         if let Some(ref mut usage) = self.final_usage {
                             usage.output_tokens = output_tokens;

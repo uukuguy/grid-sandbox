@@ -43,11 +43,7 @@ impl Tool for SkillTool {
         ToolSource::Skill(self.skill.name.clone())
     }
 
-    async fn execute(
-        &self,
-        _params: serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<ToolResult> {
+    async fn execute(&self, _params: serde_json::Value, _ctx: &ToolContext) -> Result<ToolResult> {
         // Return the skill's instructions as the tool result.
         // The Agent will follow these instructions.
         Ok(ToolResult::success(&self.skill.body))

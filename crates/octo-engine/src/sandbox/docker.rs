@@ -67,8 +67,9 @@ impl DockerAdapter {
         use bollard::Docker;
 
         // Try to connect to Docker daemon
-        Docker::connect_with_local_defaults()
-            .map_err(|e| SandboxError::ExecutionFailed(format!("Failed to connect to Docker: {}", e)))
+        Docker::connect_with_local_defaults().map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to connect to Docker: {}", e))
+        })
     }
 
     /// Check if Docker support is available
@@ -161,10 +162,9 @@ impl RuntimeAdapter for DockerAdapter {
 
         #[cfg(feature = "sandbox-docker")]
         {
-            let client = self
-                .client
-                .as_ref()
-                .ok_or_else(|| SandboxError::ExecutionFailed("Docker client not initialized".into()))?;
+            let client = self.client.as_ref().ok_or_else(|| {
+                SandboxError::ExecutionFailed("Docker client not initialized".into())
+            })?;
 
             let id = SandboxId::new(uuid::Uuid::new_v4().to_string());
 
@@ -218,10 +218,9 @@ impl RuntimeAdapter for DockerAdapter {
             let container_id = instance.container_id.clone();
             drop(instances);
 
-            let client = self
-                .client
-                .as_ref()
-                .ok_or_else(|| SandboxError::ExecutionFailed("Docker client not initialized".into()))?;
+            let client = self.client.as_ref().ok_or_else(|| {
+                SandboxError::ExecutionFailed("Docker client not initialized".into())
+            })?;
 
             execute_in_container(client, &container_id, code).await
         }
@@ -431,15 +430,10 @@ async fn wait_for_exec_completion(
 
 /// Stop a Docker container
 #[cfg(feature = "sandbox-docker")]
-async fn stop_container(
-    client: &bollard::Docker,
-    container_id: &str,
-) -> Result<(), SandboxError> {
+async fn stop_container(client: &bollard::Docker, container_id: &str) -> Result<(), SandboxError> {
     use bollard::container::StopContainerOptions;
 
-    let options = StopContainerOptions {
-        t: 10,
-    };
+    let options = StopContainerOptions { t: 10 };
 
     match client.stop_container(container_id, Some(options)).await {
         Ok(()) => {

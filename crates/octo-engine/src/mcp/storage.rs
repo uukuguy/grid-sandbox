@@ -138,7 +138,8 @@ impl McpStorage {
     }
 
     pub fn delete_server(&self, id: &str) -> rusqlite::Result<()> {
-        self.conn.execute("DELETE FROM mcp_servers WHERE id = ?", [id])?;
+        self.conn
+            .execute("DELETE FROM mcp_servers WHERE id = ?", [id])?;
         Ok(())
     }
 
@@ -160,7 +161,11 @@ impl McpStorage {
         Ok(())
     }
 
-    pub fn list_executions(&self, server_id: &str, limit: usize) -> rusqlite::Result<Vec<McpExecutionRecord>> {
+    pub fn list_executions(
+        &self,
+        server_id: &str,
+        limit: usize,
+    ) -> rusqlite::Result<Vec<McpExecutionRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, server_id, tool_name, params, result, error, duration_ms, executed_at FROM mcp_executions WHERE server_id = ? ORDER BY executed_at DESC LIMIT ?"
         )?;
@@ -199,7 +204,13 @@ impl McpStorage {
         Ok(())
     }
 
-    pub fn list_logs(&self, server_id: &str, level: Option<&str>, limit: usize, offset: usize) -> rusqlite::Result<Vec<McpLogRecord>> {
+    pub fn list_logs(
+        &self,
+        server_id: &str,
+        level: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> rusqlite::Result<Vec<McpLogRecord>> {
         let mut sql = String::from(
             "SELECT id, server_id, level, direction, method, params, result, raw_data, duration_ms, logged_at FROM mcp_logs WHERE server_id = ?"
         );
@@ -234,7 +245,8 @@ impl McpStorage {
     }
 
     pub fn clear_logs(&self, server_id: &str) -> rusqlite::Result<()> {
-        self.conn.execute("DELETE FROM mcp_logs WHERE server_id = ?", [server_id])?;
+        self.conn
+            .execute("DELETE FROM mcp_logs WHERE server_id = ?", [server_id])?;
         Ok(())
     }
 }

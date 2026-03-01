@@ -101,10 +101,7 @@ async fn test_docker_adapter_failed_command() {
     let id = adapter.create(&config).await.unwrap();
 
     // Execute command that fails
-    let result = adapter
-        .execute(&id, "exit 1", "bash")
-        .await
-        .unwrap();
+    let result = adapter.execute(&id, "exit 1", "bash").await.unwrap();
 
     assert_eq!(result.exit_code, 1);
     assert!(!result.success);
@@ -159,7 +156,9 @@ async fn test_docker_adapter_with_env_vars() {
     }
 
     let mut config = SandboxConfig::new(SandboxType::Docker);
-    config.env.insert("TEST_VAR".to_string(), "test_value".to_string());
+    config
+        .env
+        .insert("TEST_VAR".to_string(), "test_value".to_string());
 
     let id = adapter.create(&config).await.unwrap();
 

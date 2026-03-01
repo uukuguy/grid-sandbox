@@ -74,10 +74,18 @@ impl Tool for FindTool {
 
         // Exclude common directories
         cmd.args([
-            "-not", "-path", "*/node_modules/*",
-            "-not", "-path", "*/.git/*",
-            "-not", "-path", "*/target/*",
-            "-not", "-path", "*/__pycache__/*",
+            "-not",
+            "-path",
+            "*/node_modules/*",
+            "-not",
+            "-path",
+            "*/.git/*",
+            "-not",
+            "-path",
+            "*/target/*",
+            "-not",
+            "-path",
+            "*/__pycache__/*",
         ]);
 
         if let Some(t) = type_filter {

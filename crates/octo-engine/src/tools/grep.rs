@@ -69,9 +69,7 @@ impl Tool for GrepTool {
         debug!(?pattern, ?search_path, ?include, "running grep");
 
         let mut cmd = tokio::process::Command::new("grep");
-        cmd.arg("-rn")
-            .arg("-E")
-            .arg("--color=never");
+        cmd.arg("-rn").arg("-E").arg("--color=never");
 
         if let Some(glob) = include {
             cmd.arg("--include").arg(glob);

@@ -22,10 +22,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 /// Tools that are expected to be polled repeatedly.
-const POLL_TOOLS: &[&str] = &[
-    "shell_exec",
-    "bash",
-];
+const POLL_TOOLS: &[&str] = &["shell_exec", "bash"];
 
 /// Maximum recent call history size for ping-pong detection.
 const HISTORY_SIZE: usize = 30;
@@ -90,7 +87,10 @@ impl LoopGuardVerdict {
 
     /// Returns true if the verdict blocks execution.
     pub fn is_blocked(&self) -> bool {
-        matches!(self, LoopGuardVerdict::Block(_) | LoopGuardVerdict::CircuitBreak(_))
+        matches!(
+            self,
+            LoopGuardVerdict::Block(_) | LoopGuardVerdict::CircuitBreak(_)
+        )
     }
 
     /// Get the warning message if this is a Warn variant.

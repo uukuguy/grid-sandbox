@@ -122,11 +122,7 @@ impl SystemPromptBuilder {
     fn format_bootstrap_section(&self) -> String {
         let mut section = String::from("## Project Context\n");
         for file in &self.bootstrap_files {
-            let filename = file
-                .path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy();
+            let filename = file.path.file_name().unwrap_or_default().to_string_lossy();
             section.push_str(&format!("\n### {filename}\n"));
             section.push_str(&file.content);
             if file.truncated {

@@ -68,12 +68,7 @@ impl ToolExecutionRecorder {
     }
 
     /// Record failed tool execution.
-    pub async fn record_failed(
-        &self,
-        id: &str,
-        error: &str,
-        duration_ms: u64,
-    ) -> Result<()> {
+    pub async fn record_failed(&self, id: &str, error: &str, duration_ms: u64) -> Result<()> {
         let id = id.to_string();
         let error = error.to_string();
 
@@ -136,8 +131,7 @@ impl ToolExecutionRecorder {
 
     fn row_to_execution(row: &rusqlite::Row<'_>) -> ToolExecution {
         let source_str: String = row.get(3).unwrap_or_default();
-        let source: ToolSource =
-            serde_json::from_str(&source_str).unwrap_or(ToolSource::BuiltIn);
+        let source: ToolSource = serde_json::from_str(&source_str).unwrap_or(ToolSource::BuiltIn);
         let input_str: String = row.get(4).unwrap_or_default();
         let output_str: Option<String> = row.get(5).unwrap_or(None);
         let status_str: String = row.get(6).unwrap_or_default();
@@ -157,7 +151,10 @@ impl ToolExecutionRecorder {
                 _ => ExecutionStatus::Failed,
             },
             started_at: row.get(7).unwrap_or(0),
-            duration_ms: row.get::<_, Option<i64>>(8).unwrap_or(None).map(|v| v as u64),
+            duration_ms: row
+                .get::<_, Option<i64>>(8)
+                .unwrap_or(None)
+                .map(|v| v as u64),
             error: row.get(9).unwrap_or(None),
         }
     }

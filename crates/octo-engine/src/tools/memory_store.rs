@@ -88,9 +88,7 @@ impl Tool for MemoryStoreTool {
 
         let id = self.store.store(entry).await?;
 
-        Ok(ToolResult::success(format!(
-            "Stored memory with id: {id}"
-        )))
+        Ok(ToolResult::success(format!("Stored memory with id: {id}")))
     }
 
     fn source(&self) -> ToolSource {

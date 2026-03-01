@@ -27,7 +27,10 @@ pub enum LlmErrorKind {
 impl LlmErrorKind {
     /// 判断是否应该重试
     pub fn is_retryable(&self) -> bool {
-        matches!(self, Self::RateLimit | Self::Overloaded | Self::Timeout | Self::ServiceError)
+        matches!(
+            self,
+            Self::RateLimit | Self::Overloaded | Self::Timeout | Self::ServiceError
+        )
     }
 
     /// 从错误消息中分类（传入 error.to_string().to_lowercase()）
@@ -36,15 +39,25 @@ impl LlmErrorKind {
             Self::RateLimit
         } else if msg.contains("529") || msg.contains("overloaded") {
             Self::Overloaded
-        } else if msg.contains("timeout") || msg.contains("timed out") || msg.contains("connection reset") {
+        } else if msg.contains("timeout")
+            || msg.contains("timed out")
+            || msg.contains("connection reset")
+        {
             Self::Timeout
         } else if msg.contains("500") || msg.contains("502") || msg.contains("503") {
             Self::ServiceError
         } else if msg.contains("402") || msg.contains("credit_balance") || msg.contains("billing") {
             Self::BillingError
-        } else if msg.contains("401") || msg.contains("403") || msg.contains("api_key") || msg.contains("unauthorized") {
+        } else if msg.contains("401")
+            || msg.contains("403")
+            || msg.contains("api_key")
+            || msg.contains("unauthorized")
+        {
             Self::AuthError
-        } else if msg.contains("context_length") || msg.contains("context overflow") || msg.contains("too long") {
+        } else if msg.contains("context_length")
+            || msg.contains("context overflow")
+            || msg.contains("too long")
+        {
             Self::ContextOverflow
         } else {
             Self::Unknown
@@ -79,8 +92,7 @@ impl Default for RetryPolicy {
 impl RetryPolicy {
     /// 计算第 attempt 次重试的等待时间（指数退避）
     pub fn delay_for(&self, attempt: u32) -> Duration {
-        let delay_secs = self.base_delay.as_secs_f64()
-            * self.backoff_factor.powi(attempt as i32);
+        let delay_secs = self.base_delay.as_secs_f64() * self.backoff_factor.powi(attempt as i32);
         let clamped = delay_secs.min(self.max_delay.as_secs_f64());
         Duration::from_secs_f64(clamped)
     }
@@ -100,34 +112,70 @@ mod tests {
 
     #[test]
     fn test_classify_rate_limit() {
-        assert_eq!(LlmErrorKind::classify_from_str("http 429 rate limit exceeded"), LlmErrorKind::RateLimit);
-        assert_eq!(LlmErrorKind::classify_from_str("rate_limit error"), LlmErrorKind::RateLimit);
+        assert_eq!(
+            LlmErrorKind::classify_from_str("http 429 rate limit exceeded"),
+            LlmErrorKind::RateLimit
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("rate_limit error"),
+            LlmErrorKind::RateLimit
+        );
     }
 
     #[test]
     fn test_classify_overloaded() {
-        assert_eq!(LlmErrorKind::classify_from_str("529 overloaded"), LlmErrorKind::Overloaded);
-        assert_eq!(LlmErrorKind::classify_from_str("server overloaded"), LlmErrorKind::Overloaded);
+        assert_eq!(
+            LlmErrorKind::classify_from_str("529 overloaded"),
+            LlmErrorKind::Overloaded
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("server overloaded"),
+            LlmErrorKind::Overloaded
+        );
     }
 
     #[test]
     fn test_classify_timeout() {
-        assert_eq!(LlmErrorKind::classify_from_str("connection timeout"), LlmErrorKind::Timeout);
-        assert_eq!(LlmErrorKind::classify_from_str("request timed out"), LlmErrorKind::Timeout);
+        assert_eq!(
+            LlmErrorKind::classify_from_str("connection timeout"),
+            LlmErrorKind::Timeout
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("request timed out"),
+            LlmErrorKind::Timeout
+        );
     }
 
     #[test]
     fn test_classify_service_error() {
-        assert_eq!(LlmErrorKind::classify_from_str("http 500 internal server error"), LlmErrorKind::ServiceError);
-        assert_eq!(LlmErrorKind::classify_from_str("502 bad gateway"), LlmErrorKind::ServiceError);
+        assert_eq!(
+            LlmErrorKind::classify_from_str("http 500 internal server error"),
+            LlmErrorKind::ServiceError
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("502 bad gateway"),
+            LlmErrorKind::ServiceError
+        );
     }
 
     #[test]
     fn test_classify_non_retryable() {
-        assert_eq!(LlmErrorKind::classify_from_str("401 unauthorized"), LlmErrorKind::AuthError);
-        assert_eq!(LlmErrorKind::classify_from_str("402 credit_balance too low"), LlmErrorKind::BillingError);
-        assert_eq!(LlmErrorKind::classify_from_str("context_length exceeded"), LlmErrorKind::ContextOverflow);
-        assert_eq!(LlmErrorKind::classify_from_str("some unknown error"), LlmErrorKind::Unknown);
+        assert_eq!(
+            LlmErrorKind::classify_from_str("401 unauthorized"),
+            LlmErrorKind::AuthError
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("402 credit_balance too low"),
+            LlmErrorKind::BillingError
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("context_length exceeded"),
+            LlmErrorKind::ContextOverflow
+        );
+        assert_eq!(
+            LlmErrorKind::classify_from_str("some unknown error"),
+            LlmErrorKind::Unknown
+        );
     }
 
     #[test]

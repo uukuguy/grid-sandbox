@@ -194,10 +194,7 @@ mod tests {
         );
 
         assert!(result);
-        assert_eq!(
-            memory.get_entity("1").unwrap().relations.len(),
-            1
-        );
+        assert_eq!(memory.get_entity("1").unwrap().relations.len(), 1);
     }
 
     #[test]
