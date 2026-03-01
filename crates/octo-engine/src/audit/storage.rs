@@ -1,8 +1,9 @@
-use sqlx::SqlitePool;
+use rusqlite::Connection;
 use chrono::Utc;
+use std::path::Path;
 
 pub struct AuditStorage {
-    pool: SqlitePool,
+    conn: Connection,
 }
 
 pub struct AuditEvent {
@@ -16,67 +17,7 @@ pub struct AuditEvent {
     pub ip_address: Option<String>,
 }
 
-impl AuditStorage {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn log(&self, event: AuditEvent) -> Result<i64, sqlx::Error> {
-        let result = sqlx::query(
-            "INSERT INTO audit_logs (timestamp, event_type, user_id,
-             session_id, resource_id, action, result, metadata, ip_address)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .bind(Utc::now().to_rfc3339())
-        .bind(&event.event_type)
-        .bind(&event.user_id)
-        .bind(&event.session_id)
-        .bind(&event.resource_id)
-        .bind(&event.action)
-        .bind(&event.result)
-        .bind(event.metadata.as_ref().map(|m| m.to_string()))
-        .bind(&event.ip_address)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    pub async fn query(
-        &self,
-        event_type: Option<&str>,
-        user_id: Option<&str>,
-        limit: u32,
-        offset: u32,
-    ) -> Result<Vec<AuditRecord>, sqlx::Error> {
-        let mut sql = "SELECT * FROM audit_logs WHERE 1=1".to_string();
-
-        if event_type.is_some() {
-            sql.push_str(" AND event_type = ?");
-        }
-        if user_id.is_some() {
-            sql.push_str(" AND user_id = ?");
-        }
-
-        sql.push_str(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
-
-        let mut query = sqlx::query_as::<_, AuditRecord>(&sql);
-
-        if let Some(t) = event_type {
-            query = query.bind(t);
-        }
-        if let Some(u) = user_id {
-            query = query.bind(u);
-        }
-        query = query.bind(limit as i64).bind(offset as i64);
-
-        let rows = query.fetch_all(&self.pool).await?;
-
-        Ok(rows)
-    }
-}
-
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone)]
 pub struct AuditRecord {
     pub id: i64,
     pub timestamp: String,
@@ -88,4 +29,83 @@ pub struct AuditRecord {
     pub result: String,
     pub metadata: Option<String>,
     pub ip_address: Option<String>,
+}
+
+impl AuditStorage {
+    pub fn new(db_path: &Path) -> rusqlite::Result<Self> {
+        let conn = Connection::open(db_path)?;
+        Ok(Self { conn })
+    }
+
+    pub fn log(&self, event: AuditEvent) -> rusqlite::Result<i64> {
+        let metadata_str = event.metadata.as_ref().map(|m| m.to_string());
+
+        self.conn.execute(
+            "INSERT INTO audit_logs (timestamp, event_type, user_id, session_id, resource_id, action, result, metadata, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rusqlite::params![
+                Utc::now().to_rfc3339(),
+                event.event_type,
+                event.user_id,
+                event.session_id,
+                event.resource_id,
+                event.action,
+                event.result,
+                metadata_str,
+                event.ip_address
+            ],
+        )?;
+
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn query(
+        &self,
+        event_type: Option<&str>,
+        user_id: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> rusqlite::Result<Vec<AuditRecord>> {
+        let mut sql = String::from("SELECT id, timestamp, event_type, user_id, session_id, resource_id, action, result, metadata, ip_address FROM audit_logs WHERE 1=1");
+
+        if event_type.is_some() {
+            sql.push_str(" AND event_type = ?");
+        }
+        if user_id.is_some() {
+            sql.push_str(" AND user_id = ?");
+        }
+
+        sql.push_str(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            params.push(Box::new(t.to_string()));
+        }
+        if let Some(u) = user_id {
+            params.push(Box::new(u.to_string()));
+        }
+        params.push(Box::new(limit as i64));
+        params.push(Box::new(offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(AuditRecord {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                event_type: row.get(2)?,
+                user_id: row.get(3)?,
+                session_id: row.get(4)?,
+                resource_id: row.get(5)?,
+                action: row.get(6)?,
+                result: row.get(7)?,
+                metadata: row.get(8)?,
+                ip_address: row.get(9)?,
+            })
+        })?;
+
+        rows.collect()
+    }
 }

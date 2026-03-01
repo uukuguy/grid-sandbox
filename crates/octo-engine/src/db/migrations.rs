@@ -271,3 +271,29 @@ pub fn migration_v5() -> Migration {
         "#,
     )
 }
+
+/// Migration v6: Add audit_logs table
+pub fn migration_v6() -> Migration {
+    Migration::new(
+        6,
+        "add_audit_logs",
+        r#"
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+            event_type TEXT NOT NULL,
+            user_id TEXT,
+            session_id TEXT,
+            resource_id TEXT,
+            action TEXT NOT NULL,
+            result TEXT NOT NULL,
+            metadata TEXT,
+            ip_address TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_logs(event_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
+        "#,
+    )
+}
