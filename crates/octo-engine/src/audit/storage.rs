@@ -108,4 +108,34 @@ impl AuditStorage {
 
         rows.collect()
     }
+
+    pub fn count(
+        &self,
+        event_type: Option<&str>,
+        user_id: Option<&str>,
+    ) -> rusqlite::Result<i64> {
+        let mut sql = String::from("SELECT COUNT(*) FROM audit_logs WHERE 1=1");
+
+        if event_type.is_some() {
+            sql.push_str(" AND event_type = ?");
+        }
+        if user_id.is_some() {
+            sql.push_str(" AND user_id = ?");
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(t) = event_type {
+            params.push(Box::new(t.to_string()));
+        }
+        if let Some(u) = user_id {
+            params.push(Box::new(u.to_string()));
+        }
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        stmt.query_row(params_refs.as_slice(), |row| row.get(0))
+    }
 }

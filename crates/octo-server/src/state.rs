@@ -80,4 +80,9 @@ impl AppState {
     pub fn mcp_storage(&self) -> Option<octo_engine::mcp::storage::McpStorage> {
         McpStorage::new(&self.db_path).ok()
     }
+
+    /// Get audit storage on-demand (creates new connection each time)
+    pub fn audit_storage(&self) -> Option<octo_engine::audit::AuditStorage> {
+        octo_engine::audit::AuditStorage::new(&self.db_path).ok()
+    }
 }

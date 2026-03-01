@@ -5,7 +5,6 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use octo_engine::audit::AuditStorage;
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -62,18 +61,19 @@ pub async fn list_audit(
     let limit = query.limit.unwrap_or(50).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    // Create a new audit storage connection for this request
-    // (similar to how audit middleware handles it)
-    let audit_storage = match AuditStorage::new(&state.db_path) {
-        Ok(storage) => storage,
-        Err(e) => {
-            tracing::error!("Failed to create audit storage: {}", e);
-            return Json(AuditResponse {
-                logs: vec![],
-                total: 0,
-            });
-        }
+    // Get audit storage on-demand
+    let Some(audit_storage) = state.audit_storage() else {
+        tracing::error!("Failed to create audit storage");
+        return Json(AuditResponse {
+            logs: vec![],
+            total: 0,
+        });
     };
+
+    // Get total count first
+    let total = audit_storage
+        .count(query.event_type.as_deref(), query.user_id.as_deref())
+        .unwrap_or(0);
 
     let logs_result = audit_storage.query(
         query.event_type.as_deref(),
@@ -85,8 +85,6 @@ pub async fn list_audit(
     let logs: Vec<AuditRecordResponse> = logs_result
         .map(|records| records.into_iter().map(AuditRecordResponse::from).collect())
         .unwrap_or_default();
-
-    let total = logs.len() as i64;
 
     Json(AuditResponse { logs, total })
 }

@@ -95,5 +95,5 @@ pub async fn get_metrics(State(state): State<Arc<AppState>>) -> Json<MetricsSnap
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/metrics", get(get_metrics))
+        .route("/v1/metrics", get(get_metrics))
 }
