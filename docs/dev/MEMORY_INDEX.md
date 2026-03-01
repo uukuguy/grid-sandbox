@@ -7,6 +7,14 @@
 
 ## [Active Work] Phase 2.5 - 核心基础设施 [2026-03-01]
 
+- 12:30 | Phase 2.5.1 Sandbox System 完成 (7/7 tasks)
+  - RuntimeAdapter trait + types (SandboxType, SandboxConfig, ExecResult, SandboxId)
+  - SubprocessAdapter: 直接进程执行
+  - WasmAdapter: WASM 沙箱 (wasmtime, feature-gated)
+  - DockerAdapter: 容器沙箱 (bollard, feature-gated)
+  - SandboxRouter: 工具→沙箱路由 (Shell→Docker, Compute→Wasm, FileSystem→Docker, Network→Wasm)
+  - Bash tool 集成: 可选沙箱执行
+  - 82 tests passing
 - 09:40 | Phase 2.5 设计文档更新 (docs/design/PHASE_2_5_DESIGN.md)
   - 拆分为 4 个子阶段: 2.5(核心) / 2.6(Provider+Scheduler) / 2.7(可观测性) / 2.8(Agent增强)
   - **Phase 2.5**: 沙箱 + 认证 + 用户隔离 (~1800 LOC)
