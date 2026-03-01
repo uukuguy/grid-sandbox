@@ -435,7 +435,7 @@ impl AgentLoop {
                         .map(|t| t.source())
                         .unwrap_or(ToolSource::BuiltIn);
                     recorder
-                        .record_start(session_id.as_str(), &tu.name, &source, &input)
+                        .record_start(session_id.as_str(), user_id.as_str(), &tu.name, &source, &input)
                         .await
                         .ok()
                 } else {
@@ -480,8 +480,7 @@ impl AgentLoop {
                     let exec = octo_types::ToolExecution {
                         id: eid.clone(),
                         session_id: session_id.as_str().to_string(),
-                        // TODO: Get user_id from agent context for proper isolation
-                        user_id: "default".to_string(),
+                        user_id: user_id.as_str().to_string(),
                         tool_name: tu.name.clone(),
                         source: self
                             .tools

@@ -16,6 +16,7 @@ impl ToolExecutionRecorder {
     pub async fn record_start(
         &self,
         session_id: &str,
+        user_id: &str,
         tool_name: &str,
         source: &ToolSource,
         input: &serde_json::Value,
@@ -27,14 +28,15 @@ impl ToolExecutionRecorder {
 
         let id_clone = id.clone();
         let session_id = session_id.to_string();
+        let user_id = user_id.to_string();
         let tool_name_owned = tool_name.to_string();
 
         self.conn
             .call(move |conn| {
                 conn.execute(
-                    "INSERT INTO tool_executions (id, session_id, tool_name, source, input, status, started_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, 'running', ?6)",
-                    rusqlite::params![id_clone, session_id, tool_name_owned, source_str, input_str, started_at],
+                    "INSERT INTO tool_executions (id, session_id, user_id, tool_name, source, input, status, started_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'running', ?7)",
+                    rusqlite::params![id_clone, session_id, user_id, tool_name_owned, source_str, input_str, started_at],
                 )?;
                 Ok(())
             })
