@@ -3,12 +3,21 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
+use std::path::PathBuf;
+
+use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::Semaphore;
+use tokio::sync::{broadcast, Semaphore};
 use uuid::Uuid;
+
+use crate::agent::{AgentEvent, AgentLoop};
+use crate::memory::WorkingMemory;
+use crate::providers::Provider;
+use crate::session::SessionStore;
+use crate::tools::ToolRegistry;
 
 /// Scheduled task
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,7 +161,7 @@ impl Default for CronParser {
 }
 
 /// Scheduler configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
     pub enabled: bool,
     pub check_interval_secs: u64,
@@ -176,10 +185,22 @@ pub struct Scheduler {
     cron_parser: CronParser,
     running: Arc<AtomicBool>,
     semaphore: Arc<Semaphore>,
+    // Agent execution dependencies
+    provider: Arc<dyn Provider>,
+    tools: Arc<ToolRegistry>,
+    memory: Arc<dyn WorkingMemory>,
+    session_store: Arc<dyn SessionStore>,
 }
 
 impl Scheduler {
-    pub fn new(config: SchedulerConfig, storage: Arc<dyn SchedulerStorage>) -> Self {
+    pub fn new(
+        config: SchedulerConfig,
+        storage: Arc<dyn SchedulerStorage>,
+        provider: Arc<dyn Provider>,
+        tools: Arc<ToolRegistry>,
+        memory: Arc<dyn WorkingMemory>,
+        session_store: Arc<dyn SessionStore>,
+    ) -> Self {
         let max_concurrent = config.max_concurrent;
         Self {
             config,
@@ -187,6 +208,10 @@ impl Scheduler {
             cron_parser: CronParser::new(),
             running: Arc::new(AtomicBool::new(false)),
             semaphore: Arc::new(Semaphore::new(max_concurrent)),
+            provider,
+            tools,
+            memory,
+            session_store,
         }
     }
 
@@ -246,12 +271,19 @@ impl Scheduler {
             error: None,
         };
 
-        // TODO: Execute agent (placeholder for now - integrate with agent later)
-        // For now, simulate execution
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        // Execute agent task
+        match self.run_agent_task(task).await {
+            Ok(response) => {
+                execution.status = ExecutionStatus::Success;
+                execution.result = Some(response);
+            }
+            Err(e) => {
+                execution.status = ExecutionStatus::Failed;
+                execution.error = Some(e.to_string());
+                tracing::error!("Agent task {} failed: {}", task.id, e);
+            }
+        }
 
-        execution.status = ExecutionStatus::Success;
-        execution.result = Some("Task executed (placeholder)".to_string());
         execution.finished_at = Some(Utc::now());
 
         // Calculate next run
@@ -266,6 +298,95 @@ impl Scheduler {
         tracing::info!("Task {} executed, next run: {:?}", task.id, next_run);
 
         Ok(())
+    }
+
+    /// Run an agent task
+    async fn run_agent_task(&self, task: &ScheduledTask) -> Result<String, SchedulerError> {
+        let config = &task.agent_config;
+
+        // Create session for the task
+        let user_id = task.user_id.as_ref()
+            .map(|u| UserId::from_string(u.clone()))
+            .unwrap_or_else(|| UserId::from_string("scheduler".to_string()));
+
+        let session = self.session_store.create_session_with_user(&user_id).await;
+        let session_id = session.session_id.clone();
+        let sandbox_id = session.sandbox_id.clone();
+
+        // Prepare initial message with the task input
+        let user_message = ChatMessage::user(config.input.clone());
+        let mut messages = vec![user_message];
+
+        // Create tool context
+        let tool_ctx = ToolContext {
+            sandbox_id: sandbox_id.clone(),
+            working_dir: PathBuf::from("/tmp"),
+        };
+
+        // Create event channel (discard events)
+        let (_tx, _) = broadcast::channel::<AgentEvent>(100);
+
+        // Create and configure agent loop
+        let mut agent_loop = AgentLoop::new(
+            self.provider.clone(),
+            self.tools.clone(),
+            self.memory.clone(),
+        )
+        .with_model("claude-3-5-sonnet-20241022".to_string()); // TODO: make configurable
+
+        // Run agent with timeout
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(config.timeout_secs),
+            agent_loop.run(
+                &session_id,
+                &user_id,
+                &sandbox_id,
+                &mut messages,
+                _tx.clone(),
+                tool_ctx,
+                None,
+            ),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(_)) => {
+                // Extract response from last assistant message
+                let response = messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == MessageRole::Assistant)
+                    .and_then(|m| {
+                        m.content.iter().find_map(|c| {
+                            if let ContentBlock::Text { text } = c {
+                                Some(text.clone())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or_else(|| "Task completed".to_string());
+
+                tracing::info!(
+                    task_id = %task.id,
+                    session_id = %session_id,
+                    "Scheduled task completed successfully"
+                );
+
+                Ok(response)
+            }
+            Ok(Err(e)) => {
+                tracing::error!(task_id = %task.id, error = %e, "Agent execution error");
+                Err(SchedulerError::ExecutionFailed(e.to_string()))
+            }
+            Err(_) => {
+                tracing::error!(task_id = %task.id, "Agent execution timed out");
+                Err(SchedulerError::ExecutionFailed(format!(
+                    "Timeout after {} seconds",
+                    config.timeout_secs
+                )))
+            }
+        }
     }
 
     // === Public API ===

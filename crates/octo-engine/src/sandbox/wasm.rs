@@ -78,7 +78,7 @@ impl WasmAdapter {
         let mut store = wasmtime::Store::new(engine, ());
 
         // Create a linker for basic imports (needs engine, not store)
-        let mut linker = wasmtime::Linker::new(store.engine());
+        let linker = wasmtime::Linker::new(store.engine());
 
         // Try to instantiate the module
         let instance = linker.instantiate(&mut store, &module).map_err(|e| {

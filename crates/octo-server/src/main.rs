@@ -14,9 +14,9 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use octo_engine::{
     create_provider, default_tools, register_memory_tools, Database, mcp::McpManager,
-    providers::ProviderChain, MemoryStore, SessionStore, SkillLoader, SkillRegistry, SkillTool,
-    SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory, ToolExecutionRecorder,
-    WorkingMemory,
+    providers::ProviderChain, scheduler::{Scheduler, SqliteSchedulerStorage}, MemoryStore, SessionStore,
+    SkillLoader, SkillRegistry, SkillTool, SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory,
+    ToolExecutionRecorder, WorkingMemory,
 };
 use state::AppState;
 
@@ -220,6 +220,22 @@ async fn main() -> Result<()> {
         tracing::warn!("Failed to start skill watcher: {e}");
     }
 
+    // Scheduler (with agent execution support)
+    let scheduler = if cfg.scheduler.enabled {
+        let storage = SqliteSchedulerStorage::new(conn.clone());
+        let s = Scheduler::new(
+            cfg.scheduler.clone(),
+            Arc::new(storage),
+            provider.clone(),
+            tools.clone(),
+            memory.clone(),
+            sessions.clone(),
+        );
+        Some(Arc::new(s))
+    } else {
+        None
+    };
+
     let state = Arc::new(AppState::new(
         provider,
         provider_chain,
@@ -232,7 +248,7 @@ async fn main() -> Result<()> {
         model,
         Some(recorder),
         skill_registry,
-        None, // scheduler - will be added in integration
+        scheduler,
         cfg.clone(),
     ));
 
