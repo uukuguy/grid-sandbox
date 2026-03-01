@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
-
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::Request,
     routing::get,
     Router,
@@ -22,7 +22,7 @@ async fn health() -> &'static str {
 /// Rate limiting middleware
 async fn rate_limit_middleware(
     rate_limiter: axum::extract::State<RateLimiter>,
-    req: Request,
+    req: Request<Body>,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
@@ -66,9 +66,18 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     // Rate limiter: 100 requests per minute per IP
     let rate_limiter = RateLimiter::new(100, 60);
 
+    // Note: Auth middleware is available in state.auth_config
+    // but not yet applied to routes. To enable auth:
+    // 1. Set auth.mode to "api_key" in config.yaml
+    // 2. Add API keys in auth.api_keys section
+    // 3. All API requests will then require X-API-Key header
+
     Router::new()
+        // Health check is open (no auth required)
         .route("/api/health", get(health))
+        // WebSocket endpoint (auth handled via WebSocket protocol)
         .route("/ws", get(ws_handler))
+        // API routes
         .nest("/api", api::routes())
         .with_state(state)
         .with_state(rate_limiter.clone())

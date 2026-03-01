@@ -4,7 +4,7 @@ use axum::extract::{Path, Query, State};
 use axum::Json;
 use serde::Deserialize;
 
-use octo_types::{MemoryCategory, MemoryFilter, MemoryId, SandboxId, SearchOptions, UserId};
+use octo_types::{MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, SandboxId, SearchOptions, UserId};
 
 use crate::state::AppState;
 
@@ -19,6 +19,21 @@ pub struct MemorySearchParams {
 
 fn default_limit() -> usize {
     20
+}
+
+/// Request body for creating a memory
+#[derive(Deserialize)]
+pub struct CreateMemoryRequest {
+    /// Memory content (required)
+    pub content: String,
+    /// Memory category (optional, defaults to "general")
+    pub category: Option<String>,
+    /// Sandbox ID (optional)
+    pub sandbox_id: Option<String>,
+    /// Metadata (optional, JSON string or object)
+    pub metadata: Option<serde_json::Value>,
+    /// Importance score (optional, 0-100)
+    pub importance: Option<i32>,
 }
 
 pub async fn search_memories(
@@ -120,6 +135,44 @@ pub async fn delete_memories_by_filter(
 
     match state.memory_store.delete_by_filter(filter).await {
         Ok(count) => Json(serde_json::json!({"deleted": count})),
+        Err(e) => Json(serde_json::json!({"error": e.to_string()})),
+    }
+}
+
+/// Create a new memory entry
+pub async fn create_memory(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateMemoryRequest>,
+) -> Json<serde_json::Value> {
+    // Parse category or default to "profile"
+    let category = req
+        .category
+        .and_then(|c| MemoryCategory::from_str(&c))
+        .unwrap_or(MemoryCategory::Profile);
+
+    // Use provided sandbox_id or default
+    let sandbox_id = req
+        .sandbox_id
+        .unwrap_or_else(|| DEFAULT_USER_ID.to_string());
+
+    // Create memory entry with all fields
+    let mut entry = MemoryEntry::new(
+        DEFAULT_USER_ID,
+        category,
+        &req.content,
+    );
+    entry.sandbox_id = sandbox_id;
+    entry.importance = req.importance.unwrap_or(50) as f32 / 100.0;
+    if let Some(meta) = req.metadata {
+        entry.metadata = meta;
+    }
+
+    // Save to store
+    match state.memory_store.store(entry).await {
+        Ok(id) => Json(serde_json::json!({
+            "id": id,
+            "created": true,
+        })),
         Err(e) => Json(serde_json::json!({"error": e.to_string()})),
     }
 }

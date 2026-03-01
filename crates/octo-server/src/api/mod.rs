@@ -10,7 +10,7 @@ pub mod tools;
 
 use std::sync::Arc;
 
-use axum::{routing::get, Router};
+use axum::{routing::{get, post}, Router};
 
 use crate::state::AppState;
 
@@ -43,7 +43,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/executions/{id}", get(executions::get_execution))
         .route("/tools", get(tools::list_tools))
         .route("/config", get(config::get_config))
-        .route("/memories", get(memories::search_memories).delete(memories::delete_memories_by_filter))
+        .route("/memories", get(memories::search_memories).post(memories::create_memory).delete(memories::delete_memories_by_filter))
         .route("/memories/working", get(memories::get_working_memory))
         .route("/memories/{id}", get(memories::get_memory).delete(memories::delete_memory))
         .route("/budget", get(budget::get_budget))

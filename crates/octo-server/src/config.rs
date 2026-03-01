@@ -1,3 +1,4 @@
+use octo_engine::auth::AuthConfigYaml;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -16,6 +17,9 @@ pub struct Config {
     pub mcp: McpConfig,
     /// Skills configuration
     pub skills: SkillsConfig,
+    /// Auth configuration (optional)
+    #[serde(default)]
+    pub auth: AuthConfigYaml,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +127,7 @@ impl Default for Config {
             logging: LoggingConfig::default(),
             mcp: McpConfig::default(),
             skills: SkillsConfig::default(),
+            auth: AuthConfigYaml::default(),
         }
     }
 }

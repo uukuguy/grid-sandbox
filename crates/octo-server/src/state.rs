@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use octo_engine::{
+    auth::AuthConfig,
     mcp::{McpManager, McpStorage}, MemoryStore, Provider,
     SessionStore, SkillRegistry, ToolExecutionRecorder, ToolRegistry, WorkingMemory,
 };
@@ -21,6 +22,8 @@ pub struct AppState {
     pub skill_registry: Arc<SkillRegistry>,
     /// Server configuration for frontend
     pub config: Config,
+    /// Auth configuration for request authentication
+    pub auth_config: AuthConfig,
 }
 
 impl AppState {
@@ -37,6 +40,9 @@ impl AppState {
         skill_registry: Arc<SkillRegistry>,
         config: Config,
     ) -> Self {
+        // Convert YAML config to runtime AuthConfig
+        let auth_config = config.auth.to_auth_config();
+
         Self {
             provider,
             tools,
@@ -49,6 +55,7 @@ impl AppState {
             recorder,
             skill_registry,
             config,
+            auth_config,
         }
     }
 
