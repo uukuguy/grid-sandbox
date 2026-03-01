@@ -7,6 +7,9 @@
 
 ## [Active Work] Phase 2.5 - 核心基础设施 [2026-03-01]
 
+- 14:31 | Phase 2.5.4 Scheduler 设计完成
+  - 设计文档: docs/design/PHASE_2_5_4_SCHEDULER_DESIGN.md
+  - 实施计划: docs/plans/2026-03-01-phase2-5-4-scheduler.md (10 tasks)
 - 12:30 | Phase 2.5.1 Sandbox System 完成 (7/7 tasks)
   - RuntimeAdapter trait + types (SandboxType, SandboxConfig, ExecResult, SandboxId)
   - SubprocessAdapter: 直接进程执行
