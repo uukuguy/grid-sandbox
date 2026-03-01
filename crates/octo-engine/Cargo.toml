@@ -30,3 +30,18 @@ notify-debouncer-mini = { workspace = true }
 rmcp = { workspace = true }
 hex = "0.4"
 sha2 = "0.10"
+
+[features]
+default = []
+sandbox-wasm = ["dep:wasmtime", "dep:wasmtime-wasi"]
+
+[dependencies.wasmtime]
+version = "25"
+optional = true
+
+[dependencies.wasmtime-wasi]
+version = "25"
+optional = true
+
+[dependencies.base64]
+version = "0.22"
