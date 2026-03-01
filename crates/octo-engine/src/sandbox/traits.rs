@@ -1,5 +1,4 @@
-// Placeholder - full implementation in Task 2
-// Will include: RuntimeAdapter trait, SandboxType, SandboxConfig, ExecResult, SandboxId, SandboxError
+// Sandbox runtime traits and types
 
 use std::fmt;
 

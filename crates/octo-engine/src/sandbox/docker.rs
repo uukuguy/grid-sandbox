@@ -6,7 +6,10 @@
 use super::{ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxType};
 use std::collections::HashMap;
 use std::marker::PhantomData;
+
+#[cfg(feature = "sandbox-docker")]
 use std::sync::Arc;
+#[cfg(feature = "sandbox-docker")]
 use tokio::sync::RwLock;
 
 /// Docker container sandbox adapter

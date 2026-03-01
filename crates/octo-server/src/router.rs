@@ -1,10 +1,8 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
     body::Body,
     extract::Request,
-    http::StatusCode,
     routing::get,
     Router,
 };

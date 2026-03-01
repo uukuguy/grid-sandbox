@@ -14,6 +14,7 @@ use tokio::sync::RwLock;
 /// It requires the `sandbox-wasm` feature to be enabled.
 pub struct WasmAdapter {
     /// Active WASM instances
+    #[allow(dead_code)]
     instances: Arc<RwLock<HashMap<SandboxId, WasmInstance>>>,
 
     /// WASM engine (only available with sandbox-wasm feature)
@@ -22,6 +23,7 @@ pub struct WasmAdapter {
 }
 
 /// Internal representation of a WASM sandbox instance
+#[allow(dead_code)]
 struct WasmInstance {
     /// Sandbox configuration
     config: SandboxConfig,
@@ -204,7 +206,7 @@ impl RuntimeAdapter for WasmAdapter {
     }
 
     /// Create a new WASM sandbox instance
-    async fn create(&self, config: &SandboxConfig) -> Result<SandboxId, SandboxError> {
+    async fn create(&self, _config: &SandboxConfig) -> Result<SandboxId, SandboxError> {
         #[cfg(not(feature = "sandbox-wasm"))]
         {
             return Err(SandboxError::UnsupportedType(

@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::extension::context::ExtensionContext;
 
@@ -123,7 +122,7 @@ pub trait Extension: Send + Sync {
 pub trait HostcallInterceptor: Send + Sync {
     /// Intercept a file read operation.
     /// Return Some(content) to override, None to proceed normally.
-    fn intercept_file_read(&self, path: &std::path::Path) -> Option<String> {
+    fn intercept_file_read(&self, _path: &std::path::Path) -> Option<String> {
         None
     }
 
@@ -131,7 +130,7 @@ pub trait HostcallInterceptor: Send + Sync {
     /// Return Some(()) to override, None to proceed normally.
     fn intercept_file_write(
         &self,
-        path: &std::path::Path,
+        _path: &std::path::Path,
         _content: &str,
     ) -> Option<Result<(), String>> {
         None
@@ -144,12 +143,12 @@ pub trait HostcallInterceptor: Send + Sync {
     }
 
     /// Check if a path is allowed.
-    fn is_path_allowed(&self, path: &std::path::Path) -> bool {
+    fn is_path_allowed(&self, _path: &std::path::Path) -> bool {
         true
     }
 
     /// Check if a command is allowed.
-    fn is_command_allowed(&self, command: &str) -> bool {
+    fn is_command_allowed(&self, _command: &str) -> bool {
         true
     }
 }

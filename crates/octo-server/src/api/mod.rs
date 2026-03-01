@@ -11,7 +11,7 @@ pub mod user_context;
 
 use std::sync::Arc;
 
-use axum::{routing::{get, post}, Router};
+use axum::{routing::get, Router};
 
 use crate::state::AppState;
 

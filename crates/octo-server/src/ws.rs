@@ -28,6 +28,7 @@ enum ClientMessage {
     },
     #[serde(rename = "cancel")]
     Cancel {
+        #[allow(dead_code)]
         session_id: String,
     },
 }
@@ -265,9 +266,6 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                 let session_id_clone = session.session_id.clone();
                 let user_id = session.user_id.clone();
                 let sandbox_id = session.sandbox_id.clone();
-
-                // Use the cancellation flag from outside the match
-                let cancel_flag_clone = cancel_flag.clone();
 
                 // Spawn agent loop task
                 let agent_handle = tokio::spawn(async move {

@@ -19,6 +19,7 @@ pub struct AppState {
     pub mcp_manager: Arc<tokio::sync::Mutex<McpManager>>,
     pub model: Option<String>,
     pub recorder: Option<Arc<ToolExecutionRecorder>>,
+    #[allow(dead_code)]
     pub skill_registry: Arc<SkillRegistry>,
     /// Server configuration for frontend
     pub config: Config,
