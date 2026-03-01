@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
@@ -125,6 +126,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             }
         };
 
+        // Create cancellation flag for agent (reused across messages)
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        let cancel_flag_for_cancel = cancel_flag.clone();
+
         match client_msg {
             ClientMessage::SendMessage {
                 session_id,
@@ -200,6 +205,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 let user_id = session.user_id.clone();
                 let sandbox_id = session.sandbox_id.clone();
 
+                // Use the cancellation flag from outside the match
+                let cancel_flag_clone = cancel_flag.clone();
+
                 // Spawn agent loop task
                 let agent_handle = tokio::spawn(async move {
                     if let Err(e) = agent_loop
@@ -210,6 +218,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                             &mut messages,
                             tx,
                             tool_ctx,
+                            Some(cancel_flag),
                         )
                         .await
                     {
@@ -316,8 +325,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 }
             }
             ClientMessage::Cancel { session_id: _ } => {
-                // TODO: implement cancellation via CancellationToken
-                debug!("Cancel requested (not yet implemented)");
+                // Set cancellation flag to stop the agent loop
+                // The agent checks this flag at the start of each round
+                cancel_flag_for_cancel.store(true, Ordering::Relaxed);
+                info!("Agent cancellation requested");
             }
         }
     }

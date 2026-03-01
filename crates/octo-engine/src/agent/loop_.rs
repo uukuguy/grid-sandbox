@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -122,6 +123,7 @@ impl AgentLoop {
         messages: &mut Vec<ChatMessage>,
         tx: broadcast::Sender<AgentEvent>,
         tool_ctx: ToolContext,
+        cancel_flag: Option<Arc<AtomicBool>>,
     ) -> Result<()> {
         // Panic if model not set - must call with_model() first
         assert!(!self.model.is_empty(), "Model not set: call with_model() before run()");
@@ -150,6 +152,14 @@ impl AgentLoop {
 
         for round in 0..MAX_ROUNDS {
             debug!(round, "Agent round starting");
+
+            // Check for cancellation
+            if let Some(flag) = &cancel_flag {
+                if flag.load(Ordering::Relaxed) {
+                    info!(session = %session_id, "Agent loop cancelled");
+                    break;
+                }
+            }
 
             // Apply context pruning based on budget
             let level = self.budget.compute_degradation_level(
