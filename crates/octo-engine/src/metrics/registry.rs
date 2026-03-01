@@ -57,6 +57,21 @@ impl MetricsRegistry {
         self.histograms.iter().map(|r| r.key().clone()).collect()
     }
 
+    /// Get all counters as a DashMap reference for iteration
+    pub fn counters(&self) -> &DashMap<String, Counter> {
+        &self.counters
+    }
+
+    /// Get all gauges as a DashMap reference for iteration
+    pub fn gauges(&self) -> &DashMap<String, Gauge> {
+        &self.gauges
+    }
+
+    /// Get all histograms as a DashMap reference for iteration
+    pub fn histograms(&self) -> &DashMap<String, Histogram> {
+        &self.histograms
+    }
+
     /// Clear all metrics
     pub fn clear(&self) {
         self.counters.clear();

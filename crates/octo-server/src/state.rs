@@ -3,9 +3,11 @@ use std::sync::Arc;
 
 use octo_engine::{
     auth::AuthConfig,
+    metrics::MetricsRegistry,
     mcp::{McpManager, McpStorage}, providers::ProviderChain, scheduler::Scheduler, MemoryStore, Provider,
     SessionStore, SkillRegistry, ToolExecutionRecorder, ToolRegistry, WorkingMemory,
 };
+use tokio::sync::RwLock;
 
 use crate::config::Config;
 
@@ -29,6 +31,8 @@ pub struct AppState {
     pub config: Config,
     /// Auth configuration for request authentication
     pub auth_config: AuthConfig,
+    /// Metrics registry for collecting application metrics
+    pub metrics_registry: Arc<RwLock<MetricsRegistry>>,
 }
 
 impl AppState {
@@ -50,6 +54,9 @@ impl AppState {
         // Convert YAML config to runtime AuthConfig
         let auth_config = config.auth.to_auth_config();
 
+        // Initialize metrics registry
+        let metrics_registry = Arc::new(RwLock::new(MetricsRegistry::new()));
+
         Self {
             provider,
             provider_chain,
@@ -65,6 +72,7 @@ impl AppState {
             scheduler,
             config,
             auth_config,
+            metrics_registry,
         }
     }
 
