@@ -30,10 +30,15 @@ impl SessionStore for SqliteSessionStore {
     }
 
     async fn create_session_with_user(&self, user_id: &UserId) -> SessionData {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
         let data = SessionData {
             session_id: SessionId::new(),
             user_id: user_id.clone(),
             sandbox_id: SandboxId::new(),
+            created_at: now,
         };
         let sid = data.session_id.as_str().to_string();
         self.sessions.insert(sid.clone(), data.clone());
@@ -42,13 +47,14 @@ impl SessionStore for SqliteSessionStore {
         // Write-through to DB (best-effort)
         let uid = data.user_id.as_str().to_string();
         let sbid = data.sandbox_id.as_str().to_string();
+        let created_at = data.created_at;
         let sid_db = sid;
         let _ = self
             .conn
             .call(move |conn| {
                 conn.execute(
-                    "INSERT OR IGNORE INTO sessions (session_id, user_id, sandbox_id) VALUES (?1, ?2, ?3)",
-                    rusqlite::params![sid_db, uid, sbid],
+                    "INSERT OR IGNORE INTO sessions (session_id, user_id, sandbox_id, created_at) VALUES (?1, ?2, ?3, ?4)",
+                    rusqlite::params![sid_db, uid, sbid, created_at],
                 )?;
                 Ok(())
             })
@@ -70,17 +76,19 @@ impl SessionStore for SqliteSessionStore {
             .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT session_id, user_id, sandbox_id FROM sessions WHERE session_id = ?1",
+                    "SELECT session_id, user_id, sandbox_id, COALESCE(created_at, 0) FROM sessions WHERE session_id = ?1",
                 )?;
                 let data = stmt
                     .query_row(rusqlite::params![sid], |row| {
                         let session_id: String = row.get(0)?;
                         let user_id: String = row.get(1)?;
                         let sandbox_id: String = row.get(2)?;
+                        let created_at: i64 = row.get(3)?;
                         Ok(SessionData {
                             session_id: SessionId::from_string(&session_id),
                             user_id: UserId::from_string(&user_id),
                             sandbox_id: SandboxId::from_string(&sandbox_id),
+                            created_at,
                         })
                     })
                     .ok();

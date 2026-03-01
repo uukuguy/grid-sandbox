@@ -10,6 +10,7 @@ pub struct SessionData {
     pub session_id: SessionId,
     pub user_id: UserId,
     pub sandbox_id: SandboxId,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]

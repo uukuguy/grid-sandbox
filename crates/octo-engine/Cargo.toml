@@ -35,7 +35,7 @@ thiserror = { workspace = true }
 cron = "0.15"
 
 [features]
-default = []
+default = ["sandbox-wasm", "sandbox-docker"]
 sandbox-wasm = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:base64"]
 sandbox-docker = ["dep:bollard", "dep:base64"]
 

@@ -31,10 +31,15 @@ impl SessionStore for InMemorySessionStore {
     }
 
     async fn create_session_with_user(&self, user_id: &UserId) -> SessionData {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
         let data = SessionData {
             session_id: SessionId::new(),
             user_id: user_id.clone(),
             sandbox_id: SandboxId::new(),
+            created_at: now,
         };
         let sid = data.session_id.as_str().to_string();
         self.sessions.insert(sid.clone(), data.clone());
