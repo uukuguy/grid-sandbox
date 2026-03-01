@@ -21,6 +21,10 @@ impl Counter {
         self.0.fetch_add(value, Ordering::Relaxed);
     }
 
+    pub fn add(&self, n: u64) {
+        self.0.fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn get(&self) -> u64 {
         self.0.load(Ordering::Relaxed)
     }
