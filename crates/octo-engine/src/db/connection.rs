@@ -2,7 +2,7 @@ use anyhow::Result;
 use tokio_rusqlite::Connection;
 use tracing::info;
 
-use super::migrations;
+use super::migrate;
 
 pub struct Database {
     conn: Connection,
@@ -56,7 +56,7 @@ impl Database {
     async fn run_migrations(&self) -> Result<()> {
         self.conn
             .call(|conn| {
-                migrations::migrate(conn)?;
+                migrate(conn)?;
                 Ok(())
             })
             .await?;
