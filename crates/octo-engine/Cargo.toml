@@ -28,3 +28,5 @@ serde_yaml = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
 rmcp = { workspace = true }
+hex = "0.4"
+sha2 = "0.10"

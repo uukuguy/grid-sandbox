@@ -389,9 +389,18 @@ impl AgentLoop {
                     serde_json::from_str(&tu.input_json).unwrap_or_default();
 
                 // Loop Guard: 检查是否陷入循环
-                if let Some(violation) = self.loop_guard.record_call(&tu.name, &tu.input_json) {
-                    tracing::warn!("Loop Guard triggered: {}", violation);
-                    return Err(anyhow::anyhow!("Loop Guard: {}", violation));
+                use super::loop_guard::LoopGuardVerdict;
+                let verdict = self.loop_guard.check(&tu.name, &input);
+                match &verdict {
+                    LoopGuardVerdict::Block(msg) | LoopGuardVerdict::CircuitBreak(msg) => {
+                        tracing::warn!("Loop Guard blocked: {}", msg);
+                        return Err(anyhow::anyhow!("Loop Guard: {}", msg));
+                    }
+                    LoopGuardVerdict::Warn(msg) => {
+                        tracing::warn!("Loop Guard warning: {}", msg);
+                        // 添加警告到工具结果
+                    }
+                    LoopGuardVerdict::Allow => {}
                 }
 
                 let _ = tx.send(AgentEvent::ToolStart {
@@ -479,6 +488,11 @@ impl AgentLoop {
 
                 // Soft-trim large tool results before injecting into messages
                 let trimmed_output = maybe_trim_tool_result(&result.output);
+
+                // Record outcome for result-aware loop detection
+                if let Some(outcome_warning) = self.loop_guard.record_outcome(&tu.name, &input, &result.output) {
+                    tracing::warn!("Loop Guard outcome: {}", outcome_warning);
+                }
 
                 tool_results.push(ContentBlock::ToolResult {
                     tool_use_id: tu.id.clone(),

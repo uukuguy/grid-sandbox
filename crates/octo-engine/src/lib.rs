@@ -2,12 +2,14 @@ pub mod event;
 pub mod agent;
 pub mod context;
 pub mod db;
+pub mod extension;
 pub mod mcp;
 pub mod memory;
 pub mod providers;
 pub mod session;
 pub mod skills;
 pub mod tools;
+pub mod security;
 
 pub use agent::{AgentEvent, AgentLoop};
 pub use event::{EventBus, OctoEvent};
@@ -22,3 +24,8 @@ pub use session::{InMemorySessionStore, SessionData, SessionStore, SessionSummar
 pub use skills::{SkillLoader, SkillRegistry, SkillTool};
 pub use tools::{default_tools, register_memory_tools, Tool, ToolRegistry};
 pub use tools::recorder::ToolExecutionRecorder;
+pub use security::{ActionTracker, AutonomyLevel, CommandRiskLevel, SecurityPolicy};
+pub use extension::{
+    AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
+    ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,
+};
