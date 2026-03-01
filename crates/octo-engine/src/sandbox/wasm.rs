@@ -340,6 +340,7 @@ impl RuntimeAdapter for WasmAdapter {
 }
 
 /// Decode base64 string to bytes
+#[cfg(feature = "sandbox-wasm")]
 fn base64_decode(input: &str) -> Result<Vec<u8>, SandboxError> {
     use base64::{engine::general_purpose::STANDARD, Engine};
 
