@@ -1,5 +1,45 @@
 # Octo Sandbox 开发工作日志
 
+## 2026-03-01 — Phase 2.7 Metrics + Audit 实施
+
+### 会话概要
+
+Phase 2.7 使用 subagent-driven-development 方式，一次会话完成全部 8 个任务，实现完整的可观测性系统。
+
+### 技术变更
+
+**Metrics 系统**
+- `crates/octo-engine/src/metrics/` — 新增 MetricsRegistry 模块
+  - Counter, Gauge, Histogram 类型，使用 DashMap 实现无锁并发
+  - EventBus 集成自动收集指标
+  - 33 个单元测试
+
+**Audit 系统**
+- `crates/octo-engine/src/audit/` — 新增 AuditStorage 模块
+  - SQLite 持久化，Migration v6
+  - Axum Middleware 自动记录 HTTP 请求
+- `crates/octo-server/src/api/` — 新增 REST API
+  - `GET /api/v1/metrics` — 指标快照
+  - `GET /api/v1/audit` — 审计日志查询
+
+**其他修复**
+- scheduler 模型名称可配置化
+- docker.rs unused field 警告修复
+- sandbox-docker/sandbox-wasm 特性确认默认启用
+
+### 测试结果
+
+- `cargo check --all`: ✅ 通过
+- `cargo test --lib`: ✅ 110 测试通过
+
+### 产出文件
+
+- `crates/octo-engine/src/metrics/` — 完整 metrics 模块
+- `crates/octo-engine/src/audit/` — 完整 audit 模块
+- `crates/octo-server/src/middleware/audit.rs` — HTTP 中间件
+
+---
+
 ## 2026-02-27 — 竞争力分析 (7项目代码级对比)
 
 ### 会话概要
