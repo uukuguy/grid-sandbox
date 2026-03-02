@@ -1,11 +1,11 @@
 {
   "plan_file": "docs/plans/2026-03-03-d3-agent-runtime.md",
-  "phase": "design",
+  "phase": "execution",
   "created_at": "2026-03-03T04:45:00+08:00",
-  "updated_at": "2026-03-03T07:20:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-03-03T09:40:00+08:00",
+  "completed_tasks": ["Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7"],
   "current_task": null,
-  "execution_mode": null,
+  "execution_mode": "subagent-driven-development",
   "phase_name": "D3: AgentRuntime 持久化主循环",
-  "notes": "设计阶段完成。核心设计：AgentRuntime（持久化主循环）+ AgentRuntimeRegistry（Session绑定）+ ws.rs 改为纯Channel层。设计文档：docs/design/AGENT_RUNTIME_DESIGN.md。Phase 2.11 D3 状态更新为 📋 设计完成。准备进入实现阶段（7 Tasks）。"
+  "notes": "D3 全部 7 Tasks 完成。AgentRuntime 持久化主循环已集成：AgentMessage协议 + AgentRuntimeHandle + AgentRuntime主循环 + AgentRuntimeRegistry + AppState集成 + ws.rs纯Channel化 + history持久化到SessionStore。附加：修复 Docker sandbox 测试（容器常驻 + 真实 stdout/stderr 捕获），9/9 通过。"
 }
