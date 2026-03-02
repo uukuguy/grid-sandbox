@@ -1,8 +1,18 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
+use tracing::{info, warn};
 
-use octo_types::SessionId;
+use octo_types::{ChatMessage, SandboxId, SessionId, ToolContext, UserId};
 
-use crate::agent::AgentEvent;
+use crate::agent::{AgentEvent, AgentLoop};
+use crate::memory::store_traits::MemoryStore;
+use crate::memory::WorkingMemory;
+use crate::providers::Provider;
+use crate::tools::ToolRegistry;
 
 /// Channel → AgentRuntime 的消息
 #[derive(Debug, Clone)]
@@ -37,5 +47,128 @@ impl AgentRuntimeHandle {
     /// 发送消息到 AgentRuntime
     pub async fn send(&self, msg: AgentMessage) -> Result<(), mpsc::error::SendError<AgentMessage>> {
         self.tx.send(msg).await
+    }
+}
+
+/// 持久化运行的 Agent 自主智能体本体
+pub struct AgentRuntime {
+    // 身份
+    session_id: SessionId,
+    user_id: UserId,
+    sandbox_id: SandboxId,
+
+    // 通道
+    rx: mpsc::Receiver<AgentMessage>,
+    broadcast_tx: broadcast::Sender<AgentEvent>,
+
+    // Harness 核心（所有字段跨 round 持久化）
+    history: Vec<ChatMessage>,
+    provider: Arc<dyn Provider>,
+    tools: Arc<ToolRegistry>,
+    memory: Arc<dyn WorkingMemory>,
+    memory_store: Option<Arc<dyn MemoryStore>>,
+    model: Option<String>,
+
+    // 生命周期
+    cancel_flag: Arc<AtomicBool>,
+}
+
+impl AgentRuntime {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        rx: mpsc::Receiver<AgentMessage>,
+        broadcast_tx: broadcast::Sender<AgentEvent>,
+        provider: Arc<dyn Provider>,
+        tools: Arc<ToolRegistry>,
+        memory: Arc<dyn WorkingMemory>,
+        memory_store: Option<Arc<dyn MemoryStore>>,
+        model: Option<String>,
+    ) -> Self {
+        Self {
+            session_id,
+            user_id,
+            sandbox_id,
+            rx,
+            broadcast_tx,
+            history: initial_history,
+            provider,
+            tools,
+            memory,
+            memory_store,
+            model,
+            cancel_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Agent 主循环入口 — 持续等待消息，处理，广播结果
+    pub async fn run(mut self) {
+        info!(session_id = %self.session_id.as_str(), "AgentRuntime started");
+
+        while let Some(msg) = self.rx.recv().await {
+            match msg {
+                AgentMessage::UserMessage { content, .. } => {
+                    // 重置取消标志
+                    self.cancel_flag.store(false, Ordering::Relaxed);
+
+                    // 追加用户消息到持久化历史
+                    self.history.push(ChatMessage::user(content));
+
+                    // 构建 AgentLoop（每 round 新建，但 history 由 AgentRuntime 持有）
+                    let mut agent_loop = AgentLoop::new(
+                        self.provider.clone(),
+                        self.tools.clone(),
+                        self.memory.clone(),
+                    );
+                    if let Some(ref ms) = self.memory_store {
+                        agent_loop = agent_loop.with_memory_store(ms.clone());
+                    }
+                    // AgentLoop::run() 中有 assert!(!self.model.is_empty())，必须设置 model
+                    let model = self
+                        .model
+                        .clone()
+                        .unwrap_or_else(|| "claude-sonnet-4-6".to_string());
+                    agent_loop = agent_loop.with_model(model);
+
+                    let tool_ctx = ToolContext {
+                        sandbox_id: self.sandbox_id.clone(),
+                        working_dir: PathBuf::from("/tmp/octo-sandbox"),
+                    };
+                    let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
+
+                    if let Err(e) = agent_loop
+                        .run(
+                            &self.session_id,
+                            &self.user_id,
+                            &self.sandbox_id,
+                            &mut self.history,
+                            self.broadcast_tx.clone(),
+                            tool_ctx,
+                            Some(self.cancel_flag.clone()),
+                        )
+                        .await
+                    {
+                        warn!("AgentRuntime round error: {e}");
+                        let _ = self.broadcast_tx.send(AgentEvent::Error {
+                            message: e.to_string(),
+                        });
+                    }
+                }
+                AgentMessage::Cancel => {
+                    self.cancel_flag.store(true, Ordering::Relaxed);
+                    info!(session_id = %self.session_id.as_str(), "AgentRuntime: cancel requested");
+                }
+            }
+        }
+
+        info!(session_id = %self.session_id.as_str(), "AgentRuntime stopped (channel closed)");
+    }
+
+    /// 返回当前对话历史（用于 session 持久化）
+    pub fn history(&self) -> &[ChatMessage] {
+        &self.history
     }
 }
