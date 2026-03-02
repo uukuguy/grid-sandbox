@@ -1,5 +1,5 @@
+use super::chain::{FailoverPolicy, LlmInstance};
 use serde::{Deserialize, Serialize};
-use super::chain::{LlmInstance, FailoverPolicy};
 
 /// Provider Chain 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +24,7 @@ fn default_interval() -> u64 {
 pub struct LlmInstanceConfig {
     pub id: String,
     pub provider: String,
-    pub api_key: String,  // 支持 ${ENV_VAR} 格式
+    pub api_key: String, // 支持 ${ENV_VAR} 格式
     pub base_url: Option<String>,
     pub model: String,
     pub priority: u8,

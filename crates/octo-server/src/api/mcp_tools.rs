@@ -88,15 +88,22 @@ pub async fn list_executions(
     };
 
     match storage.list_executions(&server_id, 100) {
-        Ok(execs) => Json(execs.into_iter().map(|e| McpToolCallResponse {
-            id: e.id,
-            server_id: e.server_id,
-            tool_name: e.tool_name,
-            result: e.result.map(|r| serde_json::from_str(&r).unwrap_or_default()),
-            error: e.error,
-            duration_ms: e.duration_ms.unwrap_or(0),
-            executed_at: e.executed_at,
-        }).collect()),
+        Ok(execs) => Json(
+            execs
+                .into_iter()
+                .map(|e| McpToolCallResponse {
+                    id: e.id,
+                    server_id: e.server_id,
+                    tool_name: e.tool_name,
+                    result: e
+                        .result
+                        .map(|r| serde_json::from_str(&r).unwrap_or_default()),
+                    error: e.error,
+                    duration_ms: e.duration_ms.unwrap_or(0),
+                    executed_at: e.executed_at,
+                })
+                .collect(),
+        ),
         Err(_) => Json(vec![]),
     }
 }

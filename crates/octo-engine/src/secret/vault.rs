@@ -66,13 +66,13 @@ impl CredentialVault {
 
         // Derive key with Argon2id
         let argon2 = Argon2::default();
-        let hash = argon2.hash_password(password.as_bytes(), &salt)
+        let hash = argon2
+            .hash_password(password.as_bytes(), &salt)
             .map_err(|e| format!("Failed to hash password: {}", e))?;
 
         // Extract 32 bytes key safely
         let mut key = [0u8; 32];
-        let hash_output = hash.hash
-            .ok_or_else(|| "Hash output missing".to_string())?;
+        let hash_output = hash.hash.ok_or_else(|| "Hash output missing".to_string())?;
         let hash_bytes = hash_output.as_bytes();
         let len = std::cmp::min(32, hash_bytes.len());
         key[..len].copy_from_slice(&hash_bytes[..len]);
@@ -122,15 +122,15 @@ impl CredentialVault {
         let entries = self.entries.read().map_err(|e| e.to_string())?;
         let plaintext = serde_json::to_vec(&*entries).map_err(|e| e.to_string())?;
 
-        let cipher = Aes256Gcm::new_from_slice(&*self.master_key)
-            .map_err(|e| e.to_string())?;
+        let cipher = Aes256Gcm::new_from_slice(&*self.master_key).map_err(|e| e.to_string())?;
 
         // Generate fresh nonce for each encryption (critical for AES-GCM security)
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let ciphertext = cipher.encrypt(nonce, plaintext.as_ref())
+        let ciphertext = cipher
+            .encrypt(nonce, plaintext.as_ref())
             .map_err(|e| e.to_string())?;
 
         let mut store = self.store.write().map_err(|e| e.to_string())?;
@@ -147,16 +147,16 @@ impl CredentialVault {
             return Ok(());
         }
 
-        let cipher = Aes256Gcm::new_from_slice(&*self.master_key)
-            .map_err(|e| e.to_string())?;
+        let cipher = Aes256Gcm::new_from_slice(&*self.master_key).map_err(|e| e.to_string())?;
 
         let nonce = Nonce::from_slice(&store.nonce);
 
-        let plaintext = cipher.decrypt(nonce, store.ciphertext.as_ref())
+        let plaintext = cipher
+            .decrypt(nonce, store.ciphertext.as_ref())
             .map_err(|_| "Decryption failed - wrong password?".to_string())?;
 
-        let entries: HashMap<String, String> = serde_json::from_slice(&plaintext)
-            .map_err(|e| e.to_string())?;
+        let entries: HashMap<String, String> =
+            serde_json::from_slice(&plaintext).map_err(|e| e.to_string())?;
 
         *self.entries.write().map_err(|e| e.to_string())? = entries;
         Ok(())

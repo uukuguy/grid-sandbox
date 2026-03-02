@@ -13,10 +13,13 @@ use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use octo_engine::{
-    create_provider, default_tools, register_memory_tools, Database, mcp::McpManager,
-    providers::ProviderChain, scheduler::{Scheduler, SqliteSchedulerStorage}, MemoryStore, SessionStore,
-    SkillLoader, SkillRegistry, SkillTool, SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory,
-    ToolExecutionRecorder, WorkingMemory,
+    create_provider, default_tools,
+    mcp::McpManager,
+    providers::ProviderChain,
+    register_memory_tools,
+    scheduler::{Scheduler, SqliteSchedulerStorage},
+    Database, MemoryStore, SessionStore, SkillLoader, SkillRegistry, SkillTool, SqliteMemoryStore,
+    SqliteSessionStore, SqliteWorkingMemory, ToolExecutionRecorder, WorkingMemory,
 };
 use state::AppState;
 
@@ -74,9 +77,9 @@ async fn main() -> Result<()> {
     // Apply logging config (clone to avoid moving)
     let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| cfg.logging.level.clone());
     fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-            EnvFilter::new(&log_filter)
-        }))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_filter)),
+        )
         .init();
 
     let addr = format!("{}:{}", cfg.server.host, cfg.server.port);
@@ -96,12 +99,14 @@ async fn main() -> Result<()> {
         provider_config.api_key
     };
 
-    let base_url = provider_config.base_url.clone().or_else(|| {
-        match provider_config.name.as_str() {
-            "openai" => std::env::var("OPENAI_BASE_URL").ok(),
-            _ => std::env::var("ANTHROPIC_BASE_URL").ok(),
-        }
-    });
+    let base_url =
+        provider_config
+            .base_url
+            .clone()
+            .or_else(|| match provider_config.name.as_str() {
+                "openai" => std::env::var("OPENAI_BASE_URL").ok(),
+                _ => std::env::var("ANTHROPIC_BASE_URL").ok(),
+            });
 
     // Read model based on provider - panic if not set
     let model = match provider_config.model.clone() {
@@ -136,8 +141,10 @@ async fn main() -> Result<()> {
         // Add instances to the chain
         for instance_config in &pc_config.instances {
             // Resolve API key from env var if needed
-            let api_key = if instance_config.api_key.starts_with("${") && instance_config.api_key.ends_with("}") {
-                let env_var = &instance_config.api_key[2..instance_config.api_key.len()-1];
+            let api_key = if instance_config.api_key.starts_with("${")
+                && instance_config.api_key.ends_with("}")
+            {
+                let env_var = &instance_config.api_key[2..instance_config.api_key.len() - 1];
                 std::env::var(env_var).unwrap_or_else(|_| instance_config.api_key.clone())
             } else {
                 instance_config.api_key.clone()
@@ -158,24 +165,27 @@ async fn main() -> Result<()> {
         }
 
         // Start health checker if configured
-        chain.start_health_checker(octo_engine::providers::HealthCheckConfig {
-            interval: std::time::Duration::from_secs(pc_config.health_check_interval_sec),
-            timeout: std::time::Duration::from_secs(10),
-        }).await;
+        chain
+            .start_health_checker(octo_engine::providers::HealthCheckConfig {
+                interval: std::time::Duration::from_secs(pc_config.health_check_interval_sec),
+                timeout: std::time::Duration::from_secs(10),
+            })
+            .await;
 
-        tracing::info!("Provider chain initialized with {} instances", pc_config.instances.len());
+        tracing::info!(
+            "Provider chain initialized with {} instances",
+            pc_config.instances.len()
+        );
         Some(chain)
     } else {
         None
     };
 
     // Working memory (Layer 0) -- SQLite-backed
-    let memory: Arc<dyn WorkingMemory> =
-        Arc::new(SqliteWorkingMemory::new(conn.clone()).await?);
+    let memory: Arc<dyn WorkingMemory> = Arc::new(SqliteWorkingMemory::new(conn.clone()).await?);
 
     // Session store -- SQLite-backed with DashMap cache
-    let sessions: Arc<dyn SessionStore> =
-        Arc::new(SqliteSessionStore::new(conn.clone()).await?);
+    let sessions: Arc<dyn SessionStore> = Arc::new(SqliteSessionStore::new(conn.clone()).await?);
 
     // Persistent memory store (Layer 2) -- SQLite-backed
     let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn.clone()));
@@ -187,14 +197,9 @@ async fn main() -> Result<()> {
     let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
 
     // Skill system
-    let home_dir = std::env::var("HOME")
-        .map(PathBuf::from)
-        .ok();
+    let home_dir = std::env::var("HOME").map(PathBuf::from).ok();
     let project_dir = std::env::current_dir().ok();
-    let skill_loader = SkillLoader::new(
-        project_dir.as_deref(),
-        home_dir.as_deref(),
-    );
+    let skill_loader = SkillLoader::new(project_dir.as_deref(), home_dir.as_deref());
     let skill_registry = Arc::new(SkillRegistry::new());
     if let Err(e) = skill_registry.load_from(&skill_loader) {
         tracing::warn!("Failed to load skills: {e}");
@@ -212,10 +217,7 @@ async fn main() -> Result<()> {
     let tools = Arc::new(tools);
 
     // Start skill hot-reload watcher
-    let watch_loader = SkillLoader::new(
-        project_dir.as_deref(),
-        home_dir.as_deref(),
-    );
+    let watch_loader = SkillLoader::new(project_dir.as_deref(), home_dir.as_deref());
     if let Err(e) = skill_registry.start_watching(watch_loader) {
         tracing::warn!("Failed to start skill watcher: {e}");
     }

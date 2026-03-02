@@ -4,12 +4,7 @@
 
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use octo_engine::audit::{AuditEvent, AuditStorage};
 use octo_engine::auth::UserContext;
 use std::path::PathBuf;
@@ -106,7 +101,12 @@ pub async fn audit_middleware(
             session_id: None,
             resource_id: None,
             action: format!("{} {}", log_method, log_path),
-            result: if log_status >= 400 { "failure" } else { "success" }.to_string(),
+            result: if log_status >= 400 {
+                "failure"
+            } else {
+                "success"
+            }
+            .to_string(),
             metadata: Some(serde_json::json!({
                 "method": log_method,
                 "path": log_path,

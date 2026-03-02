@@ -18,18 +18,14 @@ impl ChatMessage {
     pub fn user(text: impl Into<String>) -> Self {
         Self {
             role: MessageRole::User,
-            content: vec![ContentBlock::Text {
-                text: text.into(),
-            }],
+            content: vec![ContentBlock::Text { text: text.into() }],
         }
     }
 
     pub fn assistant(text: impl Into<String>) -> Self {
         Self {
             role: MessageRole::Assistant,
-            content: vec![ContentBlock::Text {
-                text: text.into(),
-            }],
+            content: vec![ContentBlock::Text { text: text.into() }],
         }
     }
 

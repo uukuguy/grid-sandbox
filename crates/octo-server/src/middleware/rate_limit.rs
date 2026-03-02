@@ -1,10 +1,6 @@
 //! Rate limiting middleware for Octo Server
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use tokio::sync::RwLock;
 

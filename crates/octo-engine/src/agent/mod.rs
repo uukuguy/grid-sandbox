@@ -4,6 +4,7 @@ pub mod context;
 pub mod extension;
 pub mod loop_;
 pub mod loop_guard;
+pub mod parallel;
 pub mod queue;
 
 pub use cancellation::{CancellationToken, ChildCancellationToken};

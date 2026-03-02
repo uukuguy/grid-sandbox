@@ -26,7 +26,8 @@ impl SqliteSessionStore {
 #[async_trait]
 impl SessionStore for SqliteSessionStore {
     async fn create_session(&self) -> SessionData {
-        self.create_session_with_user(&UserId::from_string("default")).await
+        self.create_session_with_user(&UserId::from_string("default"))
+            .await
     }
 
     async fn create_session_with_user(&self, user_id: &UserId) -> SessionData {
@@ -105,7 +106,11 @@ impl SessionStore for SqliteSessionStore {
         }
     }
 
-    async fn get_session_for_user(&self, session_id: &SessionId, user_id: &UserId) -> Option<SessionData> {
+    async fn get_session_for_user(
+        &self,
+        session_id: &SessionId,
+        user_id: &UserId,
+    ) -> Option<SessionData> {
         // First check if session belongs to user
         if let Some(data) = self.get_session(session_id).await {
             if data.user_id.as_str() == user_id.as_str() {
@@ -252,7 +257,12 @@ impl SessionStore for SqliteSessionStore {
         result.unwrap_or_default()
     }
 
-    async fn list_sessions_for_user(&self, user_id: &UserId, limit: usize, offset: usize) -> Vec<SessionSummary> {
+    async fn list_sessions_for_user(
+        &self,
+        user_id: &UserId,
+        limit: usize,
+        offset: usize,
+    ) -> Vec<SessionSummary> {
         let uid = user_id.as_str().to_string();
         let result = self
             .conn

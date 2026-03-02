@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::{broadcast, Semaphore};
 use uuid::Uuid;
 
@@ -116,7 +116,8 @@ impl Serialize for SchedulerError {
 pub trait SchedulerStorage: Send + Sync {
     async fn save_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError>;
     async fn get_task(&self, task_id: &str) -> Result<Option<ScheduledTask>, SchedulerError>;
-    async fn list_tasks(&self, user_id: Option<&str>) -> Result<Vec<ScheduledTask>, SchedulerError>;
+    async fn list_tasks(&self, user_id: Option<&str>)
+        -> Result<Vec<ScheduledTask>, SchedulerError>;
     async fn delete_task(&self, task_id: &str) -> Result<(), SchedulerError>;
     async fn update_timing(
         &self,
@@ -125,7 +126,11 @@ pub trait SchedulerStorage: Send + Sync {
         next_run: Option<DateTime<Utc>>,
     ) -> Result<(), SchedulerError>;
     async fn save_execution(&self, execution: &TaskExecution) -> Result<(), SchedulerError>;
-    async fn get_executions(&self, task_id: &str, limit: usize) -> Result<Vec<TaskExecution>, SchedulerError>;
+    async fn get_executions(
+        &self,
+        task_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskExecution>, SchedulerError>;
     async fn get_due_tasks(&self) -> Result<Vec<ScheduledTask>, SchedulerError>;
 }
 
@@ -141,7 +146,11 @@ impl CronParser {
     }
 
     /// Parse cron expression and calculate next run time
-    pub fn parse_next(&self, cron_expr: &str, from: DateTime<Utc>) -> Result<DateTime<Utc>, SchedulerError> {
+    pub fn parse_next(
+        &self,
+        cron_expr: &str,
+        from: DateTime<Utc>,
+    ) -> Result<DateTime<Utc>, SchedulerError> {
         // Cron expression uses standard 5-field format: minute hour day month weekday
         let schedule = Schedule::from_str(cron_expr)
             .map_err(|e| SchedulerError::InvalidCron(e.to_string()))?;
@@ -156,8 +165,7 @@ impl CronParser {
 
     /// Validate cron expression
     pub fn validate(&self, cron_expr: &str) -> Result<(), SchedulerError> {
-        Schedule::from_str(cron_expr)
-            .map_err(|e| SchedulerError::InvalidCron(e.to_string()))?;
+        Schedule::from_str(cron_expr).map_err(|e| SchedulerError::InvalidCron(e.to_string()))?;
         Ok(())
     }
 }
@@ -230,11 +238,17 @@ impl Scheduler {
         }
 
         self.running.store(true, Ordering::SeqCst);
-        tracing::info!("Scheduler started with {}s interval", self.config.check_interval_secs);
+        tracing::info!(
+            "Scheduler started with {}s interval",
+            self.config.check_interval_secs
+        );
 
         while self.running.load(Ordering::SeqCst) {
             self.tick().await;
-            tokio::time::sleep(tokio::time::Duration::from_secs(self.config.check_interval_secs)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                self.config.check_interval_secs,
+            ))
+            .await;
         }
     }
 
@@ -263,7 +277,11 @@ impl Scheduler {
     /// Execute a single task
     async fn execute_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
         // Check concurrency limit
-        let _permit = self.semaphore.acquire().await.map_err(|e| SchedulerError::ExecutionFailed(e.to_string()))?;
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
+            .map_err(|e| SchedulerError::ExecutionFailed(e.to_string()))?;
 
         let execution_id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -298,7 +316,9 @@ impl Scheduler {
         let next_run = self.cron_parser.parse_next(&task.cron, Utc::now()).ok();
 
         // Update task timing
-        self.storage.update_timing(&task.id, Some(now), next_run).await?;
+        self.storage
+            .update_timing(&task.id, Some(now), next_run)
+            .await?;
 
         // Save execution
         self.storage.save_execution(&execution).await?;
@@ -313,7 +333,9 @@ impl Scheduler {
         let config = &task.agent_config;
 
         // Create session for the task
-        let user_id = task.user_id.as_ref()
+        let user_id = task
+            .user_id
+            .as_ref()
             .map(|u| UserId::from_string(u.clone()))
             .unwrap_or_else(|| UserId::from_string("scheduler".to_string()));
 
@@ -433,7 +455,10 @@ impl Scheduler {
     }
 
     /// List tasks
-    pub async fn list_tasks(&self, user_id: Option<&str>) -> Result<Vec<ScheduledTask>, SchedulerError> {
+    pub async fn list_tasks(
+        &self,
+        user_id: Option<&str>,
+    ) -> Result<Vec<ScheduledTask>, SchedulerError> {
         self.storage.list_tasks(user_id).await
     }
 
@@ -456,7 +481,9 @@ impl Scheduler {
         agent_config: Option<AgentTaskConfig>,
         enabled: Option<bool>,
     ) -> Result<ScheduledTask, SchedulerError> {
-        let mut task = self.storage.get_task(task_id)
+        let mut task = self
+            .storage
+            .get_task(task_id)
             .await?
             .ok_or_else(|| SchedulerError::TaskNotFound(task_id.to_string()))?;
 
@@ -485,8 +512,15 @@ impl Scheduler {
     }
 
     /// Run task immediately (manual trigger)
-    pub async fn run_now(&self, task_id: &str, user_id: Option<&str>) -> Result<TaskExecution, SchedulerError> {
-        let task = self.storage.get_task(task_id).await?
+    pub async fn run_now(
+        &self,
+        task_id: &str,
+        user_id: Option<&str>,
+    ) -> Result<TaskExecution, SchedulerError> {
+        let task = self
+            .storage
+            .get_task(task_id)
+            .await?
             .ok_or_else(|| SchedulerError::TaskNotFound(task_id.to_string()))?;
 
         // Check user ownership
@@ -510,13 +544,19 @@ impl Scheduler {
         self.storage.save_execution(&execution).await?;
 
         // Update last_run
-        self.storage.update_timing(task_id, Some(now), task.next_run).await?;
+        self.storage
+            .update_timing(task_id, Some(now), task.next_run)
+            .await?;
 
         Ok(execution)
     }
 
     /// Get task executions
-    pub async fn get_executions(&self, task_id: &str, limit: usize) -> Result<Vec<TaskExecution>, SchedulerError> {
+    pub async fn get_executions(
+        &self,
+        task_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskExecution>, SchedulerError> {
         self.storage.get_executions(task_id, limit).await
     }
 }

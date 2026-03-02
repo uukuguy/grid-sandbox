@@ -176,9 +176,9 @@ mod tests {
     fn test_histogram_buckets() {
         let hist = Histogram::new(vec![10.0, 50.0, 100.0]);
 
-        hist.observe(5.0);   // bucket 0 (<=10)
-        hist.observe(15.0);  // bucket 1 (<=50)
-        hist.observe(60.0);  // bucket 2 (<=100)
+        hist.observe(5.0); // bucket 0 (<=10)
+        hist.observe(15.0); // bucket 1 (<=50)
+        hist.observe(60.0); // bucket 2 (<=100)
         hist.observe(150.0); // bucket 3 (>100)
 
         let buckets = hist.buckets();
@@ -199,8 +199,8 @@ mod tests {
 
         let cumulative = hist.cumulative_buckets();
         assert_eq!(cumulative.len(), 3);
-        assert_eq!(cumulative[0], (10.0, 1));   // 1 value <= 10
-        assert_eq!(cumulative[1], (50.0, 2));   // 2 values <= 50
+        assert_eq!(cumulative[0], (10.0, 1)); // 1 value <= 10
+        assert_eq!(cumulative[1], (50.0, 2)); // 2 values <= 50
         assert_eq!(cumulative[2], (100.0, 3)); // 3 values <= 100
     }
 

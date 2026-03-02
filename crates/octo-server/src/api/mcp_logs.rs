@@ -46,18 +46,26 @@ pub async fn list_logs(
 
     let level = params.level.as_deref();
     match storage.list_logs(&server_id, level, limit, offset) {
-        Ok(logs) => Json(logs.into_iter().map(|l| McpLogEntry {
-            id: l.id,
-            server_id: l.server_id,
-            level: l.level,
-            direction: l.direction,
-            method: l.method,
-            params: l.params.map(|p| serde_json::from_str(&p).unwrap_or_default()),
-            result: l.result.map(|r| serde_json::from_str(&r).unwrap_or_default()),
-            raw_data: l.raw_data,
-            duration_ms: l.duration_ms,
-            logged_at: l.logged_at,
-        }).collect()),
+        Ok(logs) => Json(
+            logs.into_iter()
+                .map(|l| McpLogEntry {
+                    id: l.id,
+                    server_id: l.server_id,
+                    level: l.level,
+                    direction: l.direction,
+                    method: l.method,
+                    params: l
+                        .params
+                        .map(|p| serde_json::from_str(&p).unwrap_or_default()),
+                    result: l
+                        .result
+                        .map(|r| serde_json::from_str(&r).unwrap_or_default()),
+                    raw_data: l.raw_data,
+                    duration_ms: l.duration_ms,
+                    logged_at: l.logged_at,
+                })
+                .collect(),
+        ),
         Err(_) => Json(vec![]),
     }
 }

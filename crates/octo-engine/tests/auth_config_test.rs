@@ -51,12 +51,13 @@ fn test_api_key_expiry() {
 fn test_get_user_id() {
     let mut config = AuthConfig::new();
     config.mode = AuthMode::ApiKey;
-    config.add_api_key("key-001", Some("user-001".to_string()), vec![Permission::Read]);
-
-    assert_eq!(
-        config.get_user_id("key-001"),
-        Some("user-001".to_string())
+    config.add_api_key(
+        "key-001",
+        Some("user-001".to_string()),
+        vec![Permission::Read],
     );
+
+    assert_eq!(config.get_user_id("key-001"), Some("user-001".to_string()));
     assert_eq!(config.get_user_id("key-002"), None);
 }
 

@@ -1,13 +1,7 @@
 // crates/octo-engine/src/auth/middleware.rs
 
 use crate::auth::{AuthConfig, AuthMode, Permission};
-use axum::{
-    body::Body,
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{body::Body, extract::Request, http::StatusCode, middleware::Next, response::Response};
 
 /// 用户上下文
 #[derive(Debug, Clone)]
@@ -34,10 +28,7 @@ pub async fn auth_middleware(
         }
         AuthMode::ApiKey => {
             // 验证 API Key
-            let key = req
-                .headers()
-                .get("X-API-Key")
-                .and_then(|v| v.to_str().ok());
+            let key = req.headers().get("X-API-Key").and_then(|v| v.to_str().ok());
 
             match key {
                 Some(k) if config.validate_key(k) => {

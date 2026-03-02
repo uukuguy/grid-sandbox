@@ -90,7 +90,8 @@ mod tests {
             params.push(Box::new(limit as i64));
             params.push(Box::new(offset as i64));
 
-            let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+            let params_refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
 
             let rows = stmt.query_map(params_refs.as_slice(), |row| {
                 Ok(AuditRecord {
@@ -110,11 +111,7 @@ mod tests {
             rows.collect()
         }
 
-        fn count(
-            &self,
-            event_type: Option<&str>,
-            user_id: Option<&str>,
-        ) -> rusqlite::Result<i64> {
+        fn count(&self, event_type: Option<&str>, user_id: Option<&str>) -> rusqlite::Result<i64> {
             let mut sql = String::from("SELECT COUNT(*) FROM audit_logs WHERE 1=1");
 
             if event_type.is_some() {
@@ -135,7 +132,8 @@ mod tests {
                 params.push(Box::new(u.to_string()));
             }
 
-            let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+            let params_refs: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|p| p.as_ref()).collect();
 
             stmt.query_row(params_refs.as_slice(), |row| row.get(0))
         }
@@ -352,7 +350,9 @@ mod tests {
         let records = storage.query(None, Some("user1"), 10, 0)?;
 
         assert_eq!(records.len(), 2);
-        assert!(records.iter().all(|r| r.user_id.as_deref() == Some("user1")));
+        assert!(records
+            .iter()
+            .all(|r| r.user_id.as_deref() == Some("user1")));
 
         Ok(())
     }
@@ -534,9 +534,9 @@ mod tests {
         let records = storage.query(Some("user.login"), Some("user1"), 10, 0)?;
 
         assert_eq!(records.len(), 2);
-        assert!(records.iter().all(|r| {
-            r.event_type == "user.login" && r.user_id.as_deref() == Some("user1")
-        }));
+        assert!(records
+            .iter()
+            .all(|r| { r.event_type == "user.login" && r.user_id.as_deref() == Some("user1") }));
 
         Ok(())
     }

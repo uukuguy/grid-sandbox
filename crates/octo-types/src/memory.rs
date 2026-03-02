@@ -232,7 +232,11 @@ pub struct MemoryEntry {
 }
 
 impl MemoryEntry {
-    pub fn new(user_id: impl Into<String>, category: MemoryCategory, content: impl Into<String>) -> Self {
+    pub fn new(
+        user_id: impl Into<String>,
+        category: MemoryCategory,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             id: MemoryId::new(),
             user_id: user_id.into(),

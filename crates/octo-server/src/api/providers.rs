@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Path, State},
-    routing::{get, post, delete},
+    routing::{delete, get, post},
     Json, Router,
 };
 use octo_engine::providers::LlmInstance;

@@ -27,7 +27,8 @@ impl Default for InMemorySessionStore {
 #[async_trait]
 impl SessionStore for InMemorySessionStore {
     async fn create_session(&self) -> SessionData {
-        self.create_session_with_user(&UserId::from_string("default")).await
+        self.create_session_with_user(&UserId::from_string("default"))
+            .await
     }
 
     async fn create_session_with_user(&self, user_id: &UserId) -> SessionData {
@@ -51,7 +52,11 @@ impl SessionStore for InMemorySessionStore {
         self.sessions.get(session_id.as_str()).map(|v| v.clone())
     }
 
-    async fn get_session_for_user(&self, session_id: &SessionId, user_id: &UserId) -> Option<SessionData> {
+    async fn get_session_for_user(
+        &self,
+        session_id: &SessionId,
+        user_id: &UserId,
+    ) -> Option<SessionData> {
         self.sessions
             .get(session_id.as_str())
             .filter(|v| v.user_id.as_str() == user_id.as_str())
@@ -91,7 +96,12 @@ impl SessionStore for InMemorySessionStore {
         summaries.into_iter().skip(offset).take(limit).collect()
     }
 
-    async fn list_sessions_for_user(&self, user_id: &UserId, limit: usize, offset: usize) -> Vec<SessionSummary> {
+    async fn list_sessions_for_user(
+        &self,
+        user_id: &UserId,
+        limit: usize,
+        offset: usize,
+    ) -> Vec<SessionSummary> {
         let mut summaries: Vec<SessionSummary> = self
             .sessions
             .iter()

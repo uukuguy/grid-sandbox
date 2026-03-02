@@ -1,13 +1,13 @@
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use anyhow::{Result, anyhow};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use tracing::info;
-use async_trait::async_trait;
 
 use octo_types::{CompletionRequest, CompletionResponse};
 
@@ -29,7 +29,10 @@ pub struct LlmInstance {
 #[serde(tag = "status")]
 pub enum InstanceHealth {
     Healthy,
-    Unhealthy { reason: String, failed_at: DateTime<Utc> },
+    Unhealthy {
+        reason: String,
+        failed_at: DateTime<Utc>,
+    },
     Unknown,
 }
 
@@ -139,7 +142,10 @@ impl ProviderChain {
             if let Some(instance) = instances.iter().find(|i| &i.id == id) {
                 if instance.enabled {
                     let health = self.health.read().await;
-                    if matches!(health.get(&instance.id), Some(InstanceHealth::Healthy) | None | Some(InstanceHealth::Unknown)) {
+                    if matches!(
+                        health.get(&instance.id),
+                        Some(InstanceHealth::Healthy) | None | Some(InstanceHealth::Unknown)
+                    ) {
                         return Ok(Arc::new(instance.clone()));
                     }
                 }
@@ -148,9 +154,7 @@ impl ProviderChain {
 
         // 2. 自动模式
         match self.policy {
-            FailoverPolicy::Manual => {
-                Err(anyhow!("No manual instance selected"))
-            }
+            FailoverPolicy::Manual => Err(anyhow!("No manual instance selected")),
             _ => self.get_next_healthy_instance().await,
         }
     }
@@ -159,14 +163,15 @@ impl ProviderChain {
         let instances = self.instances.read().await;
         let health = self.health.read().await;
 
-        let mut sorted: Vec<_> = instances.iter()
-            .filter(|i| i.enabled)
-            .collect();
+        let mut sorted: Vec<_> = instances.iter().filter(|i| i.enabled).collect();
         sorted.sort_by_key(|i| i.priority);
 
         for instance in sorted {
             let instance_health = health.get(&instance.id);
-            if matches!(instance_health, Some(InstanceHealth::Healthy) | None | Some(InstanceHealth::Unknown)) {
+            if matches!(
+                instance_health,
+                Some(InstanceHealth::Healthy) | None | Some(InstanceHealth::Unknown)
+            ) {
                 return Ok(Arc::new(instance.clone()));
             }
         }
@@ -177,10 +182,13 @@ impl ProviderChain {
     /// 标记实例不健康
     pub async fn mark_unhealthy(&self, instance_id: &str, reason: &str) {
         let mut health = self.health.write().await;
-        health.insert(instance_id.to_string(), InstanceHealth::Unhealthy {
-            reason: reason.to_string(),
-            failed_at: Utc::now(),
-        });
+        health.insert(
+            instance_id.to_string(),
+            InstanceHealth::Unhealthy {
+                reason: reason.to_string(),
+                failed_at: Utc::now(),
+            },
+        );
     }
 
     /// 手动选择实例
@@ -237,10 +245,7 @@ impl ProviderChain {
                     // 只检查 Unknown 或 Unhealthy 的实例
                     let should_check = {
                         let h = health.read().await;
-                        matches!(
-                            h.get(&id),
-                            Some(InstanceHealth::Unhealthy { .. }) | None
-                        )
+                        matches!(h.get(&id), Some(InstanceHealth::Unhealthy { .. }) | None)
                     };
 
                     if should_check {
@@ -329,7 +334,9 @@ impl crate::providers::Provider for ChainProvider {
             match provider.complete(request.clone()).await {
                 Ok(response) => return Ok(response),
                 Err(e) => {
-                    self.chain.mark_unhealthy(&instance.id, &e.to_string()).await;
+                    self.chain
+                        .mark_unhealthy(&instance.id, &e.to_string())
+                        .await;
                     last_error = Some(e);
                 }
             }
@@ -354,7 +361,9 @@ impl crate::providers::Provider for ChainProvider {
         match provider.stream(request).await {
             Ok(stream) => Ok(stream),
             Err(e) => {
-                self.chain.mark_unhealthy(&instance.id, &e.to_string()).await;
+                self.chain
+                    .mark_unhealthy(&instance.id, &e.to_string())
+                    .await;
                 Err(e)
             }
         }

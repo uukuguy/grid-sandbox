@@ -3,9 +3,12 @@ use std::sync::Arc;
 
 use octo_engine::{
     auth::AuthConfig,
+    mcp::{McpManager, McpStorage},
     metrics::MetricsRegistry,
-    mcp::{McpManager, McpStorage}, providers::ProviderChain, scheduler::Scheduler, MemoryStore, Provider,
-    SessionStore, SkillRegistry, ToolExecutionRecorder, ToolRegistry, WorkingMemory,
+    providers::ProviderChain,
+    scheduler::Scheduler,
+    MemoryStore, Provider, SessionStore, SkillRegistry, ToolExecutionRecorder, ToolRegistry,
+    WorkingMemory,
 };
 use tokio::sync::RwLock;
 

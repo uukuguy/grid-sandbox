@@ -41,8 +41,8 @@ impl Permission {
 /// API Key
 #[derive(Debug, Clone)]
 pub struct ApiKey {
-    pub key_hash: String,           // sha256 哈希存储
-    pub user_id: Option<String>,    // 可选用户绑定
+    pub key_hash: String,        // sha256 哈希存储
+    pub user_id: Option<String>, // 可选用户绑定
     pub permissions: Vec<Permission>,
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -96,7 +96,12 @@ impl AuthConfig {
     }
 
     /// 添加 API Key
-    pub fn add_api_key(&mut self, key: &str, user_id: Option<String>, permissions: Vec<Permission>) {
+    pub fn add_api_key(
+        &mut self,
+        key: &str,
+        user_id: Option<String>,
+        permissions: Vec<Permission>,
+    ) {
         let api_key = ApiKey::new(key, user_id, permissions);
         self.api_keys.insert(api_key.key_hash.clone(), api_key);
     }

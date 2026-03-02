@@ -165,34 +165,24 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                             existing
                         } else {
                             // Session not found or doesn't belong to user - create new session for this user
-                            let s = state
-                                .sessions
-                                .create_session_with_user(uid)
-                                .await;
+                            let s = state.sessions.create_session_with_user(uid).await;
                             let msg = ServerMessage::SessionCreated {
                                 session_id: s.session_id.as_str().to_string(),
                             };
                             let _ = sender
-                                .send(Message::Text(
-                                    serde_json::to_string(&msg).unwrap().into(),
-                                ))
+                                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
                                 .await;
                             s
                         }
                     }
                     // Case 2: No session ID, but user_id exists - create new session for user
                     (None, Some(uid)) => {
-                        let s = state
-                            .sessions
-                            .create_session_with_user(uid)
-                            .await;
+                        let s = state.sessions.create_session_with_user(uid).await;
                         let msg = ServerMessage::SessionCreated {
                             session_id: s.session_id.as_str().to_string(),
                         };
                         let _ = sender
-                            .send(Message::Text(
-                                serde_json::to_string(&msg).unwrap().into(),
-                            ))
+                            .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
                             .await;
                         s
                     }
@@ -208,9 +198,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                                 session_id: s.session_id.as_str().to_string(),
                             };
                             let _ = sender
-                                .send(Message::Text(
-                                    serde_json::to_string(&msg).unwrap().into(),
-                                ))
+                                .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
                                 .await;
                             s
                         }
@@ -222,9 +210,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                             session_id: s.session_id.as_str().to_string(),
                         };
                         let _ = sender
-                            .send(Message::Text(
-                                serde_json::to_string(&msg).unwrap().into(),
-                            ))
+                            .send(Message::Text(serde_json::to_string(&msg).unwrap().into()))
                             .await;
                         s
                     }
@@ -234,7 +220,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
 
                 // Add user message to history
                 let user_msg = ChatMessage::user(&content);
-                state.sessions.push_message(&session.session_id, user_msg).await;
+                state
+                    .sessions
+                    .push_message(&session.session_id, user_msg)
+                    .await;
 
                 // Get current messages
                 let mut messages = state
@@ -298,12 +287,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                                     session_id: sid_str.clone(),
                                     text,
                                 },
-                                AgentEvent::TextComplete { text } => {
-                                    ServerMessage::TextComplete {
-                                        session_id: sid_str.clone(),
-                                        text,
-                                    }
-                                }
+                                AgentEvent::TextComplete { text } => ServerMessage::TextComplete {
+                                    session_id: sid_str.clone(),
+                                    text,
+                                },
                                 AgentEvent::ThinkingDelta { text } => {
                                     ServerMessage::ThinkingDelta {
                                         session_id: sid_str.clone(),
@@ -348,12 +335,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                                         budget,
                                     }
                                 }
-                                AgentEvent::Typing { state } => {
-                                    ServerMessage::Typing {
-                                        session_id: sid_str.clone(),
-                                        state,
-                                    }
-                                }
+                                AgentEvent::Typing { state } => ServerMessage::Typing {
+                                    session_id: sid_str.clone(),
+                                    state,
+                                },
                                 AgentEvent::Error { message } => ServerMessage::Error {
                                     session_id: sid_str.clone(),
                                     message,

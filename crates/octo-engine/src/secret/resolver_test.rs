@@ -42,8 +42,7 @@ mod tests {
         vault.set("test_key", "vault_value").unwrap();
 
         // Test priority: Vault > Dotenv > Env
-        let resolver = CredentialResolver::new()
-            .with_vault(vault);
+        let resolver = CredentialResolver::new().with_vault(vault);
 
         // Vault should have the value
         let result = resolver.resolve("test_key");

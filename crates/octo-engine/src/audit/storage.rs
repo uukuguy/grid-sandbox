@@ -1,5 +1,5 @@
-use rusqlite::Connection;
 use chrono::Utc;
+use rusqlite::Connection;
 use std::path::Path;
 
 pub struct AuditStorage {
@@ -109,11 +109,7 @@ impl AuditStorage {
         rows.collect()
     }
 
-    pub fn count(
-        &self,
-        event_type: Option<&str>,
-        user_id: Option<&str>,
-    ) -> rusqlite::Result<i64> {
+    pub fn count(&self, event_type: Option<&str>, user_id: Option<&str>) -> rusqlite::Result<i64> {
         let mut sql = String::from("SELECT COUNT(*) FROM audit_logs WHERE 1=1");
 
         if event_type.is_some() {

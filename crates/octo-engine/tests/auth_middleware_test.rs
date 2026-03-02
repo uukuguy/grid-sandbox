@@ -1,9 +1,6 @@
 // crates/octo-engine/tests/auth_middleware_test.rs
 
-use axum::{
-    body::Body,
-    extract::Request,
-};
+use axum::{body::Body, extract::Request};
 use octo_engine::auth::*;
 
 // Test get_user_context function directly
@@ -16,10 +13,7 @@ fn test_get_user_context_none() {
 
 #[test]
 fn test_get_user_context_with_context() {
-    let mut req = Request::builder()
-        .uri("/")
-        .body(Body::empty())
-        .unwrap();
+    let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
 
     req.extensions_mut().insert(UserContext {
         user_id: Some("user-001".to_string()),

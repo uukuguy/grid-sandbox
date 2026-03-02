@@ -5,10 +5,12 @@ use axum::Json;
 use octo_engine::auth::UserContext;
 use serde::Deserialize;
 
-use octo_types::{MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, SandboxId, SearchOptions, UserId};
+use octo_types::{
+    MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, SandboxId, SearchOptions, UserId,
+};
 
-use crate::state::AppState;
 use super::user_context::get_user_id_from_context;
+use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct MemorySearchParams {
@@ -82,9 +84,7 @@ pub async fn get_working_memory(
 ) -> Json<serde_json::Value> {
     let user_id_str = get_user_id_from_context(Some(&ctx));
     let user_id = UserId::from_string(&user_id_str);
-    let sandbox_id = SandboxId::from_string(
-        params.sandbox_id.as_deref().unwrap_or(&user_id_str),
-    );
+    let sandbox_id = SandboxId::from_string(params.sandbox_id.as_deref().unwrap_or(&user_id_str));
     match state.memory.get_blocks(&user_id, &sandbox_id).await {
         Ok(blocks) => Json(serde_json::json!({ "blocks": blocks })),
         Err(_) => Json(serde_json::json!({ "blocks": [] })),
@@ -178,16 +178,10 @@ pub async fn create_memory(
         .unwrap_or(MemoryCategory::Profile);
 
     // Use provided sandbox_id or default
-    let sandbox_id = req
-        .sandbox_id
-        .unwrap_or_else(|| user_id.clone());
+    let sandbox_id = req.sandbox_id.unwrap_or_else(|| user_id.clone());
 
     // Create memory entry with all fields
-    let mut entry = MemoryEntry::new(
-        &user_id,
-        category,
-        &req.content,
-    );
+    let mut entry = MemoryEntry::new(&user_id, category, &req.content);
     entry.sandbox_id = sandbox_id;
     entry.importance = req.importance.unwrap_or(50) as f32 / 100.0;
     if let Some(meta) = req.metadata {

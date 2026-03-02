@@ -5,9 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::extension::context::ExtensionContext;
-use crate::extension::traits::{
-    AgentResult, Extension, ExtensionHostActions, HostcallInterceptor,
-};
+use crate::extension::traits::{AgentResult, Extension, ExtensionHostActions, HostcallInterceptor};
 
 /// Manager for all registered extensions.
 pub struct ExtensionManager {

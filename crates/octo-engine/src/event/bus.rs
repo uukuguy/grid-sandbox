@@ -45,7 +45,11 @@ pub struct EventBus {
 }
 
 impl EventBus {
-    pub fn new(channel_capacity: usize, history_capacity: usize, metrics: Arc<MetricsRegistry>) -> Self {
+    pub fn new(
+        channel_capacity: usize,
+        history_capacity: usize,
+        metrics: Arc<MetricsRegistry>,
+    ) -> Self {
         let (sender, _) = broadcast::channel(channel_capacity);
         Self {
             sender,
@@ -75,7 +79,11 @@ impl EventBus {
     /// 根据事件类型记录指标
     fn record_metrics(&self, event: &OctoEvent) {
         match event {
-            OctoEvent::ToolCallCompleted { tool_name: _, duration_ms, .. } => {
+            OctoEvent::ToolCallCompleted {
+                tool_name: _,
+                duration_ms,
+                ..
+            } => {
                 self.metrics.counter("octo.tools.executions.total").inc();
                 self.metrics
                     .histogram(
@@ -99,12 +107,18 @@ impl EventBus {
                 self.metrics.counter("octo.tools.calls.started.total").inc();
             }
             OctoEvent::ContextDegraded { level: _, .. } => {
-                self.metrics.counter("octo.context.degradations.total").inc();
+                self.metrics
+                    .counter("octo.context.degradations.total")
+                    .inc();
             }
             OctoEvent::LoopGuardTriggered { reason: _, .. } => {
-                self.metrics.counter("octo.sessions.guards.triggered.total").inc();
+                self.metrics
+                    .counter("octo.sessions.guards.triggered.total")
+                    .inc();
             }
-            OctoEvent::TokenBudgetUpdated { used, total, ratio, .. } => {
+            OctoEvent::TokenBudgetUpdated {
+                used, total, ratio, ..
+            } => {
                 self.metrics
                     .gauge("octo.context.tokens.used")
                     .set(*used as i64);

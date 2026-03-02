@@ -90,6 +90,5 @@ pub async fn list_audit(
 }
 
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/audit", get(list_audit))
+    Router::new().route("/audit", get(list_audit))
 }

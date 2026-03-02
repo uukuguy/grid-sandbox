@@ -18,8 +18,8 @@ impl SqliteSchedulerStorage {
     /// Helper to convert a row to ScheduledTask
     fn row_to_task(row: &rusqlite::Row) -> rusqlite::Result<ScheduledTask> {
         let agent_config_json: String = row.get(4)?;
-        let agent_config: AgentTaskConfig = serde_json::from_str(&agent_config_json)
-            .unwrap_or_default();
+        let agent_config: AgentTaskConfig =
+            serde_json::from_str(&agent_config_json).unwrap_or_default();
 
         Ok(ScheduledTask {
             id: row.get(0)?,
@@ -28,13 +28,16 @@ impl SqliteSchedulerStorage {
             cron: row.get(3)?,
             agent_config,
             enabled: row.get::<_, i32>(5)? != 0,
-            last_run: row.get::<_, Option<String>>(6)?
+            last_run: row
+                .get::<_, Option<String>>(6)?
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
                 .map(|d| d.with_timezone(&chrono::Utc)),
-            next_run: row.get::<_, Option<String>>(7)?
+            next_run: row
+                .get::<_, Option<String>>(7)?
                 .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
                 .map(|d| d.with_timezone(&chrono::Utc)),
-            created_at: row.get::<_, String>(8)?
+            created_at: row
+                .get::<_, String>(8)?
                 .parse::<i64>()
                 .map(|t| chrono::DateTime::from_timestamp(t, 0))
                 .unwrap_or(None)
@@ -123,7 +126,10 @@ impl SchedulerStorage for SqliteSchedulerStorage {
         Ok(result)
     }
 
-    async fn list_tasks(&self, user_id: Option<&str>) -> Result<Vec<ScheduledTask>, SchedulerError> {
+    async fn list_tasks(
+        &self,
+        user_id: Option<&str>,
+    ) -> Result<Vec<ScheduledTask>, SchedulerError> {
         let result = if let Some(user_id) = user_id {
             let user_id = user_id.to_string();
             self.conn.call(move |conn| {
@@ -158,13 +164,13 @@ impl SchedulerStorage for SqliteSchedulerStorage {
 
     async fn delete_task(&self, task_id: &str) -> Result<(), SchedulerError> {
         let task_id = task_id.to_string();
-        self.conn.call(move |conn| {
-            conn.execute(
-                "DELETE FROM scheduled_tasks WHERE id = ?1",
-                [&task_id],
-            )?;
-            Ok(())
-        }).await.map_err(|e| SchedulerError::Storage(e.to_string()))?;
+        self.conn
+            .call(move |conn| {
+                conn.execute("DELETE FROM scheduled_tasks WHERE id = ?1", [&task_id])?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| SchedulerError::Storage(e.to_string()))?;
 
         Ok(())
     }
@@ -201,60 +207,74 @@ impl SchedulerStorage for SqliteSchedulerStorage {
         let result = execution.result.clone();
         let error = execution.error.clone();
 
-        self.conn.call(move |conn| {
-            conn.execute(
-                r#"INSERT OR REPLACE INTO task_executions
+        self.conn
+            .call(move |conn| {
+                conn.execute(
+                    r#"INSERT OR REPLACE INTO task_executions
                    (id, task_id, started_at, finished_at, status, result, error)
                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
-                params![id, task_id, started_at, finished_at, status, result, error],
-            )?;
-            Ok(())
-        }).await.map_err(|e| SchedulerError::Storage(e.to_string()))?;
+                    params![id, task_id, started_at, finished_at, status, result, error],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| SchedulerError::Storage(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn get_executions(&self, task_id: &str, limit: usize) -> Result<Vec<TaskExecution>, SchedulerError> {
+    async fn get_executions(
+        &self,
+        task_id: &str,
+        limit: usize,
+    ) -> Result<Vec<TaskExecution>, SchedulerError> {
         let task_id = task_id.to_string();
         let limit = limit as i64;
-        let result = self.conn.call(move |conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, task_id, started_at, finished_at, status, result, error
-                 FROM task_executions WHERE task_id = ?1 ORDER BY started_at DESC LIMIT ?2"
-            )?;
+        let result = self
+            .conn
+            .call(move |conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT id, task_id, started_at, finished_at, status, result, error
+                 FROM task_executions WHERE task_id = ?1 ORDER BY started_at DESC LIMIT ?2",
+                )?;
 
-            let executions = stmt.query_map(params![&task_id, limit], |row| {
-                let status_str: String = row.get(4)?;
-                let status = match status_str.as_str() {
-                    "Running" => ExecutionStatus::Running,
-                    "Success" => ExecutionStatus::Success,
-                    "Failed" => ExecutionStatus::Failed,
-                    "Timeout" => ExecutionStatus::Timeout,
-                    "Cancelled" => ExecutionStatus::Cancelled,
-                    _ => ExecutionStatus::Failed,
-                };
+                let executions = stmt
+                    .query_map(params![&task_id, limit], |row| {
+                        let status_str: String = row.get(4)?;
+                        let status = match status_str.as_str() {
+                            "Running" => ExecutionStatus::Running,
+                            "Success" => ExecutionStatus::Success,
+                            "Failed" => ExecutionStatus::Failed,
+                            "Timeout" => ExecutionStatus::Timeout,
+                            "Cancelled" => ExecutionStatus::Cancelled,
+                            _ => ExecutionStatus::Failed,
+                        };
 
-                Ok(TaskExecution {
-                    id: row.get(0)?,
-                    task_id: row.get(1)?,
-                    started_at: row.get::<_, String>(2)?
-                        .parse::<i64>()
-                        .map(|t| chrono::DateTime::from_timestamp(t, 0))
-                        .unwrap_or(None)
-                        .unwrap_or_else(chrono::Utc::now),
-                    finished_at: row.get::<_, Option<String>>(3)?
-                        .and_then(|s| s.parse::<i64>().ok())
-                        .and_then(|t| chrono::DateTime::from_timestamp(t, 0)),
-                    status,
-                    result: row.get(5)?,
-                    error: row.get(6)?,
-                })
-            })?
-                .filter_map(|r| r.ok())
-                .collect();
+                        Ok(TaskExecution {
+                            id: row.get(0)?,
+                            task_id: row.get(1)?,
+                            started_at: row
+                                .get::<_, String>(2)?
+                                .parse::<i64>()
+                                .map(|t| chrono::DateTime::from_timestamp(t, 0))
+                                .unwrap_or(None)
+                                .unwrap_or_else(chrono::Utc::now),
+                            finished_at: row
+                                .get::<_, Option<String>>(3)?
+                                .and_then(|s| s.parse::<i64>().ok())
+                                .and_then(|t| chrono::DateTime::from_timestamp(t, 0)),
+                            status,
+                            result: row.get(5)?,
+                            error: row.get(6)?,
+                        })
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
 
-            Ok(executions)
-        }).await.map_err(|e| SchedulerError::Storage(e.to_string()))?;
+                Ok(executions)
+            })
+            .await
+            .map_err(|e| SchedulerError::Storage(e.to_string()))?;
 
         Ok(result)
     }

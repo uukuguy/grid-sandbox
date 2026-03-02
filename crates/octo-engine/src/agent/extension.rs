@@ -10,15 +10,9 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExtensionEvent {
     /// Agent turn started
-    TurnStart {
-        round: u32,
-        max_rounds: u32,
-    },
+    TurnStart { round: u32, max_rounds: u32 },
     /// Agent turn ended
-    TurnEnd {
-        round: u32,
-        stop_reason: String,
-    },
+    TurnEnd { round: u32, stop_reason: String },
     /// Tool call started
     ToolCallStart {
         tool_name: String,
@@ -31,10 +25,7 @@ pub enum ExtensionEvent {
         duration_ms: u64,
     },
     /// Error occurred
-    Error {
-        error: String,
-        round: u32,
-    },
+    Error { error: String, round: u32 },
 }
 
 /// Agent extension trait for handling events

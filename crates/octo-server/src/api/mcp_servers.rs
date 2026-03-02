@@ -13,8 +13,8 @@ use octo_engine::mcp::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::state::AppState;
 use super::user_context::get_user_id_from_context;
+use crate::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct McpServerConfigRequest {
@@ -247,12 +247,16 @@ pub async fn update_server(
     let created_at = existing.created_at;
 
     let now = chrono::Utc::now().to_rfc3339();
-    let env_str = req.env.as_ref().map(|e| {
-        e.iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect::<Vec<_>>()
-            .join(",")
-    }).unwrap_or_default();
+    let env_str = req
+        .env
+        .as_ref()
+        .map(|e| {
+            e.iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .unwrap_or_default();
 
     let record = McpServerRecord {
         id: id.clone(),
@@ -278,7 +282,8 @@ pub async fn update_server(
                 ServerRuntimeState::Starting => "starting",
                 ServerRuntimeState::Running { .. } => "running",
                 ServerRuntimeState::Error { .. } => "error",
-            }.to_string();
+            }
+            .to_string();
 
             Json(Some(McpServerResponse {
                 id: record.id,
@@ -295,7 +300,7 @@ pub async fn update_server(
                 created_at: record.created_at,
                 updated_at: record.updated_at,
             }))
-        },
+        }
         Err(_) => Json(None),
     }
 }
@@ -369,11 +374,17 @@ pub async fn start_server(
 
     // Add and connect the server via McpManager
     let mut manager = state.mcp_manager.lock().await;
-    tracing::debug!("MCP Manager runtime states before start: {:?}", manager.all_runtime_states());
+    tracing::debug!(
+        "MCP Manager runtime states before start: {:?}",
+        manager.all_runtime_states()
+    );
     match manager.add_server_v2(config).await {
         Ok(tools) => {
             manager.set_runtime_state(&id, ServerRuntimeState::Running { pid: 0 });
-            tracing::debug!("MCP Manager runtime states after start: {:?}", manager.all_runtime_states());
+            tracing::debug!(
+                "MCP Manager runtime states after start: {:?}",
+                manager.all_runtime_states()
+            );
             tracing::info!(server = %id, tool_count = tools.len(), "MCP server started");
             Json(serde_json::json!({
                 "started": id,

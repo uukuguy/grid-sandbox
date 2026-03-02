@@ -56,8 +56,6 @@ impl Clone for Gauge {
 
 impl std::fmt::Debug for Gauge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Gauge")
-            .field("value", &self.get())
-            .finish()
+        f.debug_struct("Gauge").field("value", &self.get()).finish()
     }
 }

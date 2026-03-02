@@ -96,7 +96,10 @@ impl From<octo_engine::scheduler::TaskExecution> for ExecutionResponse {
             task_id: e.task_id,
             started_at: e.started_at.to_rfc3339(),
             finished_at: e.finished_at.map(|d| d.to_rfc3339()),
-            status: serde_json::to_string(&e.status).unwrap_or_default().trim_matches('"').to_string(),
+            status: serde_json::to_string(&e.status)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string(),
             result: e.result,
             error: e.error,
         }
@@ -128,7 +131,10 @@ async fn create_task(
     Extension(user_ctx): Extension<UserContext>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> Result<Json<TaskResponse>, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let task = scheduler
         .create_task(
@@ -152,7 +158,10 @@ async fn get_task(
     Path(task_id): Path<String>,
     Extension(user_ctx): Extension<UserContext>,
 ) -> Result<Json<TaskResponse>, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let task = scheduler
         .get_task(&task_id)
@@ -176,7 +185,10 @@ async fn update_task(
     Extension(user_ctx): Extension<UserContext>,
     Json(payload): Json<UpdateTaskRequest>,
 ) -> Result<Json<TaskResponse>, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let task = scheduler
         .get_task(&task_id)
@@ -213,7 +225,10 @@ async fn delete_task(
     Path(task_id): Path<String>,
     Extension(user_ctx): Extension<UserContext>,
 ) -> Result<axum::http::StatusCode, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let task = scheduler
         .get_task(&task_id)
@@ -241,7 +256,10 @@ async fn run_task(
     Path(task_id): Path<String>,
     Extension(user_ctx): Extension<UserContext>,
 ) -> Result<Json<ExecutionResponse>, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let execution = scheduler
         .run_now(&task_id, user_ctx.user_id.as_deref())
@@ -260,7 +278,10 @@ async fn list_executions(
     Query(params): Query<ExecutionQuery>,
     Extension(user_ctx): Extension<UserContext>,
 ) -> Result<Json<Vec<ExecutionResponse>>, axum::http::StatusCode> {
-    let scheduler = state.scheduler.as_ref().ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let scheduler = state
+        .scheduler
+        .as_ref()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
 
     let task = scheduler
         .get_task(&task_id)
@@ -280,12 +301,7 @@ async fn list_executions(
         .await
         .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(
-        executions
-            .into_iter()
-            .map(|e| e.into())
-            .collect(),
-    ))
+    Ok(Json(executions.into_iter().map(|e| e.into()).collect()))
 }
 
 #[derive(Debug, Deserialize)]

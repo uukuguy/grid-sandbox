@@ -67,10 +67,9 @@ impl CredentialResolver {
 
         re.replace_all(config, |caps: &regex::Captures| {
             let key = &caps[1];
-            self.resolve(key)
-                .map(|v| v.to_string())
-                .unwrap_or_default()
-        }).to_string()
+            self.resolve(key).map(|v| v.to_string()).unwrap_or_default()
+        })
+        .to_string()
     }
 
     fn read_dotenv(&self, _path: &PathBuf, key: &str) -> Result<String, std::env::VarError> {

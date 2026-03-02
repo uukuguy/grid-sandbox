@@ -2,11 +2,11 @@ pub mod audit;
 pub mod budget;
 pub mod config;
 pub mod executions;
-pub mod memories;
-pub mod metrics;
 pub mod mcp_logs;
 pub mod mcp_servers;
 pub mod mcp_tools;
+pub mod memories;
+pub mod metrics;
 pub mod providers;
 pub mod scheduler;
 pub mod sessions;
@@ -41,7 +41,10 @@ impl PaginationParams {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         // More specific routes first
-        .route("/sessions/{id}/executions", get(executions::list_session_executions))
+        .route(
+            "/sessions/{id}/executions",
+            get(executions::list_session_executions),
+        )
         .route("/sessions/{id}", get(sessions::get_session))
         // Then less specific
         .route("/sessions", get(sessions::list_sessions))
@@ -49,9 +52,17 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/executions/{id}", get(executions::get_execution))
         .route("/tools", get(tools::list_tools))
         .route("/config", get(config::get_config))
-        .route("/memories", get(memories::search_memories).post(memories::create_memory).delete(memories::delete_memories_by_filter))
+        .route(
+            "/memories",
+            get(memories::search_memories)
+                .post(memories::create_memory)
+                .delete(memories::delete_memories_by_filter),
+        )
         .route("/memories/working", get(memories::get_working_memory))
-        .route("/memories/{id}", get(memories::get_memory).delete(memories::delete_memory))
+        .route(
+            "/memories/{id}",
+            get(memories::get_memory).delete(memories::delete_memory),
+        )
         .route("/budget", get(budget::get_budget))
         // Metrics and Audit
         .merge(metrics::router())

@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, routing::get, Json, Router};
 use serde::Serialize;
 
 use crate::state::AppState;
@@ -94,6 +90,5 @@ pub async fn get_metrics(State(state): State<Arc<AppState>>) -> Json<MetricsSnap
 }
 
 pub fn router() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/v1/metrics", get(get_metrics))
+    Router::new().route("/v1/metrics", get(get_metrics))
 }

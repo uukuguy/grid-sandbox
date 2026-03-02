@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 
 use octo_types::{
     ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, SessionId, StopReason,
-    StreamEvent, ToolContext, ToolSource, UserId,
+    StreamEvent, ToolContext, UserId,
 };
 
 use crate::context::{ContextBudgetManager, ContextPruner, DegradationLevel, MemoryFlusher};
@@ -19,6 +19,8 @@ use crate::tools::ToolRegistry;
 
 use super::config::AgentConfig;
 use super::context::ContextBuilder;
+use super::parallel::execute_parallel;
+use super::CancellationToken;
 
 const MAX_ROUNDS: u32 = 30;
 const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
@@ -430,13 +432,21 @@ impl AgentLoop {
 
             // Execute tools and build tool result messages
             let mut tool_results: Vec<ContentBlock> = Vec::new();
-            for tu in &tool_uses {
-                let input: serde_json::Value =
-                    serde_json::from_str(&tu.input_json).unwrap_or_default();
 
-                // Loop Guard: 检查是否陷入循环
-                use super::loop_guard::LoopGuardVerdict;
-                let verdict = self.loop_guard.check(&tu.name, &input);
+            // Parse tool inputs first for loop guard check
+            let parsed_tools: Vec<_> = tool_uses
+                .iter()
+                .map(|tu| {
+                    let input: serde_json::Value =
+                        serde_json::from_str(&tu.input_json).unwrap_or_default();
+                    (tu, input)
+                })
+                .collect();
+
+            // Loop Guard: check all tools before execution
+            use super::loop_guard::LoopGuardVerdict;
+            for (tu, input) in &parsed_tools {
+                let verdict = self.loop_guard.check(&tu.name, input);
                 match &verdict {
                     LoopGuardVerdict::Block(msg) | LoopGuardVerdict::CircuitBreak(msg) => {
                         tracing::warn!("Loop Guard blocked: {}", msg);
@@ -444,11 +454,13 @@ impl AgentLoop {
                     }
                     LoopGuardVerdict::Warn(msg) => {
                         tracing::warn!("Loop Guard warning: {}", msg);
-                        // 添加警告到工具结果
                     }
                     LoopGuardVerdict::Allow => {}
                 }
+            }
 
+            // Send ToolStart events for all tools
+            for (tu, input) in &parsed_tools {
                 let _ = tx.send(AgentEvent::ToolStart {
                     tool_id: tu.id.clone(),
                     tool_name: tu.name.clone(),
@@ -461,84 +473,66 @@ impl AgentLoop {
                     })
                     .await;
                 }
+            }
 
-                let exec_id = if let Some(ref recorder) = self.recorder {
-                    let source = self
-                        .tools
-                        .get(&tu.name)
-                        .map(|t| t.source())
-                        .unwrap_or(ToolSource::BuiltIn);
-                    recorder
-                        .record_start(session_id.as_str(), user_id.as_str(), &tu.name, &source, &input)
-                        .await
-                        .ok()
-                } else {
-                    None
-                };
+            // Execute tools - parallel or sequential based on config
+            let cancellation_token = CancellationToken::new();
 
-                let started_at_ms = chrono::Utc::now().timestamp_millis();
-                let exec_start = std::time::Instant::now();
+            let tool_outputs: Vec<_> = if self.config.enable_parallel {
+                // Parallel execution
+                let tools_to_run: Vec<_> = parsed_tools
+                    .iter()
+                    .map(|(tu, input)| (tu.name.clone(), input.clone()))
+                    .collect();
 
-                let result = if let Some(tool) = self.tools.get(&tu.name) {
-                    match tool.execute(input.clone(), &tool_ctx).await {
-                        Ok(r) => r,
-                        Err(e) => octo_types::ToolResult::error(format!("Tool error: {e}")),
-                    }
-                } else {
-                    octo_types::ToolResult::error(format!("Unknown tool: {}", tu.name))
-                };
+                let results = execute_parallel(
+                    tools_to_run,
+                    &self.tools,
+                    self.config.max_parallel_tools,
+                    &cancellation_token,
+                    &tool_ctx,
+                )
+                .await;
 
-                let exec_duration = exec_start.elapsed().as_millis() as u64;
-                if let Some(ref bus) = self.event_bus {
-                    bus.publish(crate::event::OctoEvent::ToolCallCompleted {
-                        session_id: session_id.as_str().to_string(),
-                        tool_name: tu.name.clone(),
-                        duration_ms: exec_duration,
-                    })
-                    .await;
-                }
-                if let (Some(ref recorder), Some(ref eid)) = (&self.recorder, &exec_id) {
-                    if result.is_error {
-                        let _ = recorder
-                            .record_failed(eid, &result.output, exec_duration)
-                            .await;
+                // Map results back to tool order
+                parsed_tools
+                    .iter()
+                    .zip(results)
+                    .map(|((tu, input), (_, result))| (tu, input.clone(), result))
+                    .collect()
+            } else {
+                // Sequential execution (original behavior)
+                let mut outputs = Vec::new();
+                for (tu, input) in &parsed_tools {
+                    let exec_start = std::time::Instant::now();
+
+                    let result = if let Some(tool) = self.tools.get(&tu.name) {
+                        match tool.execute(input.clone(), &tool_ctx).await {
+                            Ok(r) => r,
+                            Err(e) => octo_types::ToolResult::error(format!("Tool error: {e}")),
+                        }
                     } else {
-                        let output_val = serde_json::Value::String(result.output.clone());
-                        let _ = recorder
-                            .record_complete(eid, &output_val, exec_duration)
-                            .await;
-                    }
-                }
-
-                if let Some(ref eid) = exec_id {
-                    let exec = octo_types::ToolExecution {
-                        id: eid.clone(),
-                        session_id: session_id.as_str().to_string(),
-                        user_id: user_id.as_str().to_string(),
-                        tool_name: tu.name.clone(),
-                        source: self
-                            .tools
-                            .get(&tu.name)
-                            .map(|t| t.source())
-                            .unwrap_or(ToolSource::BuiltIn),
-                        input: input.clone(),
-                        output: Some(serde_json::Value::String(result.output.clone())),
-                        status: if result.is_error {
-                            octo_types::ExecutionStatus::Failed
-                        } else {
-                            octo_types::ExecutionStatus::Success
-                        },
-                        started_at: started_at_ms,
-                        duration_ms: Some(exec_duration),
-                        error: if result.is_error {
-                            Some(result.output.clone())
-                        } else {
-                            None
-                        },
+                        octo_types::ToolResult::error(format!("Unknown tool: {}", tu.name))
                     };
-                    let _ = tx.send(AgentEvent::ToolExecution { execution: exec });
-                }
 
+                    let exec_duration = exec_start.elapsed().as_millis() as u64;
+
+                    if let Some(ref bus) = self.event_bus {
+                        bus.publish(crate::event::OctoEvent::ToolCallCompleted {
+                            session_id: session_id.as_str().to_string(),
+                            tool_name: tu.name.clone(),
+                            duration_ms: exec_duration,
+                        })
+                        .await;
+                    }
+
+                    outputs.push((tu, input.clone(), result));
+                }
+                outputs
+            };
+
+            // Process results and send events
+            for (tu, input, result) in tool_outputs {
                 let _ = tx.send(AgentEvent::ToolResult {
                     tool_id: tu.id.clone(),
                     output: result.output.clone(),

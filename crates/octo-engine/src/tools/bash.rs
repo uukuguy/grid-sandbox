@@ -10,7 +10,7 @@ use super::traits::Tool;
 
 // Sandbox imports - feature-gated
 #[cfg(feature = "sandbox-wasm")]
-use crate::sandbox::{AdapterEnum, SandboxRouter, SubprocessAdapter, ToolCategory, SandboxType};
+use crate::sandbox::{AdapterEnum, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory};
 
 /// Shell 命令执行安全模式（参考 ARCHITECTURE_DESIGN.md §5.5.1）
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,14 +128,19 @@ impl BashTool {
             router.set_mapping(ToolCategory::Shell, SandboxType::Subprocess);
 
             // 在指定工作目录中执行
-            let full_command = format!(
-                "cd {} && {}",
-                working_dir.display(),
-                command
-            );
+            let full_command = format!("cd {} && {}", working_dir.display(), command);
 
-            match router.execute(ToolCategory::Shell, &full_command, "bash").await {
-                Ok(ExecResult { stdout, stderr, success, exit_code, .. }) => {
+            match router
+                .execute(ToolCategory::Shell, &full_command, "bash")
+                .await
+            {
+                Ok(ExecResult {
+                    stdout,
+                    stderr,
+                    success,
+                    exit_code,
+                    ..
+                }) => {
                     let combined = if stderr.is_empty() {
                         stdout
                     } else if stdout.is_empty() {
@@ -148,7 +153,10 @@ impl BashTool {
                 }
                 Err(e) => {
                     // 沙箱执行失败，回退到直接执行
-                    tracing::warn!("Sandbox execution failed, falling back to direct execution: {}", e);
+                    tracing::warn!(
+                        "Sandbox execution failed, falling back to direct execution: {}",
+                        e
+                    );
                 }
             }
         }

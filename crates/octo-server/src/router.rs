@@ -1,11 +1,6 @@
 use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    extract::Request,
-    routing::get,
-    Router,
-};
+use axum::{body::Body, extract::Request, routing::get, Router};
 use octo_engine::auth::{auth_middleware, AuthConfig};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;

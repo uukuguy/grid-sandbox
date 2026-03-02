@@ -29,7 +29,12 @@ impl Histogram {
 
     pub fn observe(&self, value: f64) {
         // Find the bucket index
-        let bucket_idx = self.0.buckets.iter().position(|&b| value <= b).unwrap_or(self.0.buckets.len());
+        let bucket_idx = self
+            .0
+            .buckets
+            .iter()
+            .position(|&b| value <= b)
+            .unwrap_or(self.0.buckets.len());
         self.0.counts[bucket_idx].fetch_add(1, Ordering::Relaxed);
 
         // Add to sum (truncating to u64 for simplicity)
@@ -55,7 +60,8 @@ impl Histogram {
 
     /// Get bucket values for Prometheus-style histogram output
     pub fn buckets(&self) -> Vec<(f64, u64)> {
-        self.0.buckets
+        self.0
+            .buckets
             .iter()
             .zip(self.0.counts.iter())
             .map(|(&bucket, count)| (bucket, count.load(Ordering::Relaxed)))
@@ -65,7 +71,8 @@ impl Histogram {
     /// Get cumulative bucket values (each bucket includes all previous buckets)
     pub fn cumulative_buckets(&self) -> Vec<(f64, u64)> {
         let mut cumulative = 0u64;
-        self.0.buckets
+        self.0
+            .buckets
             .iter()
             .zip(self.0.counts.iter())
             .map(|(&bucket, count)| {

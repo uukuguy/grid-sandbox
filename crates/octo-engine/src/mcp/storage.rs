@@ -128,7 +128,11 @@ impl McpStorage {
     }
 
     /// Get server only if it belongs to the user
-    pub fn get_server_for_user(&self, id: &str, user_id: &str) -> rusqlite::Result<Option<McpServerRecord>> {
+    pub fn get_server_for_user(
+        &self,
+        id: &str,
+        user_id: &str,
+    ) -> rusqlite::Result<Option<McpServerRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, source, command, args, env, enabled, COALESCE(transport, 'stdio') as transport, url, COALESCE(user_id, 'default') as user_id, created_at, updated_at FROM mcp_servers WHERE id = ? AND (user_id = ? OR user_id = 'default')"
         )?;

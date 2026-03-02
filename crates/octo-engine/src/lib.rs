@@ -5,9 +5,9 @@ pub mod context;
 pub mod db;
 pub mod event;
 pub mod extension;
-pub mod metrics;
 pub mod mcp;
 pub mod memory;
+pub mod metrics;
 pub mod providers;
 pub mod sandbox;
 pub mod scheduler;
@@ -18,7 +18,7 @@ pub mod skills;
 pub mod tools;
 
 pub use agent::{AgentEvent, AgentLoop};
-pub use audit::{AuditStorage, AuditEvent, AuditRecord};
+pub use audit::{AuditEvent, AuditRecord, AuditStorage};
 pub use auth::{
     auth_middleware, get_user_context, ApiKey, ApiKeyConfig, AuthConfig, AuthConfigYaml, AuthMode,
     Permission, UserContext,
@@ -32,12 +32,12 @@ pub use extension::{
     AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
     ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,
 };
-pub use metrics::{Counter, Gauge, Histogram, MetricsRegistry};
 pub use mcp::{McpClient, McpManager, McpServerConfig, McpToolBridge, McpToolInfo, StdioMcpClient};
 pub use memory::{
     InMemoryWorkingMemory, MemoryStore, SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager,
     WorkingMemory,
 };
+pub use metrics::{Counter, Gauge, Histogram, MetricsRegistry};
 pub use providers::{create_anthropic_provider, create_openai_provider, create_provider, Provider};
 pub use sandbox::{
     DockerAdapter, ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxType,

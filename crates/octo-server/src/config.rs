@@ -106,9 +106,7 @@ pub struct McpConfig {
 
 impl Default for McpConfig {
     fn default() -> Self {
-        Self {
-            servers_dir: None,
-        }
+        Self { servers_dir: None }
     }
 }
 
@@ -120,9 +118,7 @@ pub struct SkillsConfig {
 
 impl Default for SkillsConfig {
     fn default() -> Self {
-        Self {
-            dirs: vec![],
-        }
+        Self { dirs: vec![] }
     }
 }
 
@@ -149,7 +145,11 @@ impl Config {
     /// 1. config.yaml - base configuration file
     /// 2. CLI arguments - e.g., --port 4000
     /// 3. Environment variables (.env) - highest priority for overrides
-    pub fn load(config_path: Option<&PathBuf>, cli_port: Option<u16>, cli_host: Option<&str>) -> Self {
+    pub fn load(
+        config_path: Option<&PathBuf>,
+        cli_port: Option<u16>,
+        cli_host: Option<&str>,
+    ) -> Self {
         // Step 1: Load from config.yaml (lowest priority)
         let mut config = if let Some(path) = config_path {
             if path.exists() {
@@ -167,7 +167,8 @@ impl Config {
             }
         } else {
             None
-        }.unwrap_or_default();
+        }
+        .unwrap_or_default();
 
         // Step 2: CLI arguments override config.yaml
         if let Some(port) = cli_port {
@@ -243,31 +244,57 @@ impl Config {
         let defaults = Self::default();
         let mut output = String::new();
 
-        output.push_str("# =============================================================================\n");
+        output.push_str(
+            "# =============================================================================\n",
+        );
         output.push_str("# Octo Server Configuration\n");
-        output.push_str("# =============================================================================\n");
-        output.push_str("# Copy this file to config.yaml and uncomment/modify parameters as needed.\n");
+        output.push_str(
+            "# =============================================================================\n",
+        );
+        output.push_str(
+            "# Copy this file to config.yaml and uncomment/modify parameters as needed.\n",
+        );
         output.push_str("# Priority: config.yaml < CLI args < .env\n");
-        output.push_str("# =============================================================================\n\n");
+        output.push_str(
+            "# =============================================================================\n\n",
+        );
 
         // Server
         output.push_str("# Server configuration\n");
         output.push_str("# server:\n");
-        output.push_str(&format!("#   host: {}    # Server bind address\n", defaults.server.host));
-        output.push_str(&format!("#   port: {}          # Server port\n\n", defaults.server.port));
+        output.push_str(&format!(
+            "#   host: {}    # Server bind address\n",
+            defaults.server.host
+        ));
+        output.push_str(&format!(
+            "#   port: {}          # Server port\n\n",
+            defaults.server.port
+        ));
 
         // Provider
         output.push_str("# LLM Provider configuration\n");
         output.push_str("# provider:\n");
-        output.push_str(&format!("#   name: {}     # Provider: anthropic or openai\n", defaults.provider.name));
+        output.push_str(&format!(
+            "#   name: {}     # Provider: anthropic or openai\n",
+            defaults.provider.name
+        ));
         output.push_str("#   api_key: \"\"         # API key (required)\n");
-        output.push_str(&format!("#   base_url: {:?}      # Optional proxy URL\n", defaults.provider.base_url));
-        output.push_str(&format!("#   model: {:?}         # Optional model override\n\n", defaults.provider.model));
+        output.push_str(&format!(
+            "#   base_url: {:?}      # Optional proxy URL\n",
+            defaults.provider.base_url
+        ));
+        output.push_str(&format!(
+            "#   model: {:?}         # Optional model override\n\n",
+            defaults.provider.model
+        ));
 
         // Database
         output.push_str("# Database configuration\n");
         output.push_str("# database:\n");
-        output.push_str(&format!("#   path: {}  # SQLite database path\n\n", defaults.database.path));
+        output.push_str(&format!(
+            "#   path: {}  # SQLite database path\n\n",
+            defaults.database.path
+        ));
 
         // Logging
         output.push_str("# Logging configuration\n");
@@ -277,12 +304,18 @@ impl Config {
         // MCP
         output.push_str("# MCP configuration\n");
         output.push_str("# mcp:\n");
-        output.push_str(&format!("#   servers_dir: {:?}   # Optional MCP servers directory\n\n", defaults.mcp.servers_dir));
+        output.push_str(&format!(
+            "#   servers_dir: {:?}   # Optional MCP servers directory\n\n",
+            defaults.mcp.servers_dir
+        ));
 
         // Skills
         output.push_str("# Skills configuration\n");
         output.push_str("# skills:\n");
-        output.push_str(&format!("#   dirs: {:?}            # List of skills directories\n", defaults.skills.dirs));
+        output.push_str(&format!(
+            "#   dirs: {:?}            # List of skills directories\n",
+            defaults.skills.dirs
+        ));
 
         output
     }
