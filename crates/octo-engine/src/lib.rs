@@ -34,7 +34,7 @@ pub use extension::{
 };
 pub use mcp::{McpClient, McpManager, McpServerConfig, McpToolBridge, McpToolInfo, StdioMcpClient};
 pub use memory::{
-    Entity, GraphStats, GraphStore, InMemoryWorkingMemory, KnowledgeGraph, MemoryStore,
+    Entity, FtsStore, GraphStats, GraphStore, InMemoryWorkingMemory, KnowledgeGraph, MemoryStore,
     MemorySystem, Relation, SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager, WorkingMemory,
 };
 pub use metrics::{Counter, Gauge, Histogram, MetricsRegistry};

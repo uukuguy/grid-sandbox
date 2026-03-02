@@ -21,6 +21,7 @@ use tokio::sync::RwLock;
 use super::session::SqliteSessionStore;
 
 pub use budget::TokenBudgetManager;
+pub use fts::FtsStore;
 pub use graph::{Entity, GraphStats, KnowledgeGraph, Relation};
 pub use graph_store::GraphStore;
 pub use semantic::{EntityRelation, SemanticEntity, SemanticMemory};
