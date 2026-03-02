@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
@@ -11,8 +9,8 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
 use octo_engine::auth::{get_user_context, UserContext};
-use octo_engine::AgentEvent;
-use octo_types::{ChatMessage, SessionId, ToolContext, UserId};
+use octo_engine::{AgentEvent, AgentMessage};
+use octo_types::{SessionId, UserId};
 
 use crate::state::AppState;
 
@@ -27,10 +25,7 @@ enum ClientMessage {
         content: String,
     },
     #[serde(rename = "cancel")]
-    Cancel {
-        #[allow(dead_code)]
-        session_id: String,
-    },
+    Cancel { session_id: String },
 }
 
 // --- Server → Client messages ---
@@ -138,10 +133,6 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
             }
         };
 
-        // Create cancellation flag for agent (reused across messages)
-        let cancel_flag = Arc::new(AtomicBool::new(false));
-        let cancel_flag_for_cancel = cancel_flag.clone();
-
         // Convert user_id from Option<String> to Option<UserId>
         let user_id_opt = user_ctx.user_id.as_ref().map(|s| UserId::from_string(s));
 
@@ -218,65 +209,36 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
 
                 let sid_str = session.session_id.as_str().to_string();
 
-                // Add user message to history
-                let user_msg = ChatMessage::user(&content);
-                state
-                    .sessions
-                    .push_message(&session.session_id, user_msg)
-                    .await;
-
-                // Get current messages
-                let mut messages = state
+                // Get current message history for initial seeding (only needed on first spawn)
+                let initial_history = state
                     .sessions
                     .get_messages(&session.session_id)
                     .await
                     .unwrap_or_default();
 
-                // Create broadcast channel for agent events
-                let (tx, mut rx) = broadcast::channel::<AgentEvent>(256);
+                // Get or spawn persistent AgentRuntime for this session
+                let handle = state.runtime_registry.get_or_spawn(
+                    session.session_id.clone(),
+                    session.user_id.clone(),
+                    session.sandbox_id.clone(),
+                    initial_history,
+                    state.agent_runner.provider(),
+                    state.agent_runner.build_tool_registry(&[]),
+                    state.agent_runner.memory(),
+                    Some(state.memory_store.clone()),
+                    state.model.clone(),
+                );
 
-                let tool_ctx = ToolContext {
-                    sandbox_id: session.sandbox_id.clone(),
-                    working_dir: PathBuf::from("/tmp/octo-sandbox"),
-                };
+                // Subscribe before sending to avoid missing events
+                let mut rx = handle.subscribe();
 
-                // Ensure working dir exists
-                let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
-
-                // Create a fresh AgentLoop per invocation (owns its own budget state)
-                let provider = state.provider.clone();
-                let tools = state.tools.clone();
-                let memory = state.memory.clone();
-                let mut agent_loop = octo_engine::AgentLoop::new(provider, tools, memory)
-                    .with_memory_store(state.memory_store.clone());
-                if let Some(ref recorder) = state.recorder {
-                    agent_loop = agent_loop.with_recorder(recorder.clone());
-                }
-                if let Some(ref m) = state.model {
-                    agent_loop = agent_loop.with_model(m.clone());
-                }
-                let session_id_clone = session.session_id.clone();
-                let user_id = session.user_id.clone();
-                let sandbox_id = session.sandbox_id.clone();
-
-                // Spawn agent loop task
-                let agent_handle = tokio::spawn(async move {
-                    if let Err(e) = agent_loop
-                        .run(
-                            &session_id_clone,
-                            &user_id,
-                            &sandbox_id,
-                            &mut messages,
-                            tx,
-                            tool_ctx,
-                            Some(cancel_flag),
-                        )
-                        .await
-                    {
-                        warn!("Agent loop error: {e}");
-                    }
-                    messages
-                });
+                // Forward user message to AgentRuntime
+                let _ = handle
+                    .send(AgentMessage::UserMessage {
+                        content: content.clone(),
+                        channel_id: "websocket".to_string(),
+                    })
+                    .await;
 
                 // Forward agent events to WebSocket
                 loop {
@@ -369,19 +331,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                     }
                 }
 
-                // Get updated messages from agent loop
-                if let Ok(updated_messages) = agent_handle.await {
-                    state
-                        .sessions
-                        .set_messages(&session.session_id, updated_messages)
-                        .await;
-                }
             }
-            ClientMessage::Cancel { session_id: _ } => {
-                // Set cancellation flag to stop the agent loop
-                // The agent checks this flag at the start of each round
-                cancel_flag_for_cancel.store(true, Ordering::Relaxed);
-                info!("Agent cancellation requested");
+            ClientMessage::Cancel { session_id } => {
+                let sid = SessionId::from_string(&session_id);
+                if let Some(handle) = state.runtime_registry.get(&sid) {
+                    let _ = handle.send(AgentMessage::Cancel).await;
+                }
+                info!("Agent cancellation requested for session {session_id}");
             }
         }
     }
