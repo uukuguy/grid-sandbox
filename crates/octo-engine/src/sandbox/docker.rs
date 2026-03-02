@@ -315,14 +315,15 @@ async fn create_container(
     labels.insert("octo-sandbox".to_string(), "true".to_string());
     labels.insert("sandbox-id".to_string(), id.to_string());
 
-    // Container config
+    // Container config - keep the container alive with a sleeping shell
+    // Alpine exits immediately without a blocking process; `sh` + tty keeps it running
     let container_config = Config {
         image: Some(image.to_string()),
         env: Some(env_vars),
         labels: Some(labels),
-        // Disable interactive terminal
-        tty: Some(false),
-        open_stdin: Some(false),
+        cmd: Some(vec!["sh".to_string()]),
+        tty: Some(true),
+        open_stdin: Some(true),
         ..Default::default()
     };
 
@@ -353,11 +354,11 @@ async fn execute_in_container(
     container_id: &str,
     code: &str,
 ) -> Result<ExecResult, SandboxError> {
-    use bollard::exec::CreateExecOptions;
+    use bollard::exec::{CreateExecOptions, StartExecResults};
+    use futures_util::StreamExt;
 
     let start = std::time::Instant::now();
 
-    // Create exec instance with shell
     let exec_options = CreateExecOptions {
         attach_stdout: Some(true),
         attach_stderr: Some(true),
@@ -373,25 +374,37 @@ async fn execute_in_container(
         .await
         .map_err(|e| SandboxError::ExecutionFailed(format!("Failed to create exec: {}", e)))?;
 
-    // Start exec synchronously - wait for completion
-    let _output = client
+    let output = client
         .start_exec(&exec_result.id, None)
         .await
         .map_err(|e| SandboxError::ExecutionFailed(format!("Failed to start exec: {}", e)))?;
 
-    // The output in bollard 0.18 is a future that resolves when complete
-    // Use a simple wait approach
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+
+    if let StartExecResults::Attached { mut output, .. } = output {
+        while let Some(chunk) = output.next().await {
+            match chunk {
+                Ok(bollard::container::LogOutput::StdOut { message }) => {
+                    stdout.push_str(&String::from_utf8_lossy(&message));
+                }
+                Ok(bollard::container::LogOutput::StdErr { message }) => {
+                    stderr.push_str(&String::from_utf8_lossy(&message));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!("Error reading exec output: {}", e);
+                }
+            }
+        }
+    }
+
     let exit_status = wait_for_exec_completion(client, &exec_result.id).await?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
-
-    // For now, return a basic result - full output capture is complex in bollard 0.18
-    let stdout = format!("Command executed in container {}", container_id);
-    let stderr = String::new();
     let exit_code = exit_status as i32;
 
     tracing::debug!(
-        "Executed command in container {}: exit_code={}, duration_ms={}",
+        "Executed in container {}: exit_code={}, duration_ms={}",
         container_id,
         exit_code,
         duration_ms
