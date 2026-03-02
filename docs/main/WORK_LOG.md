@@ -1,5 +1,71 @@
 # Octo Sandbox 开发工作日志
 
+## 2026-03-02 — Phase 2.8 Agent 增强 + Secret Manager 实施
+
+### 会话概要
+
+Phase 2.8 实现企业级 Secret Manager 和 Agent Loop 增强功能。使用 subagent-driven-development 方式，10/10 任务全部完成。
+
+### 技术变更
+
+**Secret Manager**
+- `crates/octo-engine/src/secret/vault.rs` — CredentialVault 加密存储
+  - AES-256-GCM 加密
+  - Argon2id 密钥派生
+  - Zeroize 内存安全
+- `crates/octo-engine/src/secret/resolver.rs` — CredentialResolver 凭证解析链
+  - 支持 Vault / .env / 环境变量优先级
+  - 完整 .env 文件解析器（注释、引号、转义序列）
+  - `${SECRET:key}` 配置语法解析
+- `crates/octo-engine/src/secret/taint.rs` — Taint Tracking 敏感数据追踪
+  - Secret / Confidential / Internal / Public 标签
+  - Sink 流量控制（Log, Error, ExternalResponse, File）
+  - TaintViolation 违规报告
+
+**Agent Loop 增强**
+- `crates/octo-engine/src/agent/config.rs` — AgentConfig 配置
+  - max_rounds (0=无限)
+  - enable_parallel / max_parallel_tools
+  - enable_typing_signal
+- `crates/octo-engine/src/agent/extension.rs` — Extension 事件钩子
+  - ExtensionEvent 事件类型
+  - AgentExtension trait
+  - ExtensionRegistry 注册表
+- `crates/octo-engine/src/agent/cancellation.rs` — CancellationToken 取消机制
+  - 父/子 Token 级联
+  - watch::Sender 通知
+- `crates/octo-engine/src/agent/parallel.rs` — 并行工具执行
+  - Semaphore 并发控制
+  - CancellationToken 集成
+  - 结果顺序保持
+- `crates/octo-engine/src/agent/loop_.rs` — 集成修改
+  - 50轮/无限轮支持
+  - Typing 信号发送
+  - 并行/顺序执行切换
+
+### Bug 修复
+
+- resolver.rs: stub .env 解析器 → 完整实现
+- taint.rs: 缺失的 TaintedValue 方法 → 完整实现
+- loop_guard.rs: unused variable 警告修复
+
+### 测试结果
+
+- `cargo check --workspace`: ✅ 通过
+- `cargo test --lib`: ✅ 149 测试通过
+- `npx tsc --noEmit`: ✅ 通过
+
+### 产出文件
+
+- `crates/octo-engine/src/secret/` — 完整 Secret Manager 模块
+- `crates/octo-engine/src/agent/config.rs` — Agent 配置
+- `crates/octo-engine/src/agent/extension.rs` — Extension 钩子
+- `crates/octo-engine/src/agent/cancellation.rs` — 取消机制
+- `crates/octo-engine/src/agent/parallel.rs` — 并行执行
+- `docs/design/PHASE_2_8_AGENT_ENHANCEMENT_DESIGN.md` — 设计文档
+
+---
+
 ## 2026-03-01 — Phase 2.7 Metrics + Audit 实施
 
 ### 会话概要
