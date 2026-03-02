@@ -1,18 +1,23 @@
 //! Knowledge Graph SQLite storage
 
+use super::fts::FtsStore;
 use super::graph::{Entity, GraphStats, KnowledgeGraph, Relation};
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct GraphStore {
-    conn: Mutex<Connection>,
+    conn: Mutex<Arc<Connection>>,
+    fts: FtsStore,
 }
 
 impl GraphStore {
     pub fn new(conn: Connection) -> Self {
+        let conn = Arc::new(conn);
+        let fts = FtsStore::new(conn.clone());
         Self {
             conn: Mutex::new(conn),
+            fts,
         }
     }
 
@@ -55,6 +60,8 @@ impl GraphStore {
                 ON kg_relations(relation_type);
             "#,
         )?;
+        drop(conn);
+        self.fts.init()?;
         Ok(())
     }
 
@@ -75,6 +82,13 @@ impl GraphStore {
                 entity.created_at,
                 entity.updated_at,
             ],
+        )?;
+        drop(conn);
+        self.fts.index_entity(
+            &entity.id,
+            &entity.name,
+            &entity.entity_type,
+            &entity.properties,
         )?;
         Ok(())
     }
@@ -191,6 +205,7 @@ impl GraphStore {
 
     /// Delete entity (cascades relations)
     pub fn delete_entity(&self, id: &str) -> Result<()> {
+        self.fts.remove_entity(id)?;
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         tx.execute(
@@ -226,5 +241,10 @@ impl GraphStore {
             relation_count: relation_count as usize,
             type_count: type_count as usize,
         })
+    }
+
+    /// FTS search
+    pub fn fts_search(&self, query: &str, limit: usize) -> Result<Vec<String>> {
+        self.fts.search(query, limit)
     }
 }

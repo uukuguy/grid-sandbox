@@ -1,5 +1,6 @@
 pub mod budget;
 pub mod extractor;
+pub mod fts;
 pub mod graph;
 pub mod graph_store;
 pub mod injector;
