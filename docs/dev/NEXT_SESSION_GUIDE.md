@@ -1,8 +1,8 @@
 # octo-sandbox 下一会话指南
 
-**最后更新**: 2026-03-03 00:10 GMT+8
+**最后更新**: 2026-03-03 GMT+8
 **当前分支**: `octo-workbench`
-**当前状态**: ✅ Phase 2.9 - MCP SSE Transport 完成
+**当前状态**: 🔄 Phase 2.11 - AgentRegistry + 上下文工程重构（设计完成，待实施）
 
 ---
 
@@ -22,41 +22,56 @@
 | Phase 2.8 Agent 增强 + Secret Manager | ✅ 完成 | Secret Manager + Agent Loop 增强 (10/10 tasks) |
 | Phase 2.9 MCP SSE Transport | ✅ 完成 | SseMcpClient + add_server_v2() + API |
 | Phase 2.10 Knowledge Graph | ✅ 完成 | Entity/Relation + Graph + FTS5 + 持久化 |
-| Phase 2.11 AgentRegistry | ⏳ 待实施 | 多代理注册表 |
+| Phase 2.11 AgentRegistry | 🔄 设计完成 | 见下方详细说明 |
 
 ---
 
-## Phase 2.9: MCP SSE Transport
+## Phase 2.11: AgentRegistry + 上下文工程重构
 
-**状态**: 设计完成，开始实施
-**计划**: `docs/plans/2026-02-27-mcp-sse-transport.md`
+**状态**: 设计完成（经过完整 brainstorming），待实施
+**计划**: `docs/plans/2026-03-02-phase2-9-agent-registry.md`（1223 行，7 Tasks）
+
+### 核心设计决策（重要，勿遗忘）
+
+1. **Agent 身份**：三段式（role/goal/backstory），对齐 CrewAI 最佳实践
+   - 优先级：`system_prompt` > `role/goal/backstory` > `SOUL.md` > `CORE_INSTRUCTIONS`
+
+2. **AgentManifest**：创建时提供，不可变；含 name/tags/role/goal/backstory/system_prompt/model/tool_filter/config
+
+3. **AgentRunner**（新增）：持有启动依赖，负责 AgentLoop 生命周期，AppState 持有 AgentRunner 而非 AgentRegistry
+
+4. **per-agent ToolRegistry**：按 `tool_filter` 白名单从全局 ToolRegistry 裁剪，Skills 也在其中（SkillTool 已注册进 ToolRegistry）
+
+5. **Zone A/B 分离**（上下文工程重构）：
+   - Zone A（System Prompt，静态）：Agent 身份 + Bootstrap 文件 + 工具规范
+   - Zone B（首条 Human Message，每轮刷新）：datetime + UserProfile + TaskContext + AutoExtracted
+   - 废弃：AgentPersona block（身份移到 manifest），SandboxContext block（移到 Zone A）
+
+6. **SQLite 持久化**：AgentEntry 持久化，重启加载（参考 McpStorage 模式）
+
+7. **Budget 统一**：ContextInjector 与 TokenBudget 对齐，system_prompt budget = 16,000
 
 ### 任务清单
 
 | Task | 内容 | 状态 |
 |------|------|------|
-| Task 1 | 添加 transport 字段 + 依赖 | ✅ |
-| Task 2 | 实现 SseMcpClient | ✅ |
-| Task 3 | McpManager 支持 transport 分发 | ✅ |
-| Task 4 | REST API list_servers + create_server | ✅ |
-| Task 5 | 全量构建验证 | ✅ |
-
-### 目标
-
-为 octo-engine MCP 客户端增加 Streamable HTTP（SSE）transport 支持，使 octo 能连接远程 MCP 服务器（如通过 URL 暴露的服务），同时保持与现有 Stdio transport 的完全兼容。
-
-### 架构
-
-采用方案 A——在 `McpServerConfigV2` 添加 `transport` 字段（`stdio` / `sse`），`McpManager::add_server_v2()` 根据该字段选择创建 `StdioMcpClient` 或 `SseMcpClient`。两者都实现相同的 `McpClient` trait，上层调用无需感知差异。
+| Task 1 | AgentRegistry 核心（DashMap 三索引 + AgentManifest） | ⏳ |
+| Task 2 | SQLite 持久化（AgentStore） | ⏳ |
+| Task 3 | AgentRunner（per-agent ToolRegistry + 生命周期） | ⏳ |
+| Task 4 | 上下文工程重构（Zone A/B 分离，MemoryBlockKind 清理） | ⏳ |
+| Task 5 | Budget 统一 | ⏳ |
+| Task 6 | AppState 集成 + REST API（8 个端点） | ⏳ |
+| Task 7 | 构建验证 | ⏳ |
 
 ---
 
-## 待实施阶段 (CC 驱动)
+## ⚠️ Deferred 未清项（启动时必查）
 
-| Phase | 任务 | 计划文档 | 状态 |
-|-------|------|----------|------|
-| Phase 2.9 | MCP SSE Transport | `2026-02-27-mcp-sse-transport.md` | ✅ 已完成 |
-| Phase 2.11 | AgentRegistry 多代理 | `2026-03-02-phase2-9-agent-registry.md` | ⏳ 待实施 |
+| 计划文档 | ID | 内容 | 前置条件 |
+|---------|----|----|---------|
+| phase2-9-agent-registry.md | D1 | SkillRegistry 热重载后同步 per-agent ToolRegistry | Task 3 完成后 |
+| phase2-9-agent-registry.md | D2 | SOUL.md/AGENTS.md 项目文件加载接入 AgentLoop | Task 4 Zone A 重构完成后 |
+| phase2-9-agent-registry.md | D3 | AgentLoop 实际运行与 session 层集成（AgentRunner 目前 spawn 空任务） | WebSocket/session 层与 AgentRunner 集成设计后 |
 
 ---
 
@@ -64,11 +79,18 @@
 
 | 组件 | 路径 |
 |------|------|
-| MCP Traits | `crates/octo-engine/src/mcp/traits.rs` |
-| MCP Stdio | `crates/octo-engine/src/mcp/stdio.rs` |
-| MCP Manager | `crates/octo-engine/src/mcp/manager.rs` |
-| MCP SSE (新增) | `crates/octo-engine/src/mcp/sse.rs` |
-| MCP API | `crates/octo-server/src/api/mcp_servers.rs` |
+| Agent Loop | `crates/octo-engine/src/agent/loop_.rs` |
+| Agent Config | `crates/octo-engine/src/agent/config.rs` |
+| CancellationToken | `crates/octo-engine/src/agent/cancellation.rs` |
+| SystemPromptBuilder | `crates/octo-engine/src/context/builder.rs` |
+| ContextInjector | `crates/octo-engine/src/memory/injector.rs` |
+| WorkingMemory | `crates/octo-engine/src/memory/working.rs` |
+| MemoryBlockKind | `crates/octo-types/src/memory.rs` |
+| ToolRegistry | `crates/octo-engine/src/tools/mod.rs` |
+| SkillRegistry | `crates/octo-engine/src/skills/registry.rs` |
+| SkillTool | `crates/octo-engine/src/skills/tool.rs` |
+| AppState | `crates/octo-server/src/state.rs` |
+| McpStorage（参考） | `crates/octo-engine/src/mcp/storage.rs` |
 
 ---
 
@@ -91,9 +113,7 @@ make dev
 ## 下一步操作
 
 ```bash
-# Phase 2.9 开始实施
-# 使用 executing-plans 或 subagent-driven-development 执行计划
-
+# Phase 2.11 开始实施（计划已完整，直接执行）
 /executing-plans
 # 或
 /subagent-driven-development
