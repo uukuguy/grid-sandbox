@@ -54,6 +54,11 @@ impl ToolRegistry {
         self.tools.insert(name, Arc::new(tool));
     }
 
+    /// Register a tool that is already wrapped in an Arc.
+    pub fn register_arc(&mut self, name: String, tool: Arc<dyn Tool>) {
+        self.tools.insert(name, tool);
+    }
+
     pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
         self.tools.get(name).cloned()
     }
