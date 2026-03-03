@@ -18,7 +18,7 @@ use octo_engine::{
     providers::ProviderChain,
     register_memory_tools,
     scheduler::{Scheduler, SqliteSchedulerStorage},
-    AgentCatalog, AgentRunner, AgentStore, Database, MemoryStore, SessionStore, SkillLoader,
+    AgentCatalog, AgentStore, AgentSupervisor, Database, MemoryStore, SessionStore, SkillLoader,
     SkillRegistry, SkillTool, SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory,
     ToolExecutionRecorder, WorkingMemory,
 };
@@ -239,7 +239,7 @@ async fn main() -> Result<()> {
         None
     };
 
-    // Agent system: registry + runner
+    // Agent system: catalog + supervisor
     // AgentStore uses a synchronous rusqlite connection (separate from the async tokio-rusqlite conn)
     let agent_conn = {
         use std::sync::Mutex;
@@ -251,13 +251,19 @@ async fn main() -> Result<()> {
     let loaded = agent_catalog.load_from_store().unwrap_or(0);
     tracing::info!("Loaded {loaded} persisted agents");
     let default_model = model.clone().unwrap_or_else(|| "claude-opus-4-5".to_string());
-    let agent_runner = Arc::new(AgentRunner::new(
-        agent_catalog,
-        provider.clone(),
-        tools.clone(),
-        memory.clone(),
-        default_model,
-    ).with_skill_registry(skill_registry.clone()));
+    let agent_supervisor = Arc::new(
+        AgentSupervisor::new(
+            agent_catalog.clone(),
+            provider.clone(),
+            tools.clone(),
+            memory.clone(),
+            default_model,
+        )
+        .with_skill_registry(skill_registry.clone())
+        .with_memory_store(memory_store.clone())
+        .with_session_store(sessions.clone())
+        .with_recorder(recorder.clone()),
+    );
 
     let state = Arc::new(AppState::new(
         provider_chain,
@@ -272,7 +278,8 @@ async fn main() -> Result<()> {
         skill_registry,
         scheduler,
         cfg.clone(),
-        agent_runner,
+        agent_catalog,
+        agent_supervisor,
     ));
 
     let app = router::build_router(state);
