@@ -221,7 +221,7 @@ impl AgentSupervisor {
 
     /// 启动 agent：从 catalog 读取 manifest，spawn AgentRuntime，更新状态机。
     /// session_id：为该 agent 创建或复用的会话标识。
-    pub async fn start(
+    pub fn start(
         &self,
         agent_id: &AgentId,
         session_id: SessionId,
@@ -249,7 +249,9 @@ impl AgentSupervisor {
     /// 停止 agent：发送 Cancel，移除 handle，更新 catalog 状态。
     pub async fn stop(&self, agent_id: &AgentId, session_id: &SessionId) -> Result<(), AgentError> {
         if let Some(handle) = self.get(session_id) {
-            let _ = handle.send(AgentMessage::Cancel).await;
+            if let Err(e) = handle.send(AgentMessage::Cancel).await {
+                tracing::warn!(session_id = %session_id.as_str(), "cancel send failed on stop: {e}");
+            }
         }
         self.remove(session_id);
         self.catalog.mark_stopped(agent_id)
@@ -258,13 +260,15 @@ impl AgentSupervisor {
     /// 暂停 agent：发送 Cancel（中断当前 round），更新 catalog 状态。
     pub async fn pause(&self, agent_id: &AgentId, session_id: &SessionId) -> Result<(), AgentError> {
         if let Some(handle) = self.get(session_id) {
-            let _ = handle.send(AgentMessage::Cancel).await;
+            if let Err(e) = handle.send(AgentMessage::Cancel).await {
+                tracing::warn!(session_id = %session_id.as_str(), "cancel send failed on pause: {e}");
+            }
         }
         self.catalog.mark_paused(agent_id)
     }
 
     /// 恢复 agent：更新 catalog 状态（Runtime 仍在运行，cancel_flag 已重置）。
-    pub async fn resume(&self, agent_id: &AgentId) -> Result<(), AgentError> {
+    pub fn resume(&self, agent_id: &AgentId) -> Result<(), AgentError> {
         let cancel_token = CancellationToken::new();
         self.catalog.mark_resumed(agent_id, cancel_token)
     }
