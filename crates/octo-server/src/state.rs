@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use octo_engine::{
     auth::AuthConfig,
-    mcp::{McpManager, McpStorage},
+    mcp::McpStorage,
     metrics::MetricsRegistry,
     scheduler::Scheduler,
     AgentExecutorHandle, AgentRuntime,
@@ -14,7 +14,6 @@ use crate::config::Config;
 
 pub struct AppState {
     pub db_path: PathBuf,
-    pub mcp_manager: Arc<tokio::sync::Mutex<McpManager>>,
     /// Scheduler for periodic tasks (optional)
     pub scheduler: Option<Arc<Scheduler>>,
     /// Server configuration for frontend
@@ -32,7 +31,6 @@ pub struct AppState {
 impl AppState {
     pub fn new(
         db_path: PathBuf,
-        mcp_manager: Arc<tokio::sync::Mutex<McpManager>>,
         scheduler: Option<Arc<Scheduler>>,
         config: Config,
         agent_supervisor: Arc<AgentRuntime>,
@@ -46,7 +44,6 @@ impl AppState {
 
         Self {
             db_path,
-            mcp_manager,
             scheduler,
             config,
             auth_config,
