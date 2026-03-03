@@ -10,7 +10,7 @@ use crate::agent::{AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentId, A
 use crate::event::EventBus;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
-use crate::providers::Provider;
+use crate::providers::{Provider, ProviderChain};
 use crate::session::SessionStore;
 use crate::skills::{SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
@@ -23,7 +23,7 @@ const BROADCAST_CAPACITY: usize = 256;
 pub struct AgentSupervisor {
     handles: DashMap<SessionId, AgentRuntimeHandle>,
     // 定义层
-    pub catalog: Arc<AgentCatalog>,
+    catalog: Arc<AgentCatalog>,
     // 共享依赖（构造时注入一次）
     provider: Arc<dyn Provider>,
     tools: Arc<ToolRegistry>,
@@ -35,6 +35,7 @@ pub struct AgentSupervisor {
     // TODO: forward to AgentRuntime once observability wiring is added
     event_bus: Option<Arc<EventBus>>,
     recorder: Option<Arc<ToolExecutionRecorder>>,
+    provider_chain: Option<Arc<ProviderChain>>,
 }
 
 impl AgentSupervisor {
@@ -57,6 +58,7 @@ impl AgentSupervisor {
             default_model,
             event_bus: None,
             recorder: None,
+            provider_chain: None,
         }
     }
 
@@ -83,6 +85,41 @@ impl AgentSupervisor {
     pub fn with_recorder(mut self, recorder: Arc<ToolExecutionRecorder>) -> Self {
         self.recorder = Some(recorder);
         self
+    }
+
+    pub fn with_provider_chain(mut self, chain: Arc<ProviderChain>) -> Self {
+        self.provider_chain = Some(chain);
+        self
+    }
+
+    // ── Getter 方法（供 server API 层只读访问） ──────────────────────────────
+
+    pub fn catalog(&self) -> &Arc<AgentCatalog> {
+        &self.catalog
+    }
+
+    pub fn tools(&self) -> &Arc<ToolRegistry> {
+        &self.tools
+    }
+
+    pub fn memory(&self) -> &Arc<dyn WorkingMemory> {
+        &self.memory
+    }
+
+    pub fn memory_store(&self) -> Option<&Arc<dyn MemoryStore>> {
+        self.memory_store.as_ref()
+    }
+
+    pub fn session_store(&self) -> Option<&Arc<dyn SessionStore>> {
+        self.session_store.as_ref()
+    }
+
+    pub fn recorder(&self) -> Option<&Arc<ToolExecutionRecorder>> {
+        self.recorder.as_ref()
+    }
+
+    pub fn provider_chain(&self) -> Option<&Arc<ProviderChain>> {
+        self.provider_chain.as_ref()
     }
 
     /// 获取已有的 AgentRuntimeHandle（如果存在）
