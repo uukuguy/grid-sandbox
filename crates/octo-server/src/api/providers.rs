@@ -43,7 +43,7 @@ pub struct AddProviderRequest {
 
 /// List all instances
 pub async fn list_providers(State(state): State<Arc<AppState>>) -> Json<ListProvidersResponse> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     let policy = match chain {
         Some(c) => format!("{:?}", c.policy()),
@@ -87,7 +87,7 @@ pub async fn select_provider(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<()>, String> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     match chain {
         Some(c) => c.select_instance(&id).await.map_err(|e| e.to_string())?,
@@ -102,7 +102,7 @@ pub async fn reset_provider(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<()>, String> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     match chain {
         Some(c) => c.reset_health(&id).await.map_err(|e| e.to_string())?,
@@ -114,7 +114,7 @@ pub async fn reset_provider(
 
 /// Clear selection
 pub async fn clear_selection(State(state): State<Arc<AppState>>) -> Result<Json<()>, String> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     match chain {
         Some(c) => c.clear_selection().await,
@@ -129,7 +129,7 @@ pub async fn add_provider(
     State(state): State<Arc<AppState>>,
     Json(req): Json<AddProviderRequest>,
 ) -> Result<Json<()>, String> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     let instance = LlmInstance {
         id: req.id,
@@ -155,7 +155,7 @@ pub async fn delete_provider(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<()>, String> {
-    let chain = state.provider_chain.as_ref();
+    let chain = state.agent_supervisor.provider_chain();
 
     match chain {
         Some(c) => c.remove_instance(&id).await.map_err(|e| e.to_string())?,
