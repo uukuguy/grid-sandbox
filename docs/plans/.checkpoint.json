@@ -1,11 +1,11 @@
 {
-  "plan_file": "docs/plans/2026-03-03-d5-singleton-agent-channel.md",
+  "plan_file": "docs/plans/2026-03-03-d6-supervisor-owns-agent-deps.md",
   "phase": "design",
-  "created_at": "2026-03-03T16:00:00+08:00",
-  "updated_at": "2026-03-03T16:30:00+08:00",
+  "created_at": "2026-03-03T20:00:00+08:00",
+  "updated_at": "2026-03-03T20:00:00+08:00",
   "completed_tasks": [],
   "current_task": null,
-  "execution_mode": null,
-  "phase_name": "D5: AgentSupervisor 主 Runtime + Channels 解耦",
-  "notes": "设计阶段完成。设计文档：docs/design/D5_SINGLETON_AGENT_CHANNEL_DESIGN.md。实现计划：4个文件改动（runtime_registry.rs新增start_primary()、state.rs新增agent_handle、main.rs预热主Runtime、ws.rs简化为纯channel层）。"
+  "execution_mode": "executing-plans",
+  "phase_name": "D6: AgentSupervisor 统一管理 Agent 相关依赖",
+  "notes": "D6 设计完成，待实施。目标：AppState 精简为 8 个字段（db_path、mcp_manager、scheduler、config、auth_config、metrics_registry、agent_supervisor、agent_handle），所有 agent 依赖（tools、memory、memory_store、sessions、recorder、provider_chain、catalog）统一由 AgentSupervisor 持有并通过 getter 暴露。10 个 Task，涉及 runtime_registry.rs、state.rs、main.rs 及 6 个 API handler。前置：D5 代码变更需先 commit。"
 }
