@@ -13,14 +13,9 @@ use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use octo_engine::{
-    create_provider, default_tools,
     mcp::McpManager,
-    providers::ProviderChain,
-    register_memory_tools,
     scheduler::{Scheduler, SqliteSchedulerStorage},
-    AgentCatalog, AgentStore, AgentRuntime, Database, MemoryStore, SessionStore, SkillLoader,
-    SkillRegistry, SkillTool, SqliteMemoryStore, SqliteSessionStore, SqliteWorkingMemory,
-    ToolExecutionRecorder, WorkingMemory,
+    AgentCatalog, AgentRuntime, AgentRuntimeConfig, AgentStore, Database,
 };
 use state::AppState;
 
@@ -86,57 +81,40 @@ async fn main() -> Result<()> {
     let addr = format!("{}:{}", cfg.server.host, cfg.server.port);
     tracing::info!("Using provider: {}", cfg.provider.name);
 
-    let provider_config = cfg.provider.clone();
-
-    let api_key = if provider_config.api_key.is_empty() {
-        // Fall back to env var if not in config
-        match provider_config.name.as_str() {
-            "openai" => std::env::var("OPENAI_API_KEY")
-                .expect("OPENAI_API_KEY must be set in config.yaml or .env"),
-            _ => std::env::var("ANTHROPIC_API_KEY")
-                .expect("ANTHROPIC_API_KEY must be set in config.yaml or .env"),
-        }
-    } else {
-        provider_config.api_key
-    };
-
-    let base_url =
-        provider_config
-            .base_url
-            .clone()
-            .or_else(|| match provider_config.name.as_str() {
-                "openai" => std::env::var("OPENAI_BASE_URL").ok(),
-                _ => std::env::var("ANTHROPIC_BASE_URL").ok(),
-            });
-
-    // Read model based on provider - panic if not set
-    let model = match provider_config.model.clone() {
-        Some(m) => Some(m),
-        None => {
-            let env_var = match provider_config.name.as_str() {
-                "openai" => "OPENAI_MODEL_NAME",
-                _ => "ANTHROPIC_MODEL_NAME",
-            };
-            Some(std::env::var(env_var).expect(&format!(
-                "{} must be set in .env when LLM_PROVIDER={}",
-                env_var, provider_config.name
-            )))
-        }
-    };
-
-    let provider_name = provider_config.name.clone();
-
     // Database: SQLite with WAL mode (use config, with env override already applied)
     let db_path = cfg.database.path.clone();
-    let db = Database::open(&db_path).await?;
-    let conn = db.conn().clone();
 
-    let provider: Arc<dyn octo_engine::Provider> =
-        Arc::from(create_provider(&provider_name, api_key.clone(), base_url.clone()));
+    // MCP manager (for runtime server management)
+    let mcp_manager = Arc::new(tokio::sync::Mutex::new(McpManager::new()));
 
-    // Initialize provider chain if configured
-    let provider_chain = if let Some(ref pc_config) = cfg.provider_chain {
-        let chain = Arc::new(ProviderChain::new(pc_config.failover_policy));
+    // Agent system: catalog + supervisor
+    // AgentStore uses a synchronous rusqlite connection (separate from the async tokio-rusqlite conn)
+    let agent_conn = {
+        use std::sync::Mutex;
+        let raw = rusqlite::Connection::open(&db_path).expect("failed to open agent DB connection");
+        Arc::new(Mutex::new(raw))
+    };
+    let agent_store = Arc::new(AgentStore::new(agent_conn).expect("failed to init AgentStore"));
+    let agent_catalog = Arc::new(AgentCatalog::new().with_store(agent_store));
+    let loaded = agent_catalog.load_from_store().unwrap_or(0);
+    tracing::info!("Loaded {loaded} persisted agents");
+
+    // Create AgentRuntime with all components internalized
+    // AgentRuntime::new() creates: WorkingMemory, SessionStore, MemoryStore,
+    // ToolRegistry, SkillRegistry, Provider, ProviderChain internally
+    let runtime_config = AgentRuntimeConfig::from_parts(
+        db_path.clone(),
+        cfg.provider.clone(),
+        cfg.skills.dirs.clone(),
+        cfg.provider_chain.clone(),
+        cfg.working_dir.clone().map(PathBuf::from),
+        cfg.enable_event_bus,
+    );
+
+    // Initialize provider chain if configured (before creating AgentRuntime)
+    // Note: instances need to be added separately after AgentRuntime creation
+    if let Some(ref pc_config) = cfg.provider_chain {
+        let chain = Arc::new(octo_engine::providers::ProviderChain::new(pc_config.failover_policy));
         let chain_clone = Arc::clone(&chain);
 
         // Add instances to the chain
@@ -177,127 +155,72 @@ async fn main() -> Result<()> {
             "Provider chain initialized with {} instances",
             pc_config.instances.len()
         );
-        Some(chain)
-    } else {
-        None
-    };
-
-    // Working memory (Layer 0) -- SQLite-backed
-    let memory: Arc<dyn WorkingMemory> = Arc::new(SqliteWorkingMemory::new(conn.clone()).await?);
-
-    // Session store -- SQLite-backed with DashMap cache
-    let sessions: Arc<dyn SessionStore> = Arc::new(SqliteSessionStore::new(conn.clone()).await?);
-
-    // Persistent memory store (Layer 2) -- SQLite-backed
-    let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn.clone()));
-
-    // MCP manager (for runtime server management)
-    let mcp_manager = Arc::new(tokio::sync::Mutex::new(McpManager::new()));
-
-    // Tool execution recorder (shares the same connection)
-    let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
-
-    // Skill system
-    let home_dir = std::env::var("HOME").map(PathBuf::from).ok();
-    let project_dir = std::env::current_dir().ok();
-    let skill_loader = SkillLoader::new(project_dir.as_deref(), home_dir.as_deref());
-    let skill_registry = Arc::new(SkillRegistry::new());
-    if let Err(e) = skill_registry.load_from(&skill_loader) {
-        tracing::warn!("Failed to load skills: {e}");
     }
 
-    // Tool registry: built-in + memory tools + skill tools
-    let mut tools = default_tools();
-    register_memory_tools(&mut tools, memory_store.clone(), provider.clone());
+    let agent_runtime = Arc::new(
+        AgentRuntime::new(agent_catalog.clone(), runtime_config).await?
+    );
 
-    // Register invocable skills as tools
-    for skill in skill_registry.invocable_skills() {
-        tracing::info!("Registering skill tool: {}", skill.name);
-        tools.register(SkillTool::new(skill));
-    }
-    let tools = Arc::new(tools);
+    // Get session store from AgentRuntime for creating primary session
+    let session_store = agent_runtime.session_store();
 
-    // Start skill hot-reload watcher
-    let watch_loader = SkillLoader::new(project_dir.as_deref(), home_dir.as_deref());
-    if let Err(e) = skill_registry.start_watching(watch_loader) {
-        tracing::warn!("Failed to start skill watcher: {e}");
-    }
+    // 创建主 session 并预热主 Runtime
+    let primary_session = session_store.create_session().await;
+    let primary_history = session_store
+        .get_messages(&primary_session.session_id)
+        .await
+        .unwrap_or_default();
+    let primary_agent_id = agent_catalog.list_all().into_iter().next().map(|e| e.id);
+    let agent_handle = agent_runtime
+        .start_primary(
+            primary_session.session_id.clone(),
+            primary_session.user_id.clone(),
+            primary_session.sandbox_id.clone(),
+            primary_history,
+            primary_agent_id.as_ref(),
+        )
+        .await;
+    tracing::info!(
+        session_id = %primary_session.session_id.as_str(),
+        "Primary AgentExecutor started"
+    );
 
-    // Scheduler (with agent execution support)
+    // Open a separate database connection for scheduler (it needs its own connection)
+    let db = Database::open(&db_path).await?;
+    let conn = db.conn().clone();
+
+    // Create scheduler (without runtime dependency)
     let scheduler = if cfg.scheduler.enabled {
         let storage = SqliteSchedulerStorage::new(conn.clone());
         let s = Scheduler::new(
             cfg.scheduler.clone(),
             Arc::new(storage),
-            provider.clone(),
-            tools.clone(),
-            memory.clone(),
-            sessions.clone(),
         );
         Some(Arc::new(s))
     } else {
         None
     };
 
-    // Agent system: catalog + supervisor
-    // AgentStore uses a synchronous rusqlite connection (separate from the async tokio-rusqlite conn)
-    let agent_conn = {
-        use std::sync::Mutex;
-        let raw = rusqlite::Connection::open(&db_path).expect("failed to open agent DB connection");
-        Arc::new(Mutex::new(raw))
-    };
-    let agent_store = Arc::new(AgentStore::new(agent_conn).expect("failed to init AgentStore"));
-    let agent_catalog = Arc::new(AgentCatalog::new().with_store(agent_store));
-    let loaded = agent_catalog.load_from_store().unwrap_or(0);
-    tracing::info!("Loaded {loaded} persisted agents");
-    let default_model = model.clone().unwrap_or_else(|| "claude-opus-4-5".to_string());
-    let agent_supervisor = {
-        let mut s = AgentRuntime::new(
-            agent_catalog.clone(),
-            &provider_name,
-            api_key,
-            base_url,
-            tools.clone(),
-            memory.clone(),
-            default_model,
-        )
-        .with_skill_registry(skill_registry.clone())
-        .with_memory_store(memory_store.clone())
-        .with_session_store(sessions.clone())
-        .with_recorder(recorder.clone());
-        if let Some(ref chain) = provider_chain {
-            s = s.with_provider_chain(chain.clone());
-        }
-        Arc::new(s)
-    };
-
-    // 创建主 session 并预热主 Runtime
-    let primary_session = sessions.create_session().await;
-    let primary_history = sessions
-        .get_messages(&primary_session.session_id)
-        .await
-        .unwrap_or_default();
-    let primary_agent_id = agent_catalog.list_all().into_iter().next().map(|e| e.id);
-    let agent_handle = agent_supervisor.start_primary(
-        primary_session.session_id.clone(),
-        primary_session.user_id.clone(),
-        primary_session.sandbox_id.clone(),
-        primary_history,
-        primary_agent_id.as_ref(),
-    );
-    tracing::info!(
-        session_id = %primary_session.session_id.as_str(),
-        "Primary AgentExecutor started"
-    );
+    // Clone agent_runtime for scheduler before moving into state
+    let agent_runtime_for_scheduler = agent_runtime.clone();
 
     let state = Arc::new(AppState::new(
         std::path::PathBuf::from(&db_path),
         mcp_manager,
-        scheduler,
+        scheduler.clone(),
         cfg.clone(),
-        agent_supervisor,
+        agent_runtime,
         agent_handle,
     ));
+
+    // Start scheduler loop with AgentRuntime
+    if let Some(ref sched) = scheduler {
+        let sched = sched.clone();
+        let runtime = agent_runtime_for_scheduler;
+        tokio::spawn(async move {
+            sched.start(&runtime).await;
+        });
+    }
 
     let app = router::build_router(state);
 
