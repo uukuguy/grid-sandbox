@@ -1,11 +1,11 @@
 {
   "plan_file": "docs/plans/2026-03-03-d6-supervisor-owns-agent-deps.md",
-  "phase": "design",
+  "phase": "completed",
   "created_at": "2026-03-03T20:00:00+08:00",
   "updated_at": "2026-03-03T20:00:00+08:00",
-  "completed_tasks": [],
+  "completed_tasks": ["T1","T2","T3","T4","T5","T6","T7","T8","T9","T10"],
   "current_task": null,
   "execution_mode": "executing-plans",
   "phase_name": "D6: AgentSupervisor 统一管理 Agent 相关依赖",
-  "notes": "D6 设计完成，待实施。目标：AppState 精简为 8 个字段（db_path、mcp_manager、scheduler、config、auth_config、metrics_registry、agent_supervisor、agent_handle），所有 agent 依赖（tools、memory、memory_store、sessions、recorder、provider_chain、catalog）统一由 AgentSupervisor 持有并通过 getter 暴露。10 个 Task，涉及 runtime_registry.rs、state.rs、main.rs 及 6 个 API handler。前置：D5 代码变更需先 commit。"
+  "notes": "D6 完成。AppState 精简为 8 个字段（server 基础设施），所有 agent 依赖统一由 AgentSupervisor 持有并通过 getter 方法暴露。API handler 全部改为通过 state.agent_supervisor.xxx() 访问。"
 }
