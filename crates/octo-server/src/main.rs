@@ -13,7 +13,6 @@ use anyhow::Result;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use octo_engine::{
-    mcp::McpManager,
     scheduler::{Scheduler, SqliteSchedulerStorage},
     AgentCatalog, AgentRuntime, AgentRuntimeConfig, AgentStore, Database,
 };
@@ -83,9 +82,6 @@ async fn main() -> Result<()> {
 
     // Database: SQLite with WAL mode (use config, with env override already applied)
     let db_path = cfg.database.path.clone();
-
-    // MCP manager (for runtime server management)
-    let mcp_manager = Arc::new(tokio::sync::Mutex::new(McpManager::new()));
 
     // Agent system: catalog + supervisor
     // AgentStore uses a synchronous rusqlite connection (separate from the async tokio-rusqlite conn)
@@ -206,7 +202,6 @@ async fn main() -> Result<()> {
 
     let state = Arc::new(AppState::new(
         std::path::PathBuf::from(&db_path),
-        mcp_manager,
         scheduler.clone(),
         cfg.clone(),
         agent_runtime,
