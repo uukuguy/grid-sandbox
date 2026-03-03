@@ -16,12 +16,13 @@ pub struct ToolInfo {
 }
 
 pub async fn list_tools(State(state): State<Arc<AppState>>) -> Json<Vec<ToolInfo>> {
-    let specs = state.tools.specs();
+    let specs = state.agent_supervisor.tools().specs();
     let tools: Vec<ToolInfo> = specs
         .into_iter()
         .map(|spec| {
             let source = state
-                .tools
+                .agent_supervisor
+                .tools()
                 .get(&spec.name)
                 .map(|t| t.source())
                 .unwrap_or(ToolSource::BuiltIn);
