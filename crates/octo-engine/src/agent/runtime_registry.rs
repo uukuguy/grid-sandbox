@@ -6,7 +6,7 @@ use tracing::info;
 
 use octo_types::{ChatMessage, SandboxId, SessionId, UserId};
 
-use crate::agent::{AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentId, AgentManifest, AgentMessage, AgentRuntime, AgentRuntimeHandle, CancellationToken};
+use crate::agent::{AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentId, AgentManifest, AgentMessage, AgentExecutor, AgentExecutorHandle, CancellationToken};
 use crate::event::EventBus;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
@@ -19,9 +19,9 @@ use crate::tools::ToolRegistry;
 const MPSC_CAPACITY: usize = 32;
 const BROADCAST_CAPACITY: usize = 256;
 
-/// Session → AgentRuntimeHandle 的注册表，同时持有所有共享运行时依赖
+/// Session → AgentExecutorHandle 的注册表，同时持有所有共享运行时依赖
 pub struct AgentSupervisor {
-    handles: DashMap<SessionId, AgentRuntimeHandle>,
+    handles: DashMap<SessionId, AgentExecutorHandle>,
     // 定义层
     catalog: Arc<AgentCatalog>,
     // 共享依赖（构造时注入一次）
@@ -32,7 +32,7 @@ pub struct AgentSupervisor {
     memory_store: Option<Arc<dyn MemoryStore>>,
     session_store: Option<Arc<dyn SessionStore>>,
     default_model: String,
-    // TODO: forward to AgentRuntime once observability wiring is added
+    // TODO: forward to AgentExecutor once observability wiring is added
     event_bus: Option<Arc<EventBus>>,
     recorder: Option<Arc<ToolExecutionRecorder>>,
     provider_chain: Option<Arc<ProviderChain>>,
@@ -122,12 +122,12 @@ impl AgentSupervisor {
         self.provider_chain.as_ref()
     }
 
-    /// 获取已有的 AgentRuntimeHandle（如果存在）
-    pub fn get(&self, session_id: &SessionId) -> Option<AgentRuntimeHandle> {
+    /// 获取已有的 AgentExecutorHandle（如果存在）
+    pub fn get(&self, session_id: &SessionId) -> Option<AgentExecutorHandle> {
         self.handles.get(session_id).map(|h| h.clone())
     }
 
-    /// 获取或 spawn 与 session 绑定的 AgentRuntime。
+    /// 获取或 spawn 与 session 绑定的 AgentExecutor。
     /// agent_id: 可选，指定要绑定的 AgentCatalog 中的 agent 定义（携带 manifest）。
     pub fn get_or_spawn(
         &self,
@@ -136,7 +136,7 @@ impl AgentSupervisor {
         sandbox_id: SandboxId,
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
-    ) -> AgentRuntimeHandle {
+    ) -> AgentExecutorHandle {
         // 已有 handle 则直接复用
         if let Some(handle) = self.get(&session_id) {
             return handle;
@@ -148,13 +148,13 @@ impl AgentSupervisor {
         let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
         let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
 
-        let handle = AgentRuntimeHandle {
+        let handle = AgentExecutorHandle {
             tx,
             broadcast_tx: broadcast_tx.clone(),
             session_id: session_id.clone(),
         };
 
-        let runtime = AgentRuntime::new(
+        let runtime = AgentExecutor::new(
             session_id.clone(),
             user_id,
             sandbox_id,
@@ -181,7 +181,7 @@ impl AgentSupervisor {
             let _ = self.catalog.mark_running(id, cancel_token);
         }
 
-        info!(session_id = %session_id.as_str(), "AgentRuntime spawned");
+        info!(session_id = %session_id.as_str(), "AgentExecutor spawned");
 
         self.handles.insert(session_id, handle.clone());
         handle
@@ -198,14 +198,14 @@ impl AgentSupervisor {
         sandbox_id: SandboxId,
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
-    ) -> AgentRuntimeHandle {
+    ) -> AgentExecutorHandle {
         self.get_or_spawn(session_id, user_id, sandbox_id, initial_history, agent_id)
     }
 
     /// 移除 session 对应的 handle（当 session 销毁时调用）
     pub fn remove(&self, session_id: &SessionId) {
         self.handles.remove(session_id);
-        info!(session_id = %session_id.as_str(), "AgentRuntime handle removed");
+        info!(session_id = %session_id.as_str(), "AgentExecutor handle removed");
     }
 
     pub fn len(&self) -> usize {
@@ -271,7 +271,7 @@ impl AgentSupervisor {
         None  // 返回 None 表示使用 AgentLoop 默认（SOUL.md）
     }
 
-    /// 启动 agent：从 catalog 读取 manifest，spawn AgentRuntime，更新状态机。
+    /// 启动 agent：从 catalog 读取 manifest，spawn AgentExecutor，更新状态机。
     /// session_id：为该 agent 创建或复用的会话标识。
     pub fn start(
         &self,
@@ -280,7 +280,7 @@ impl AgentSupervisor {
         user_id: UserId,
         sandbox_id: SandboxId,
         initial_history: Vec<ChatMessage>,
-    ) -> Result<AgentRuntimeHandle, AgentError> {
+    ) -> Result<AgentExecutorHandle, AgentError> {
         // 验证 agent 存在
         self.catalog
             .get(agent_id)

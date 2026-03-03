@@ -285,7 +285,7 @@ async fn main() -> Result<()> {
     );
     tracing::info!(
         session_id = %primary_session.session_id.as_str(),
-        "Primary AgentRuntime started"
+        "Primary AgentExecutor started"
     );
 
     let state = Arc::new(AppState::new(

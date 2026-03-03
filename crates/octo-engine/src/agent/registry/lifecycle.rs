@@ -1,6 +1,6 @@
 //! Lifecycle state machine: start / stop / pause / resume
 
-use super::{AgentId, AgentCatalog, AgentRuntimeHandle, AgentStatus};
+use super::{AgentId, AgentCatalog, AgentExecutorHandle, AgentStatus};
 use crate::agent::CancellationToken;
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ impl AgentCatalog {
             .ok_or_else(|| AgentError::NotFound(id.clone()))?;
         match slot.value().0.state {
             AgentStatus::Created | AgentStatus::Paused => {
-                slot.value_mut().1 = Some(AgentRuntimeHandle { cancel_token });
+                slot.value_mut().1 = Some(AgentExecutorHandle { cancel_token });
                 slot.value_mut().0.state = AgentStatus::Running;
                 Ok(())
             }
@@ -104,7 +104,7 @@ impl AgentCatalog {
                 action: "resume",
             });
         }
-        slot.value_mut().1 = Some(AgentRuntimeHandle { cancel_token });
+        slot.value_mut().1 = Some(AgentExecutorHandle { cancel_token });
         slot.value_mut().0.state = AgentStatus::Running;
         Ok(())
     }

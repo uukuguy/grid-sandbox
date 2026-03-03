@@ -13,12 +13,12 @@ use dashmap::DashMap;
 
 use crate::agent::CancellationToken;
 
-pub(crate) struct AgentRuntimeHandle {
+pub(crate) struct AgentExecutorHandle {
     pub cancel_token: CancellationToken,
 }
 
 pub struct AgentCatalog {
-    pub(crate) by_id: DashMap<AgentId, (AgentEntry, Option<AgentRuntimeHandle>)>,
+    pub(crate) by_id: DashMap<AgentId, (AgentEntry, Option<AgentExecutorHandle>)>,
     by_name: DashMap<String, AgentId>,
     by_tag: DashMap<String, Vec<AgentId>>,
     store: Option<Arc<AgentStore>>,

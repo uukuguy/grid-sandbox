@@ -137,7 +137,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 // 先订阅，再发消息（避免丢失事件）
                 let mut rx = handle.subscribe();
 
-                // Forward user message to AgentRuntime
+                // Forward user message to AgentExecutor
                 let _ = handle
                     .send(AgentMessage::UserMessage {
                         content: content.clone(),

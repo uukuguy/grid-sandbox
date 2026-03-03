@@ -14,7 +14,7 @@ use crate::memory::WorkingMemory;
 use crate::providers::Provider;
 use crate::tools::ToolRegistry;
 
-/// Channel → AgentRuntime 的消息
+/// Channel → AgentExecutor 的消息
 #[derive(Debug, Clone)]
 pub enum AgentMessage {
     /// 用户发来的文本消息
@@ -27,31 +27,31 @@ pub enum AgentMessage {
     Cancel,
 }
 
-/// AgentRuntime 的对外句柄（可 clone，廉价）
+/// AgentExecutor 的对外句柄（可 clone，廉价）
 #[derive(Clone)]
-pub struct AgentRuntimeHandle {
-    /// 向 AgentRuntime 发送消息
+pub struct AgentExecutorHandle {
+    /// 向 AgentExecutor 发送消息
     pub tx: mpsc::Sender<AgentMessage>,
-    /// 订阅 AgentRuntime 的广播事件
+    /// 订阅 AgentExecutor 的广播事件
     pub broadcast_tx: broadcast::Sender<AgentEvent>,
     /// 关联的 session_id
     pub session_id: SessionId,
 }
 
-impl AgentRuntimeHandle {
+impl AgentExecutorHandle {
     /// 创建一个新的广播订阅者
     pub fn subscribe(&self) -> broadcast::Receiver<AgentEvent> {
         self.broadcast_tx.subscribe()
     }
 
-    /// 发送消息到 AgentRuntime
+    /// 发送消息到 AgentExecutor
     pub async fn send(&self, msg: AgentMessage) -> Result<(), mpsc::error::SendError<AgentMessage>> {
         self.tx.send(msg).await
     }
 }
 
 /// 持久化运行的 Agent 自主智能体本体
-pub struct AgentRuntime {
+pub struct AgentExecutor {
     // 身份
     session_id: SessionId,
     user_id: UserId,
@@ -78,7 +78,7 @@ pub struct AgentRuntime {
     cancel_flag: Arc<AtomicBool>,
 }
 
-impl AgentRuntime {
+impl AgentExecutor {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_id: SessionId,
@@ -117,7 +117,7 @@ impl AgentRuntime {
 
     /// Agent 主循环入口 — 持续等待消息，处理，广播结果
     pub async fn run(mut self) {
-        info!(session_id = %self.session_id.as_str(), "AgentRuntime started");
+        info!(session_id = %self.session_id.as_str(), "AgentExecutor started");
 
         while let Some(msg) = self.rx.recv().await {
             match msg {
@@ -128,7 +128,7 @@ impl AgentRuntime {
                     // 追加用户消息到持久化历史
                     self.history.push(ChatMessage::user(content));
 
-                    // 构建 AgentLoop（每 round 新建，但 history 由 AgentRuntime 持有）
+                    // 构建 AgentLoop（每 round 新建，但 history 由 AgentExecutor 持有）
                     let mut agent_loop = AgentLoop::new(
                         self.provider.clone(),
                         self.tools.clone(),
@@ -168,7 +168,7 @@ impl AgentRuntime {
                         )
                         .await
                     {
-                        warn!("AgentRuntime round error: {e}");
+                        warn!("AgentExecutor round error: {e}");
                         let _ = self.broadcast_tx.send(AgentEvent::Error {
                             message: e.to_string(),
                         });
@@ -181,12 +181,12 @@ impl AgentRuntime {
                 }
                 AgentMessage::Cancel => {
                     self.cancel_flag.store(true, Ordering::Relaxed);
-                    info!(session_id = %self.session_id.as_str(), "AgentRuntime: cancel requested");
+                    info!(session_id = %self.session_id.as_str(), "AgentExecutor: cancel requested");
                 }
             }
         }
 
-        info!(session_id = %self.session_id.as_str(), "AgentRuntime stopped (channel closed)");
+        info!(session_id = %self.session_id.as_str(), "AgentExecutor stopped (channel closed)");
     }
 
     /// 返回当前对话历史（用于 session 持久化）
