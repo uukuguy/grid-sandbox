@@ -6,7 +6,7 @@ use tracing::info;
 
 use octo_types::{ChatMessage, SandboxId, SessionId, UserId};
 
-use crate::agent::{AgentCatalog, AgentConfig, AgentEvent, AgentId, AgentManifest, AgentMessage, AgentRuntime, AgentRuntimeHandle};
+use crate::agent::{AgentCatalog, AgentConfig, AgentEvent, AgentId, AgentManifest, AgentMessage, AgentRuntime, AgentRuntimeHandle, CancellationToken};
 use crate::event::EventBus;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
@@ -15,6 +15,7 @@ use crate::session::SessionStore;
 use crate::skills::{SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
 use crate::tools::ToolRegistry;
+
 
 const MPSC_CAPACITY: usize = 32;
 const BROADCAST_CAPACITY: usize = 256;
@@ -89,26 +90,23 @@ impl AgentSupervisor {
         self.handles.get(session_id).map(|h| h.clone())
     }
 
-    /// Spawn 一个新的 AgentRuntime 并注册其 Handle。
-    /// 如果该 session 已有运行中的 runtime，直接返回已有 handle。
-    #[allow(clippy::too_many_arguments)]
+    /// 获取或 spawn 与 session 绑定的 AgentRuntime。
+    /// agent_id: 可选，指定要绑定的 AgentCatalog 中的 agent 定义（携带 manifest）。
     pub fn get_or_spawn(
         &self,
         session_id: SessionId,
         user_id: UserId,
         sandbox_id: SandboxId,
         initial_history: Vec<ChatMessage>,
-        provider: Arc<dyn Provider>,
-        tools: Arc<ToolRegistry>,
-        memory: Arc<dyn WorkingMemory>,
-        memory_store: Option<Arc<dyn MemoryStore>>,
-        model: Option<String>,
-        session_store: Option<Arc<dyn crate::session::SessionStore>>,
+        agent_id: Option<&AgentId>,
     ) -> AgentRuntimeHandle {
         // 已有 handle 则直接复用
         if let Some(handle) = self.get(&session_id) {
             return handle;
         }
+
+        // 从 manifest 解析运行时配置
+        let (tools, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
 
         let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
         let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
@@ -126,18 +124,25 @@ impl AgentSupervisor {
             initial_history,
             rx,
             broadcast_tx,
-            provider,
+            self.provider.clone(),
             tools,
-            memory,
-            memory_store,
-            model,
-            session_store,
+            self.memory.clone(),
+            self.memory_store.clone(),
+            Some(model),
+            self.session_store.clone(),
+            system_prompt,
+            config,
         );
 
         // Spawn 持久化主循环
         tokio::spawn(async move {
             runtime.run().await;
         });
+
+        if let Some(id) = agent_id {
+            let cancel_token = CancellationToken::new();
+            let _ = self.catalog.mark_running(id, cancel_token);
+        }
 
         info!(session_id = %session_id.as_str(), "AgentRuntime spawned");
 

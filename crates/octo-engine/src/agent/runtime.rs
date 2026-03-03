@@ -8,7 +8,7 @@ use tracing::{info, warn};
 
 use octo_types::{ChatMessage, SandboxId, SessionId, ToolContext, UserId};
 
-use crate::agent::{AgentEvent, AgentLoop};
+use crate::agent::{AgentConfig, AgentEvent, AgentLoop};
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
@@ -70,6 +70,10 @@ pub struct AgentRuntime {
     model: Option<String>,
     session_store: Option<Arc<dyn crate::session::SessionStore>>,
 
+    // manifest 配置（来自 AgentCatalog）
+    system_prompt: Option<String>,
+    config: AgentConfig,
+
     // 生命周期
     cancel_flag: Arc<AtomicBool>,
 }
@@ -89,6 +93,8 @@ impl AgentRuntime {
         memory_store: Option<Arc<dyn MemoryStore>>,
         model: Option<String>,
         session_store: Option<Arc<dyn crate::session::SessionStore>>,
+        system_prompt: Option<String>,
+        config: AgentConfig,
     ) -> Self {
         Self {
             session_id,
@@ -103,6 +109,8 @@ impl AgentRuntime {
             memory_store,
             model,
             session_store,
+            system_prompt,
+            config,
             cancel_flag: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -135,6 +143,12 @@ impl AgentRuntime {
                         .clone()
                         .unwrap_or_else(|| "claude-sonnet-4-6".to_string());
                     agent_loop = agent_loop.with_model(model);
+
+                    // 注入 manifest 配置
+                    if let Some(ref prompt) = self.system_prompt {
+                        agent_loop = agent_loop.with_system_prompt(prompt.clone());
+                    }
+                    agent_loop = agent_loop.with_config(self.config.clone());
 
                     let tool_ctx = ToolContext {
                         sandbox_id: self.sandbox_id.clone(),
