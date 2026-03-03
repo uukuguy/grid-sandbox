@@ -17,7 +17,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use octo_engine::{AgentEntry, AgentId, AgentManifest};
+use octo_engine::{agent::CancellationToken, AgentEntry, AgentId, AgentManifest};
 
 use crate::state::AppState;
 
@@ -32,15 +32,15 @@ pub fn router() -> Router<Arc<AppState>> {
 }
 
 async fn list_agents(State(s): State<Arc<AppState>>) -> Json<Vec<AgentEntry>> {
-    Json(s.agent_runner.catalog.list_all())
+    Json(s.catalog.list_all())
 }
 
 async fn create_agent(
     State(s): State<Arc<AppState>>,
     Json(manifest): Json<AgentManifest>,
 ) -> (StatusCode, Json<AgentEntry>) {
-    let id = s.agent_runner.catalog.register(manifest);
-    let entry = s.agent_runner.catalog.get(&id).unwrap();
+    let id = s.catalog.register(manifest);
+    let entry = s.catalog.get(&id).unwrap();
     (StatusCode::CREATED, Json(entry))
 }
 
@@ -48,8 +48,7 @@ async fn get_agent(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
-    s.agent_runner
-        .catalog
+    s.catalog
         .get(&AgentId(id))
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -60,12 +59,10 @@ async fn start_agent(
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
     let agent_id = AgentId(id);
-    s.agent_runner
-        .start(&agent_id)
-        .await
+    s.catalog
+        .mark_running(&agent_id, CancellationToken::new())
         .map_err(|_| StatusCode::CONFLICT)?;
-    s.agent_runner
-        .catalog
+    s.catalog
         .get(&agent_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -76,12 +73,10 @@ async fn stop_agent(
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
     let agent_id = AgentId(id);
-    s.agent_runner
-        .stop(&agent_id)
-        .await
+    s.catalog
+        .mark_stopped(&agent_id)
         .map_err(|_| StatusCode::CONFLICT)?;
-    s.agent_runner
-        .catalog
+    s.catalog
         .get(&agent_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -92,12 +87,10 @@ async fn pause_agent(
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
     let agent_id = AgentId(id);
-    s.agent_runner
-        .pause(&agent_id)
-        .await
+    s.catalog
+        .mark_paused(&agent_id)
         .map_err(|_| StatusCode::CONFLICT)?;
-    s.agent_runner
-        .catalog
+    s.catalog
         .get(&agent_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -108,12 +101,10 @@ async fn resume_agent(
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
     let agent_id = AgentId(id);
-    s.agent_runner
-        .resume(&agent_id)
-        .await
+    s.catalog
+        .mark_resumed(&agent_id, CancellationToken::new())
         .map_err(|_| StatusCode::CONFLICT)?;
-    s.agent_runner
-        .catalog
+    s.catalog
         .get(&agent_id)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
@@ -123,7 +114,7 @@ async fn delete_agent(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> StatusCode {
-    if s.agent_runner.catalog.unregister(&AgentId(id)).is_some() {
+    if s.catalog.unregister(&AgentId(id)).is_some() {
         StatusCode::NO_CONTENT
     } else {
         StatusCode::NOT_FOUND
