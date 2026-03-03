@@ -1,5 +1,5 @@
 use octo_engine::auth::AuthConfigYaml;
-use octo_engine::providers::ProviderChainConfig;
+use octo_engine::providers::{ProviderChainConfig, ProviderConfig};
 use octo_engine::scheduler::SchedulerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -28,6 +28,12 @@ pub struct Config {
     /// Provider Chain configuration (optional)
     #[serde(default)]
     pub provider_chain: Option<ProviderChainConfig>,
+    /// Working directory for sandbox (optional)
+    #[serde(default)]
+    pub working_dir: Option<String>,
+    /// Enable event bus for observability (default: false)
+    #[serde(default)]
+    pub enable_event_bus: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,29 +49,6 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3001,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderConfig {
-    /// Provider name: "anthropic" or "openai"
-    pub name: String,
-    /// API key (required)
-    pub api_key: String,
-    /// Base URL for API (optional, for proxies)
-    pub base_url: Option<String>,
-    /// Model name (optional, provider default if not set)
-    pub model: Option<String>,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            name: "anthropic".to_string(),
-            api_key: "".to_string(),
-            base_url: None,
-            model: None,
         }
     }
 }
@@ -134,6 +117,8 @@ impl Default for Config {
             auth: AuthConfigYaml::default(),
             scheduler: SchedulerConfig::default(),
             provider_chain: None,
+            working_dir: None,
+            enable_event_bus: false,
         }
     }
 }
@@ -235,6 +220,16 @@ impl Config {
             config.logging.level = level;
         }
 
+        // Working directory
+        if let Ok(dir) = std::env::var("OCTO_WORKING_DIR") {
+            config.working_dir = Some(dir);
+        }
+
+        // Event bus
+        if let Ok(enabled) = std::env::var("OCTO_ENABLE_EVENT_BUS") {
+            config.enable_event_bus = enabled.parse().unwrap_or(false);
+        }
+
         config
     }
 
@@ -315,6 +310,17 @@ impl Config {
         output.push_str(&format!(
             "#   dirs: {:?}            # List of skills directories\n",
             defaults.skills.dirs
+        ));
+
+        // Working directory
+        output.push_str("# Working directory for sandbox (optional)\n");
+        output.push_str("# working_dir: \"./data/sandbox\"   # Optional working directory\n");
+
+        // Event bus
+        output.push_str("# Enable event bus for observability\n");
+        output.push_str(&format!(
+            "# enable_event_bus: {}    # Enable event bus (default: false)\n",
+            defaults.enable_event_bus
         ));
 
         output
