@@ -37,7 +37,7 @@ pub struct AppState {
     pub metrics_registry: Arc<RwLock<MetricsRegistry>>,
     /// Agent catalog for agent definitions and lifecycle state
     pub catalog: Arc<AgentCatalog>,
-    /// Session-bound AgentRuntime registry
+    /// Runtime supervisor: holds shared deps and manages AgentRuntime lifecycle
     pub agent_supervisor: Arc<AgentSupervisor>,
 }
 
