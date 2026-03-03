@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use anyhow::Result;
 use dashmap::DashMap;
@@ -15,6 +15,7 @@ use crate::agent::{
 use crate::db::Database;
 use crate::event::EventBus;
 use crate::mcp::manager::McpManager;
+use crate::mcp::traits::McpToolInfo;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::{SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
@@ -76,7 +77,7 @@ pub struct AgentRuntime {
     catalog: Arc<AgentCatalog>,
     // 共享依赖（构造时注入一次）
     provider: Arc<dyn Provider>,
-    tools: Arc<ToolRegistry>,
+    tools: Arc<StdMutex<ToolRegistry>>,
     skill_registry: Option<Arc<SkillRegistry>>,
     memory: Arc<dyn WorkingMemory>,
     memory_store: Arc<dyn MemoryStore>,
@@ -210,7 +211,7 @@ impl AgentRuntime {
             agent_handles: DashMap::new(),
             catalog,
             provider,
-            tools: Arc::new(tools),
+            tools: Arc::new(StdMutex::new(tools)),
             skill_registry: Some(skill_registry),
             memory,
             memory_store,
@@ -277,7 +278,7 @@ impl AgentRuntime {
         &self.catalog
     }
 
-    pub fn tools(&self) -> &Arc<ToolRegistry> {
+    pub fn tools(&self) -> &Arc<StdMutex<ToolRegistry>> {
         &self.tools
     }
 
@@ -303,6 +304,102 @@ impl AgentRuntime {
 
     pub fn provider(&self) -> &Arc<dyn Provider> {
         &self.provider
+    }
+
+    // ── MCP Server 管理 API ─────────────────────────────────────────────────
+
+    /// 添加 MCP Server → 自动注册 tools
+    pub async fn add_mcp_server(
+        &self,
+        config: crate::mcp::traits::McpServerConfig,
+    ) -> Result<Vec<McpToolInfo>, AgentError> {
+        let mcp = self.mcp_manager.as_ref()
+            .ok_or(AgentError::McpNotInitialized)?;
+
+        let tools = {
+            let mut guard = mcp.lock().await;
+            guard.add_server(config.clone()).await
+                .map_err(|e| AgentError::McpError(e.to_string()))?
+        };
+
+        // 注册到 ToolRegistry
+        {
+            let mcp_guard = mcp.lock().await;
+            let mut tools_guard = self.tools.lock().unwrap();
+            for tool_info in &tools {
+                if let Some(client) = mcp_guard.clients().get(&config.name) {
+                    let bridge = crate::mcp::bridge::McpToolBridge::new(
+                        client.clone(),
+                        config.name.clone(),
+                        tool_info.clone(),
+                    );
+                    tools_guard.register(bridge);
+                }
+            }
+        }
+
+        Ok(tools)
+    }
+
+    /// 移除 MCP Server → 自动注销 tools
+    pub async fn remove_mcp_server(
+        &self,
+        name: &str,
+    ) -> Result<(), AgentError> {
+        let mcp = self.mcp_manager.as_ref()
+            .ok_or(AgentError::McpNotInitialized)?;
+
+        // 先获取要移除的 tools 信息
+        let removed_tool_names: Vec<String> = {
+            let guard = mcp.lock().await;
+            guard.get_tool_infos(name)
+                .map(|tools| tools.iter().map(|t| t.name.clone()).collect())
+                .unwrap_or_default()
+        };
+
+        // 调用 remove_server
+        {
+            let mut guard = mcp.lock().await;
+            guard.remove_server(name).await
+                .map_err(|e| AgentError::McpError(e.to_string()))?;
+        }
+
+        // 从 ToolRegistry 注销
+        // 由于 ToolRegistry 没有 unregister 方法，我们重新构建工具列表
+        // 过滤掉属于该 MCP server 的工具
+        let all_tools: Vec<(String, Arc<dyn crate::tools::Tool>)> = {
+            let tools_guard = self.tools.lock().unwrap();
+            tools_guard.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        };
+        let mut new_registry = crate::tools::ToolRegistry::new();
+        for (tool_name, tool) in all_tools {
+            // 检查工具来源是否为该 MCP server，使用模式匹配
+            let should_remove = match tool.source() {
+                octo_types::ToolSource::Mcp(server_name) => server_name == name,
+                _ => false,
+            };
+            if should_remove {
+                continue; // 跳过要移除的工具
+            }
+            new_registry.register_arc(tool_name, tool);
+        }
+        // 替换旧的 registry
+        let mut tools_guard = self.tools.lock().unwrap();
+        *tools_guard = new_registry;
+
+        Ok(())
+    }
+
+    /// 列出运行中的 MCP servers
+    pub fn list_mcp_servers(&self) -> Vec<crate::mcp::manager::ServerRuntimeState> {
+        match &self.mcp_manager {
+            Some(mcp) => {
+                let guard = mcp.blocking_lock();
+                let states = guard.all_runtime_states();
+                states.into_iter().map(|(_, state)| state).collect()
+            }
+            None => vec![],
+        }
     }
 
     /// 获取主 AgentExecutorHandle（如果已启动）
@@ -396,16 +493,25 @@ impl AgentRuntime {
 
     /// 按 tool_filter 构建 ToolRegistry（含 SkillRegistry 热重载 overlay）
     fn build_tool_registry(&self, tool_filter: &[String]) -> Arc<ToolRegistry> {
+        // 获取 tools 的锁
+        let tools_guard = self.tools.lock().unwrap();
+
         // 快速路径：无动态 skills 且无 filter
         if self.skill_registry.is_none() && tool_filter.is_empty() {
-            return self.tools.clone();
+            // 克隆内部的 ToolRegistry 并包装成 Arc
+            let mut registry = ToolRegistry::new();
+            for (name, tool) in tools_guard.iter() {
+                registry.register_arc(name.clone(), tool);
+            }
+            return Arc::new(registry);
         }
 
         // 从全局工具快照构建
         let mut registry = ToolRegistry::new();
-        for (name, tool) in self.tools.iter() {
+        for (name, tool) in tools_guard.iter() {
             registry.register_arc(name.clone(), tool);
         }
+        drop(tools_guard);
 
         // 覆盖当前热重载的 skill tools
         if let Some(ref skills) = self.skill_registry {
@@ -563,12 +669,14 @@ impl AgentRuntime {
             }
         }
         // 无 agent_id 或 agent 不存在：使用全局默认
-        (
-            self.tools.clone(),
-            None,
-            self.default_model.clone(),
-            AgentConfig::default(),
-        )
+        {
+            let tools_guard = self.tools.lock().unwrap();
+            let mut registry = ToolRegistry::new();
+            for (name, tool) in tools_guard.iter() {
+                registry.register_arc(name.clone(), tool);
+            }
+            (Arc::new(registry), None, self.default_model.clone(), AgentConfig::default())
+        }
     }
 
     /// Execute a scheduled task: create session, run agent, return result.
@@ -607,9 +715,17 @@ impl AgentRuntime {
         let (tx, _) = tokio::sync::broadcast::channel::<AgentEvent>(100);
 
         // Create and configure agent loop using this runtime's dependencies
+        let tools_guard = self.tools.lock().unwrap();
+        let mut registry = ToolRegistry::new();
+        for (name, tool) in tools_guard.iter() {
+            registry.register_arc(name.clone(), tool);
+        }
+        let tools = Arc::new(registry);
+        drop(tools_guard);
+
         let mut agent_loop = AgentLoop::new(
             self.provider.clone(),
-            self.tools.clone(),
+            tools,
             self.memory.clone(),
         )
         .with_model(config.model.clone());

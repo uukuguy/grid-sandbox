@@ -65,6 +65,11 @@ impl McpManager {
             .unwrap_or(ServerRuntimeState::Stopped)
     }
 
+    /// Get all clients (for creating tool bridges).
+    pub fn clients(&self) -> &HashMap<String, Arc<RwLock<Box<dyn McpClient>>>> {
+        &self.clients
+    }
+
     /// Get all runtime states.
     pub fn all_runtime_states(&self) -> HashMap<String, ServerRuntimeState> {
         self.runtime_states.clone()
