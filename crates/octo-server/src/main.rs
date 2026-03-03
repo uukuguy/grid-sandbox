@@ -132,7 +132,7 @@ async fn main() -> Result<()> {
     let conn = db.conn().clone();
 
     let provider: Arc<dyn octo_engine::Provider> =
-        Arc::from(create_provider(&provider_name, api_key, base_url.clone()));
+        Arc::from(create_provider(&provider_name, api_key.clone(), base_url.clone()));
 
     // Initialize provider chain if configured
     let provider_chain = if let Some(ref pc_config) = cfg.provider_chain {
@@ -254,7 +254,9 @@ async fn main() -> Result<()> {
     let agent_supervisor = {
         let mut s = AgentRuntime::new(
             agent_catalog.clone(),
-            provider.clone(),
+            &provider_name,
+            api_key,
+            base_url,
             tools.clone(),
             memory.clone(),
             default_model,

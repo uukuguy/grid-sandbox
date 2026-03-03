@@ -13,7 +13,7 @@ use crate::agent::{
 use crate::event::EventBus;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
-use crate::providers::{Provider, ProviderChain};
+use crate::providers::{create_provider, Provider, ProviderChain};
 use crate::session::SessionStore;
 use crate::skills::{SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
@@ -46,11 +46,20 @@ pub struct AgentRuntime {
 impl AgentRuntime {
     pub fn new(
         catalog: Arc<AgentCatalog>,
-        provider: Arc<dyn Provider>,
+        provider_name: &str,
+        provider_api_key: String,
+        provider_base_url: Option<String>,
         tools: Arc<ToolRegistry>,
         memory: Arc<dyn WorkingMemory>,
         default_model: String,
     ) -> Self {
+        // Create provider internally based on config
+        let provider: Arc<dyn Provider> = Arc::from(create_provider(
+            provider_name,
+            provider_api_key,
+            provider_base_url,
+        ));
+
         Self {
             handles: DashMap::new(),
             agent_handles: DashMap::new(),
