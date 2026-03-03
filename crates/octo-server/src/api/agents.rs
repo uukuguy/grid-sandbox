@@ -17,7 +17,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use octo_engine::{agent::CancellationToken, AgentEntry, AgentError, AgentId, AgentManifest};
+use octo_engine::{AgentEntry, AgentError, AgentId, AgentManifest};
 
 use crate::state::AppState;
 
@@ -66,10 +66,13 @@ async fn start_agent(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
+    use octo_types::{SandboxId, SessionId, UserId};
     let agent_id = AgentId(id);
+    let session_id = SessionId::new();
+    let user_id = UserId::from_string("api");
+    let sandbox_id = SandboxId::from_string("default");
     s.agent_supervisor
-        .catalog()
-        .mark_running(&agent_id, CancellationToken::new())
+        .start(&agent_id, session_id, user_id, sandbox_id, vec![])
         .map_err(agent_err_to_status)?;
     s.agent_supervisor
         .catalog()
@@ -82,10 +85,12 @@ async fn stop_agent(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
+    use octo_types::SessionId;
     let agent_id = AgentId(id);
+    let session_id = SessionId::from_string(agent_id.0.clone());
     s.agent_supervisor
-        .catalog()
-        .mark_stopped(&agent_id)
+        .stop(&agent_id, &session_id)
+        .await
         .map_err(agent_err_to_status)?;
     s.agent_supervisor
         .catalog()
@@ -98,10 +103,12 @@ async fn pause_agent(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<AgentEntry>, StatusCode> {
+    use octo_types::SessionId;
     let agent_id = AgentId(id);
+    let session_id = SessionId::from_string(agent_id.0.clone());
     s.agent_supervisor
-        .catalog()
-        .mark_paused(&agent_id)
+        .pause(&agent_id, &session_id)
+        .await
         .map_err(agent_err_to_status)?;
     s.agent_supervisor
         .catalog()
@@ -116,8 +123,7 @@ async fn resume_agent(
 ) -> Result<Json<AgentEntry>, StatusCode> {
     let agent_id = AgentId(id);
     s.agent_supervisor
-        .catalog()
-        .mark_resumed(&agent_id, CancellationToken::new())
+        .resume(&agent_id)
         .map_err(agent_err_to_status)?;
     s.agent_supervisor
         .catalog()
