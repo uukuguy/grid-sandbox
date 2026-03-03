@@ -85,6 +85,9 @@ pub struct AgentRuntime {
     event_bus: Option<Arc<EventBus>>,
     recorder: Arc<ToolExecutionRecorder>,
     provider_chain: Option<Arc<ProviderChain>>,
+    // Runtime fields (Task 2)
+    mcp_manager: Option<Arc<Mutex<crate::mcp::manager::McpManager>>>,
+    working_dir: PathBuf,
 }
 
 impl AgentRuntime {
