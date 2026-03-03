@@ -126,7 +126,6 @@ async fn resume_agent(
     let agent_id = AgentId(id);
     s.agent_supervisor
         .resume(&agent_id)
-        .await
         .map_err(agent_err_to_status)?;
     s.agent_supervisor
         .catalog()

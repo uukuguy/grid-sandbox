@@ -185,20 +185,21 @@ async fn main() -> Result<()> {
     let db = Database::open(&db_path).await?;
     let conn = db.conn().clone();
 
-    // Create scheduler (without runtime dependency)
+    // Create scheduler with required dependencies from agent_runtime
     let scheduler = if cfg.scheduler.enabled {
         let storage = SqliteSchedulerStorage::new(conn.clone());
         let s = Scheduler::new(
             cfg.scheduler.clone(),
             Arc::new(storage),
+            agent_runtime.provider().clone(),
+            agent_runtime.tools().clone(),
+            agent_runtime.memory().clone(),
+            agent_runtime.session_store().clone(),
         );
         Some(Arc::new(s))
     } else {
         None
     };
-
-    // Clone agent_runtime for scheduler before moving into state
-    let agent_runtime_for_scheduler = agent_runtime.clone();
 
     let state = Arc::new(AppState::new(
         std::path::PathBuf::from(&db_path),
@@ -208,12 +209,11 @@ async fn main() -> Result<()> {
         agent_handle,
     ));
 
-    // Start scheduler loop with AgentRuntime
+    // Start scheduler loop
     if let Some(ref sched) = scheduler {
         let sched = sched.clone();
-        let runtime = agent_runtime_for_scheduler;
         tokio::spawn(async move {
-            sched.start(&runtime).await;
+            sched.start().await;
         });
     }
 

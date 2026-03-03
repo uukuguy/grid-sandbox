@@ -97,10 +97,7 @@ pub async fn get_memory(
     Path(id): Path<String>,
     Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let mem_store = match state.agent_supervisor.memory_store() {
-        Some(s) => s,
-        None => return Json(serde_json::json!({"error": "not found"})),
-    };
+    let mem_store = state.agent_supervisor.memory_store();
     let user_id = get_user_id_from_context(Some(&ctx));
     let mem_id = MemoryId::from_string(&id);
     match mem_store.get(&mem_id).await {
@@ -121,10 +118,7 @@ pub async fn delete_memory(
     Path(id): Path<String>,
     Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let mem_store = match state.agent_supervisor.memory_store() {
-        Some(s) => s,
-        None => return Json(serde_json::json!({"error": "not found or access denied"})),
-    };
+    let mem_store = state.agent_supervisor.memory_store();
     let user_id = get_user_id_from_context(Some(&ctx));
     let mem_id = MemoryId::from_string(&id);
 
@@ -152,10 +146,7 @@ pub async fn delete_memories_by_filter(
     Query(params): Query<DeleteFilterParams>,
     Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let mem_store = match state.agent_supervisor.memory_store() {
-        Some(s) => s,
-        None => return Json(serde_json::json!({"deleted": 0})),
-    };
+    let mem_store = state.agent_supervisor.memory_store();
     let user_id = get_user_id_from_context(Some(&ctx));
     let categories = params
         .category
@@ -182,10 +173,7 @@ pub async fn create_memory(
     Extension(ctx): Extension<UserContext>,
     Json(req): Json<CreateMemoryRequest>,
 ) -> Json<serde_json::Value> {
-    let mem_store = match state.agent_supervisor.memory_store() {
-        Some(s) => s,
-        None => return Json(serde_json::json!({"error": "memory store not available"})),
-    };
+    let mem_store = state.agent_supervisor.memory_store();
     let user_id = get_user_id_from_context(Some(&ctx));
 
     // Parse category or default to "profile"

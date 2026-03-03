@@ -184,7 +184,7 @@ impl Config {
             "openai" => {
                 if let Ok(api_key) = std::env::var("OPENAI_API_KEY") {
                     if !api_key.is_empty() {
-                        config.provider.api_key = api_key;
+                        config.provider.api_key = Some(api_key);
                     }
                 }
                 if let Ok(url) = std::env::var("OPENAI_BASE_URL") {
@@ -198,7 +198,7 @@ impl Config {
                 // Default to anthropic
                 if let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") {
                     if !api_key.is_empty() {
-                        config.provider.api_key = api_key;
+                        config.provider.api_key = Some(api_key);
                     }
                 }
                 if let Ok(url) = std::env::var("ANTHROPIC_BASE_URL") {

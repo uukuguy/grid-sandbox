@@ -14,10 +14,7 @@ pub async fn list_sessions(
     Query(params): Query<PaginationParams>,
     Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let sessions = match state.agent_supervisor.session_store() {
-        Some(s) => s,
-        None => return Json(serde_json::json!([])),
-    };
+    let sessions = state.agent_supervisor.session_store();
     let user_id_str = get_user_id_from_context(Some(&ctx));
     let user_id = UserId::from_string(&user_id_str);
     let limit = params.limit.min(100);
@@ -32,14 +29,7 @@ pub async fn get_session(
     Path(id): Path<String>,
     Extension(ctx): Extension<UserContext>,
 ) -> Json<serde_json::Value> {
-    let sessions = match state.agent_supervisor.session_store() {
-        Some(s) => s,
-        None => {
-            return Json(serde_json::json!({
-                "error": "Session not found or access denied"
-            }))
-        }
-    };
+    let sessions = state.agent_supervisor.session_store();
     let user_id_str = get_user_id_from_context(Some(&ctx));
     let user_id = UserId::from_string(&user_id_str);
     let session_id = SessionId::from_string(&id);

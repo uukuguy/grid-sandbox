@@ -9,7 +9,7 @@ use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::{broadcast, Semaphore};
 use uuid::Uuid;
 
@@ -203,7 +203,7 @@ pub struct Scheduler {
     semaphore: Arc<Semaphore>,
     // Agent execution dependencies
     provider: Arc<dyn Provider>,
-    tools: Arc<ToolRegistry>,
+    tools: Arc<StdMutex<ToolRegistry>>,
     memory: Arc<dyn WorkingMemory>,
     session_store: Arc<dyn SessionStore>,
 }
@@ -213,7 +213,7 @@ impl Scheduler {
         config: SchedulerConfig,
         storage: Arc<dyn SchedulerStorage>,
         provider: Arc<dyn Provider>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<StdMutex<ToolRegistry>>,
         memory: Arc<dyn WorkingMemory>,
         session_store: Arc<dyn SessionStore>,
     ) -> Self {
@@ -356,10 +356,20 @@ impl Scheduler {
         // Create event channel (discard events)
         let (_tx, _) = broadcast::channel::<AgentEvent>(100);
 
+        // Build a snapshot of the tool registry for this task execution
+        let tools_snapshot = {
+            let guard = self.tools.lock().unwrap();
+            let mut snapshot = ToolRegistry::new();
+            for (name, tool) in guard.iter() {
+                snapshot.register_arc(name.clone(), tool);
+            }
+            Arc::new(snapshot)
+        };
+
         // Create and configure agent loop
         let mut agent_loop = AgentLoop::new(
             self.provider.clone(),
-            self.tools.clone(),
+            tools_snapshot,
             self.memory.clone(),
         )
         .with_model(config.model.clone());

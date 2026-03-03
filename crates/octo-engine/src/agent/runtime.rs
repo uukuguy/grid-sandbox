@@ -426,10 +426,9 @@ impl AgentRuntime {
         tool_name: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        use futures_util::TryFutureExt;
         match &self.mcp_manager {
             Some(mcp) => {
-                let mut guard = mcp.lock().await;
+                let guard = mcp.lock().await;
                 guard.call_tool(server_id, tool_name, arguments)
                     .await
                     .map_err(|e| e.to_string())
