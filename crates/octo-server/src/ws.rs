@@ -222,12 +222,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user_ctx: UserCo
                     session.user_id.clone(),
                     session.sandbox_id.clone(),
                     initial_history,
-                    state.agent_runner.provider(),
-                    state.agent_runner.build_tool_registry(&[]),
-                    state.agent_runner.memory(),
-                    Some(state.memory_store.clone()),
-                    state.model.clone(),
-                    Some(state.sessions.clone()),
+                    None,  // no bound agent_id — use default config
                 );
 
                 // Subscribe before sending to avoid missing events
