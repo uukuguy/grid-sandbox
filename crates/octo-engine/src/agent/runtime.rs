@@ -14,6 +14,7 @@ use crate::agent::{
 };
 use crate::db::Database;
 use crate::event::EventBus;
+use crate::mcp::manager::McpManager;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::{SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
@@ -180,7 +181,25 @@ impl AgentRuntime {
             None
         };
 
-        // 10. Get default model
+        // 10. EventBus initialization (default enabled)
+        let event_bus = if config.enable_event_bus {
+            Some(Arc::new(EventBus::new(
+                1000,
+                1000,
+                Arc::new(crate::metrics::MetricsRegistry::new()),
+            )))
+        } else {
+            None
+        };
+
+        // 11. McpManager initialization
+        let mcp_manager = Some(Arc::new(Mutex::new(McpManager::new())));
+
+        // 12. Working directory
+        let working_dir = config.working_dir
+            .unwrap_or_else(|| PathBuf::from("/tmp/octo-sandbox"));
+
+        // 13. Get default model
         let default_model = config
             .provider
             .model
@@ -197,9 +216,11 @@ impl AgentRuntime {
             memory_store,
             session_store,
             default_model,
-            event_bus: None,
+            event_bus,
             recorder,
             provider_chain,
+            mcp_manager,
+            working_dir,
         })
     }
 
