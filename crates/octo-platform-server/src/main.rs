@@ -24,7 +24,9 @@ pub mod auth;
 pub mod db;
 pub mod user_runtime;
 pub mod api;
+pub mod ws;
 pub use user_runtime::UserRuntime;
+use crate::ws::ws_handler;
 
 /// Platform configuration
 #[derive(Debug, Clone)]
@@ -349,6 +351,8 @@ async fn main() -> Result<()> {
         .route("/api/sessions", post(api::sessions::create_session))
         .route("/api/sessions/{session_id}", get(api::sessions::get_session))
         .route("/api/sessions/{session_id}", delete(api::sessions::delete_session))
+        // WebSocket
+        .route("/ws/{session_id}", get(ws_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
