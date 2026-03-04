@@ -10,16 +10,20 @@ use uuid::Uuid;
 
 use super::Permission;
 
-/// 用户角色
+/// 用户角色（扩展为 5 级角色）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "lowercase")]
 pub enum UserRole {
-    /// 只读用户
+    /// 查看者 - 仅能读取资源
+    Viewer,
+    /// 只读用户（兼容旧版）
     Readonly,
-    /// 普通用户
+    /// 普通用户 - 可以创建会话和运行 Agent
     User,
-    /// 管理员
+    /// 管理员 - 可以管理 MCP 和 Skills
     Admin,
+    /// 所有者 - 可以管理用户和配置
+    Owner,
 }
 
 impl Default for UserRole {
@@ -31,18 +35,22 @@ impl Default for UserRole {
 impl UserRole {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
+            "viewer" => Some(UserRole::Viewer),
             "readonly" => Some(UserRole::Readonly),
             "user" => Some(UserRole::User),
             "admin" => Some(UserRole::Admin),
+            "owner" => Some(UserRole::Owner),
             _ => None,
         }
     }
 
     pub fn to_permission(&self) -> Vec<Permission> {
         match self {
+            UserRole::Viewer => vec![Permission::Read],
             UserRole::Readonly => vec![Permission::Read],
             UserRole::User => vec![Permission::Read, Permission::Write],
             UserRole::Admin => vec![Permission::Read, Permission::Write, Permission::Admin],
+            UserRole::Owner => vec![Permission::Read, Permission::Write, Permission::Admin],
         }
     }
 }
