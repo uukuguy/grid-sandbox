@@ -14,6 +14,7 @@ pub mod scheduler;
 pub mod secret;
 pub mod security;
 pub mod session;
+pub mod skill_runtime;
 pub mod skills;
 pub mod tools;
 
@@ -48,5 +49,6 @@ pub use session::{
     InMemorySessionStore, SessionData, SessionStore, SessionSummary, SqliteSessionStore,
 };
 pub use skills::{SkillLoader, SkillRegistry, SkillTool};
+pub use skill_runtime::{RuntimeType, SkillContext, SkillRuntime, ToolInfo};
 pub use tools::recorder::ToolExecutionRecorder;
 pub use tools::{default_tools, register_memory_tools, Tool, ToolRegistry};
