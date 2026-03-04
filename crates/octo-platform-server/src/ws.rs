@@ -122,8 +122,16 @@ async fn handle_socket(session_id: String, socket: WebSocket) {
 
                 match client_msg {
                     ClientMessage::Chat { content } => {
-                        // TODO: Integrate with AgentRuntime (P1-4)
-                        // For now, just echo the message back
+                        // =============================================================================
+                        // STUB: AgentRuntime Integration (P1-4)
+                        // =============================================================================
+                        // For now, just echo the message back. Full integration will include:
+                        // - Create/update AgentRuntime per session
+                        // - Stream agent responses via AgentRuntime::run()
+                        // - Handle tool execution results
+                        // - Support conversation context and memory layers
+                        //
+                        // See P1-4 plan for implementation details.
                         let response = ServerMessage::Response {
                             content: format!("[Stub] Received: {}", content),
                             done: true,
