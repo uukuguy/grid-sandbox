@@ -5,6 +5,32 @@
 
 ---
 
+## v1.0 Enhancement Plan - 5分标准补充 [2026-03-04]
+
+- 18:30 | 补充方案设计完成
+  - Phase 2: Architecture - Skills + Runtime
+    - Agent Skills 标准实现 (Progressive Disclosure)
+    - SkillRuntime (Python/WASM/Node.js)
+  - Phase 3: Auth - API Key + RBAC
+  - Phase 4: Observability - 结构化日志 + Metering
+  - 文档: docs/plans/2026-03-04-v1.0-enhancement-plan.md
+  - 预计工作量: ~1230 LOC
+
+---
+
+## v1.0 Release Sprint - Phase C 前端控制台 [COMPLETED 2026-03-04]
+
+- 16:30 | Phase C (6 tasks) 完成: C1-C6 完成/已存在
+  - C1: TabBar 扩展（Tasks, Schedule 标签）
+  - C2: Tasks 页面（任务提交、列表、详情、删除）
+  - C3: Schedule 页面（Cron 任务 CRUD、手动触发、执行历史）
+  - C4: Tools 页面（已存在 MCP+Tools tab，Built-in Tools/Skills 需 API）
+  - C5: Memory 页面（已存在 Working/Session/Persistent 内存）
+  - C6: Debug 页面（已存在 Token Budget + Tool Stats）
+  - Deferred 剩余: D1 (observability), D3 (auth)
+
+---
+
 ## v1.0 Release Sprint - Phase A 稳定地基 [COMPLETED 2026-03-04]
 
 - 11:30 | Phase A (6 tasks) 完成: A1-A6 全部完成
