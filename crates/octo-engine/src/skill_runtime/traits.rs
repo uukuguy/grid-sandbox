@@ -49,8 +49,6 @@ pub trait SkillRuntime: Send + Sync {
     async fn check_environment(&self) -> Result<()>;
 }
 
-use serde::{Deserialize, Serialize};
-
 #[cfg(test)]
 mod tests {
     use super::*;
