@@ -1,3 +1,4 @@
+import { useAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSetAtom } from 'jotai';
@@ -10,7 +11,7 @@ export function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const setSessionsAtom = useSetAtom(sessionsAtom);
-  const setCurrentSessionId = useSetAtom(currentSessionIdAtom);
+  const [currentSessionId, setCurrentSessionId] = useAtom(currentSessionIdAtom);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,6 +43,10 @@ export function SessionsPage() {
       await sessionsApi.delete(sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       setSessionsAtom((prev) => prev.filter((s) => s.id !== sessionId));
+      // Clear current session if deleting the active one
+      if (currentSessionId === sessionId) {
+        setCurrentSessionId(null);
+      }
     } catch (err) {
       console.error(err);
     }
