@@ -18,7 +18,8 @@ target/
 # Node
 node_modules/
 web/node_modules/
-web/pnpm-lock.yaml
+# pnpm-lock.yaml excluded intentionally - see Dockerfile for build strategy
+# web/pnpm-lock.yaml
 
 # Test coverage
 *.profraw
