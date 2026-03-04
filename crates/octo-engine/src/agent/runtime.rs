@@ -20,6 +20,7 @@ use crate::memory::store_traits::MemoryStore;
 use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
 use crate::providers::ProviderConfig;
+use crate::metering::Metering;
 use crate::scheduler::ScheduledTask;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{SkillLoader, SkillRegistry, SkillTool};
@@ -83,13 +84,15 @@ pub struct AgentRuntime {
     memory_store: Arc<dyn MemoryStore>,
     session_store: Arc<dyn SessionStore>,
     default_model: String,
-    // TODO: forward to AgentExecutor once observability wiring is added
+    // Observability: event bus already forwarded to AgentExecutor at line 482
     event_bus: Option<Arc<EventBus>>,
     recorder: Arc<ToolExecutionRecorder>,
     provider_chain: Option<Arc<ProviderChain>>,
     // Runtime fields (Task 2)
     mcp_manager: Arc<Mutex<crate::mcp::manager::McpManager>>,
     working_dir: PathBuf,
+    // Observability: metering for token usage tracking
+    metering: Arc<Metering>,
 }
 
 impl AgentRuntime {
@@ -208,6 +211,9 @@ impl AgentRuntime {
             .model
             .unwrap_or_else(|| "claude-opus-4-5".to_string());
 
+        // 14. Metering initialization (Task 10 - observability)
+        let metering = Arc::new(Metering::new());
+
         Ok(Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
@@ -224,6 +230,7 @@ impl AgentRuntime {
             provider_chain,
             mcp_manager,
             working_dir,
+            metering,
         })
     }
 
@@ -293,6 +300,11 @@ impl AgentRuntime {
 
     pub fn mcp_manager(&self) -> &Arc<Mutex<crate::mcp::manager::McpManager>> {
         &self.mcp_manager
+    }
+
+    /// Get metering snapshot for observability
+    pub fn metering(&self) -> crate::metering::MeteringSnapshot {
+        self.metering.snapshot()
     }
 
     // ── MCP Server 管理 API ─────────────────────────────────────────────────

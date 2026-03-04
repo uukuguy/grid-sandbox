@@ -94,7 +94,8 @@ pub async fn auth_middleware_with_role(
             }
         }
         AuthMode::Full => {
-            // 完整认证（octo-platform 实现）
+            // 完整认证仅在 octo-platform (多租户) 实现
+            // octo-workbench (单用户) 使用 ApiKey 或 None 模式
             Err(StatusCode::NOT_IMPLEMENTED)
         }
     }
