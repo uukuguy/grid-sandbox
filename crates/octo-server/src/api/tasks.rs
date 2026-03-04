@@ -1,12 +1,5 @@
 //! Background Tasks API
-//!
-//! POST   /api/tasks              submit a background task
-//! GET    /api/tasks              list all background tasks
-//! GET    /api/tasks/:id          get task status and result
-//! DELETE /api/tasks/:id         cancel a running task
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -16,15 +9,11 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use chrono::{DateTime, Utc};
-use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// Task status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
@@ -32,374 +21,326 @@ pub enum TaskStatus {
     Running,
     Success,
     Failed,
-    Cancelled,
 }
 
-/// Background task
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BackgroundTask {
-    pub id: String,
-    pub status: TaskStatus,
-    pub prompt: String,
-    pub model: Option<String>,
-    pub result: Option<String>,
-    pub error: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub finished_at: Option<DateTime<Utc>>,
-}
-
-impl BackgroundTask {
-    pub fn new(prompt: String, model: Option<String>) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            status: TaskStatus::Pending,
-            prompt,
-            model,
-            result: None,
-            error: None,
-            created_at: Utc::now(),
-            finished_at: None,
-        }
-    }
-}
-
-/// In-memory task store
-pub struct TaskStore {
-    tasks: RwLock<HashMap<String, BackgroundTask>>,
-    /// Cancel tokens for running tasks
-    cancel_tokens: RwLock<HashMap<String, broadcast::Sender<()>>>,
-}
-
-impl TaskStore {
-    pub fn new() -> Self {
-        Self {
-            tasks: RwLock::new(HashMap::new()),
-            cancel_tokens: RwLock::new(HashMap::new()),
-        }
-    }
-
-    pub async fn create_task(&self, task: BackgroundTask) -> BackgroundTask {
-        let mut tasks = self.tasks.write().await;
-        tasks.insert(task.id.clone(), task.clone());
-        task
-    }
-
-    pub async fn get_task(&self, id: &str) -> Option<BackgroundTask> {
-        let tasks = self.tasks.read().await;
-        tasks.get(id).cloned()
-    }
-
-    pub async fn list_tasks(&self) -> Vec<BackgroundTask> {
-        let tasks = self.tasks.read().await;
-        let mut list: Vec<BackgroundTask> = tasks.values().cloned().collect();
-        // Sort by created_at descending (most recent first)
-        list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        list
-    }
-
-    pub async fn update_task(&self, task: BackgroundTask) -> Option<BackgroundTask> {
-        let mut tasks = self.tasks.write().await;
-        tasks.insert(task.id.clone(), task.clone());
-        Some(task)
-    }
-
-    pub async fn register_cancel_token(&self, task_id: &str, sender: broadcast::Sender<()>) {
-        let mut tokens = self.cancel_tokens.write().await;
-        tokens.insert(task_id.to_string(), sender);
-    }
-
-    pub async fn cancel_task(&self, id: &str) -> bool {
-        // Mark task as cancelled
-        let mut tasks = self.tasks.write().await;
-        if let Some(task) = tasks.get_mut(id) {
-            if task.status == TaskStatus::Running {
-                task.status = TaskStatus::Cancelled;
-                task.finished_at = Some(Utc::now());
-                // Send cancel signal
-                let tokens = self.cancel_tokens.read().await;
-                if let Some(sender) = tokens.get(id) {
-                    let _ = sender.send(());
-                }
-                return true;
-            }
-        }
-        false
-    }
-}
-
-impl Default for TaskStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Request to create a background task
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateTaskRequest {
-    pub prompt: String,
-    pub model: Option<String>,
-    /// Optional max rounds (default: 50)
-    #[serde(default = "default_max_rounds")]
-    pub max_rounds: u32,
-    /// Optional timeout in seconds (default: 300)
-    #[serde(default = "default_timeout_secs")]
-    pub timeout_secs: u64,
-}
-
-fn default_max_rounds() -> u32 {
-    50
-}
-
-fn default_timeout_secs() -> u64 {
-    300
-}
-
-/// Response for a background task
-#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskResponse {
     pub id: String,
     pub status: TaskStatus,
     pub result: Option<String>,
     pub error: Option<String>,
-    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutionResponse {
+    pub id: String,
+    pub task_id: String,
+    pub started_at: String,
     pub finished_at: Option<String>,
+    pub status: String,
+    pub result: Option<String>,
+    pub error: Option<String>,
 }
 
-impl From<BackgroundTask> for TaskResponse {
-    fn from(t: BackgroundTask) -> Self {
-        Self {
-            id: t.id,
-            status: t.status,
-            result: t.result,
-            error: t.error,
-            created_at: t.created_at.to_rfc3339(),
-            finished_at: t.finished_at.map(|d| d.to_rfc3339()),
-        }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDetailResponse {
+    pub task: TaskResponse,
+    pub executions: Vec<TaskExecutionResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTaskRequest {
+    pub prompt: String,
+    pub model: Option<String>,
+    #[serde(default)]
+    pub max_rounds: u32,
+    #[serde(default)]
+    pub timeout_secs: u64,
+}
+
+async fn submit_task(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateTaskRequest>,
+) -> Result<Json<TaskResponse>, StatusCode> {
+    // Basic validation
+    if req.prompt.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
     }
-}
 
-/// Execute a background task using the agent runtime
-/// This runs the agent loop with the given prompt and returns the result
-async fn execute_background_task(
-    agent_runtime: Arc<octo_engine::AgentRuntime>,
-    task_id: String,
-    prompt: String,
-    model: String,
-    _max_rounds: u32,
-    _timeout_secs: u64,
-    task_store: Arc<TaskStore>,
-    mut cancel_rx: broadcast::Receiver<()>,
-) {
-    // Create session for the task
-    let user_id = UserId::from_string("api-task");
-    let session = agent_runtime.session_store().create_session_with_user(&user_id).await;
-    let session_id = session.session_id.clone();
-    let sandbox_id = session.sandbox_id.clone();
+    // Get scheduler
+    let scheduler = state.scheduler.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    // Prepare initial message
-    let user_message = ChatMessage::user(prompt.clone());
-    let mut messages = vec![user_message];
+    // Create task config
+    let task_id = Uuid::new_v4().to_string();
+    let model = req.model.unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
 
-    // Create tool context
-    let tool_ctx = ToolContext {
-        sandbox_id: sandbox_id.clone(),
-        working_dir: PathBuf::from("/tmp"),
+    let config = octo_engine::scheduler::AgentTaskConfig {
+        system_prompt: String::new(),
+        input: req.prompt,
+        max_rounds: req.max_rounds.max(1),
+        timeout_secs: req.timeout_secs.max(60),
+        model,
     };
 
-    // Create event channel
-    let (tx, _) = broadcast::channel::<octo_engine::agent::AgentEvent>(100);
-
-    // Build tool registry snapshot
-    let tools_snapshot = {
-        let tools_guard = agent_runtime.tools().lock().unwrap();
-        let mut registry = octo_engine::tools::ToolRegistry::new();
-        for (name, tool) in tools_guard.iter() {
-            registry.register_arc(name.clone(), tool);
+    // Create scheduled task via scheduler
+    let scheduled = match scheduler.create_task(
+        Some("api-task".to_string()),
+        format!("ad-hoc-{}", &task_id[..8]),
+        "0 0 1 1 2099".to_string(),
+        config,
+        true,
+    ).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("create task error: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
-        Arc::new(registry)
     };
 
-    // Create and configure agent loop
-    let mut agent_loop = octo_engine::agent::AgentLoop::new(
-        agent_runtime.provider().clone(),
-        tools_snapshot,
-        agent_runtime.memory().clone(),
-    )
-    .with_model(model);
+    // Clone the components needed for execution to avoid Send issues with &self
+    let provider = state.agent_supervisor.provider().clone();
+    let tools = state.agent_supervisor.tools().clone();
+    let memory = state.agent_supervisor.memory().clone();
+    let session_store = state.agent_supervisor.session_store().clone();
 
-    // Run with timeout and cancellation
-    let result = tokio::select! {
-        result = agent_loop.run(
-            &session_id,
-            &user_id,
-            &sandbox_id,
-            &mut messages,
-            tx,
-            tool_ctx,
-            None,
-        ) => {
-            result.map(|_| {
-                messages
+    // Execute in a spawned task with the cloned components
+    let task_id_clone = task_id.clone();
+    let input = scheduled.agent_config.input.clone();
+    let model = scheduled.agent_config.model.clone();
+    let timeout = scheduled.agent_config.timeout_secs;
+
+    let exec_result = tokio::spawn(async move {
+        // Build tool registry snapshot - drop guard BEFORE any await
+        let tools_snapshot = {
+            let tools_guard = tools.lock().unwrap();
+            let mut registry = octo_engine::tools::ToolRegistry::new();
+            for (name, tool) in tools_guard.iter() {
+                registry.register_arc(name.clone(), tool);
+            }
+            Arc::new(registry)
+        }; // tools_guard is dropped here
+
+        // Create session
+        let user_id = octo_types::UserId::from_string("api-task");
+        let session = session_store.create_session_with_user(&user_id).await;
+        let session_id = session.session_id.clone();
+        let sandbox_id = session.sandbox_id.clone();
+
+        // Create messages
+        let mut messages = vec![octo_types::ChatMessage::user(input)];
+
+        // Create tool context
+        let tool_ctx = octo_types::ToolContext {
+            sandbox_id: sandbox_id.clone(),
+            working_dir: std::path::PathBuf::from("/tmp"),
+        };
+
+        // Create event channel
+        let (tx, _) = tokio::sync::broadcast::channel(100);
+
+        // Create and run agent
+        let mut agent_loop = octo_engine::agent::AgentLoop::new(
+            provider,
+            tools_snapshot,
+            memory,
+        )
+        .with_model(model);
+
+        // Run with timeout
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout),
+            agent_loop.run(
+                &session_id,
+                &user_id,
+                &sandbox_id,
+                &mut messages,
+                tx,
+                tool_ctx,
+                None,
+            ),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(_)) => {
+                // Extract response
+                let response = messages
                     .iter()
                     .rev()
-                    .find(|m| m.role == MessageRole::Assistant)
+                    .find(|m| m.role == octo_types::MessageRole::Assistant)
                     .and_then(|m| {
                         m.content.iter().find_map(|c| {
-                            if let ContentBlock::Text { text } = c {
+                            if let octo_types::ContentBlock::Text { text } = c {
                                 Some(text.clone())
                             } else {
                                 None
                             }
                         })
                     })
-                    .unwrap_or_else(|| "Task completed".to_string())
-            })
-        }
-        _ = cancel_rx.recv() => {
-            // Task was cancelled
-            let mut tasks = task_store.tasks.write().await;
-            if let Some(t) = tasks.get_mut(&task_id) {
-                t.status = TaskStatus::Cancelled;
-                t.finished_at = Some(Utc::now());
+                    .unwrap_or_else(|| "Task completed".to_string());
+
+                tracing::info!(task_id = %task_id_clone, "Background task completed");
+                Ok(response)
             }
-            return;
+            Ok(Err(e)) => {
+                tracing::error!(task_id = %task_id_clone, error = %e, "Agent error");
+                Err(e.to_string())
+            }
+            Err(_) => {
+                tracing::error!(task_id = %task_id_clone, "Timeout");
+                Err(format!("Timeout after {} seconds", timeout))
+            }
         }
+    }).await;
+
+    let response = match exec_result {
+        Ok(Ok(output)) => TaskResponse {
+            id: task_id,
+            status: TaskStatus::Success,
+            result: Some(output),
+            error: None,
+        },
+        Ok(Err(e)) => TaskResponse {
+            id: task_id,
+            status: TaskStatus::Failed,
+            result: None,
+            error: Some(e),
+        },
+        Err(e) => TaskResponse {
+            id: task_id,
+            status: TaskStatus::Failed,
+            result: None,
+            error: Some(e.to_string()),
+        },
     };
 
-    // Update task result
-    let mut tasks = task_store.tasks.write().await;
-    if let Some(t) = tasks.get_mut(&task_id) {
-        match result {
-            Ok(response) => {
-                t.status = TaskStatus::Success;
-                t.result = Some(response);
-            }
-            Err(e) => {
-                t.status = TaskStatus::Failed;
-                t.error = Some(e.to_string());
-            }
-        }
-        t.finished_at = Some(Utc::now());
+    Ok(Json(response))
+}
+
+/// Map ExecutionStatus to TaskStatus
+fn map_execution_status(status: &octo_engine::scheduler::ExecutionStatus) -> TaskStatus {
+    match status {
+        octo_engine::scheduler::ExecutionStatus::Running => TaskStatus::Running,
+        octo_engine::scheduler::ExecutionStatus::Success => TaskStatus::Success,
+        octo_engine::scheduler::ExecutionStatus::Failed
+        | octo_engine::scheduler::ExecutionStatus::Timeout
+        | octo_engine::scheduler::ExecutionStatus::Cancelled => TaskStatus::Failed,
     }
 }
 
-/// POST /api/tasks - Submit a new background task
-pub async fn create_task(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<CreateTaskRequest>,
-) -> Result<(StatusCode, Json<TaskResponse>), StatusCode> {
-    let task_store = state
-        .task_store
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+/// Convert ScheduledTask to TaskResponse
+fn scheduled_task_to_response(
+    task: &octo_engine::scheduler::ScheduledTask,
+    execution: Option<&octo_engine::scheduler::TaskExecution>,
+) -> TaskResponse {
+    let status = if let Some(exec) = execution {
+        map_execution_status(&exec.status)
+    } else {
+        // No executions yet - task is pending
+        TaskStatus::Pending
+    };
 
-    // Create initial task
-    let mut task = BackgroundTask::new(req.prompt.clone(), req.model.clone());
-    task.status = TaskStatus::Running;
-
-    let task_id = task.id.clone();
-    let task_store = Arc::clone(task_store);
-
-    // Create the task in store
-    let task = task_store.create_task(task).await;
-
-    // Create cancel token for this task
-    let (cancel_tx, cancel_rx) = broadcast::channel::<()>(1);
-    task_store
-        .register_cancel_token(&task_id, cancel_tx)
-        .await;
-
-    // Get the model to use
-    let model = req
-        .model
-        .clone()
-        .unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string());
-
-    // Clone all data needed for the spawned task
-    let prompt = req.prompt.clone();
-    let max_rounds = req.max_rounds;
-    let timeout_secs = req.timeout_secs;
-    let agent_runtime = Arc::clone(&state.agent_supervisor);
-
-    // Spawn background task execution
-    tokio::spawn(async move {
-        execute_background_task(
-            agent_runtime,
-            task_id,
-            prompt,
-            model,
-            max_rounds,
-            timeout_secs,
-            task_store,
-            cancel_rx,
-        )
-        .await;
-    });
-
-    tracing::info!(task_id = %task.id, "Background task submitted");
-
-    Ok((StatusCode::CREATED, Json(task.into())))
+    TaskResponse {
+        id: task.id.clone(),
+        status,
+        result: execution.and_then(|e| e.result.clone()),
+        error: execution.and_then(|e| e.error.clone()),
+    }
 }
 
-/// GET /api/tasks - List all background tasks
-pub async fn list_tasks(
+async fn list_tasks(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<TaskResponse>>, StatusCode> {
-    let task_store = state
-        .task_store
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let scheduler = state.scheduler.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    let tasks = task_store.list_tasks().await;
-    let responses: Vec<TaskResponse> = tasks.into_iter().map(|t| t.into()).collect();
+    let tasks = scheduler.list_tasks(None).await.map_err(|e| {
+        tracing::error!("list_tasks error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let mut responses = Vec::with_capacity(tasks.len());
+
+    for task in tasks {
+        // Get the latest execution for each task
+        let executions = scheduler.get_executions(&task.id, 1).await.unwrap_or_default();
+        let latest_execution = executions.first();
+        responses.push(scheduled_task_to_response(&task, latest_execution));
+    }
 
     Ok(Json(responses))
 }
 
-/// GET /api/tasks/:id - Get task status and result
-pub async fn get_task(
+async fn get_task(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<TaskResponse>, StatusCode> {
-    let task_store = state
-        .task_store
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+) -> Result<Json<TaskDetailResponse>, StatusCode> {
+    let scheduler = state.scheduler.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    let task = task_store
-        .get_task(&id)
-        .await
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let task = scheduler.get_task(&id).await.map_err(|e| {
+        tracing::error!("get_task error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    Ok(Json(task.into()))
+    let task = match task {
+        Some(t) => t,
+        None => return Err(StatusCode::NOT_FOUND),
+    };
+
+    let executions = scheduler.get_executions(&id, 10).await.unwrap_or_default();
+    let latest_execution = executions.first();
+
+    let task_response = scheduled_task_to_response(&task, latest_execution);
+
+    let execution_responses: Vec<TaskExecutionResponse> = executions
+        .iter()
+        .map(|e| TaskExecutionResponse {
+            id: e.id.clone(),
+            task_id: e.task_id.clone(),
+            started_at: e.started_at.to_rfc3339(),
+            finished_at: e.finished_at.map(|dt| dt.to_rfc3339()),
+            status: format!("{:?}", e.status),
+            result: e.result.clone(),
+            error: e.error.clone(),
+        })
+        .collect();
+
+    Ok(Json(TaskDetailResponse {
+        task: task_response,
+        executions: execution_responses,
+    }))
 }
 
-/// DELETE /api/tasks/:id - Cancel a running task
-pub async fn cancel_task(
+async fn cancel_task(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let task_store = state
-        .task_store
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
+    let scheduler = state.scheduler.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-    let cancelled = task_store.cancel_task(&id).await;
+    // Check if task exists first
+    let task = scheduler.get_task(&id).await.map_err(|e| {
+        tracing::error!("get_task error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-    if cancelled {
-        tracing::info!(task_id = %id, "Background task cancelled");
-        Ok(StatusCode::NO_CONTENT)
-    } else {
-        // Task not found or not in cancellable state
-        Err(StatusCode::NOT_FOUND)
+    if task.is_none() {
+        return Err(StatusCode::NOT_FOUND);
     }
+
+    // Delete the task
+    scheduler.delete_task(&id).await.map_err(|e| {
+        tracing::error!("delete_task error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/tasks", post(create_task).get(list_tasks))
+        .route("/tasks", post(submit_task).get(list_tasks))
         .route("/tasks/{id}", get(get_task).delete(cancel_task))
 }
