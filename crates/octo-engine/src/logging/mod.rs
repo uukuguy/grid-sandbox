@@ -16,7 +16,8 @@ pub fn init_logging() {
     tracing_subscriber::registry()
         .with(formatter)
         .with(EnvFilter::new("info"))
-        .init();
+        .try_init()
+        .ok();
 }
 
 /// Initialize structured logging with custom filter.
@@ -34,7 +35,8 @@ pub fn init_logging_with_filter(filter: &str) {
     tracing_subscriber::registry()
         .with(formatter)
         .with(EnvFilter::new(filter))
-        .init();
+        .try_init()
+        .ok();
 }
 
 /// Initialize logging with pretty formatting (non-JSON) for development.
@@ -49,8 +51,9 @@ pub fn init_pretty_logging() {
 
     tracing_subscriber::registry()
         .with(formatter)
-        .with(EnvFilter::new("debug"))
-        .init();
+        .with(EnvFilter::new("info"))
+        .try_init()
+        .ok();
 }
 
 /// Initialize logging with pretty formatting and custom filter.
@@ -64,7 +67,8 @@ pub fn init_pretty_logging_with_filter(filter: &str) {
     tracing_subscriber::registry()
         .with(formatter)
         .with(EnvFilter::new(filter))
-        .init();
+        .try_init()
+        .ok();
 }
 
 #[macro_export]
@@ -124,7 +128,7 @@ mod tests {
     fn test_init_pretty_logging_does_not_panic() {
         let _ = tracing_subscriber::registry()
             .with(fmt::layer())
-            .with(EnvFilter::new("debug"))
+            .with(EnvFilter::new("info"))
             .try_init();
     }
 
@@ -132,7 +136,7 @@ mod tests {
     fn test_init_pretty_logging_with_filter_does_not_panic() {
         let _ = tracing_subscriber::registry()
             .with(fmt::layer())
-            .with(EnvFilter::new("debug"))
+            .with(EnvFilter::new("info"))
             .try_init();
     }
 
