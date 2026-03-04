@@ -95,6 +95,12 @@ export function ChatPage() {
       return;
     }
 
+    // =============================================================================
+    // NOTE: Session history loading is not implemented yet.
+    // This requires a backend API endpoint like GET /api/sessions/:id/messages
+    // When implemented, fetch messages here and setMessages with the history.
+    // =============================================================================
+
     // Set up message handlers
     wsManager.onMessage(handleWsMessage);
     wsManager.onConnect(() => setIsConnected(true));
@@ -136,8 +142,10 @@ export function ChatPage() {
   };
 
   const handleStop = () => {
-    // For now, we just stop the streaming state
-    // In a full implementation, this would send a cancel request to the server
+    // Send cancel request to server via WebSocket
+    wsManager.sendCancel();
+
+    // Update local streaming state
     setIsStreaming(false);
     currentAssistantMessageId.current = null;
   };

@@ -102,6 +102,12 @@ class WebSocketManager {
     }
   }
 
+  sendCancel() {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'cancel' }));
+    }
+  }
+
   onMessage(handler: MessageHandler) {
     this.messageHandlers.push(handler);
   }
