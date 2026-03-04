@@ -17,7 +17,7 @@ interface TaskExecution {
   task_id: string;
   started_at: string;
   finished_at?: string;
-  status: string;
+  status: "pending" | "running" | "success" | "failed";
   result?: string;
   error?: string;
 }
@@ -25,6 +25,7 @@ interface TaskExecution {
 export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -33,26 +34,35 @@ export default function Tasks() {
     setLoading(true);
     try {
       const res = await fetch("/api/tasks");
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
+      const data = await res.json();
+      setTasks(data);
     } catch (error) {
-      console.error("Failed to fetch tasks:", error);
+      const msg = error instanceof Error ? error.message : "Failed to fetch tasks";
+      console.error("Failed to fetch tasks:", msg);
+      window.alert(`Error: ${msg}`);
     } finally {
       setLoading(false);
     }
   }, []);
 
   const fetchTaskDetail = useCallback(async (id: string) => {
+    setDetailLoading(true);
     try {
       const res = await fetch(`/api/tasks/${id}`);
-      if (res.ok) {
-        const data: TaskDetail = await res.json();
-        setSelectedTask(data);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
+      const data: TaskDetail = await res.json();
+      setSelectedTask(data);
     } catch (error) {
-      console.error("Failed to fetch task detail:", error);
+      const msg = error instanceof Error ? error.message : "Failed to fetch task detail";
+      console.error("Failed to fetch task detail:", msg);
+      window.alert(`Error: ${msg}`);
+    } finally {
+      setDetailLoading(false);
     }
   }, []);
 
@@ -65,28 +75,35 @@ export default function Tasks() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt, max_rounds: 10, timeout_secs: 300 }),
       });
-      if (res.ok) {
-        setPrompt("");
-        await fetchTasks();
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
+      setPrompt("");
+      await fetchTasks();
     } catch (error) {
-      console.error("Failed to submit task:", error);
+      const msg = error instanceof Error ? error.message : "Failed to submit task";
+      console.error("Failed to submit task:", msg);
+      window.alert(`Error: ${msg}`);
     } finally {
       setSubmitting(false);
     }
   };
 
   const deleteTask = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this task?")) return;
     try {
       const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        await fetchTasks();
-        if (selectedTask?.task.id === id) {
-          setSelectedTask(null);
-        }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      await fetchTasks();
+      if (selectedTask?.task.id === id) {
+        setSelectedTask(null);
       }
     } catch (error) {
-      console.error("Failed to delete task:", error);
+      const msg = error instanceof Error ? error.message : "Failed to delete task";
+      console.error("Failed to delete task:", msg);
+      window.alert(`Error: ${msg}`);
     }
   };
 
@@ -189,7 +206,11 @@ export default function Tasks() {
 
         {/* Task Detail */}
         <div className="w-1/2 overflow-auto">
-          {selectedTask ? (
+          {detailLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <span className="text-muted-foreground">Loading...</span>
+            </div>
+          ) : selectedTask ? (
             <TaskDetailView task={selectedTask} />
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -267,9 +288,9 @@ function TaskDetailView({ task: taskDetail }: { task: TaskDetail }) {
                   </span>
                   <span
                     className={`px-1.5 py-0.5 rounded ${
-                      exec.status === "Success"
+                      exec.status === "success"
                         ? "bg-green-100 text-green-800"
-                        : exec.status === "Running"
+                        : exec.status === "running"
                         ? "bg-blue-100 text-blue-800"
                         : "bg-red-100 text-red-800"
                     }`}
@@ -303,7 +324,7 @@ function TaskDetailView({ task: taskDetail }: { task: TaskDetail }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status: "pending" | "running" | "success" | "failed" }) {
   const styles = {
     pending: "bg-yellow-100 text-yellow-800",
     running: "bg-blue-100 text-blue-800",
