@@ -21,6 +21,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod auth;
 pub mod db;
+pub mod user_runtime;
 
 /// Platform configuration
 #[derive(Debug, Clone)]
