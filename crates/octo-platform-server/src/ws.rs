@@ -7,13 +7,19 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, State,
     },
+    http::StatusCode,
     response::IntoResponse,
+    Json,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
+use tracing::{debug, warn};
 
-use crate::{AppState, AuthExtractor};
+use crate::{AppState, AuthExtractor, ErrorResponse};
+
+/// Maximum message size limit (1MB)
+const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 
 /// WebSocket message from client
 #[derive(Debug, Deserialize)]
@@ -44,10 +50,32 @@ pub async fn ws_handler(
     Path(session_id): Path<String>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(state, auth.user_id, session_id, socket))
+    // Validate session ownership before allowing WebSocket connection
+    let user_runtime = match state.get_or_create_user_runtime(&auth.user_id) {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse { error: "Failed to access user runtime".to_string() }),
+            )
+                .into_response();
+        }
+    };
+
+    // Check if session exists and belongs to the user
+    let session = user_runtime.get_session(&auth.user_id, &session_id);
+    if session.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse { error: "Session not found or access denied".to_string() }),
+        )
+            .into_response();
+    }
+
+    ws.on_upgrade(move |socket| handle_socket(session_id, socket))
 }
 
-async fn handle_socket(_state: Arc<AppState>, _user_id: String, session_id: String, socket: WebSocket) {
+async fn handle_socket(session_id: String, socket: WebSocket) {
     let (mut sender, mut receiver) = socket.split();
 
     // Create a channel for sending messages back to client
@@ -56,7 +84,14 @@ async fn handle_socket(_state: Arc<AppState>, _user_id: String, session_id: Stri
     // Spawn task to forward messages to WebSocket
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            let text = serde_json::to_string(&msg).unwrap_or_default();
+            // Issue #1: Handle serialization errors properly instead of silently returning empty string
+            let text = match serde_json::to_string(&msg) {
+                Ok(json) => json,
+                Err(e) => {
+                    warn!("Failed to serialize WebSocket message: {}", e);
+                    continue;
+                }
+            };
             if sender.send(Message::Text(text.into())).await.is_err() {
                 break;
             }
@@ -67,20 +102,36 @@ async fn handle_socket(_state: Arc<AppState>, _user_id: String, session_id: Stri
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                if let Ok(client_msg) = serde_json::from_str::<ClientMessage>(&text) {
-                    match client_msg {
-                        ClientMessage::Chat { content } => {
-                            // TODO: Integrate with AgentRuntime (P1-4)
-                            // For now, just echo the message back
-                            let response = ServerMessage::Response {
-                                content: format!("[Stub] Received: {}", content),
-                                done: true,
-                            };
-                            let _ = tx.send(response).await;
-                        }
-                        ClientMessage::Ping => {
-                            let _ = tx.send(ServerMessage::Pong).await;
-                        }
+                // Issue #4: Add message size limit validation
+                if text.len() > MAX_MESSAGE_SIZE {
+                    let error_msg = ServerMessage::Error {
+                        message: format!("Message too large (max {} bytes)", MAX_MESSAGE_SIZE),
+                    };
+                    let _ = tx.send(error_msg).await;
+                    continue;
+                }
+
+                // Issue #3: Log malformed JSON instead of silently ignoring
+                let client_msg = match serde_json::from_str::<ClientMessage>(&text) {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        debug!("Failed to parse client WebSocket message: {}", e);
+                        continue;
+                    }
+                };
+
+                match client_msg {
+                    ClientMessage::Chat { content } => {
+                        // TODO: Integrate with AgentRuntime (P1-4)
+                        // For now, just echo the message back
+                        let response = ServerMessage::Response {
+                            content: format!("[Stub] Received: {}", content),
+                            done: true,
+                        };
+                        let _ = tx.send(response).await;
+                    }
+                    ClientMessage::Ping => {
+                        let _ = tx.send(ServerMessage::Pong).await;
                     }
                 }
             }
