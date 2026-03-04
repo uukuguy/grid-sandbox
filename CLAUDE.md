@@ -114,43 +114,88 @@ make lint            # Clippy lint
 
 ---
 
+## Mono-Repo Product Structure
+
+**IMPORTANT**: octo-sandbox is a mono-repo hosting two independent products sharing `octo-engine`.
+
+### Product Boundaries
+
+| Product | Branch | Crates | Frontend | Purpose |
+|---------|--------|--------|----------|---------|
+| **octo-workbench** | `octo-workbench` | `octo-engine`, `octo-server`, `octo-types` | `web/` | Single-user single-agent workbench |
+| **octo-platform** | `octo-platform` | `octo-engine`, `octo-platform-server`, `octo-types` | `web-platform/` | Multi-tenant multi-agent platform |
+
+### Rules
+- `octo-engine` and `octo-types` are **shared libraries** — changes must be backward compatible
+- `octo-server` is **workbench-only** — do NOT add platform logic here
+- `octo-platform-server` is **platform-only** — separate crate, separate branch
+- `web/` is **workbench frontend only** — do NOT add platform pages here
+- `web-platform/` is **platform frontend only** — separate app, separate branch
+
+### Shared Design Tokens (Frontend)
+
+Both frontends share visual design via:
+- `design/tailwind.base.ts` — shared Tailwind config (colors, fonts, spacing)
+- `design/tokens.css` — CSS variables for theming
+
+Each frontend's `tailwind.config.ts` extends `design/tailwind.base.ts`.
+Basic UI primitives (Button, Input, Badge, Modal) are **copied** from workbench to platform at platform launch — they evolve independently after that.
+
 ## Project Structure
 
 ```
 octo-sandbox/
 ├── crates/
-│   ├── octo-engine/          # Core engine (lib)
+│   ├── octo-types/           # Shared types (both products)
+│   ├── octo-engine/          # Shared core engine (both products)
 │   │   ├── agent/            # Agent loop & context
-│   │   ├── context/           # Context builder, budget, pruner
-│   │   ├── db/                # SQLite connection & migrations
-│   │   ├── event/             # Event bus for observability
-│   │   ├── memory/            # Working memory, persistent store
-│   │   ├── mcp/               # MCP client, server, storage
-│   │   ├── providers/         # LLM provider traits
-│   │   ├── session/           # Session management
-│   │   ├── skills/            # Skill loader & registry
-│   │   └── tools/             # Built-in tools
+│   │   ├── context/          # Context builder, budget, pruner
+│   │   ├── db/               # SQLite connection & migrations
+│   │   ├── event/            # Event bus for observability
+│   │   ├── memory/           # Working memory, persistent store
+│   │   ├── mcp/              # MCP client, server, storage
+│   │   ├── providers/        # LLM provider traits
+│   │   ├── session/          # Session management
+│   │   ├── skills/           # Skill loader & registry
+│   │   └── tools/            # Built-in tools
 │   │
-│   └── octo-server/          # API server (bin)
-│       ├── api/               # REST endpoints
-│       ├── config.rs           # Configuration module
-│       ├── router.rs           # Axum router
-│       ├── state.rs            # AppState
-│       └── ws.rs               # WebSocket handler
+│   ├── octo-server/          # Workbench API server (bin) [workbench-only]
+│   │   ├── api/              # REST endpoints
+│   │   ├── config.rs         # Configuration module
+│   │   ├── router.rs         # Axum router
+│   │   ├── state.rs          # AppState
+│   │   └── ws.rs             # WebSocket handler
+│   │
+│   └── octo-platform-server/ # Platform API server (bin) [platform-only, future]
+│       ├── api/              # REST endpoints (tenant/user/agent/orchestration)
+│       ├── tenant/           # TenantManager, TenantRuntime
+│       ├── auth/             # JWT + OAuth2/OIDC
+│       └── orchestrator/     # Multi-agent DAG execution
 │
-├── web/                       # Frontend (React)
+├── web/                      # Workbench frontend [workbench-only]
 │   ├── src/
-│   │   ├── atoms/             # Jotai atoms
-│   │   ├── components/         # React components
-│   │   ├── pages/              # Page components
-│   │   ├── stores/             # State stores
-│   │   └── ws/                 # WebSocket manager
-│   └── vite.config.ts          # Vite config
+│   │   ├── atoms/            # Jotai atoms
+│   │   ├── components/       # React components
+│   │   ├── pages/            # Page components
+│   │   ├── stores/           # State stores
+│   │   └── ws/               # WebSocket manager
+│   └── vite.config.ts        # Vite config
 │
-├── config.yaml                # Main config (committed)
-├── .env                       # Local overrides (NOT committed)
-├── .env.example               # Env template
-└── Makefile                   # Commands
+├── web-platform/             # Platform frontend [platform-only, future]
+│   ├── src/
+│   │   ├── admin/            # Tenant/user/quota management
+│   │   ├── workspace/        # Agent interaction (per-user)
+│   │   └── orchestrator/     # DAG visualization
+│   └── vite.config.ts
+│
+├── design/                   # Shared frontend design tokens
+│   ├── tailwind.base.ts      # Base Tailwind config
+│   └── tokens.css            # CSS variables (colors, fonts)
+│
+├── config.yaml               # Main config (committed)
+├── .env                      # Local overrides (NOT committed)
+├── .env.example              # Env template
+└── Makefile                  # Commands
 ```
 
 ---
