@@ -16,6 +16,8 @@ pub struct PythonRuntime {
     venv_base: PathBuf,
     /// Cache of created virtual environments (skill_name -> venv_path).
     venv_cache: tokio::sync::RwLock<std::collections::HashMap<String, PathBuf>>,
+    /// Mutex to prevent concurrent venv creation for the same skill (race condition fix).
+    venv_creation_lock: tokio::sync::Mutex<()>,
 }
 
 impl PythonRuntime {
@@ -24,6 +26,7 @@ impl PythonRuntime {
         Self {
             venv_base,
             venv_cache: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            venv_creation_lock: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -39,7 +42,20 @@ impl PythonRuntime {
 
     /// Get or create a virtual environment for the given skill.
     async fn get_venv(&self, skill_name: &str) -> Result<PathBuf> {
-        // Check cache first
+        // Check cache first (read-only, no lock needed)
+        {
+            let cache = self.venv_cache.read().await;
+            if let Some(venv_path) = cache.get(skill_name) {
+                if venv_path.exists() {
+                    return Ok(venv_path.clone());
+                }
+            }
+        }
+
+        // Acquire lock to prevent race condition in venv creation
+        let _lock = self.venv_creation_lock.lock().await;
+
+        // Double-check cache after acquiring lock (another task may have created it)
         {
             let cache = self.venv_cache.read().await;
             if let Some(venv_path) = cache.get(skill_name) {
@@ -59,26 +75,62 @@ impl PythonRuntime {
                 fs::create_dir_all(parent).await?;
             }
 
+            // Find Python executable (cross-platform: prefer `py` on Windows, `python3` on Unix)
+            let python_cmd = Self::find_python_command();
+
             // Create virtual environment
-            let output = Command::new("python3")
+            let output = Command::new(&python_cmd)
                 .args(["-m", "venv", venv_path.to_string_lossy().as_ref()])
                 .output()
                 .await
-                .context("Failed to create Python virtual environment")?;
+                .with_context(|| format!("Failed to create Python virtual environment using {}", python_cmd))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 anyhow::bail!("Failed to create venv: {}", stderr);
             }
-        }
 
-        // Cache the venv path
-        {
+            // Only cache after successful creation (fixes issue #4)
+            let mut cache = self.venv_cache.write().await;
+            cache.insert(skill_name.to_string(), venv_path.clone());
+        } else {
+            // venv already existed, cache it
             let mut cache = self.venv_cache.write().await;
             cache.insert(skill_name.to_string(), venv_path.clone());
         }
 
         Ok(venv_path)
+    }
+
+    /// Find the appropriate Python command for the current platform.
+    fn find_python_command() -> String {
+        #[cfg(windows)]
+        {
+            // On Windows, prefer `py` launcher, fall back to `python`
+            if std::process::Command::new("py")
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return "py".to_string();
+            }
+            if std::process::Command::new("python")
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+            {
+                return "python".to_string();
+            }
+            // Fall back to python3 (some Windows setups have it)
+            "python3".to_string()
+        }
+        #[cfg(not(windows))]
+        {
+            // On Unix, prefer python3
+            "python3".to_string()
+        }
     }
 
     /// Get the Python executable path in the virtual environment.
@@ -140,13 +192,7 @@ impl PythonRuntime {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            // If the script exits with error, try to parse the output as JSON error
-            if !stdout.is_empty() {
-                if let Ok(result) = serde_json::from_str::<Value>(&stdout) {
-                    return Ok(result);
-                }
-            }
+            // Return the error from the script, don't mask it by parsing stdout
             anyhow::bail!("Python script failed: {}", stderr);
         }
 
@@ -189,19 +235,22 @@ impl SkillRuntime for PythonRuntime {
     }
 
     async fn check_environment(&self) -> Result<()> {
-        // Check if python3 is available
-        let output = Command::new("python3")
+        // Find Python command (cross-platform)
+        let python_cmd = Self::find_python_command();
+
+        // Check if Python is available
+        let output = Command::new(&python_cmd)
             .arg("--version")
             .output()
             .await
-            .context("Python 3 not found")?;
+            .with_context(|| format!("Python not found (tried: {})", python_cmd))?;
 
         if !output.status.success() {
-            anyhow::bail!("Python 3 not found");
+            anyhow::bail!("Python not found (tried: {})", python_cmd);
         }
 
         let version = String::from_utf8_lossy(&output.stdout);
-        tracing::info!("Python runtime check passed: {}", version.trim());
+        tracing::info!("Python runtime check passed: {} (using {})", version.trim(), python_cmd);
 
         Ok(())
     }
