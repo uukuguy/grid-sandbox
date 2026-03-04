@@ -7,8 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{ArcAppState, AuthExtractor, ErrorResponse};
 use crate::user_runtime::{Session, SessionStatus};
+use crate::{ArcAppState, AuthExtractor, ErrorResponse};
 
 /// Custom error type that can return different status codes
 type ApiError = (StatusCode, Json<ErrorResponse>);
@@ -52,8 +52,11 @@ pub async fn list_sessions(
     State(state): State<ArcAppState>,
     auth: AuthExtractor,
 ) -> Result<Json<Vec<SessionResponse>>, ErrorResponse> {
-    let user_runtime = state.get_or_create_user_runtime(&auth.user_id)
-        .map_err(|_| ErrorResponse { error: "Failed to access user runtime".to_string() })?;
+    let user_runtime = state
+        .get_or_create_user_runtime(&auth.user_id)
+        .map_err(|_| ErrorResponse {
+            error: "Failed to access user runtime".to_string(),
+        })?;
 
     let sessions = user_runtime.list_sessions(&auth.user_id);
     Ok(Json(sessions.into_iter().map(|s| s.into()).collect()))
@@ -65,11 +68,17 @@ pub async fn create_session(
     auth: AuthExtractor,
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<SessionResponse>, ErrorResponse> {
-    let user_runtime = state.get_or_create_user_runtime(&auth.user_id)
-        .map_err(|_| ErrorResponse { error: "Failed to access user runtime".to_string() })?;
+    let user_runtime = state
+        .get_or_create_user_runtime(&auth.user_id)
+        .map_err(|_| ErrorResponse {
+            error: "Failed to access user runtime".to_string(),
+        })?;
 
-    let session = user_runtime.create_session(req.name)
-        .map_err(|_| ErrorResponse { error: "Failed to create session".to_string() })?;
+    let session = user_runtime
+        .create_session(req.name)
+        .map_err(|_| ErrorResponse {
+            error: "Failed to create session".to_string(),
+        })?;
 
     Ok(Json(session.into()))
 }
@@ -80,11 +89,27 @@ pub async fn get_session(
     auth: AuthExtractor,
     Path(session_id): Path<String>,
 ) -> Result<Json<SessionResponse>, ApiError> {
-    let user_runtime = state.get_or_create_user_runtime(&auth.user_id)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "Failed to access user runtime".to_string() })))?;
+    let user_runtime = state
+        .get_or_create_user_runtime(&auth.user_id)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to access user runtime".to_string(),
+                }),
+            )
+        })?;
 
-    let session = user_runtime.get_session(&auth.user_id, &session_id)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, Json(ErrorResponse { error: "Session not found".to_string() })))?;
+    let session = user_runtime
+        .get_session(&auth.user_id, &session_id)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "Session not found".to_string(),
+                }),
+            )
+        })?;
 
     Ok(Json(session.into()))
 }
@@ -95,12 +120,25 @@ pub async fn delete_session(
     auth: AuthExtractor,
     Path(session_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let user_runtime = state.get_or_create_user_runtime(&auth.user_id)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: "Failed to access user runtime".to_string() })))?;
+    let user_runtime = state
+        .get_or_create_user_runtime(&auth.user_id)
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Failed to access user runtime".to_string(),
+                }),
+            )
+        })?;
 
     let deleted = user_runtime.delete_session(&auth.user_id, &session_id);
     if !deleted {
-        return Err((StatusCode::NOT_FOUND, Json(ErrorResponse { error: "Session not found".to_string() })));
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Session not found".to_string(),
+            }),
+        ));
     }
 
     Ok(StatusCode::NO_CONTENT)

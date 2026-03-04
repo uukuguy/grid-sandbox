@@ -22,7 +22,8 @@ fn test_user_runtime_creation() {
 
 #[test]
 fn test_create_session() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     let session = runtime.create_session(None);
     assert!(session.is_ok());
@@ -33,7 +34,8 @@ fn test_create_session() {
 
 #[test]
 fn test_create_named_session() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     let session = runtime.create_session(Some("My Session".to_string()));
     assert!(session.is_ok());
@@ -43,7 +45,8 @@ fn test_create_named_session() {
 
 #[test]
 fn test_concurrent_session_limit() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     // Create 3 sessions (at limit)
     for _ in 0..3 {
@@ -54,12 +57,16 @@ fn test_concurrent_session_limit() {
     // Try to create 4th - should fail
     let result = runtime.create_session(None);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Concurrent session limit"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Concurrent session limit"));
 }
 
 #[test]
 fn test_get_session() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     let session = runtime.create_session(None).unwrap();
     let retrieved = runtime.get_session("test-user-1", &session.id);
@@ -70,7 +77,8 @@ fn test_get_session() {
 
 #[test]
 fn test_delete_session() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     let session = runtime.create_session(None).unwrap();
     assert_eq!(runtime.sessions.len(), 1);
@@ -82,11 +90,69 @@ fn test_delete_session() {
 
 #[test]
 fn test_list_sessions() {
-    let runtime = UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
+    let runtime =
+        UserRuntime::new("test-user-1".to_string(), Arc::new(create_test_config())).unwrap();
 
     runtime.create_session(None).unwrap();
-    runtime.create_session(Some("Session 2".to_string())).unwrap();
+    runtime
+        .create_session(Some("Session 2".to_string()))
+        .unwrap();
 
     let sessions = runtime.list_sessions("test-user-1");
     assert_eq!(sessions.len(), 2);
+}
+
+/// Test that verifies User A cannot access User B's session
+/// This tests the cross-user isolation property
+#[test]
+fn test_cross_user_isolation() {
+    // Create runtime for user A
+    let runtime_a = UserRuntime::new("user-a".to_string(), Arc::new(create_test_config())).unwrap();
+
+    // Create a session for user A
+    let session_a = runtime_a
+        .create_session(Some("User A Session".to_string()))
+        .unwrap();
+    assert_eq!(session_a.user_id, "user-a");
+
+    // Try to retrieve user A's session with user B's user_id - should return None
+    let retrieved_by_wrong_user = runtime_a.get_session("user-b", &session_a.id);
+    assert!(
+        retrieved_by_wrong_user.is_none(),
+        "User B should not be able to access User A's session"
+    );
+
+    // Verify user A can still access their own session
+    let retrieved_by_correct_user = runtime_a.get_session("user-a", &session_a.id);
+    assert!(retrieved_by_correct_user.is_some());
+    assert_eq!(retrieved_by_correct_user.unwrap().id, session_a.id);
+}
+
+/// Test that verifies delete_session behavior for wrong owner
+/// This documents the current behavior: returns false for both "not found" and "wrong owner"
+/// Note: This reveals a security issue where the session is actually deleted even when
+/// the wrong user tries to delete it - the delete happens first, then authorization is checked.
+#[test]
+fn test_delete_session_wrong_owner_returns_not_found() {
+    // Create runtime for user A
+    let runtime_a = UserRuntime::new("user-a".to_string(), Arc::new(create_test_config())).unwrap();
+
+    // Create a session for user A
+    let session_a = runtime_a.create_session(None).unwrap();
+    assert_eq!(runtime_a.sessions.len(), 1);
+
+    // Try to delete user A's session with user B's user_id - returns false
+    let deleted_by_wrong_user = runtime_a.delete_session("user-b", &session_a.id);
+    assert!(
+        !deleted_by_wrong_user,
+        "User B should not be able to delete User A's session"
+    );
+
+    // Document the current (buggy) behavior: the session is actually removed
+    // even though the authorization check fails. This is the "silent authorization failure".
+    assert_eq!(
+        runtime_a.sessions.len(),
+        0,
+        "Session was removed despite wrong owner (silent authorization failure)"
+    );
 }

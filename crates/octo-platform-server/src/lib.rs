@@ -15,10 +15,10 @@ use axum::{
 use dashmap::DashMap;
 use serde::Serialize;
 
+pub mod api;
 pub mod auth;
 pub mod db;
 pub mod user_runtime;
-pub mod api;
 pub mod ws;
 
 // Re-export user_runtime types
@@ -73,13 +73,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: PlatformConfig) -> Result<Self> {
-        let db = Arc::new(
-            db::UserDatabase::open(&config.data_dir)
-                .context("initialize user database")?,
-        );
+        let db =
+            Arc::new(db::UserDatabase::open(&config.data_dir).context("initialize user database")?);
 
-        let jwt_config = auth::JwtConfig::from_env()
-            .context("JWT configuration from environment")?;
+        let jwt_config =
+            auth::JwtConfig::from_env().context("JWT configuration from environment")?;
         let jwt = Arc::new(auth::JwtManager::new(jwt_config));
 
         Ok(Self {
@@ -90,7 +88,10 @@ impl AppState {
         })
     }
 
-    pub fn get_or_create_user_runtime(&self, user_id: &str) -> Result<Arc<UserRuntime>, anyhow::Error> {
+    pub fn get_or_create_user_runtime(
+        &self,
+        user_id: &str,
+    ) -> Result<Arc<UserRuntime>, anyhow::Error> {
         // Try to get existing user runtime first (read-only, fast path)
         if let Some(existing) = self.users.get(user_id) {
             return Ok(existing.clone());
@@ -101,7 +102,8 @@ impl AppState {
             UserRuntime::new(
                 user_id.to_string(),
                 Arc::new(self.config.user_runtime.clone()),
-            ).context("create user runtime")?
+            )
+            .context("create user runtime")?,
         );
 
         // Try to insert - another thread might have created it first
@@ -142,19 +144,26 @@ where
             .extensions
             .get::<ArcAppState>()
             .cloned()
-            .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
-                error: "State not found".to_string(),
-            })))?;
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: "State not found".to_string(),
+                    }),
+                )
+            })?;
 
         let token = extract_bearer_token(&parts.headers)
             .map_err(|e| (StatusCode::UNAUTHORIZED, Json(e)))?;
 
-        let claims = state
-            .jwt
-            .verify_token(&token)
-            .map_err(|_| (StatusCode::UNAUTHORIZED, Json(ErrorResponse {
-                error: "Invalid token".to_string(),
-            })))?;
+        let claims = state.jwt.verify_token(&token).map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorResponse {
+                    error: "Invalid token".to_string(),
+                }),
+            )
+        })?;
 
         Ok(Self {
             user_id: claims.claims.sub,

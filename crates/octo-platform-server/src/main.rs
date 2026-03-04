@@ -12,9 +12,7 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use octo_platform_server::{
-    api::sessions, db, AppState, PlatformConfig,
-};
+use octo_platform_server::{api::sessions, db, AppState, PlatformConfig};
 use octo_platform_server::{ErrorResponse, LoginResponse, RegisterResponse};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -27,10 +25,9 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(req): Json<db::RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, ErrorResponse> {
-    let user = state
-        .db
-        .register(&req)
-        .map_err(|_| ErrorResponse { error: "Failed to register user".to_string() })?;
+    let user = state.db.register(&req).map_err(|_| ErrorResponse {
+        error: "Failed to register user".to_string(),
+    })?;
 
     Ok(Json(RegisterResponse { user }))
 }
@@ -39,10 +36,9 @@ async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<db::LoginRequest>,
 ) -> Result<Json<LoginResponse>, ErrorResponse> {
-    let user = state
-        .db
-        .authenticate(&req)
-        .map_err(|_| ErrorResponse { error: "Invalid credentials".to_string() })?;
+    let user = state.db.authenticate(&req).map_err(|_| ErrorResponse {
+        error: "Invalid credentials".to_string(),
+    })?;
 
     let access_token = state
         .jwt
@@ -86,7 +82,9 @@ async fn refresh(
     let user = state
         .db
         .get_user(&claims.sub)
-        .map_err(|_| ErrorResponse { error: "Failed to get user".to_string() })?
+        .map_err(|_| ErrorResponse {
+            error: "Failed to get user".to_string(),
+        })?
         .ok_or_else(|| ErrorResponse {
             error: "User not found".to_string(),
         })?;
@@ -120,17 +118,16 @@ async fn me(
 
     let token = extract_bearer_token(request.headers())?;
 
-    let claims = state
-        .jwt
-        .verify_token(&token)
-        .map_err(|_| ErrorResponse {
-            error: "Invalid token".to_string(),
-        })?;
+    let claims = state.jwt.verify_token(&token).map_err(|_| ErrorResponse {
+        error: "Invalid token".to_string(),
+    })?;
 
     let user = state
         .db
         .get_user(&claims.claims.sub)
-        .map_err(|_| ErrorResponse { error: "Failed to get user".to_string() })?
+        .map_err(|_| ErrorResponse {
+            error: "Failed to get user".to_string(),
+        })?
         .ok_or_else(|| ErrorResponse {
             error: "User not found".to_string(),
         })?;
@@ -169,7 +166,10 @@ async fn main() -> Result<()> {
         .route("/api/sessions", get(sessions::list_sessions))
         .route("/api/sessions", post(sessions::create_session))
         .route("/api/sessions/{session_id}", get(sessions::get_session))
-        .route("/api/sessions/{session_id}", delete(sessions::delete_session))
+        .route(
+            "/api/sessions/{session_id}",
+            delete(sessions::delete_session),
+        )
         // WebSocket
         .route("/ws/{session_id}", get(ws_handler))
         .layer(TraceLayer::new_for_http())

@@ -80,13 +80,10 @@ impl Session {
 
 impl UserRuntime {
     pub fn new(user_id: String, config: Arc<UserRuntimeConfig>) -> Result<Self> {
-        let db_path = PathBuf::from(
-            config.db_path_template.replace("{user_id}", &user_id)
-        );
+        let db_path = PathBuf::from(config.db_path_template.replace("{user_id}", &user_id));
 
         // Ensure directory exists
-        std::fs::create_dir_all(&db_path)
-            .context("create user data directory")?;
+        std::fs::create_dir_all(&db_path).context("create user data directory")?;
 
         tracing::info!("UserRuntime created for user: {} at {:?}", user_id, db_path);
 

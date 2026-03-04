@@ -56,7 +56,9 @@ pub async fn ws_handler(
         Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse { error: "Failed to access user runtime".to_string() }),
+                Json(ErrorResponse {
+                    error: "Failed to access user runtime".to_string(),
+                }),
             )
                 .into_response();
         }
@@ -67,7 +69,9 @@ pub async fn ws_handler(
     if session.is_none() {
         return (
             StatusCode::NOT_FOUND,
-            Json(ErrorResponse { error: "Session not found or access denied".to_string() }),
+            Json(ErrorResponse {
+                error: "Session not found or access denied".to_string(),
+            }),
         )
             .into_response();
     }
