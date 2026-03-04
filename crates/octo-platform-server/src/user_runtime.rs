@@ -23,6 +23,17 @@ pub struct UserRuntime {
     session_creation_lock: Mutex<()>, // Protects session creation to prevent TOCTOU race
 }
 
+impl std::fmt::Debug for UserRuntime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserRuntime")
+            .field("user_id", &self.user_id)
+            .field("config", &self.config)
+            .field("sessions", &self.sessions)
+            .field("db_path", &self.db_path)
+            .finish()
+    }
+}
+
 /// Session - one per conversation
 #[derive(Debug, Clone)]
 pub struct Session {

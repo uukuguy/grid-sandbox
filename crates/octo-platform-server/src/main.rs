@@ -14,6 +14,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -22,6 +23,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 pub mod auth;
 pub mod db;
 pub mod user_runtime;
+pub use user_runtime::UserRuntime;
 
 /// Platform configuration
 #[derive(Debug, Clone)]
@@ -67,6 +69,7 @@ pub struct AppState {
     pub config: PlatformConfig,
     pub db: Arc<db::UserDatabase>,
     pub jwt: Arc<auth::JwtManager>,
+    pub users: DashMap<String, Arc<UserRuntime>>,
 }
 
 impl AppState {
@@ -80,7 +83,26 @@ impl AppState {
             .context("JWT configuration from environment")?;
         let jwt = Arc::new(auth::JwtManager::new(jwt_config));
 
-        Ok(Self { config, db, jwt })
+        Ok(Self {
+            config,
+            db,
+            jwt,
+            users: DashMap::new(),
+        })
+    }
+
+    pub fn get_or_create_user_runtime(&self, user_id: &str) -> Arc<UserRuntime> {
+        self.users
+            .entry(user_id.to_string())
+            .or_insert_with(|| {
+                Arc::new(
+                    UserRuntime::new(
+                        user_id.to_string(),
+                        Arc::new(self.config.user_runtime.clone()),
+                    ).expect("create user runtime")
+                )
+            })
+            .clone()
     }
 }
 
