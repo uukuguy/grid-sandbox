@@ -17,7 +17,7 @@ use crate::event::EventBus;
 use crate::mcp::manager::McpManager;
 use crate::mcp::traits::McpToolInfo;
 use crate::memory::store_traits::MemoryStore;
-use crate::memory::{SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
+use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
 use crate::providers::ProviderConfig;
 use crate::scheduler::ScheduledTask;
@@ -487,8 +487,8 @@ impl AgentRuntime {
             }
         }
 
-        // 从 manifest 解析运行时配置
-        let (tools, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
+        // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
+        let (_, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
 
         let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
         let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
@@ -507,8 +507,8 @@ impl AgentRuntime {
             rx,
             broadcast_tx,
             self.provider.clone(),
-            tools,
-            self.memory.clone(),
+            Arc::clone(&self.tools),  // 共享引用，支持 MCP 热插拔
+            Arc::new(InMemoryWorkingMemory::new()),  // 每 session 独立实例，防止数据污染
             Some(self.memory_store.clone()),
             Some(model),
             Some(self.session_store.clone()),
@@ -540,13 +540,14 @@ impl AgentRuntime {
 
     /// 停止主 Runtime
     pub async fn stop_primary(&self) {
-        let handle = {
+        let _dropped_handle = {
             let mut guard = self.primary_handle.lock().await;
             guard.take()
         };
-        if let Some(h) = handle {
-            let _ = h.send(AgentMessage::Cancel).await;
-            info!("Primary AgentExecutor stopped");
+        // AgentExecutorHandle is dropped here → tx is dropped → rx.recv() returns None
+        // → AgentExecutor while loop naturally exits → tokio task ends
+        if _dropped_handle.is_some() {
+            info!("Primary AgentExecutor stopped (tx dropped)");
         }
     }
 

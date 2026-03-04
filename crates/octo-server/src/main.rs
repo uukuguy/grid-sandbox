@@ -217,19 +217,27 @@ async fn main() -> Result<()> {
         });
     }
 
-    let app = router::build_router(state);
+    let app = router::build_router(state.clone());
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("octo-server listening on {addr}");
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(state.clone()))
         .await?;
+
+    // Graceful shutdown: clean up MCP servers
+    tracing::info!("Shutting down MCP servers...");
+    if let Some(mcp_manager) = state.agent_supervisor.mcp_manager() {
+        let mut guard = mcp_manager.lock().await;
+        let _ = guard.shutdown_all().await;
+        tracing::info!("MCP servers shut down");
+    }
 
     Ok(())
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(_state: Arc<AppState>) {
     tokio::signal::ctrl_c()
         .await
         .expect("failed to install CTRL+C signal handler");

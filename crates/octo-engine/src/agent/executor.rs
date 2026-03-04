@@ -64,7 +64,7 @@ pub struct AgentExecutor {
     // Harness 核心（所有字段跨 round 持久化）
     history: Vec<ChatMessage>,
     provider: Arc<dyn Provider>,
-    tools: Arc<ToolRegistry>,
+    tools: Arc<std::sync::Mutex<ToolRegistry>>,
     memory: Arc<dyn WorkingMemory>,
     memory_store: Option<Arc<dyn MemoryStore>>,
     model: Option<String>,
@@ -93,7 +93,7 @@ impl AgentExecutor {
         rx: mpsc::Receiver<AgentMessage>,
         broadcast_tx: broadcast::Sender<AgentEvent>,
         provider: Arc<dyn Provider>,
-        tools: Arc<ToolRegistry>,
+        tools: Arc<std::sync::Mutex<ToolRegistry>>,
         memory: Arc<dyn WorkingMemory>,
         memory_store: Option<Arc<dyn MemoryStore>>,
         model: Option<String>,
@@ -137,10 +137,20 @@ impl AgentExecutor {
                     // 追加用户消息到持久化历史
                     self.history.push(ChatMessage::user(content));
 
+                    // 从共享 ToolRegistry 生成快照（每 round 新建，实现 MCP 热插拔）
+                    let tools_snapshot = {
+                        let guard = self.tools.lock().unwrap();
+                        let mut registry = ToolRegistry::new();
+                        for (name, tool) in guard.iter() {
+                            registry.register_arc(name.clone(), tool);
+                        }
+                        Arc::new(registry)
+                    };
+
                     // 构建 AgentLoop（每 round 新建，但 history 由 AgentExecutor 持有）
                     let mut agent_loop = AgentLoop::new(
                         self.provider.clone(),
-                        self.tools.clone(),
+                        tools_snapshot,
                         self.memory.clone(),
                     );
                     if let Some(ref ms) = self.memory_store {
