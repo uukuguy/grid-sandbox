@@ -32,6 +32,16 @@
 
 ---
 
+## v1.0 Release Sprint - Deferred Code 修复 [COMPLETED 2026-03-04]
+
+- 15:45 | 代码级 Deferred 修复: D2, D4, D5 已解决
+  - D2: 删除 legacy new_legacy 构造函数 (runtime.rs)
+  - D4: ws.rs 3处 .unwrap() 改为 if let Ok 处理
+  - D5: tools.rs Mutex lock 改为错误处理
+  - Deferred 剩余: D1 (observability), D3 (auth middleware)
+
+---
+
 ## Phase 2.11 - AgentRegistry + 上下文工程重构 [COMPLETED 2026-03-03]
 
 - 05:00 | Phase 2.11 完成: AgentRegistry + AgentRunner + Zone A/B 上下文重构 + SQLite 持久化 + REST API
