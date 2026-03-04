@@ -39,10 +39,10 @@ branch: octo-workbench    branch: octo-platform
 
 | Task | 内容 | 状态 |
 |------|------|------|
-| P1-1 | 新建 `octo-platform-server` crate，基础 Axum 服务 | ⏳ |
-| P1-2 | 自建用户系统：注册/登录/JWT | ⏳ |
-| P1-3 | `PlatformState`：单租户 + `DashMap<UserId, Arc<AgentRuntime>>` | ⏳ |
-| P1-4 | 每用户独立 WebSocket + AgentRuntime 懒加载 | ⏳ |
+| P1-1 | 新建 `octo-platform-server` crate，基础 Axum 服务 | ✅ |
+| P1-2 | 自建用户系统：注册/登录/JWT | ✅ |
+| P1-3 | `PlatformState`：单租户 + `DashMap<UserId, Arc<AgentRuntime>>` | ✅ |
+| P1-4 | 每用户独立 WebSocket + AgentRuntime 懒加载 + Agent 池 | ✅ 设计 + 实现计划 |
 | P1-5 | Admin API：用户 CRUD、角色管理 | ⏳ |
 | P1-6 | `web-platform/` 初始化：登录页 + 用户工作空间 | ⏳ |
 
