@@ -169,7 +169,10 @@ async fn list_tasks(
 
     for task in tasks {
         // Get the latest execution for each task
-        let executions = scheduler.get_executions(&task.id, 1).await.unwrap_or_default();
+        let executions = scheduler.get_executions(&task.id, 1).await.map_err(|e| {
+            tracing::error!("get_executions error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         let latest_execution = executions.first();
         responses.push(scheduled_task_to_response(&task, latest_execution));
     }
@@ -193,7 +196,10 @@ async fn get_task(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let executions = scheduler.get_executions(&id, 10).await.unwrap_or_default();
+    let executions = scheduler.get_executions(&id, 10).await.map_err(|e| {
+        tracing::error!("get_executions error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     let latest_execution = executions.first();
 
     let task_response = scheduled_task_to_response(&task, latest_execution);

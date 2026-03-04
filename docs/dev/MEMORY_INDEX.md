@@ -5,6 +5,33 @@
 
 ---
 
+## v1.0 Release Sprint - Phase A 稳定地基 [COMPLETED 2026-03-04]
+
+- 11:30 | Phase A (6 tasks) 完成: A1-A6 全部完成
+  - A1: stop_primary 改为 drop tx（不再发送 Cancel 消息）
+  - A2: ToolRegistry 改为 Arc<StdMutex<>> 共享引用（支持 MCP 热插拔）
+  - A3: scheduler run_now 改为真实执行（调用 execute_task）
+  - A4: WorkingMemory 每 session 独立实例（防止数据污染）
+  - A5: graceful shutdown 添加 MCP shutdown_all
+  - A6: 确认 RetryPolicy 已实现（max_retries=3, base_delay=1s）
+  - Deferred 项 D1/D2/D3 已通过 A2 解决
+  - cargo check 零错误，149 测试通过
+
+---
+
+## v1.0 Release Sprint - Phase B 后端能力 [COMPLETED 2026-03-04]
+
+- 15:15 | Phase B (6 tasks) 完成: B1-B6 全部完成
+  - B1: 并行工具执行 (already done)
+  - B2: Background Tasks REST API (POST/GET/DELETE /api/tasks)
+  - B3: 增强 /health 端点 (status, uptime, provider, mcp_servers, version)
+  - B4: LoopTurnStarted 事件 (turns.total 指标修复)
+  - B5: JSON 日志格式 (OCTO_LOG_FORMAT=json)
+  - B6: 移除 Option<McpManager> (简化 API)
+  - cargo check 零错误，200 测试通过
+
+---
+
 ## Phase 2.11 - AgentRegistry + 上下文工程重构 [COMPLETED 2026-03-03]
 
 - 05:00 | Phase 2.11 完成: AgentRegistry + AgentRunner + Zone A/B 上下文重构 + SQLite 持久化 + REST API
@@ -44,6 +71,7 @@
 
 ## [Active Work]
 
+- 12:30 | v1.0 Release Sprint Phase B checkpoint: A1-A6 complete, B1 verified implemented, B2 attempted (Axum issue - use scheduler API)
 - 04:30 | Phase 2.11 设计完成（完整 brainstorming）：AgentManifest 三段身份 + AgentRunner + Zone A/B 分离 + SQLite 持久化，计划文档更新（1223行，7 Tasks），待实施
 - 00:10 | Phase 2.9 MCP SSE Transport 完成 (已验证之前会话的实现)
 - 22:00 | Phase 2.10 Knowledge Graph 完成
