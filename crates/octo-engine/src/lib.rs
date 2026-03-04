@@ -5,6 +5,7 @@ pub mod context;
 pub mod db;
 pub mod event;
 pub mod extension;
+pub mod logging;
 pub mod mcp;
 pub mod memory;
 pub mod metrics;
@@ -33,6 +34,8 @@ pub use extension::{
     AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
     ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,
 };
+pub use logging::{init_logging, init_logging_with_filter, init_pretty_logging, init_pretty_logging_with_filter};
+// audit_log macro is exported at crate root via #[macro_export] in logging module
 pub use mcp::{McpClient, McpManager, McpServerConfig, McpToolBridge, McpToolInfo, StdioMcpClient};
 pub use memory::{
     Entity, FtsStore, GraphStats, GraphStore, InMemoryWorkingMemory, KnowledgeGraph, MemoryStore,
