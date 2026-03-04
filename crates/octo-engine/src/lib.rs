@@ -22,7 +22,7 @@ pub use agent::{AgentCatalog, AgentEntry, AgentError, AgentEvent, AgentId, Agent
 pub use audit::{AuditEvent, AuditRecord, AuditStorage};
 pub use auth::{
     auth_middleware, get_user_context, ApiKey, ApiKeyConfig, AuthConfig, AuthConfigYaml, AuthMode,
-    Permission, UserContext,
+    ApiKeyStorage, ApiKeyResponse, UserRole, Permission, UserContext,
 };
 pub use context::{
     BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,

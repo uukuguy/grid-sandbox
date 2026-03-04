@@ -1,7 +1,14 @@
 // crates/octo-engine/src/auth/mod.rs
 
+pub mod api_key;
 pub mod config;
 pub mod middleware;
 
+// Re-export config types
 pub use config::*;
+
+// Re-export middleware types
 pub use middleware::*;
+
+// Re-export api_key types (excluding ApiKey to avoid conflict with config)
+pub use api_key::{ApiKeyResponse, ApiKeyStorage, UserRole};
