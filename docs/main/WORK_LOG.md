@@ -1,5 +1,40 @@
 # Octo Sandbox 开发工作日志
 
+## 2026-03-04 — v1.0 发布冲刺设计 + AgentRuntime 深度架构分析
+
+### 会话概要
+
+完成 AgentRuntime 全面架构审计，对标 Goose/OpenHands/pi_agent_rust 等顶级框架，识别关键问题并制定 v1.0 发布冲刺完整方案。
+
+### 架构分析产出
+
+**深度审计**（`docs/design/AGENT_RUNTIME_ARCHITECTURE_AUDIT.md`）：
+- 精确定位 3 个 P0 bug：MCP 动态注册对运行中 Agent 无效、stop_primary 不真正终止、Scheduler run_now 假执行
+- 确认 2 个 P1 问题：WorkingMemory 无 session 隔离、enable_parallel 配置无效
+- 对标 Goose 版本化缓存模式、OpenHands EventStream 架构、pi_agent_rust 扩展机制
+
+**v1.0 发布冲刺设计**（`docs/plans/2026-03-04-v1.0-release-sprint-design.md`）：
+- 19 个 Feature：S1-6（稳定可靠）+ C1-7（能力完整）+ O1-6（可观测性）
+- 4 个架构关键调整：ToolRegistry 版本化、stop 语义修复、WorkingMemory 隔离、后台任务 API
+- 4 个 Phase：地基（~3天）→ 后端能力（~4天）→ 前端控制台（~5天）→ 集成验收（~2天）
+
+### 当前状态
+
+- **AgentRuntime 重构**：已完成（commit 520a1bc），零编译错误
+- **v1.0 设计**：已完成并文档化，待进入实施
+- **下一步**：writing-plans 生成实施计划 → Phase A 开始执行
+
+### 待解决问题
+
+- P0: MCP 工具动态注册对运行中 Agent 无效（ToolRegistry 快照问题）
+- P0: stop_primary 发 Cancel 但 Executor while loop 继续（需改为 drop tx）
+- P0: Scheduler run_now 假执行（未调用 execute_scheduled_task）
+- P1: WorkingMemory 全局共享无 session 隔离
+- P1: enable_parallel 配置无效（loop_.rs 仍是串行）
+- P2: LoopTurnStarted 事件未发布（turns 指标为0）
+
+---
+
 ## 2026-03-02 — Phase 2.8 Agent 增强 + Secret Manager 实施
 
 ### 会话概要
