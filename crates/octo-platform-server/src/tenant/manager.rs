@@ -4,13 +4,12 @@ use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 use rusqlite::Connection;
 
-use super::models::{ResourceQuota, Tenant, TenantPlan};
+use super::models::ResourceQuota;
 use super::runtime::TenantRuntime;
 
 pub struct TenantManager {
     conn: Arc<Mutex<Connection>>,
     runtimes: DashMap<String, Arc<TenantRuntime>>,
-    data_dir: PathBuf,
 }
 
 impl TenantManager {
@@ -45,7 +44,6 @@ impl TenantManager {
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
             runtimes: DashMap::new(),
-            data_dir,
         })
     }
 
