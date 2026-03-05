@@ -113,7 +113,10 @@ impl AgentEntry {
 #[derive(Debug)]
 pub enum AgentError {
     NotFound(AgentId),
-    InvalidTransition { from: AgentStatus, action: &'static str },
+    InvalidTransition {
+        from: AgentStatus,
+        action: &'static str,
+    },
     ScheduledTask(String),
     Internal(String),
 
@@ -121,6 +124,9 @@ pub enum AgentError {
     McpNotInitialized,
     McpError(String),
     McpServerNotFound(String),
+
+    // Permission-related errors (Task 3)
+    PermissionDenied(String),
 }
 
 impl std::fmt::Display for AgentError {
@@ -137,6 +143,9 @@ impl std::fmt::Display for AgentError {
             Self::McpNotInitialized => write!(f, "MCP manager not initialized"),
             Self::McpError(msg) => write!(f, "MCP error: {msg}"),
             Self::McpServerNotFound(name) => write!(f, "MCP server not found: {name}"),
+
+            // Permission-related errors
+            Self::PermissionDenied(msg) => write!(f, "permission denied: {msg}"),
         }
     }
 }

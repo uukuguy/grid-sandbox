@@ -30,6 +30,7 @@ fn agent_err_to_status(e: AgentError) -> StatusCode {
         AgentError::McpNotInitialized => StatusCode::SERVICE_UNAVAILABLE,
         AgentError::McpError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         AgentError::McpServerNotFound(_) => StatusCode::NOT_FOUND,
+        AgentError::PermissionDenied(_) => StatusCode::FORBIDDEN,
     }
 }
 
@@ -51,7 +52,12 @@ async fn create_agent(
     State(s): State<Arc<AppState>>,
     Json(manifest): Json<AgentManifest>,
 ) -> Result<(StatusCode, Json<AgentEntry>), StatusCode> {
-    let id = s.agent_supervisor.catalog().register(manifest);
+    // Get tenant_id from runtime's tenant context (single-user workbench)
+    let tenant_id = s
+        .agent_supervisor
+        .tenant_context()
+        .map(|ctx| ctx.tenant_id.clone());
+    let id = s.agent_supervisor.catalog().register(manifest, tenant_id);
     let entry = s.agent_supervisor.catalog().get(&id).ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok((StatusCode::CREATED, Json(entry)))
 }

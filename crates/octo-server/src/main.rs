@@ -14,8 +14,9 @@ use tracing_subscriber::EnvFilter;
 
 use octo_engine::{
     scheduler::{Scheduler, SqliteSchedulerStorage},
-    AgentCatalog, AgentRuntime, AgentRuntimeConfig, AgentStore, Database,
+    AgentCatalog, AgentRuntime, AgentRuntimeConfig, AgentStore, Database, TenantContext,
 };
+use octo_types::{TenantId, UserId};
 use state::AppState;
 
 fn print_default_config() {
@@ -166,8 +167,14 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Create tenant context for single-user scenario (octo-workbench)
+    let tenant_context = TenantContext::for_single_user(
+        TenantId::from_string("default"),
+        UserId::from_string("local-user"),
+    );
+
     let agent_runtime = Arc::new(
-        AgentRuntime::new(agent_catalog.clone(), runtime_config).await?
+        AgentRuntime::new(agent_catalog.clone(), runtime_config, Some(tenant_context)).await?
     );
 
     // Get session store from AgentRuntime for creating primary session
