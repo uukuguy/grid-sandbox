@@ -82,6 +82,7 @@ pub struct AppState {
     pub jwt: Arc<auth::JwtManager>,
     pub users: DashMap<String, Arc<UserRuntime>>,
     pub agent_pool: Arc<AgentPool>,
+    pub tenant_manager: Arc<TenantManager>,
 }
 
 impl AppState {
@@ -95,12 +96,18 @@ impl AppState {
 
         let agent_pool = Arc::new(AgentPool::new());
 
+        let tenant_manager = Arc::new(
+            TenantManager::new(config.data_dir.clone())
+                .context("initialize tenant manager")?,
+        );
+
         Ok(Self {
             config,
             db,
             jwt,
             users: DashMap::new(),
             agent_pool,
+            tenant_manager,
         })
     }
 

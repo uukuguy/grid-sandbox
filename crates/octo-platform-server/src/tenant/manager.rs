@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +11,14 @@ use super::runtime::TenantRuntime;
 pub struct TenantManager {
     conn: Arc<Mutex<Connection>>,
     runtimes: DashMap<String, Arc<TenantRuntime>>,
+}
+
+impl fmt::Debug for TenantManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TenantManager")
+            .field("runtimes", &self.runtimes.len())
+            .finish()
+    }
 }
 
 impl TenantManager {
