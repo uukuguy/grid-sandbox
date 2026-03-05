@@ -66,10 +66,17 @@ async fn submit_task(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateTaskRequest>,
 ) -> Result<Json<TaskResponse>, StatusCode> {
-    // Basic validation
+    // Input validation with limits
     if req.prompt.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
+    if req.prompt.len() > 100_000 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if req.max_rounds > 100 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    // timeout_secs already has minimum of 60 enforced below
 
     // Get scheduler
     let scheduler = state
@@ -96,7 +103,7 @@ async fn submit_task(
         .create_task(
             Some("api-task".to_string()),
             format!("ad-hoc-{}", Uuid::new_v4().to_string()[..8].to_string()),
-            "0 0 1 1 2099".to_string(),
+            "0 0 1 1 2099".to_string(), // Far future - won't auto-run
             config,
             true,
         )
@@ -109,28 +116,25 @@ async fn submit_task(
         }
     };
 
-    // Execute task via scheduler to store execution result in database
-    let execution_result = scheduler.run_now(&scheduled.id, Some("api-task")).await;
-
-    let response = match execution_result {
-        Ok(execution) => TaskResponse {
-            id: scheduled.id.clone(),
-            status: map_execution_status(&execution.status),
-            result: execution.result,
-            error: execution.error,
-        },
-        Err(e) => {
-            tracing::error!("run_now error: {}", e);
-            TaskResponse {
-                id: scheduled.id.clone(),
-                status: TaskStatus::Failed,
-                result: None,
-                error: Some(e.to_string()),
+    // Spawn background task to execute the agent (non-blocking)
+    let task_id = scheduled.id.clone();
+    let scheduler_clone = state.scheduler.clone();
+    tokio::spawn(async move {
+        if let Some(scheduler) = scheduler_clone.as_ref() {
+            let result = scheduler.run_now(&task_id, Some("api-task")).await;
+            if let Err(e) = result {
+                tracing::error!("background task {} execution error: {}", task_id, e);
             }
         }
-    };
+    });
 
-    Ok(Json(response))
+    // Return immediately with pending status
+    Ok(Json(TaskResponse {
+        id: scheduled.id,
+        status: TaskStatus::Pending,
+        result: None,
+        error: None,
+    }))
 }
 
 /// Map ExecutionStatus to TaskStatus
