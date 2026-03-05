@@ -2270,6 +2270,7 @@ dependencies = [
  "futures-util",
  "glob",
  "hex",
+ "jsonwebtoken",
  "keyring",
  "notify",
  "notify-debouncer-mini",

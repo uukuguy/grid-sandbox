@@ -19,6 +19,7 @@ pub mod agent_pool;
 pub mod api;
 pub mod auth;
 pub mod db;
+pub mod middleware;
 pub mod tenant;
 pub mod user_runtime;
 pub mod ws;
