@@ -74,7 +74,24 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-/// User response (without password hash)
+/// User update request
+#[derive(Debug, Deserialize)]
+pub struct UpdateUserRequest {
+    pub email: Option<String>,
+    pub display_name: Option<String>,
+    pub role: Option<String>,
+}
+
+/// Paginated user list response
+#[derive(Debug, Serialize)]
+pub struct PaginatedUsersResponse {
+    pub users: Vec<UserResponse>,
+    pub total: i64,
+    pub page: i64,
+    pub per_page: i64,
+    pub total_pages: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct UserResponse {
     pub id: String,
@@ -258,14 +275,22 @@ impl UserDatabase {
         }
     }
 
-    /// List all users (admin only)
-    pub fn list_users(&self) -> Result<Vec<UserResponse>> {
+    /// List users with pagination (admin only)
+    pub fn list_users(&self, page: i64, per_page: i64) -> Result<PaginatedUsersResponse> {
         let conn = self.conn.lock().unwrap();
+
+        // Get total count
+        let total: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
+
+        let offset = (page - 1) * per_page;
+        let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
         let mut stmt = conn.prepare(
-            "SELECT id, email, password_hash, display_name, role, created_at FROM users ORDER BY created_at DESC",
+            "SELECT id, email, password_hash, display_name, role, created_at
+             FROM users ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",
         )?;
 
-        let users = stmt.query_map([], |row| {
+        let users = stmt.query_map(params![per_page, offset], |row| {
             Ok(User {
                 id: row.get(0)?,
                 email: row.get(1)?,
@@ -282,6 +307,93 @@ impl UserDatabase {
         for user in users {
             result.push(user?.into());
         }
-        Ok(result)
+
+        Ok(PaginatedUsersResponse {
+            users: result,
+            total,
+            page,
+            per_page,
+            total_pages,
+        })
+    }
+
+    /// Update a user
+    pub fn update_user(&self, user_id: &str, req: &UpdateUserRequest) -> Result<Option<UserResponse>> {
+        let conn = self.conn.lock().unwrap();
+
+        // Check if user exists
+        let exists: bool = conn.query_row(
+            "SELECT 1 FROM users WHERE id = ?1",
+            [user_id],
+            |row| row.get::<_, i32>(0),
+        ).is_ok();
+
+        if !exists {
+            return Ok(None);
+        }
+
+        // Build dynamic update query - handle each field separately for simplicity
+        if req.email.is_none() && req.display_name.is_none() && req.role.is_none() {
+            // No fields to update, just return current user
+            drop(conn);
+            return self.get_user(user_id);
+        }
+
+        // Check and update email if provided
+        if let Some(ref email) = req.email {
+            let email_taken: bool = conn.query_row(
+                "SELECT 1 FROM users WHERE email = ?1 AND id != ?2",
+                params![email, user_id],
+                |row| row.get::<_, i32>(0),
+            ).is_ok();
+
+            if email_taken {
+                anyhow::bail!("Email already in use");
+            }
+
+            conn.execute(
+                "UPDATE users SET email = ?1 WHERE id = ?2",
+                params![email, user_id],
+            )?;
+        }
+
+        // Update display_name if provided
+        if let Some(ref display_name) = req.display_name {
+            conn.execute(
+                "UPDATE users SET display_name = ?1 WHERE id = ?2",
+                params![display_name, user_id],
+            )?;
+        }
+
+        // Update role if provided (validate role first)
+        if let Some(ref role) = req.role {
+            // Validate role - only accept explicitly valid roles
+            let role_str = role.to_lowercase();
+            if !["admin", "member", "viewer"].contains(&role_str.as_str()) {
+                anyhow::bail!("Invalid role: must be admin, member, or viewer");
+            }
+
+            conn.execute(
+                "UPDATE users SET role = ?1 WHERE id = ?2",
+                params![role_str, user_id],
+            )?;
+        }
+
+        tracing::info!("User updated: {}", user_id);
+        drop(conn);
+        self.get_user(user_id)
+    }
+
+    /// Delete a user
+    pub fn delete_user(&self, user_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+
+        let deleted = conn.execute("DELETE FROM users WHERE id = ?1", [user_id])?;
+
+        if deleted > 0 {
+            tracing::info!("User deleted: {}", user_id);
+        }
+
+        Ok(deleted > 0)
     }
 }

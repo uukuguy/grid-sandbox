@@ -59,6 +59,9 @@ pub struct PoolConfig {
     pub idle_timeout: Duration,
     /// Isolation strategy
     pub strategy: IsolationStrategy,
+    /// Data directory for workspace persistence
+    #[serde(default)]
+    pub data_dir: Option<PathBuf>,
 }
 
 impl Default for PoolConfig {
@@ -70,6 +73,7 @@ impl Default for PoolConfig {
             max_idle: 5,
             idle_timeout: Duration::from_secs(300), // 5 minutes
             strategy: IsolationStrategy::Memory,
+            data_dir: None,
         }
     }
 }
@@ -464,24 +468,43 @@ impl AgentPool {
     }
 
     /// Persist workspace data to session store
-    /// TODO: Implement actual persistence to Session Store
-    /// - WorkingMemory -> Session Store
-    /// - ContextSnapshot -> Persistent storage
+    ///
+    /// Writes workspace context as JSON files to the data directory.
+    /// File structure: {data_dir}/workspaces/{user_id}/{session_id}.json
     async fn persist_workspace(&self, workspace: &Workspace) {
-        // Log the persistence action (in production, this would save to database)
-        tracing::debug!(
-            "Persisting workspace for user: {}, sessions: {:?}",
-            workspace.user_id,
-            workspace.session_ids
-        );
+        // Get data directory from config
+        let data_dir = match &self.config.data_dir {
+            Some(dir) => dir.clone(),
+            None => {
+                tracing::debug!("No data_dir configured, skipping workspace persistence");
+                return;
+            }
+        };
 
-        // If there's a context snapshot, log its details
-        if let Some(ref context) = workspace.context {
-            tracing::debug!(
-                "Persisting context: {} working memory blocks, {} session memory blocks",
-                context.working_memory.len(),
-                context.session_memory.len()
-            );
+        // Ensure workspace directory exists
+        let workspace_dir = data_dir.join("workspaces").join(&workspace.user_id);
+        if let Err(e) = std::fs::create_dir_all(&workspace_dir) {
+            tracing::error!("Failed to create workspace directory: {}", e);
+            return;
+        }
+
+        // Persist each session's context
+        for session_id in &workspace.session_ids {
+            let file_path = workspace_dir.join(format!("{}.json", session_id));
+
+            // Serialize context to JSON
+            let json_content = serde_json::to_string_pretty(&workspace.context)
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to serialize workspace context: {}", e);
+                    String::new()
+                });
+
+            // Write to file
+            if let Err(e) = std::fs::write(&file_path, &json_content) {
+                tracing::error!("Failed to write workspace file {}: {}", file_path.display(), e);
+            } else {
+                tracing::debug!("Persisted workspace for user: {}, session: {}", workspace.user_id, session_id);
+            }
         }
     }
 }

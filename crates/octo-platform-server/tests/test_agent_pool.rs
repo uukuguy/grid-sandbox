@@ -13,6 +13,7 @@ async fn test_pool_creation() {
         max_idle: 2,
         idle_timeout: Duration::from_secs(60),
         strategy: IsolationStrategy::Memory,
+        data_dir: None,
     };
 
     let pool = AgentPool::with_config(config);
@@ -39,6 +40,7 @@ async fn test_concurrent_users() {
         max_idle: 2,
         idle_timeout: Duration::from_secs(60),
         strategy: IsolationStrategy::Memory,
+        data_dir: None,
     };
 
     // Wrap pool in Arc for sharing across tasks

@@ -9,10 +9,10 @@ use axum::{
     body::Body,
     extract::State,
     http::Request,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
-use octo_platform_server::{api::sessions, db, AppState, PlatformConfig};
+use octo_platform_server::{api::sessions, api::users, db, AppState, PlatformConfig};
 use octo_platform_server::{ErrorResponse, LoginResponse, RegisterResponse};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -169,6 +169,15 @@ async fn main() -> Result<()> {
         .route(
             "/api/sessions/{session_id}",
             delete(sessions::delete_session),
+        )
+        // User routes (admin or self)
+        .route("/api/users", get(users::list_users))
+        .route("/api/users/{user_id}", get(users::get_user))
+        .route("/api/users/{user_id}", put(users::update_user))
+        .route("/api/users/{user_id}", delete(users::delete_user))
+        .route(
+            "/api/users/{user_id}/role",
+            patch(users::update_user_role),
         )
         // WebSocket
         .route("/ws/{session_id}", get(ws_handler))
