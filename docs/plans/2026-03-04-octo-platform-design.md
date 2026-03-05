@@ -3,6 +3,42 @@
 > 日期：2026-03-04
 > 状态：设计完成（已确认：产品定位、架构总览、目录结构、前端策略、编排层、数据模型、实施路线图）
 > 基础：octo-workbench v1.0 冲刺完成后开始实施
+> 更新：2026-03-05 添加 Phase 2.11a/b 拆分说明
+
+---
+
+## 0.1 Phase 2.11 拆分说明
+
+由于 octo-engine 需要同时支撑 octo-workbench (单用户) 和 octo-platform (多租户)，将原 Phase 2.11 拆分为：
+
+### Phase 2.11a: octo-engine 多租户适配 (当前分支)
+
+**目标**：octo-engine 原生支持多租户，为 octo-platform 做好准备
+
+**详细计划**：`2026-03-05-phase2-11a-octoe-engine-multi-tenant-implementation.md`
+
+| Task | 内容 |
+|------|------|
+| Task 1 | AgentCatalog 添加 TenantId 索引 |
+| Task 2 | 新增 TenantContext 类型 |
+| Task 3 | AgentRuntime 支持 TenantContext |
+| Task 4 | Zone A/B 完整实现 |
+| Task 5 | Budget 统一 |
+| Task 6 | AppState 集成 + REST API |
+| Task 7 | 构建验证 |
+
+### Phase 2.11b: octo-platform-server (新分支)
+
+**目标**：实现租户管理层
+
+| Task | 内容 |
+|------|------|
+| Task 1 | TenantRuntime 实现 |
+| Task 2 | UserRuntime 实现 |
+| Task 3 | JWT/OAuth2 认证集成 |
+| Task 4 | 资源配额管理 |
+
+**依赖**：Phase 2.11a 完成后的 octo-engine
 
 ---
 
