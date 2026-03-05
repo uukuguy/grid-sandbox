@@ -146,6 +146,7 @@ pub struct AuthExtractor {
     pub user_id: String,
     pub email: String,
     pub role: String,
+    pub tenant_id: String,
 }
 
 impl<S> FromRequestParts<S> for AuthExtractor
@@ -185,6 +186,7 @@ where
             user_id: claims.claims.sub,
             email: claims.claims.email,
             role: claims.claims.role,
+            tenant_id: claims.claims.tenant_id,
         })
     }
 }

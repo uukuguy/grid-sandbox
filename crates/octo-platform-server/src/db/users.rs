@@ -73,6 +73,7 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    pub tenant_id: Option<String>,
 }
 
 /// User update request
@@ -172,13 +173,15 @@ impl UserDatabase {
     }
 
     /// Register a new user
-    pub fn register(&self, req: &RegisterRequest) -> Result<UserResponse> {
+    pub fn register(&self, req: &RegisterRequest, tenant_id: Option<&str>) -> Result<UserResponse> {
         let conn = self.conn.lock().unwrap();
 
-        // Check if email already exists
+        let tenant = tenant_id.unwrap_or("default").to_string();
+
+        // Check if email already exists within the same tenant
         let email_exists = conn.query_row(
-            "SELECT 1 FROM users WHERE email = ?1",
-            [&req.email],
+            "SELECT 1 FROM users WHERE email = ?1 AND tenant_id = ?2",
+            params![req.email, tenant],
             |row| row.get::<_, i32>(0),
         );
 
@@ -196,7 +199,7 @@ impl UserDatabase {
 
         // Create user
         let user = User {
-            tenant_id: "default".to_string(),
+            tenant_id: tenant,
             id: Uuid::new_v4().to_string(),
             email: req.email.clone(),
             password_hash,
@@ -229,10 +232,13 @@ impl UserDatabase {
     /// Authenticate user
     pub fn authenticate(&self, req: &LoginRequest) -> Result<UserResponse> {
         let conn = self.conn.lock().unwrap();
+
+        let tenant_id = req.tenant_id.as_deref().unwrap_or("default");
+
         let user: User = conn.query_row(
             "SELECT tenant_id, id, email, password_hash, display_name, role, created_at
-             FROM users WHERE email = ?1",
-            [&req.email],
+             FROM users WHERE email = ?1 AND tenant_id = ?2",
+            params![req.email, tenant_id],
             |row| {
                 Ok(User {
                     tenant_id: row.get(0)?,
@@ -260,12 +266,12 @@ impl UserDatabase {
     }
 
     /// Get user by ID
-    pub fn get_user(&self, user_id: &str) -> Result<Option<UserResponse>> {
+    pub fn get_user(&self, tenant_id: &str, user_id: &str) -> Result<Option<UserResponse>> {
         let conn = self.conn.lock().unwrap();
         let result = conn.query_row(
             "SELECT tenant_id, id, email, password_hash, display_name, role, created_at
-             FROM users WHERE id = ?1",
-            [user_id],
+             FROM users WHERE id = ?1 AND tenant_id = ?2",
+            params![user_id, tenant_id],
             |row| {
                 Ok(User {
                     tenant_id: row.get(0)?,
@@ -289,21 +295,25 @@ impl UserDatabase {
     }
 
     /// List users with pagination (admin only)
-    pub fn list_users(&self, page: i64, per_page: i64) -> Result<PaginatedUsersResponse> {
+    pub fn list_users(&self, tenant_id: &str, page: i64, per_page: i64) -> Result<PaginatedUsersResponse> {
         let conn = self.conn.lock().unwrap();
 
-        // Get total count
-        let total: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
+        // Get total count for this tenant
+        let total: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM users WHERE tenant_id = ?1",
+            [tenant_id],
+            |row| row.get(0),
+        )?;
 
         let offset = (page - 1) * per_page;
         let total_pages = (total as f64 / per_page as f64).ceil() as i64;
 
         let mut stmt = conn.prepare(
             "SELECT tenant_id, id, email, password_hash, display_name, role, created_at
-             FROM users ORDER BY created_at DESC LIMIT ?1 OFFSET ?2",
+             FROM users WHERE tenant_id = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
         )?;
 
-        let users = stmt.query_map(params![per_page, offset], |row| {
+        let users = stmt.query_map(params![tenant_id, per_page, offset], |row| {
             Ok(User {
                 tenant_id: row.get(0)?,
                 id: row.get(1)?,
@@ -332,13 +342,13 @@ impl UserDatabase {
     }
 
     /// Update a user
-    pub fn update_user(&self, user_id: &str, req: &UpdateUserRequest) -> Result<Option<UserResponse>> {
+    pub fn update_user(&self, tenant_id: &str, user_id: &str, req: &UpdateUserRequest) -> Result<Option<UserResponse>> {
         let conn = self.conn.lock().unwrap();
 
-        // Check if user exists
+        // Check if user exists in this tenant
         let exists: bool = conn.query_row(
-            "SELECT 1 FROM users WHERE id = ?1",
-            [user_id],
+            "SELECT 1 FROM users WHERE id = ?1 AND tenant_id = ?2",
+            params![user_id, tenant_id],
             |row| row.get::<_, i32>(0),
         ).is_ok();
 
@@ -350,14 +360,14 @@ impl UserDatabase {
         if req.email.is_none() && req.display_name.is_none() && req.role.is_none() {
             // No fields to update, just return current user
             drop(conn);
-            return self.get_user(user_id);
+            return self.get_user(tenant_id, user_id);
         }
 
         // Check and update email if provided
         if let Some(ref email) = req.email {
             let email_taken: bool = conn.query_row(
-                "SELECT 1 FROM users WHERE email = ?1 AND id != ?2",
-                params![email, user_id],
+                "SELECT 1 FROM users WHERE email = ?1 AND id != ?2 AND tenant_id = ?3",
+                params![email, user_id, tenant_id],
                 |row| row.get::<_, i32>(0),
             ).is_ok();
 
@@ -366,16 +376,16 @@ impl UserDatabase {
             }
 
             conn.execute(
-                "UPDATE users SET email = ?1 WHERE id = ?2",
-                params![email, user_id],
+                "UPDATE users SET email = ?1 WHERE id = ?2 AND tenant_id = ?3",
+                params![email, user_id, tenant_id],
             )?;
         }
 
         // Update display_name if provided
         if let Some(ref display_name) = req.display_name {
             conn.execute(
-                "UPDATE users SET display_name = ?1 WHERE id = ?2",
-                params![display_name, user_id],
+                "UPDATE users SET display_name = ?1 WHERE id = ?2 AND tenant_id = ?3",
+                params![display_name, user_id, tenant_id],
             )?;
         }
 
@@ -388,21 +398,24 @@ impl UserDatabase {
             }
 
             conn.execute(
-                "UPDATE users SET role = ?1 WHERE id = ?2",
-                params![role_str, user_id],
+                "UPDATE users SET role = ?1 WHERE id = ?2 AND tenant_id = ?3",
+                params![role_str, user_id, tenant_id],
             )?;
         }
 
         tracing::info!("User updated: {}", user_id);
         drop(conn);
-        self.get_user(user_id)
+        self.get_user(tenant_id, user_id)
     }
 
     /// Delete a user
-    pub fn delete_user(&self, user_id: &str) -> Result<bool> {
+    pub fn delete_user(&self, tenant_id: &str, user_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
 
-        let deleted = conn.execute("DELETE FROM users WHERE id = ?1", [user_id])?;
+        let deleted = conn.execute(
+            "DELETE FROM users WHERE id = ?1 AND tenant_id = ?2",
+            params![user_id, tenant_id],
+        )?;
 
         if deleted > 0 {
             tracing::info!("User deleted: {}", user_id);

@@ -25,7 +25,7 @@ async fn register(
     State(state): State<Arc<AppState>>,
     Json(req): Json<db::RegisterRequest>,
 ) -> Result<Json<RegisterResponse>, ErrorResponse> {
-    let user = state.db.register(&req).map_err(|_| ErrorResponse {
+    let user = state.db.register(&req, None).map_err(|_| ErrorResponse {
         error: "Failed to register user".to_string(),
     })?;
 
@@ -42,14 +42,14 @@ async fn login(
 
     let access_token = state
         .jwt
-        .generate_access_token(&user.id, &user.email, &user.role.to_string())
+        .generate_access_token(&user.id, &user.email, &user.role.to_string(), &user.tenant_id)
         .map_err(|_| ErrorResponse {
             error: "Failed to generate access token".to_string(),
         })?;
 
     let refresh_token = state
         .jwt
-        .generate_refresh_token(&user.id, &user.email, &user.role.to_string())
+        .generate_refresh_token(&user.id, &user.email, &user.role.to_string(), &user.tenant_id)
         .map_err(|_| ErrorResponse {
             error: "Failed to generate refresh token".to_string(),
         })?;
@@ -81,7 +81,7 @@ async fn refresh(
 
     let user = state
         .db
-        .get_user(&claims.sub)
+        .get_user(&claims.tenant_id, &claims.sub)
         .map_err(|_| ErrorResponse {
             error: "Failed to get user".to_string(),
         })?
@@ -91,14 +91,14 @@ async fn refresh(
 
     let access_token = state
         .jwt
-        .generate_access_token(&user.id, &user.email, &user.role.to_string())
+        .generate_access_token(&user.id, &user.email, &user.role.to_string(), &user.tenant_id)
         .map_err(|_| ErrorResponse {
             error: "Failed to generate access token".to_string(),
         })?;
 
     let refresh_token = state
         .jwt
-        .generate_refresh_token(&user.id, &user.email, &user.role.to_string())
+        .generate_refresh_token(&user.id, &user.email, &user.role.to_string(), &user.tenant_id)
         .map_err(|_| ErrorResponse {
             error: "Failed to generate refresh token".to_string(),
         })?;
@@ -124,7 +124,7 @@ async fn me(
 
     let user = state
         .db
-        .get_user(&claims.claims.sub)
+        .get_user(&claims.claims.tenant_id, &claims.claims.sub)
         .map_err(|_| ErrorResponse {
             error: "Failed to get user".to_string(),
         })?

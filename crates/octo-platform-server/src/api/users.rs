@@ -64,7 +64,7 @@ pub async fn list_users(
 
     state
         .db
-        .list_users(page, per_page)
+        .list_users(&auth.tenant_id, page, per_page)
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -92,7 +92,7 @@ pub async fn get_user(
         ));
     }
 
-    let user = state.db.get_user(&user_id).map_err(|e| {
+    let user = state.db.get_user(&auth.tenant_id, &user_id).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -210,7 +210,7 @@ pub async fn update_user(
 
     let user = state
         .db
-        .update_user(&user_id, &req)
+        .update_user(&auth.tenant_id, &user_id, &req)
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -260,7 +260,7 @@ pub async fn delete_user(
         ));
     }
 
-    let deleted = state.db.delete_user(&user_id).map_err(|e| {
+    let deleted = state.db.delete_user(&auth.tenant_id, &user_id).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -322,7 +322,7 @@ pub async fn update_user_role(
 
     let user = state
         .db
-        .update_user(&user_id, &update_req)
+        .update_user(&auth.tenant_id, &user_id, &update_req)
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
