@@ -12,7 +12,7 @@ use axum::{
     routing::{delete, get, patch, post, put},
     Json, Router,
 };
-use octo_platform_server::{api::mcp, api::sessions, api::users, db, AppState, PlatformConfig};
+use octo_platform_server::{api::admin, api::mcp, api::sessions, api::users, db, AppState, PlatformConfig};
 use octo_platform_server::{ErrorResponse, LoginResponse, RegisterResponse};
 use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
@@ -182,6 +182,10 @@ async fn main() -> Result<()> {
         // MCP routes
         .route("/api/mcp", get(mcp::list_mcp).post(mcp::add_mcp))
         .route("/api/mcp/:id", get(mcp::get_mcp).delete(mcp::delete_mcp))
+        // Admin routes
+        .route("/api/admin/tenants", get(admin::tenants::list_tenants).post(admin::tenants::create_tenant))
+        .route("/api/admin/tenants/:id", get(admin::tenants::get_tenant).patch(admin::tenants::update_tenant).delete(admin::tenants::delete_tenant))
+        .route("/api/admin/tenants/:id/quotas", get(admin::tenants::get_quotas).patch(admin::tenants::update_quotas))
         // WebSocket
         .route("/ws/{session_id}", get(ws_handler))
         .layer(TraceLayer::new_for_http())
