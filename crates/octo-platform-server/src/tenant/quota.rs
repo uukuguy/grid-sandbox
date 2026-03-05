@@ -71,9 +71,10 @@ impl QuotaManager {
         Ok(())
     }
 
-    pub fn acquire_session(&self) -> SessionGuard {
+    pub fn acquire_session(&self) -> Result<SessionGuard, QuotaExceeded> {
+        self.check_active_sessions()?;
         self.active_sessions.fetch_add(1, Ordering::Relaxed);
-        SessionGuard { manager: self }
+        Ok(SessionGuard { manager: self })
     }
 
     pub fn check_active_agents(&self) -> Result<(), QuotaExceeded> {
