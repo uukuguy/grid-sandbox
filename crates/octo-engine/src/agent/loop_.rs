@@ -117,6 +117,7 @@ impl AgentLoop {
             hook_registry: None,
             config: AgentConfig::default(),
             manifest: None,
+            #[allow(deprecated)]
             system_prompt_override: None,
         }
     }

@@ -4,6 +4,7 @@ use octo_engine::auth::middleware::{RequiredAction, UserContext};
 use octo_engine::auth::roles::Role;
 
 /// 从请求中提取用户上下文
+#[allow(dead_code)]
 pub fn get_user_context<B>(req: &Request<B>) -> Option<UserContext> {
     req.extensions().get::<UserContext>().cloned()
 }
@@ -82,6 +83,7 @@ pub async fn auth_middleware_with_role(
 }
 
 /// RBAC 中间件: 检查是否具有执行特定动作的权限
+#[allow(dead_code)]
 pub async fn require_action_middleware(
     req: Request<Body>,
     next: Next,
@@ -111,6 +113,7 @@ pub async fn require_action_middleware(
 }
 
 /// RBAC 中间件: 检查是否具有最低角色权限
+#[allow(dead_code)]
 pub async fn require_role_middleware(
     req: Request<Body>,
     next: Next,

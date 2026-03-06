@@ -91,6 +91,11 @@ async fn main() -> Result<()> {
 
     let addr = format!("{}:{}", cfg.server.host, cfg.server.port);
     tracing::info!("Using provider: {}", cfg.provider.name);
+    tracing::info!(
+        auth_mode = ?cfg.auth.mode,
+        api_key_count = cfg.auth.api_keys.as_ref().map(|k| k.len()).unwrap_or(0),
+        "Auth configuration loaded"
+    );
 
     // Database: SQLite with WAL mode (use config, with env override already applied)
     let db_path = cfg.database.path.clone();
