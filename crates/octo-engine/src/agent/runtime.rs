@@ -6,20 +6,23 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::info;
 
-use octo_types::{ChatMessage, ContentBlock, MessageRole, SandboxId, SessionId, ToolContext, UserId};
+use octo_types::{
+    ChatMessage, ContentBlock, MessageRole, SandboxId, SessionId, TenantId, ToolContext, UserId,
+};
 
 use crate::agent::{
-    AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentId, AgentManifest,
-    AgentMessage, AgentExecutor, AgentExecutorHandle, AgentLoop, AgentStatus, CancellationToken,
+    AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentExecutor, AgentExecutorHandle, AgentId,
+    AgentLoop, AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
 };
 use crate::db::Database;
 use crate::event::EventBus;
 use crate::mcp::manager::McpManager;
 use crate::mcp::traits::McpToolInfo;
 use crate::memory::store_traits::MemoryStore;
-use crate::memory::{SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
-use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
+use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
+use crate::metering::Metering;
 use crate::providers::ProviderConfig;
+use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
 use crate::scheduler::ScheduledTask;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{SkillLoader, SkillRegistry, SkillTool};
@@ -83,13 +86,17 @@ pub struct AgentRuntime {
     memory_store: Arc<dyn MemoryStore>,
     session_store: Arc<dyn SessionStore>,
     default_model: String,
-    // TODO: forward to AgentExecutor once observability wiring is added
+    // Observability: event bus already forwarded to AgentExecutor at line 482
     event_bus: Option<Arc<EventBus>>,
     recorder: Arc<ToolExecutionRecorder>,
     provider_chain: Option<Arc<ProviderChain>>,
     // Runtime fields (Task 2)
-    mcp_manager: Option<Arc<Mutex<crate::mcp::manager::McpManager>>>,
+    mcp_manager: Arc<Mutex<crate::mcp::manager::McpManager>>,
     working_dir: PathBuf,
+    // Observability: metering for token usage tracking
+    metering: Arc<Metering>,
+    // Tenant isolation (Task 3)
+    tenant_context: Option<TenantContext>,
 }
 
 impl AgentRuntime {
@@ -98,6 +105,8 @@ impl AgentRuntime {
     /// # Arguments
     /// * `catalog` - Agent catalog (created externally with store)
     /// * `config` - Runtime configuration containing db_path, provider, skills, etc.
+    /// * `tenant_context` - Optional tenant context for multi-tenant isolation.
+    ///                      Pass `None` for single-user mode (octo-workbench).
     ///
     /// # Returns
     /// A fully initialized AgentRuntime with:
@@ -113,37 +122,37 @@ impl AgentRuntime {
     pub async fn new(
         catalog: Arc<AgentCatalog>,
         config: AgentRuntimeConfig,
+        tenant_context: Option<TenantContext>,
     ) -> Result<Self, AgentError> {
         // 1. Open database
-        let db = Database::open(&config.db_path).await.map_err(|e| {
-            AgentError::Internal(format!("Failed to open database: {}", e))
-        })?;
+        let db = Database::open(&config.db_path)
+            .await
+            .map_err(|e| AgentError::Internal(format!("Failed to open database: {}", e)))?;
         let conn = db.conn().clone();
 
         // 2. Create WorkingMemory (Layer 0)
-        let memory: Arc<dyn WorkingMemory> = Arc::new(
-            SqliteWorkingMemory::new(conn.clone()).await.map_err(|e| {
+        let memory: Arc<dyn WorkingMemory> =
+            Arc::new(SqliteWorkingMemory::new(conn.clone()).await.map_err(|e| {
                 AgentError::Internal(format!("Failed to create working memory: {}", e))
-            })?
-        );
+            })?);
 
         // 3. Create SessionStore
-        let session_store: Arc<dyn SessionStore> = Arc::new(
-            SqliteSessionStore::new(conn.clone()).await.map_err(|e| {
+        let session_store: Arc<dyn SessionStore> =
+            Arc::new(SqliteSessionStore::new(conn.clone()).await.map_err(|e| {
                 AgentError::Internal(format!("Failed to create session store: {}", e))
-            })?
-        );
+            })?);
 
         // 4. Create MemoryStore (Layer 2)
-        let memory_store: Arc<dyn MemoryStore> = Arc::new(
-            SqliteMemoryStore::new(conn.clone())
-        );
+        let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn.clone()));
 
         // 5. Create ToolExecutionRecorder
         let recorder = Arc::new(ToolExecutionRecorder::new(conn));
 
         // 6. Create Provider
-        let api_key = config.provider.api_key.clone()
+        let api_key = config
+            .provider
+            .api_key
+            .clone()
             .unwrap_or_else(|| std::env::var("ANTHROPIC_API_KEY").unwrap_or_default());
         let provider: Arc<dyn Provider> = Arc::from(create_provider(
             &config.provider.name,
@@ -196,10 +205,11 @@ impl AgentRuntime {
         };
 
         // 11. McpManager initialization
-        let mcp_manager = Some(Arc::new(Mutex::new(McpManager::new())));
+        let mcp_manager = Arc::new(Mutex::new(McpManager::new()));
 
         // 12. Working directory
-        let working_dir = config.working_dir
+        let working_dir = config
+            .working_dir
             .unwrap_or_else(|| PathBuf::from("/tmp/octo-sandbox"));
 
         // 13. Get default model
@@ -207,6 +217,9 @@ impl AgentRuntime {
             .provider
             .model
             .unwrap_or_else(|| "claude-opus-4-5".to_string());
+
+        // 14. Metering initialization (Task 10 - observability)
+        let metering = Arc::new(Metering::new());
 
         Ok(Self {
             primary_handle: Mutex::new(None),
@@ -224,24 +237,9 @@ impl AgentRuntime {
             provider_chain,
             mcp_manager,
             working_dir,
+            metering,
+            tenant_context,
         })
-    }
-
-    /// Legacy constructor for backward compatibility during transition.
-    /// Prefer using `new()` which creates all components internally.
-    #[deprecated(since = "0.4.0", note = "Use new() instead")]
-    #[allow(dead_code)]
-    pub fn new_legacy(
-        _catalog: Arc<AgentCatalog>,
-        _provider_config: &ProviderConfig,
-        _tools: Arc<ToolRegistry>,
-        _memory: Arc<dyn WorkingMemory>,
-        _default_model: String,
-    ) -> Self {
-        // This legacy constructor is deprecated and should not be used.
-        // Use new() instead which creates all components internally.
-        // We still need this for compilation during the transition period.
-        unimplemented!("Use AgentRuntime::new() instead")
     }
 
     pub fn with_skill_registry(mut self, skills: Arc<SkillRegistry>) -> Self {
@@ -308,8 +306,39 @@ impl AgentRuntime {
         &self.provider
     }
 
-    pub fn mcp_manager(&self) -> Option<&Arc<Mutex<crate::mcp::manager::McpManager>>> {
-        self.mcp_manager.as_ref()
+    pub fn mcp_manager(&self) -> &Arc<Mutex<crate::mcp::manager::McpManager>> {
+        &self.mcp_manager
+    }
+
+    /// Get metering snapshot for observability
+    pub fn metering(&self) -> crate::metering::MeteringSnapshot {
+        self.metering.snapshot()
+    }
+
+    /// Get tenant context (if any)
+    pub fn tenant_context(&self) -> Option<&TenantContext> {
+        self.tenant_context.as_ref()
+    }
+
+    /// Verify that the given tenant_id matches the current tenant context.
+    /// Returns Ok(()) if access is allowed, or Err(AgentError::PermissionDenied) if not.
+    ///
+    /// # Arguments
+    /// * `tenant_id` - The tenant ID to verify access for
+    ///
+    /// # Returns
+    /// * `Ok(())` - If tenant access is allowed (no tenant context set, or matching tenant)
+    /// * `Err(AgentError::PermissionDenied)` - If tenant context exists but doesn't match
+    pub fn verify_tenant_access(&self, tenant_id: &TenantId) -> Result<(), AgentError> {
+        if let Some(ref ctx) = self.tenant_context {
+            if &ctx.tenant_id != tenant_id {
+                return Err(AgentError::PermissionDenied(format!(
+                    "Tenant mismatch: expected {}, got {}",
+                    ctx.tenant_id, tenant_id
+                )));
+            }
+        }
+        Ok(())
     }
 
     // ── MCP Server 管理 API ─────────────────────────────────────────────────
@@ -319,12 +348,13 @@ impl AgentRuntime {
         &self,
         config: crate::mcp::traits::McpServerConfig,
     ) -> Result<Vec<McpToolInfo>, AgentError> {
-        let mcp = self.mcp_manager.as_ref()
-            .ok_or(AgentError::McpNotInitialized)?;
+        let mcp = &self.mcp_manager;
 
         let tools = {
             let mut guard = mcp.lock().await;
-            guard.add_server(config.clone()).await
+            guard
+                .add_server(config.clone())
+                .await
                 .map_err(|e| AgentError::McpError(e.to_string()))?
         };
 
@@ -348,17 +378,14 @@ impl AgentRuntime {
     }
 
     /// 移除 MCP Server → 自动注销 tools
-    pub async fn remove_mcp_server(
-        &self,
-        name: &str,
-    ) -> Result<(), AgentError> {
-        let mcp = self.mcp_manager.as_ref()
-            .ok_or(AgentError::McpNotInitialized)?;
+    pub async fn remove_mcp_server(&self, name: &str) -> Result<(), AgentError> {
+        let mcp = &self.mcp_manager;
 
         // 先获取要移除的 tools 信息
         let _removed_tool_names: Vec<String> = {
             let guard = mcp.lock().await;
-            guard.get_tool_infos(name)
+            guard
+                .get_tool_infos(name)
                 .map(|tools| tools.iter().map(|t| t.name.clone()).collect())
                 .unwrap_or_default()
         };
@@ -366,7 +393,9 @@ impl AgentRuntime {
         // 调用 remove_server
         {
             let mut guard = mcp.lock().await;
-            guard.remove_server(name).await
+            guard
+                .remove_server(name)
+                .await
                 .map_err(|e| AgentError::McpError(e.to_string()))?;
         }
 
@@ -375,7 +404,10 @@ impl AgentRuntime {
         // 过滤掉属于该 MCP server 的工具
         let all_tools: Vec<(String, Arc<dyn crate::tools::Tool>)> = {
             let tools_guard = self.tools.lock().unwrap();
-            tools_guard.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            tools_guard
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
         };
         let mut new_registry = crate::tools::ToolRegistry::new();
         for (tool_name, tool) in all_tools {
@@ -397,26 +429,27 @@ impl AgentRuntime {
     }
 
     /// 列出运行中的 MCP servers
-    pub fn list_mcp_servers(&self) -> Vec<crate::mcp::manager::ServerRuntimeState> {
-        match &self.mcp_manager {
-            Some(mcp) => {
-                let guard = mcp.blocking_lock();
-                let states = guard.all_runtime_states();
-                states.into_iter().map(|(_, state)| state).collect()
-            }
-            None => vec![],
-        }
+    pub async fn list_mcp_servers(&self) -> Vec<crate::mcp::manager::ServerRuntimeState> {
+        let guard = self.mcp_manager.lock().await;
+        let states = guard.all_runtime_states();
+        states.into_iter().map(|(_, state)| state).collect()
+    }
+
+    /// 获取所有 MCP servers 的运行时状态（包含名称）
+    pub async fn get_all_mcp_server_states(
+        &self,
+    ) -> std::collections::HashMap<String, crate::mcp::manager::ServerRuntimeState> {
+        let guard = self.mcp_manager.lock().await;
+        guard.all_runtime_states()
     }
 
     /// 获取指定 MCP server 的 tools
-    pub async fn get_mcp_tool_infos(&self, server_id: &str) -> Vec<crate::mcp::traits::McpToolInfo> {
-        match &self.mcp_manager {
-            Some(mcp) => {
-                let guard = mcp.lock().await;
-                guard.get_tool_infos(server_id).unwrap_or_default()
-            }
-            None => vec![],
-        }
+    pub async fn get_mcp_tool_infos(
+        &self,
+        server_id: &str,
+    ) -> Vec<crate::mcp::traits::McpToolInfo> {
+        let guard = self.mcp_manager.lock().await;
+        guard.get_tool_infos(server_id).unwrap_or_default()
     }
 
     /// 调用 MCP tool
@@ -426,37 +459,26 @@ impl AgentRuntime {
         tool_name: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        match &self.mcp_manager {
-            Some(mcp) => {
-                let guard = mcp.lock().await;
-                guard.call_tool(server_id, tool_name, arguments)
-                    .await
-                    .map_err(|e| e.to_string())
-            }
-            None => Err("MCP manager not initialized".to_string()),
-        }
+        let guard = self.mcp_manager.lock().await;
+        guard
+            .call_tool(server_id, tool_name, arguments)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// 获取指定 MCP server 的运行时状态
-    pub fn get_mcp_runtime_state(&self, server_id: &str) -> crate::mcp::manager::ServerRuntimeState {
-        match &self.mcp_manager {
-            Some(mcp) => {
-                let guard = mcp.blocking_lock();
-                guard.get_runtime_state(server_id)
-            }
-            None => crate::mcp::manager::ServerRuntimeState::Stopped,
-        }
+    pub async fn get_mcp_runtime_state(
+        &self,
+        server_id: &str,
+    ) -> crate::mcp::manager::ServerRuntimeState {
+        let guard = self.mcp_manager.lock().await;
+        guard.get_runtime_state(server_id)
     }
 
     /// 获取指定 MCP server 的 tool 数量
     pub async fn get_mcp_tool_count(&self, server_id: &str) -> usize {
-        match &self.mcp_manager {
-            Some(mcp) => {
-                let guard = mcp.lock().await;
-                guard.get_tool_count(server_id)
-            }
-            None => 0,
-        }
+        let guard = self.mcp_manager.lock().await;
+        guard.get_tool_count(server_id)
     }
 
     /// 获取主 AgentExecutorHandle（如果已启动）
@@ -487,8 +509,8 @@ impl AgentRuntime {
             }
         }
 
-        // 从 manifest 解析运行时配置
-        let (tools, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
+        // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
+        let (_, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
 
         let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
         let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
@@ -507,8 +529,8 @@ impl AgentRuntime {
             rx,
             broadcast_tx,
             self.provider.clone(),
-            tools,
-            self.memory.clone(),
+            Arc::clone(&self.tools), // 共享引用，支持 MCP 热插拔
+            Arc::new(InMemoryWorkingMemory::new()), // 每 session 独立实例，防止数据污染
             Some(self.memory_store.clone()),
             Some(model),
             Some(self.session_store.clone()),
@@ -540,13 +562,14 @@ impl AgentRuntime {
 
     /// 停止主 Runtime
     pub async fn stop_primary(&self) {
-        let handle = {
+        let _dropped_handle = {
             let mut guard = self.primary_handle.lock().await;
             guard.take()
         };
-        if let Some(h) = handle {
-            let _ = h.send(AgentMessage::Cancel).await;
-            info!("Primary AgentExecutor stopped");
+        // AgentExecutorHandle is dropped here → tx is dropped → rx.recv() returns None
+        // → AgentExecutor while loop naturally exits → tokio task ends
+        if _dropped_handle.is_some() {
+            info!("Primary AgentExecutor stopped (tx dropped)");
         }
     }
 
@@ -611,7 +634,7 @@ impl AgentRuntime {
             }
             return Some(parts.join("\n\n"));
         }
-        None  // 返回 None 表示使用 AgentLoop 默认（SOUL.md）
+        None // 返回 None 表示使用 AgentLoop 默认（SOUL.md）
     }
 
     /// 启动 agent：从 catalog 读取 manifest，启动 primary Executor，更新状态机。
@@ -630,20 +653,23 @@ impl AgentRuntime {
             .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
 
         // 启动 primary Runtime
-        let handle = self.start_primary(
-            session_id,
-            user_id,
-            sandbox_id,
-            initial_history,
-            Some(agent_id),
-        ).await;
+        let handle = self
+            .start_primary(
+                session_id,
+                user_id,
+                sandbox_id,
+                initial_history,
+                Some(agent_id),
+            )
+            .await;
 
         Ok(handle)
     }
 
     /// 停止 agent：发送 Cancel，更新 catalog 状态。
     pub async fn stop(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self.catalog
+        let entry = self
+            .catalog
             .get(agent_id)
             .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
         if entry.state == AgentStatus::Stopped {
@@ -670,7 +696,8 @@ impl AgentRuntime {
 
     /// 暂停 agent：发送 Cancel（中断当前 round），更新 catalog 状态。
     pub async fn pause(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self.catalog
+        let entry = self
+            .catalog
             .get(agent_id)
             .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
         if entry.state != AgentStatus::Running {
@@ -697,7 +724,8 @@ impl AgentRuntime {
 
     /// 恢复 agent：更新 catalog 状态（Runtime 仍在运行，cancel_flag 已重置）。
     pub fn resume(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self.catalog
+        let entry = self
+            .catalog
             .get(agent_id)
             .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
         if entry.state != AgentStatus::Paused {
@@ -722,7 +750,10 @@ impl AgentRuntime {
                 let manifest = &entry.manifest;
                 let tools = self.build_tool_registry(&manifest.tool_filter);
                 let system_prompt = Self::build_system_prompt(manifest);
-                let model = manifest.model.clone().unwrap_or_else(|| self.default_model.clone());
+                let model = manifest
+                    .model
+                    .clone()
+                    .unwrap_or_else(|| self.default_model.clone());
                 let config = manifest.config.clone();
                 return (tools, system_prompt, model, config);
             }
@@ -734,16 +765,18 @@ impl AgentRuntime {
             for (name, tool) in tools_guard.iter() {
                 registry.register_arc(name.clone(), tool);
             }
-            (Arc::new(registry), None, self.default_model.clone(), AgentConfig::default())
+            (
+                Arc::new(registry),
+                None,
+                self.default_model.clone(),
+                AgentConfig::default(),
+            )
         }
     }
 
     /// Execute a scheduled task: create session, run agent, return result.
     /// Reuses provider/tools/memory from this AgentRuntime.
-    pub async fn execute_scheduled_task(
-        &self,
-        task: &ScheduledTask,
-    ) -> Result<String, AgentError> {
+    pub async fn execute_scheduled_task(&self, task: &ScheduledTask) -> Result<String, AgentError> {
         let config = &task.agent_config;
 
         // Create session for the task using the session store
@@ -753,10 +786,7 @@ impl AgentRuntime {
             .map(|u| UserId::from_string(u.clone()))
             .unwrap_or_else(|| UserId::from_string("scheduler".to_string()));
 
-        let session = self
-            .session_store
-            .create_session_with_user(&user_id)
-            .await;
+        let session = self.session_store.create_session_with_user(&user_id).await;
         let session_id = session.session_id.clone();
         let sandbox_id = session.sandbox_id.clone();
 
@@ -782,12 +812,8 @@ impl AgentRuntime {
         let tools = Arc::new(registry);
         drop(tools_guard);
 
-        let mut agent_loop = AgentLoop::new(
-            self.provider.clone(),
-            tools,
-            self.memory.clone(),
-        )
-        .with_model(config.model.clone());
+        let mut agent_loop = AgentLoop::new(self.provider.clone(), tools, self.memory.clone())
+            .with_model(config.model.clone());
 
         // Run agent with timeout
         let result = tokio::time::timeout(

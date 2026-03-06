@@ -67,7 +67,7 @@ pub async fn list_servers(
         return Json(vec![]);
     };
 
-    let runtime_states = state.agent_supervisor.list_mcp_servers();
+    let runtime_states = state.agent_supervisor.list_mcp_servers().await;
 
     // Use list_servers_for_user to filter by user_id
     match storage.list_servers_for_user(&user_id) {
@@ -78,11 +78,9 @@ pub async fn list_servers(
                     // Find runtime state for this server
                     let runtime_status = runtime_states
                         .iter()
-                        .find(|state| {
-                            match state {
-                                octo_engine::mcp::manager::ServerRuntimeState::Running { .. } => true,
-                                _ => false,
-                            }
+                        .find(|state| match state {
+                            octo_engine::mcp::manager::ServerRuntimeState::Running { .. } => true,
+                            _ => false,
                         })
                         .map(|_| "running")
                         .unwrap_or("stopped");
@@ -282,7 +280,7 @@ pub async fn update_server(
     match storage.update_server(&record) {
         Ok(_) => {
             // Get runtime status from manager
-            let runtime = state.agent_supervisor.get_mcp_runtime_state(&id);
+            let runtime = state.agent_supervisor.get_mcp_runtime_state(&id).await;
             let runtime_status = match runtime {
                 ServerRuntimeState::Stopped => "stopped",
                 ServerRuntimeState::Starting => "starting",
@@ -427,7 +425,7 @@ pub async fn get_server_status(
         }
     }
 
-    let runtime_state = state.agent_supervisor.get_mcp_runtime_state(&id);
+    let runtime_state = state.agent_supervisor.get_mcp_runtime_state(&id).await;
     let tool_count = state.agent_supervisor.get_mcp_tool_count(&id).await;
 
     let (status, pid, error) = match runtime_state {

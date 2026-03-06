@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
+use super::roles::Role;
+
 /// 认证模式
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,6 +46,7 @@ pub struct ApiKey {
     pub key_hash: String,        // sha256 哈希存储
     pub user_id: Option<String>, // 可选用户绑定
     pub permissions: Vec<Permission>,
+    pub role: Option<Role>, // 角色信息（用于 RBAC）
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
@@ -58,6 +61,7 @@ impl ApiKey {
             key_hash,
             user_id,
             permissions,
+            role: None,
             expires_at: None,
             created_at: Utc::now(),
         }
@@ -65,6 +69,11 @@ impl ApiKey {
 
     pub fn with_expiry(mut self, expires_at: DateTime<Utc>) -> Self {
         self.expires_at = Some(expires_at);
+        self
+    }
+
+    pub fn with_role(mut self, role: Role) -> Self {
+        self.role = Some(role);
         self
     }
 
@@ -95,7 +104,7 @@ impl AuthConfig {
         self
     }
 
-    /// 添加 API Key
+    /// 添加 API Key（带角色）
     pub fn add_api_key(
         &mut self,
         key: &str,
@@ -103,6 +112,21 @@ impl AuthConfig {
         permissions: Vec<Permission>,
     ) {
         let api_key = ApiKey::new(key, user_id, permissions);
+        self.api_keys.insert(api_key.key_hash.clone(), api_key);
+    }
+
+    /// 添加 API Key（带角色）
+    pub fn add_api_key_with_role(
+        &mut self,
+        key: &str,
+        user_id: Option<String>,
+        permissions: Vec<Permission>,
+        role: Option<Role>,
+    ) {
+        let mut api_key = ApiKey::new(key, user_id, permissions);
+        if let Some(r) = role {
+            api_key = api_key.with_role(r);
+        }
         self.api_keys.insert(api_key.key_hash.clone(), api_key);
     }
 
@@ -143,6 +167,15 @@ impl AuthConfig {
             .map(|k| k.permissions.clone())
             .unwrap_or_default()
     }
+
+    /// 获取角色
+    pub fn get_role(&self, key: &str) -> Option<Role> {
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        let key_hash = format!("{:x}", hasher.finalize());
+
+        self.api_keys.get(&key_hash).and_then(|k| k.role)
+    }
 }
 
 /// API Key 配置（用于配置文件）
@@ -151,6 +184,7 @@ pub struct ApiKeyConfig {
     pub key: String, // 原始 key（加载时哈希）
     pub user_id: Option<String>,
     pub permissions: Vec<String>,
+    pub role: Option<String>, // 角色: viewer, user, admin, owner
     pub expires_at: Option<String>,
 }
 
@@ -183,7 +217,15 @@ impl AuthConfigYaml {
                     .filter_map(|p| Permission::from_str(p))
                     .collect();
 
-                config.add_api_key(&key_config.key, key_config.user_id.clone(), permissions);
+                // 解析角色
+                let role = key_config.role.as_ref().and_then(|r| Role::from_str(r));
+
+                config.add_api_key_with_role(
+                    &key_config.key,
+                    key_config.user_id.clone(),
+                    permissions,
+                    role,
+                );
             }
         }
 

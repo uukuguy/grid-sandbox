@@ -274,8 +274,8 @@ impl Scheduler {
         }
     }
 
-    /// Execute a single task
-    async fn execute_task(&self, task: &ScheduledTask) -> Result<(), SchedulerError> {
+    /// Execute a single task and return the execution result
+    async fn execute_task(&self, task: &ScheduledTask) -> Result<TaskExecution, SchedulerError> {
         // Check concurrency limit
         let _permit = self
             .semaphore
@@ -325,7 +325,7 @@ impl Scheduler {
 
         tracing::info!("Task {} executed, next run: {:?}", task.id, next_run);
 
-        Ok(())
+        Ok(execution)
     }
 
     /// Run an agent task
@@ -367,12 +367,9 @@ impl Scheduler {
         };
 
         // Create and configure agent loop
-        let mut agent_loop = AgentLoop::new(
-            self.provider.clone(),
-            tools_snapshot,
-            self.memory.clone(),
-        )
-        .with_model(config.model.clone());
+        let mut agent_loop =
+            AgentLoop::new(self.provider.clone(), tools_snapshot, self.memory.clone())
+                .with_model(config.model.clone());
 
         // Run agent with timeout
         let result = tokio::time::timeout(
@@ -540,23 +537,8 @@ impl Scheduler {
             }
         }
 
-        let now = Utc::now();
-        let execution = TaskExecution {
-            id: Uuid::new_v4().to_string(),
-            task_id: task_id.to_string(),
-            started_at: now,
-            finished_at: Some(now),
-            status: ExecutionStatus::Success,
-            result: Some("Manually triggered".to_string()),
-            error: None,
-        };
-
-        self.storage.save_execution(&execution).await?;
-
-        // Update last_run
-        self.storage
-            .update_timing(task_id, Some(now), task.next_run)
-            .await?;
+        // Execute the task for real
+        let execution = self.execute_task(&task).await?;
 
         Ok(execution)
     }
