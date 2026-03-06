@@ -5,6 +5,7 @@ pub mod context;
 pub mod db;
 pub mod event;
 pub mod extension;
+pub mod hooks;
 pub mod logging;
 pub mod mcp;
 pub mod memory;
@@ -21,9 +22,10 @@ pub mod skills;
 pub mod tools;
 
 pub use agent::{
-    AgentCatalog, AgentEntry, AgentError, AgentEvent, AgentExecutor, AgentExecutorHandle, AgentId,
-    AgentLoop, AgentManifest, AgentMessage, AgentRuntime, AgentRuntimeConfig, AgentStatus,
-    AgentStore, TenantContext,
+    AgentCapability, AgentCatalog, AgentEntry, AgentError, AgentEvent, AgentExecutor,
+    AgentExecutorHandle, AgentId, AgentLoop, AgentManifest, AgentMessage, AgentProfile,
+    AgentRouter, AgentRuntime, AgentRuntimeConfig, AgentStatus, AgentStore, RouteAlternative,
+    RouteResult, TenantContext,
 };
 pub use audit::{AuditEvent, AuditRecord, AuditStorage};
 pub use auth::{
@@ -34,7 +36,8 @@ pub use context::{
     BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,
 };
 pub use db::Database;
-pub use event::{EventBus, OctoEvent};
+pub use event::{EventBus, EventCountProjection, EventStore, OctoEvent, Projection, StoredEvent};
+pub use hooks::{BoxHookHandler, HookAction, HookContext, HookHandler, HookPoint, HookRegistry};
 pub use extension::{
     AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
     ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,
@@ -45,9 +48,10 @@ pub use logging::{
 // audit_log macro is exported at crate root via #[macro_export] in logging module
 pub use mcp::{McpClient, McpManager, McpServerConfig, McpToolBridge, McpToolInfo, StdioMcpClient};
 pub use memory::{
-    Entity, FtsStore, GraphStats, GraphStore, InMemoryWorkingMemory, KnowledgeGraph, MemoryStore,
-    MemorySystem, Relation, SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager,
-    WorkingMemory,
+    Entity, FtsStore, GraphStats, GraphStore, HybridQueryEngine, HybridSearchResult,
+    InMemoryWorkingMemory, KnowledgeGraph, MemoryStore, MemorySystem, QueryType, Relation,
+    SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager, VectorEntry, VectorIndex,
+    VectorIndexConfig, VectorSearchResult, WorkingMemory,
 };
 pub use metering::{Metering, MeteringSnapshot};
 pub use metrics::{Counter, Gauge, Histogram, MetricsRegistry};
