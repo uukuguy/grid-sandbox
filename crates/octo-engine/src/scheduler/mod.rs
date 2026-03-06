@@ -351,6 +351,7 @@ impl Scheduler {
         let tool_ctx = ToolContext {
             sandbox_id: sandbox_id.clone(),
             working_dir: PathBuf::from("/tmp"),
+            path_validator: None,
         };
 
         // Create event channel (discard events)
@@ -358,7 +359,7 @@ impl Scheduler {
 
         // Build a snapshot of the tool registry for this task execution
         let tools_snapshot = {
-            let guard = self.tools.lock().unwrap();
+            let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
             let mut snapshot = ToolRegistry::new();
             for (name, tool) in guard.iter() {
                 snapshot.register_arc(name.clone(), tool);

@@ -192,6 +192,38 @@ pub async fn create_server(
     let env_str = serde_json::to_string(&env_map).unwrap_or_default();
     let enabled = req.enabled.unwrap_or(true);
 
+    // Validate command against allowlist
+    const ALLOWED_MCP_COMMANDS: &[&str] = &[
+        "npx", "node", "python3", "python", "cargo", "deno", "bun", "uvx",
+    ];
+    if !command.is_empty() {
+        let cmd_base = command
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .rsplit('/')
+            .next()
+            .unwrap_or("");
+        if !ALLOWED_MCP_COMMANDS.contains(&cmd_base) {
+            tracing::warn!(command = %command, "MCP server command rejected: not in allowlist");
+            return Json(McpServerResponse {
+                id: id.clone(),
+                name: req.name,
+                source,
+                command,
+                args: args_vec,
+                env: env_map,
+                transport,
+                url: req.url,
+                enabled: false,
+                runtime_status: "error".to_string(),
+                tool_count: 0,
+                created_at: now.clone(),
+                updated_at: now,
+            });
+        }
+    }
+
     let record = octo_engine::mcp::storage::McpServerRecord {
         id: id.clone(),
         name: req.name.clone(),

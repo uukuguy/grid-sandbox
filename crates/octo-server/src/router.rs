@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use axum::{body::Body, extract::Request, extract::State, routing::get, Json, Router};
-use octo_engine::auth::{auth_middleware_with_role, AuthConfig};
+use octo_engine::auth::AuthConfig;
+use crate::middleware::auth_middleware_with_role;
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -106,10 +107,24 @@ async fn auth_middleware_wrapper(
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = if state.config.server.cors_origins.is_empty() {
+        CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    } else {
+        let origins: Vec<axum::http::HeaderValue> = state
+            .config
+            .server
+            .cors_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        CorsLayer::new()
+            .allow_origin(origins)
+            .allow_methods(Any)
+            .allow_headers(Any)
+    };
 
     // Rate limiter: 100 requests per minute per IP
     let rate_limiter = RateLimiter::new(100, 60);

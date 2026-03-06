@@ -84,9 +84,20 @@ enum ServerMessage {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-    _req: Request,
+    req: Request,
 ) -> impl IntoResponse {
+    // Auth check: if auth is enabled, verify user context exists
+    if state.auth_config.mode != octo_engine::auth::AuthMode::None {
+        if req.extensions().get::<octo_engine::auth::UserContext>().is_none() {
+            return axum::response::Response::builder()
+                .status(axum::http::StatusCode::UNAUTHORIZED)
+                .body(axum::body::Body::from("WebSocket authentication required"))
+                .unwrap()
+                .into_response();
+        }
+    }
     ws.on_upgrade(move |socket| handle_socket(socket, state))
+        .into_response()
 }
 
 async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {

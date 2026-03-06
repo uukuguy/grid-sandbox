@@ -27,8 +27,8 @@ pub use agent::{
 };
 pub use audit::{AuditEvent, AuditRecord, AuditStorage};
 pub use auth::{
-    auth_middleware_with_role, get_user_context, Action, ApiKey, ApiKeyConfig, ApiKeyResponse,
-    ApiKeyStorage, AuthConfig, AuthConfigYaml, AuthMode, Permission, Role, UserContext,
+    Action, ApiKey, ApiKeyConfig, ApiKeyResponse, ApiKeyStorage, AuthConfig, AuthConfigYaml,
+    AuthMode, Permission, Role, UserContext,
 };
 pub use context::{
     BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,

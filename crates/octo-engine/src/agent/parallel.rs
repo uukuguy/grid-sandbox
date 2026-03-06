@@ -166,6 +166,7 @@ mod tests {
         ToolContext {
             sandbox_id: SandboxId::from_string("test-sandbox"),
             working_dir: std::path::PathBuf::from("/tmp"),
+            path_validator: None,
         }
     }
 

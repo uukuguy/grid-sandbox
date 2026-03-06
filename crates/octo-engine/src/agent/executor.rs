@@ -142,7 +142,7 @@ impl AgentExecutor {
 
                     // 从共享 ToolRegistry 生成快照（每 round 新建，实现 MCP 热插拔）
                     let tools_snapshot = {
-                        let guard = self.tools.lock().unwrap();
+                        let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
                         let mut registry = ToolRegistry::new();
                         for (name, tool) in guard.iter() {
                             registry.register_arc(name.clone(), tool);
@@ -177,6 +177,7 @@ impl AgentExecutor {
                     let tool_ctx = ToolContext {
                         sandbox_id: self.sandbox_id.clone(),
                         working_dir: self.working_dir.clone(),
+                        path_validator: None,
                     };
                     let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
 

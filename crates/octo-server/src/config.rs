@@ -48,6 +48,9 @@ pub struct ServerConfig {
     pub host: String,
     /// Server port (default: 3001)
     pub port: u16,
+    /// Allowed CORS origins (empty = allow all)
+    #[serde(default)]
+    pub cors_origins: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -55,6 +58,7 @@ impl Default for ServerConfig {
         Self {
             host: "127.0.0.1".to_string(),
             port: 3001,
+            cors_origins: vec![],
         }
     }
 }
@@ -182,6 +186,15 @@ impl Config {
             if let Ok(p) = port.parse() {
                 config.server.port = p;
             }
+        }
+
+        // CORS origins
+        if let Ok(origins) = std::env::var("OCTO_CORS_ORIGINS") {
+            config.server.cors_origins = origins
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
         }
 
         // Provider - read first to determine other fields

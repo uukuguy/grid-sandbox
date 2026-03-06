@@ -416,7 +416,7 @@ impl AgentPool {
         let catalog = Arc::new(AgentCatalog::new());
 
         // Create the AgentRuntime
-        let runtime = AgentRuntime::new(catalog, runtime_config)
+        let runtime = AgentRuntime::new(catalog, runtime_config, None)
             .await
             .map_err(|e| PoolError::RuntimeError(e.to_string()))?;
 

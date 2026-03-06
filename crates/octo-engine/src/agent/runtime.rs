@@ -6,24 +6,20 @@ use dashmap::DashMap;
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tracing::info;
 
-use octo_types::{
-    ChatMessage, ContentBlock, MessageRole, SandboxId, SessionId, TenantId, ToolContext, UserId,
-};
+use octo_types::{ChatMessage, SandboxId, SessionId, TenantId, UserId};
 
 use crate::agent::{
     AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentExecutor, AgentExecutorHandle, AgentId,
-    AgentLoop, AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
+    AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
 };
 use crate::db::Database;
 use crate::event::EventBus;
 use crate::mcp::manager::McpManager;
-use crate::mcp::traits::McpToolInfo;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::metering::Metering;
 use crate::providers::ProviderConfig;
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
-use crate::scheduler::ScheduledTask;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{SkillLoader, SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
@@ -73,30 +69,30 @@ impl AgentRuntimeConfig {
 /// Session → AgentExecutorHandle 的注册表，同时持有所有共享运行时依赖
 pub struct AgentRuntime {
     /// 单一主 executor（单用户场景）- 使用 Mutex 实现内部可变性
-    primary_handle: Mutex<Option<AgentExecutorHandle>>,
+    pub(crate) primary_handle: Mutex<Option<AgentExecutorHandle>>,
     /// AgentId → CancellationToken，用于 stop/pause 时取消正在运行的 AgentExecutor
-    agent_handles: DashMap<AgentId, CancellationToken>,
+    pub(crate) agent_handles: DashMap<AgentId, CancellationToken>,
     // 定义层
-    catalog: Arc<AgentCatalog>,
+    pub(crate) catalog: Arc<AgentCatalog>,
     // 共享依赖（构造时注入一次）
-    provider: Arc<dyn Provider>,
-    tools: Arc<StdMutex<ToolRegistry>>,
-    skill_registry: Option<Arc<SkillRegistry>>,
-    memory: Arc<dyn WorkingMemory>,
-    memory_store: Arc<dyn MemoryStore>,
-    session_store: Arc<dyn SessionStore>,
-    default_model: String,
+    pub(crate) provider: Arc<dyn Provider>,
+    pub(crate) tools: Arc<StdMutex<ToolRegistry>>,
+    pub(crate) skill_registry: Option<Arc<SkillRegistry>>,
+    pub(crate) memory: Arc<dyn WorkingMemory>,
+    pub(crate) memory_store: Arc<dyn MemoryStore>,
+    pub(crate) session_store: Arc<dyn SessionStore>,
+    pub(crate) default_model: String,
     // Observability: event bus already forwarded to AgentExecutor at line 482
-    event_bus: Option<Arc<EventBus>>,
-    recorder: Arc<ToolExecutionRecorder>,
-    provider_chain: Option<Arc<ProviderChain>>,
+    pub(crate) event_bus: Option<Arc<EventBus>>,
+    pub(crate) recorder: Arc<ToolExecutionRecorder>,
+    pub(crate) provider_chain: Option<Arc<ProviderChain>>,
     // Runtime fields (Task 2)
-    mcp_manager: Arc<Mutex<crate::mcp::manager::McpManager>>,
-    working_dir: PathBuf,
+    pub(crate) mcp_manager: Arc<Mutex<crate::mcp::manager::McpManager>>,
+    pub(crate) working_dir: PathBuf,
     // Observability: metering for token usage tracking
-    metering: Arc<Metering>,
+    pub(crate) metering: Arc<Metering>,
     // Tenant isolation (Task 3)
-    tenant_context: Option<TenantContext>,
+    pub(crate) tenant_context: Option<TenantContext>,
 }
 
 impl AgentRuntime {
@@ -341,146 +337,6 @@ impl AgentRuntime {
         Ok(())
     }
 
-    // ── MCP Server 管理 API ─────────────────────────────────────────────────
-
-    /// 添加 MCP Server → 自动注册 tools
-    pub async fn add_mcp_server(
-        &self,
-        config: crate::mcp::traits::McpServerConfig,
-    ) -> Result<Vec<McpToolInfo>, AgentError> {
-        let mcp = &self.mcp_manager;
-
-        let tools = {
-            let mut guard = mcp.lock().await;
-            guard
-                .add_server(config.clone())
-                .await
-                .map_err(|e| AgentError::McpError(e.to_string()))?
-        };
-
-        // 注册到 ToolRegistry
-        {
-            let mcp_guard = mcp.lock().await;
-            let mut tools_guard = self.tools.lock().unwrap();
-            for tool_info in &tools {
-                if let Some(client) = mcp_guard.clients().get(&config.name) {
-                    let bridge = crate::mcp::bridge::McpToolBridge::new(
-                        client.clone(),
-                        config.name.clone(),
-                        tool_info.clone(),
-                    );
-                    tools_guard.register(bridge);
-                }
-            }
-        }
-
-        Ok(tools)
-    }
-
-    /// 移除 MCP Server → 自动注销 tools
-    pub async fn remove_mcp_server(&self, name: &str) -> Result<(), AgentError> {
-        let mcp = &self.mcp_manager;
-
-        // 先获取要移除的 tools 信息
-        let _removed_tool_names: Vec<String> = {
-            let guard = mcp.lock().await;
-            guard
-                .get_tool_infos(name)
-                .map(|tools| tools.iter().map(|t| t.name.clone()).collect())
-                .unwrap_or_default()
-        };
-
-        // 调用 remove_server
-        {
-            let mut guard = mcp.lock().await;
-            guard
-                .remove_server(name)
-                .await
-                .map_err(|e| AgentError::McpError(e.to_string()))?;
-        }
-
-        // 从 ToolRegistry 注销
-        // 由于 ToolRegistry 没有 unregister 方法，我们重新构建工具列表
-        // 过滤掉属于该 MCP server 的工具
-        let all_tools: Vec<(String, Arc<dyn crate::tools::Tool>)> = {
-            let tools_guard = self.tools.lock().unwrap();
-            tools_guard
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
-        };
-        let mut new_registry = crate::tools::ToolRegistry::new();
-        for (tool_name, tool) in all_tools {
-            // 检查工具来源是否为该 MCP server，使用模式匹配
-            let should_remove = match tool.source() {
-                octo_types::ToolSource::Mcp(server_name) => server_name == name,
-                _ => false,
-            };
-            if should_remove {
-                continue; // 跳过要移除的工具
-            }
-            new_registry.register_arc(tool_name, tool);
-        }
-        // 替换旧的 registry
-        let mut tools_guard = self.tools.lock().unwrap();
-        *tools_guard = new_registry;
-
-        Ok(())
-    }
-
-    /// 列出运行中的 MCP servers
-    pub async fn list_mcp_servers(&self) -> Vec<crate::mcp::manager::ServerRuntimeState> {
-        let guard = self.mcp_manager.lock().await;
-        let states = guard.all_runtime_states();
-        states.into_iter().map(|(_, state)| state).collect()
-    }
-
-    /// 获取所有 MCP servers 的运行时状态（包含名称）
-    pub async fn get_all_mcp_server_states(
-        &self,
-    ) -> std::collections::HashMap<String, crate::mcp::manager::ServerRuntimeState> {
-        let guard = self.mcp_manager.lock().await;
-        guard.all_runtime_states()
-    }
-
-    /// 获取指定 MCP server 的 tools
-    pub async fn get_mcp_tool_infos(
-        &self,
-        server_id: &str,
-    ) -> Vec<crate::mcp::traits::McpToolInfo> {
-        let guard = self.mcp_manager.lock().await;
-        guard.get_tool_infos(server_id).unwrap_or_default()
-    }
-
-    /// 调用 MCP tool
-    pub async fn call_mcp_tool(
-        &self,
-        server_id: &str,
-        tool_name: &str,
-        arguments: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        let guard = self.mcp_manager.lock().await;
-        guard
-            .call_tool(server_id, tool_name, arguments)
-            .await
-            .map_err(|e| e.to_string())
-    }
-
-    /// 获取指定 MCP server 的运行时状态
-    pub async fn get_mcp_runtime_state(
-        &self,
-        server_id: &str,
-    ) -> crate::mcp::manager::ServerRuntimeState {
-        let guard = self.mcp_manager.lock().await;
-        guard.get_runtime_state(server_id)
-    }
-
-    /// 获取指定 MCP server 的 tool 数量
-    pub async fn get_mcp_tool_count(&self, server_id: &str) -> usize {
-        let guard = self.mcp_manager.lock().await;
-        guard.get_tool_count(server_id)
-    }
-
     /// 获取主 AgentExecutorHandle（如果已启动）
     pub async fn primary(&self) -> Option<AgentExecutorHandle> {
         let guard = self.primary_handle.lock().await;
@@ -576,23 +432,15 @@ impl AgentRuntime {
     /// 按 tool_filter 构建 ToolRegistry（含 SkillRegistry 热重载 overlay）
     fn build_tool_registry(&self, tool_filter: &[String]) -> Arc<ToolRegistry> {
         // 获取 tools 的锁
-        let tools_guard = self.tools.lock().unwrap();
+        let tools_guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
 
         // 快速路径：无动态 skills 且无 filter
         if self.skill_registry.is_none() && tool_filter.is_empty() {
-            // 克隆内部的 ToolRegistry 并包装成 Arc
-            let mut registry = ToolRegistry::new();
-            for (name, tool) in tools_guard.iter() {
-                registry.register_arc(name.clone(), tool);
-            }
-            return Arc::new(registry);
+            return Arc::new(tools_guard.snapshot());
         }
 
         // 从全局工具快照构建
-        let mut registry = ToolRegistry::new();
-        for (name, tool) in tools_guard.iter() {
-            registry.register_arc(name.clone(), tool);
-        }
+        let mut registry = tools_guard.snapshot();
         drop(tools_guard);
 
         // 覆盖当前热重载的 skill tools
@@ -637,109 +485,6 @@ impl AgentRuntime {
         None // 返回 None 表示使用 AgentLoop 默认（SOUL.md）
     }
 
-    /// 启动 agent：从 catalog 读取 manifest，启动 primary Executor，更新状态机。
-    /// session_id：为该 agent 创建或复用的会话标识。
-    pub async fn start(
-        &self,
-        agent_id: &AgentId,
-        session_id: SessionId,
-        user_id: UserId,
-        sandbox_id: SandboxId,
-        initial_history: Vec<ChatMessage>,
-    ) -> Result<AgentExecutorHandle, AgentError> {
-        // 验证 agent 存在
-        self.catalog
-            .get(agent_id)
-            .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
-
-        // 启动 primary Runtime
-        let handle = self
-            .start_primary(
-                session_id,
-                user_id,
-                sandbox_id,
-                initial_history,
-                Some(agent_id),
-            )
-            .await;
-
-        Ok(handle)
-    }
-
-    /// 停止 agent：发送 Cancel，更新 catalog 状态。
-    pub async fn stop(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self
-            .catalog
-            .get(agent_id)
-            .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
-        if entry.state == AgentStatus::Stopped {
-            return Err(AgentError::InvalidTransition {
-                from: AgentStatus::Stopped,
-                action: "stop",
-            });
-        }
-        if let Some((_, token)) = self.agent_handles.remove(agent_id) {
-            token.cancel();
-        }
-        let handle = {
-            let mut guard = self.primary_handle.lock().await;
-            guard.take()
-        };
-        if let Some(ref h) = handle {
-            if let Err(e) = h.send(AgentMessage::Cancel).await {
-                tracing::warn!("cancel send failed on stop: {e}");
-            }
-        }
-        self.catalog.update_state(agent_id, AgentStatus::Stopped);
-        Ok(())
-    }
-
-    /// 暂停 agent：发送 Cancel（中断当前 round），更新 catalog 状态。
-    pub async fn pause(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self
-            .catalog
-            .get(agent_id)
-            .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
-        if entry.state != AgentStatus::Running {
-            return Err(AgentError::InvalidTransition {
-                from: entry.state.clone(),
-                action: "pause",
-            });
-        }
-        if let Some((_, token)) = self.agent_handles.remove(agent_id) {
-            token.cancel();
-        }
-        let handle = {
-            let guard = self.primary_handle.lock().await;
-            guard.clone()
-        };
-        if let Some(ref h) = handle {
-            if let Err(e) = h.send(AgentMessage::Cancel).await {
-                tracing::warn!("cancel send failed on pause: {e}");
-            }
-        }
-        self.catalog.update_state(agent_id, AgentStatus::Paused);
-        Ok(())
-    }
-
-    /// 恢复 agent：更新 catalog 状态（Runtime 仍在运行，cancel_flag 已重置）。
-    pub fn resume(&self, agent_id: &AgentId) -> Result<(), AgentError> {
-        let entry = self
-            .catalog
-            .get(agent_id)
-            .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
-        if entry.state != AgentStatus::Paused {
-            return Err(AgentError::InvalidTransition {
-                from: entry.state.clone(),
-                action: "resume",
-            });
-        }
-        let cancel_token = CancellationToken::new();
-        self.agent_handles.insert(agent_id.clone(), cancel_token);
-        self.catalog.update_state(agent_id, AgentStatus::Running);
-        Ok(())
-    }
-
     /// 按 agent_id 解析运行时配置（从 catalog 读取 manifest）
     fn resolve_runtime_config(
         &self,
@@ -760,13 +505,9 @@ impl AgentRuntime {
         }
         // 无 agent_id 或 agent 不存在：使用全局默认
         {
-            let tools_guard = self.tools.lock().unwrap();
-            let mut registry = ToolRegistry::new();
-            for (name, tool) in tools_guard.iter() {
-                registry.register_arc(name.clone(), tool);
-            }
+            let tools_guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
             (
-                Arc::new(registry),
+                Arc::new(tools_guard.snapshot()),
                 None,
                 self.default_model.clone(),
                 AgentConfig::default(),
@@ -774,99 +515,4 @@ impl AgentRuntime {
         }
     }
 
-    /// Execute a scheduled task: create session, run agent, return result.
-    /// Reuses provider/tools/memory from this AgentRuntime.
-    pub async fn execute_scheduled_task(&self, task: &ScheduledTask) -> Result<String, AgentError> {
-        let config = &task.agent_config;
-
-        // Create session for the task using the session store
-        let user_id = task
-            .user_id
-            .as_ref()
-            .map(|u| UserId::from_string(u.clone()))
-            .unwrap_or_else(|| UserId::from_string("scheduler".to_string()));
-
-        let session = self.session_store.create_session_with_user(&user_id).await;
-        let session_id = session.session_id.clone();
-        let sandbox_id = session.sandbox_id.clone();
-
-        // Prepare initial message with the task input
-        let user_message = ChatMessage::user(config.input.clone());
-        let mut messages = vec![user_message];
-
-        // Create tool context
-        let tool_ctx = ToolContext {
-            sandbox_id: sandbox_id.clone(),
-            working_dir: PathBuf::from("/tmp"),
-        };
-
-        // Create event channel (discard events)
-        let (tx, _) = tokio::sync::broadcast::channel::<AgentEvent>(100);
-
-        // Create and configure agent loop using this runtime's dependencies
-        let tools_guard = self.tools.lock().unwrap();
-        let mut registry = ToolRegistry::new();
-        for (name, tool) in tools_guard.iter() {
-            registry.register_arc(name.clone(), tool);
-        }
-        let tools = Arc::new(registry);
-        drop(tools_guard);
-
-        let mut agent_loop = AgentLoop::new(self.provider.clone(), tools, self.memory.clone())
-            .with_model(config.model.clone());
-
-        // Run agent with timeout
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(config.timeout_secs),
-            agent_loop.run(
-                &session_id,
-                &user_id,
-                &sandbox_id,
-                &mut messages,
-                tx,
-                tool_ctx,
-                None,
-            ),
-        )
-        .await;
-
-        match result {
-            Ok(Ok(_)) => {
-                // Extract response from last assistant message
-                let response = messages
-                    .iter()
-                    .rev()
-                    .find(|m| m.role == MessageRole::Assistant)
-                    .and_then(|m| {
-                        m.content.iter().find_map(|c| {
-                            if let ContentBlock::Text { text } = c {
-                                Some(text.clone())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .unwrap_or_else(|| "Task completed".to_string());
-
-                tracing::info!(
-                    task_id = %task.id,
-                    session_id = %session_id,
-                    "Scheduled task completed successfully"
-                );
-
-                Ok(response)
-            }
-            Ok(Err(e)) => {
-                tracing::error!(task_id = %task.id, error = %e, "Agent execution error");
-                Err(AgentError::ScheduledTask(e.to_string()))
-            }
-            Err(_) => {
-                tracing::error!(task_id = %task.id, "Agent execution timed out");
-                Err(AgentError::ScheduledTask(format!(
-                    "Timeout after {} seconds",
-                    config.timeout_secs
-                )))
-            }
-        }
-    }
 }

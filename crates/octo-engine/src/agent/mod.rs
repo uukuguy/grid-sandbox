@@ -10,6 +10,9 @@ pub mod loop_guard;
 pub mod parallel;
 pub mod queue;
 pub mod runtime;
+mod runtime_lifecycle;
+mod runtime_mcp;
+mod runtime_scheduler;
 pub mod store;
 pub mod tenant; // 新增
 

@@ -22,10 +22,10 @@ pub struct JwtClaims {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthMode {
-    /// 无认证（默认）
-    #[default]
+    /// 无认证
     None,
-    /// API Key 模式
+    /// API Key 模式（默认）
+    #[default]
     ApiKey,
     /// 完整认证（保留给 octo-platform）
     Full,
@@ -114,6 +114,13 @@ impl AuthConfig {
     pub fn with_mode(mut self, mode: AuthMode) -> Self {
         self.mode = mode;
         self
+    }
+
+    /// Log a warning if auth mode is None (insecure)
+    pub fn warn_if_insecure(&self) {
+        if self.mode == AuthMode::None {
+            tracing::warn!("Authentication is DISABLED (mode=none). All API endpoints are publicly accessible. Set auth.mode to 'api_key' for production use.");
+        }
     }
 
     /// 添加 API Key（带角色）

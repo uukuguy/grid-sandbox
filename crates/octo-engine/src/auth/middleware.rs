@@ -1,7 +1,6 @@
 // crates/octo-engine/src/auth/middleware.rs
 
-use crate::auth::{roles::Role, AuthConfig, AuthMode, Permission};
-use axum::{body::Body, extract::Request, http::StatusCode, middleware::Next, response::Response};
+use crate::auth::{roles::Role, Permission};
 
 /// 用户上下文
 #[derive(Debug, Clone)]
@@ -43,11 +42,6 @@ impl UserContext {
     }
 }
 
-/// 从请求中提取用户上下文
-pub fn get_user_context<B>(req: &Request<B>) -> Option<UserContext> {
-    req.extensions().get::<UserContext>().cloned()
-}
-
 /// RBAC: 需要的动作
 #[derive(Clone, Debug)]
 pub struct RequiredAction(pub crate::auth::roles::Action);
@@ -55,114 +49,3 @@ pub struct RequiredAction(pub crate::auth::roles::Action);
 /// RBAC: 需要的角色
 #[derive(Clone, Debug)]
 pub struct RequiredRole(pub Role);
-
-/// 认证中间件 - 验证 API Key 并提取角色信息
-pub async fn auth_middleware_with_role(
-    req: Request<Body>,
-    next: Next,
-    config: &AuthConfig,
-) -> Result<Response, StatusCode> {
-    match config.mode {
-        AuthMode::None => {
-            // 无认证模式，直接放行，注入匿名用户
-            let mut req = req;
-            req.extensions_mut().insert(UserContext::anonymous());
-            Ok(next.run(req).await)
-        }
-        AuthMode::ApiKey => {
-            // 验证 API Key
-            let key = req.headers().get("x-api-key").and_then(|v| v.to_str().ok());
-
-            match key {
-                Some(k) if config.validate_key(k) => {
-                    let user_id = config.get_user_id(k);
-                    let permissions = config.get_permissions(k);
-                    // 从 AuthConfig 获取角色信息（需要扩展 AuthConfig）
-                    let role = config.get_role(k);
-
-                    let mut req = req;
-                    req.extensions_mut()
-                        .insert(UserContext::new(user_id, permissions, role));
-                    Ok(next.run(req).await)
-                }
-                _ => Err(StatusCode::UNAUTHORIZED),
-            }
-        }
-        AuthMode::Full => {
-            // 完整认证：JWT Bearer token
-            let auth_header = req.headers().get("authorization");
-            let token = auth_header
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.strip_prefix("Bearer "));
-
-            match token {
-                Some(t) => {
-                    if let Some(claims) = config.validate_jwt(t) {
-                        // Convert role string to permissions
-                        let permissions = match claims.role.as_str() {
-                            "admin" => vec![Permission::Admin],
-                            "member" => vec![Permission::Read, Permission::Write],
-                            "viewer" => vec![Permission::Read],
-                            _ => vec![],
-                        };
-
-                        let mut req = req;
-                        req.extensions_mut().insert(UserContext {
-                            user_id: Some(claims.sub),
-                            permissions,
-                        });
-                        Ok(next.run(req).await)
-                    } else {
-                        Err(StatusCode::UNAUTHORIZED)
-                    }
-                }
-                _ => Err(StatusCode::UNAUTHORIZED),
-            }
-        }
-    }
-}
-
-/// RBAC 中间件: 检查是否具有执行特定动作的权限
-pub async fn require_action_middleware<B>(
-    req: Request<Body>,
-    next: Next,
-    required_action: RequiredAction,
-) -> Result<Response, StatusCode> {
-    let user_ctx = get_user_context(&req).ok_or(StatusCode::UNAUTHORIZED)?;
-
-    // 将 Action 转换为 Permission 进行检查
-    let required_permission = match required_action.0 {
-        crate::auth::roles::Action::Read => Some(Permission::Read),
-        crate::auth::roles::Action::CreateSession => Some(Permission::Write),
-        crate::auth::roles::Action::RunAgent => Some(Permission::Write),
-        crate::auth::roles::Action::ManageMcp => Some(Permission::Admin),
-        crate::auth::roles::Action::ManageSkills => Some(Permission::Admin),
-        crate::auth::roles::Action::ManageUsers => Some(Permission::Admin),
-        crate::auth::roles::Action::ManageConfig => Some(Permission::Admin),
-    };
-
-    if let Some(permission) = required_permission {
-        if user_ctx.has_permission(&permission) {
-            Ok(next.run(req).await)
-        } else {
-            Err(StatusCode::FORBIDDEN)
-        }
-    } else {
-        Err(StatusCode::FORBIDDEN)
-    }
-}
-
-/// RBAC 中间件: 检查是否具有最低角色权限
-pub async fn require_role_middleware<B>(
-    req: Request<Body>,
-    next: Next,
-    required_role: RequiredRole,
-) -> Result<Response, StatusCode> {
-    let user_ctx = get_user_context(&req).ok_or(StatusCode::UNAUTHORIZED)?;
-
-    if user_ctx.has_role(required_role.0) {
-        Ok(next.run(req).await)
-    } else {
-        Err(StatusCode::FORBIDDEN)
-    }
-}

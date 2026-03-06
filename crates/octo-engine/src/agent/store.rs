@@ -20,7 +20,7 @@ impl AgentStore {
     }
 
     fn migrate(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS agents (
@@ -39,7 +39,7 @@ impl AgentStore {
     }
 
     pub fn save(&self, entry: &AgentEntry) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let manifest_json = serde_json::to_string(&entry.manifest)?;
         let state = entry.state.to_string();
         conn.execute(
@@ -58,13 +58,13 @@ impl AgentStore {
     }
 
     pub fn delete(&self, id: &AgentId) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute("DELETE FROM agents WHERE id = ?1", rusqlite::params![id.0])?;
         Ok(())
     }
 
     pub fn load_all(&self) -> Result<Vec<AgentEntry>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let mut stmt = conn.prepare(
             "SELECT id, tenant_id, manifest, state, created_at FROM agents ORDER BY created_at ASC",
         )?;
@@ -104,7 +104,7 @@ impl AgentStore {
     }
 
     pub fn update_state(&self, id: &AgentId, state: &AgentStatus) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
             "UPDATE agents SET state = ?1 WHERE id = ?2",
             rusqlite::params![state.to_string(), id.0],
