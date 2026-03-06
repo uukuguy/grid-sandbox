@@ -40,3 +40,9 @@ scheduler:
   check_interval_secs: 60
   max_concurrent: 5
 
+# Auth configuration
+# API key is loaded from OCTO_API_KEY environment variable (.env)
+# Auth mode is loaded from OCTO_AUTH_MODE environment variable (.env)
+# auth:
+#   mode: api_key
+

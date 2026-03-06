@@ -253,6 +253,34 @@ impl Config {
             config.enable_event_bus = enabled.parse().unwrap_or(false);
         }
 
+        // Auth: OCTO_AUTH_MODE and OCTO_API_KEY override config.yaml
+        if let Ok(mode) = std::env::var("OCTO_AUTH_MODE") {
+            let m = match mode.to_lowercase().as_str() {
+                "none" => Some(octo_engine::auth::AuthMode::None),
+                "api_key" | "apikey" => Some(octo_engine::auth::AuthMode::ApiKey),
+                "full" => Some(octo_engine::auth::AuthMode::Full),
+                _ => None,
+            };
+            if let Some(m) = m {
+                config.auth.mode = Some(m);
+            }
+        }
+        if let Ok(key) = std::env::var("OCTO_API_KEY") {
+            if !key.is_empty() {
+                use octo_engine::auth::ApiKeyConfig;
+                let keys = config.auth.api_keys.get_or_insert_with(Vec::new);
+                keys.push(ApiKeyConfig {
+                    key,
+                    user_id: Some(
+                        std::env::var("OCTO_API_KEY_USER").unwrap_or_else(|_| "default".into()),
+                    ),
+                    permissions: vec!["read".into(), "write".into(), "admin".into()],
+                    role: None,
+                    expires_at: None,
+                });
+            }
+        }
+
         config
     }
 
@@ -345,6 +373,25 @@ impl Config {
             "# enable_event_bus: {}    # Enable event bus (default: false)\n",
             defaults.enable_event_bus
         ));
+
+        // Auth
+        output.push_str("\n# Auth configuration\n");
+        output.push_str("# Configure via environment variables (recommended) or inline below.\n");
+        output.push_str("#\n");
+        output.push_str("# Option 1: Disable auth (local dev only)\n");
+        output.push_str("#   OCTO_AUTH_MODE=none\n");
+        output.push_str("#\n");
+        output.push_str("# Option 2: API key auth\n");
+        output.push_str("#   OCTO_AUTH_MODE=api_key\n");
+        output.push_str("#   OCTO_API_KEY=your-secret-key     # key clients use in Authorization: Bearer header\n");
+        output.push_str("#   OCTO_API_KEY_USER=dev            # optional user id (default: \"default\")\n");
+        output.push_str("#\n");
+        output.push_str("# auth:\n");
+        output.push_str("#   mode: api_key   # none | api_key\n");
+        output.push_str("#   api_keys:\n");
+        output.push_str("#     - key: \"your-secret-key\"\n");
+        output.push_str("#       user_id: \"dev\"\n");
+        output.push_str("#       permissions: [\"read\", \"write\", \"admin\"]\n");
 
         output
     }

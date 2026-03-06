@@ -21,6 +21,7 @@ impl AgentStore {
 
     fn migrate(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        // Step 1: create table (no-op if already exists)
         conn.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS agents (
@@ -31,6 +32,15 @@ impl AgentStore {
                 state       TEXT NOT NULL DEFAULT 'created',
                 created_at  INTEGER NOT NULL
             );
+        ",
+        )?;
+        // Step 2: add tenant_id column to pre-existing databases (idempotent: ignore if exists)
+        let _ = conn.execute_batch(
+            "ALTER TABLE agents ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default';",
+        );
+        // Step 3: create indexes
+        conn.execute_batch(
+            "
             CREATE INDEX IF NOT EXISTS idx_agents_name ON agents(name);
             CREATE INDEX IF NOT EXISTS idx_agents_tenant ON agents(tenant_id);
         ",
