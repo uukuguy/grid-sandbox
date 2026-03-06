@@ -325,6 +325,37 @@ const handlers = {
     console.log(JSON.stringify({ action: 'spawn-review-agents', pr: prNumber, specs }, null, 2));
   },
 
+  'run-tests': () => {
+    // Route test execution through RuFlo tester agent
+    // Usage: node hook-handler.cjs run-tests [--crate <name>] [--filter <pattern>]
+    const crateArg = args.includes('--crate') ? args[args.indexOf('--crate') + 1] : null;
+    const filterArg = args.includes('--filter') ? args[args.indexOf('--filter') + 1] : null;
+    const pr = codeReview ? codeReview.findOpenPR() : null;
+
+    const testSpec = {
+      action: 'run-tests',
+      agent: 'tester',
+      command: 'cargo test',
+      flags: ['--test-threads=1'],
+      crate: crateArg || 'workspace',
+      filter: filterArg || null,
+      pr,
+      postResultsToPR: !!pr,
+      routing: {
+        agent: 'tester',
+        confidence: 0.95,
+        reason: 'Explicit test execution via RuFlo tester agent',
+      },
+    };
+
+    if (crateArg) testSpec.flags.unshift(`-p ${crateArg}`);
+    if (filterArg) testSpec.flags.push('--', filterArg);
+
+    console.log(`[TEST] Routing test execution to RuFlo tester agent`);
+    console.log(`[TEST] Crate: ${crateArg || 'all (--workspace)'} | Filter: ${filterArg || 'none'} | PR: #${pr || 'none'}`);
+    console.log(JSON.stringify(testSpec, null, 2));
+  },
+
   'stats': () => {
     if (intelligence && intelligence.stats) {
       intelligence.stats(args.includes('--json'));

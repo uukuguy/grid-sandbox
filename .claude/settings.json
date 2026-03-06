@@ -327,6 +327,13 @@
       "cveCheck": true,
       "threatModel": true
     },
+    "testRunner": {
+      "enabled": true,
+      "agent": "tester",
+      "defaultFlags": ["--test-threads=1"],
+      "postResultsToPR": true,
+      "command": "node .claude/helpers/hook-handler.cjs run-tests"
+    },
     "codeReview": {
       "enabled": true,
       "autoOnPR": true,
