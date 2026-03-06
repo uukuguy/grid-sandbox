@@ -64,9 +64,11 @@ count_entities() {
   local type="$1"
   local pattern="$2"
 
-  find "$PROJECT_ROOT/crates" -name "*.rs" 2>/dev/null | \
+  local count
+  count=$(find "$PROJECT_ROOT/crates" -name "*.rs" 2>/dev/null | \
     xargs grep -l "$pattern" 2>/dev/null | \
-    grep -v target | grep -v ".test." | wc -l || echo "0"
+    grep -v target | grep -v ".test." | wc -l 2>/dev/null | tr -d ' ')
+  echo "${count:-0}"
 }
 
 track_ddd() {
