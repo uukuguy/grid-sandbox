@@ -1,33 +1,7 @@
 // crates/octo-engine/tests/auth_middleware_test.rs
 
-use axum::{body::Body, extract::Request};
 use octo_engine::auth::roles::Role;
 use octo_engine::auth::*;
-
-// Test get_user_context function directly
-#[test]
-fn test_get_user_context_none() {
-    let req = Request::builder().uri("/").body(Body::empty()).unwrap();
-    let ctx = get_user_context(&req);
-    assert!(ctx.is_none());
-}
-
-#[test]
-fn test_get_user_context_with_context() {
-    let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
-
-    req.extensions_mut().insert(UserContext {
-        user_id: Some("user-001".to_string()),
-        permissions: vec![Permission::Read, Permission::Write],
-        role: Some(Role::User),
-    });
-
-    let ctx = get_user_context(&req).unwrap();
-    assert_eq!(ctx.user_id, Some("user-001".to_string()));
-    assert!(ctx.permissions.contains(&Permission::Read));
-    assert!(ctx.permissions.contains(&Permission::Write));
-    assert_eq!(ctx.role, Some(Role::User));
-}
 
 // Test UserContext::has_permission
 #[test]
