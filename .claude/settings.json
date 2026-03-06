@@ -326,6 +326,17 @@
       "scanOnEdit": true,
       "cveCheck": true,
       "threatModel": true
+    },
+    "codeReview": {
+      "enabled": true,
+      "autoOnPR": true,
+      "baseBranch": "main",
+      "postToGitHub": true,
+      "reviewers": [
+        { "type": "architect-review", "focus": "architecture" },
+        { "type": "security-auditor", "focus": "security" },
+        { "type": "code-reviewer", "focus": "quality" }
+      ]
     }
   }
 }

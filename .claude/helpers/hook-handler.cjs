@@ -47,6 +47,7 @@ const session = safeRequire(path.join(helpersDir, 'session.js'));
 const memory = safeRequire(path.join(helpersDir, 'memory.js'));
 const intelligence = safeRequire(path.join(helpersDir, 'intelligence.cjs'));
 const adrGenerator = safeRequire(path.join(helpersDir, 'adr-generator.cjs'));
+const codeReview = safeRequire(path.join(helpersDir, 'code-review.cjs'));
 
 // Get the command from argv
 const [,, command, ...args] = process.argv;
@@ -299,6 +300,29 @@ const handlers = {
       } catch (e) { /* non-fatal */ }
     }
     console.log('[OK] Task completed');
+  },
+
+  'code-review': () => {
+    // Trigger professional code review pipeline
+    if (!codeReview) {
+      console.log('[CODE-REVIEW] Module not available');
+      return;
+    }
+    const config = codeReview.getReviewConfig();
+    if (!config.enabled) {
+      console.log('[CODE-REVIEW] Disabled in settings');
+      return;
+    }
+    const { specs, files, error } = codeReview.generateReviewSpecs(config);
+    if (error) {
+      console.log(`[CODE-REVIEW] ${error}`);
+      return;
+    }
+    const prNumber = codeReview.findOpenPR();
+    console.log(`[CODE-REVIEW] Pipeline ready: ${specs.length} reviewers, ${files.length} files, PR #${prNumber || 'none'}`);
+    console.log(`[CODE-REVIEW] Reviewers: ${specs.map(s => s.focus).join(', ')}`);
+    // Output specs as JSON for Claude Code to spawn review agents
+    console.log(JSON.stringify({ action: 'spawn-review-agents', pr: prNumber, specs }, null, 2));
   },
 
   'stats': () => {
