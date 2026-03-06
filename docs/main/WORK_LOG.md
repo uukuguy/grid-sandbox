@@ -1031,4 +1031,109 @@ Phase 2.5.3 用户隔离在单次会话中完成全部 11 个任务，实现跨 
 
 - **Phase 2.6 规划** — Provider 多实例 + Scheduler
 - **运行时验证** — 启动服务测试用户隔离功能
+
+---
+
+## 2026-03-07 — 代码审查修复 + ADR/DDD 文档更新
+
+### 会话概要
+
+执行三智能体并行代码审查（architect-review、security-auditor、code-reviewer），收集审查结果并修复所有 must-fix 和 important 级别的 Bug。同时完成 RuFlo post-task 流水线的附加任务：更新 ADR 架构决策记录、DDD 限界上下文变更日志和本工作日志。
+
+### 代码审查流水线
+
+通过 Claude Code Task tool 并行启动 3 个专项审查智能体，对 `dev` 分支相对 `main` 的所有变更进行审查：
+
+| 审查维度 | 智能体 | 发现问题 |
+|----------|--------|----------|
+| 架构设计 | architect-review | CRITICAL×1, HIGH×2 |
+| 安全漏洞 | security-auditor | CRITICAL×1, HIGH×3 |
+| 代码质量 | code-reviewer | CRITICAL×1, HIGH×4 |
+
+### 修复的 Bug（共 8 个）
+
+#### CRITICAL 级别
+
+**1. `call_mcp_tool` 持有 Mutex 跨网络 I/O（并发死锁风险）**
+- 文件：`crates/octo-engine/src/agent/runtime_mcp.rs`
+- 问题：锁持有期间执行异步网络调用，并发工具调用会串行化甚至死锁
+- 修复：改为 clone-under-lock 模式——锁内仅 clone `Arc<RwLock<Box<dyn McpClient>>>`，锁外执行网络 I/O
+
+**2. HMAC Secret 使用硬编码默认值不报错（API key hash 伪造漏洞）**
+- 文件：`crates/octo-engine/src/auth/config.rs`
+- 问题：`OCTO_HMAC_SECRET` 未配置时使用硬编码默认值，攻击者可离线推算合法 token
+- 修复：`warn_if_insecure()` 在 api_key/full 模式下若使用默认 Secret 则 panic，阻止启动
+
+**3. `lock().unwrap()` 导致 Mutex 毒化级联崩溃**
+- 文件：`crates/octo-platform-server/src/db/users.rs`（7处）、`crates/octo-platform-server/src/tenant/manager.rs`（1处）
+- 问题：任意线程 panic 后 Mutex 毒化，所有后续操作均 panic
+- 修复：统一改为 `.lock().unwrap_or_else(|e| e.into_inner())`，从毒化锁中恢复
+
+#### HIGH/IMPORTANT 级别
+
+**4. `list_servers` 运行时状态显示错误（任意服务器 Running → 全部显示 Running）**
+- 文件：`crates/octo-server/src/api/mcp_servers.rs`
+- 问题：`runtime_states.iter().find(|s| Running)` 找到第一个运行状态就对所有服务器适用
+- 修复：改为 `get_all_mcp_server_states()` 按服务器名称查 HashMap，每台独立判断
+
+**5. `args` 序列化格式不一致（MCP 服务器无法从存储重启）**
+- 文件：`crates/octo-server/src/api/mcp_servers.rs`
+- 问题：`create_server` 用 `args.join(" ")` 存空格分隔字符串，`start_server` 用 `serde_json::from_str` 期望 JSON 数组，永远反序列化为空
+- 修复：存储和读取统一改为 JSON 数组格式
+
+**6. `env` 序列化格式不一致（update 与 create 不兼容）**
+- 文件：`crates/octo-server/src/api/mcp_servers.rs`
+- 问题：`create_server` 存 JSON object，`update_server` 用 `key=value,` 格式覆盖
+- 修复：`update_server` 改为 `serde_json::to_string(&env_map)`，统一 JSON object 格式
+
+**7. `update_server` 空值检查不安全（is_none() + unwrap() 模式）**
+- 文件：`crates/octo-server/src/api/mcp_servers.rs`
+- 问题：先检查 `is_none()` 后立即 `unwrap()`，逻辑上冗余且不安全
+- 修复：改为 `let Some(existing) = ... else { return ... }`，用 if-let 模式
+
+**8. `data-platform/users.db` 提交到 Git 仓库（敏感数据泄露）**
+- 文件：`.gitignore`、`data-platform/users.db`
+- 问题：SQLite 数据库文件（含用户凭据）被纳入版本控制
+- 修复：`git rm --cached data-platform/users.db`，`.gitignore` 添加 `data-platform/*.db*` 规则
+
+### 技术变更清单
+
+| 文件 | 变更类型 | 说明 |
+|------|----------|------|
+| `crates/octo-engine/src/agent/runtime_mcp.rs` | 🔴 并发修复 | call_mcp_tool clone-under-lock |
+| `crates/octo-engine/src/auth/config.rs` | 🔴 安全加固 | HMAC Secret fail-fast panic |
+| `crates/octo-server/src/api/mcp_servers.rs` | 🔴 数据一致性 | args/env 序列化、状态检测、空值检查 |
+| `crates/octo-platform-server/src/db/users.rs` | 🔴 可靠性修复 | 7处 mutex 毒化防护 |
+| `crates/octo-platform-server/src/tenant/manager.rs` | 🔴 可靠性修复 | 1处 mutex 毒化防护 |
+| `.gitignore` | ✅ 安全规则 | 排除 data-platform/*.db* |
+| `data-platform/users.db` | ✅ 数据清理 | 从 git 追踪中移除 |
+
+### 架构文档更新（RuFlo post-task 附加任务）
+
+**ADR 更新** — `docs/adr/ADR_SECURITY_REFACTORING.md`：
+- **ADR-006**：HMAC Secret fail-fast 保护机制（认证上下文）
+- **ADR-007**：`call_mcp_tool` 无锁网络 I/O — clone-under-lock 模式（MCP 集成上下文）
+
+**DDD 变更日志** — `docs/ddd/DDD_CHANGE_LOG.md`：
+- 认证上下文：`warn_if_insecure()` 行为变更为 fail-fast
+- MCP 集成上下文：`call_mcp_tool()` 并发语义更新
+- MCP 存储上下文：args/env 序列化格式变更（已有 DB 记录需重建）
+- 平台用户上下文：`UserDatabase` 并发处理策略更新
+
+### 提交记录
+
+```
+8528571  fix: address all must-fix and important bugs from code review
+```
+
+### 验证结果
+
+- 编译：`cargo check --workspace` ✅ 通过
+- 所有 8 个已识别 Bug 均已修复并提交
+
+### 下一步
+
+- **安全遗留项** — DNS rebinding SSRF 防护（`McpUriValidator`）可在后续迭代实现
+- **健康端点** — 评估是否需要对 `/health` 进行最小化信息返回
+- **命令拒绝响应码** — `SecurityPolicy` 拒绝时考虑返回 HTTP 403 而非 200
 - **测试覆盖** — 添加用户隔离单元测试
