@@ -44,6 +44,8 @@
 
 ## [Active Work]
 
+- 10:30 | README 重写完成：英文(README.md) + 中文(README.zh.md)，企业级定位，沙箱安全可控，无对标竞品，已提交 5682a72
+- 10:00 | 项目名 octo-sandbox 确认保留；GitHub About/Topics 方案确定；v1.0 sprint 待执行 (Phase A-D, 17 tasks)
 - 04:30 | Phase 2.11 设计完成（完整 brainstorming）：AgentManifest 三段身份 + AgentRunner + Zone A/B 分离 + SQLite 持久化，计划文档更新（1223行，7 Tasks），待实施
 - 00:10 | Phase 2.9 MCP SSE Transport 完成 (已验证之前会话的实现)
 - 22:00 | Phase 2.10 Knowledge Graph 完成
