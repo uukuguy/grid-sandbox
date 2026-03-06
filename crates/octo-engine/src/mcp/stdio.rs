@@ -99,11 +99,7 @@ impl McpClient for StdioMcpClient {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("MCP client not connected"))?;
 
-        let arguments = if args.is_object() {
-            Some(args.as_object().unwrap().clone())
-        } else {
-            None
-        };
+        let arguments = args.as_object().map(|o| o.clone());
 
         let result = service
             .call_tool(CallToolRequestParams {

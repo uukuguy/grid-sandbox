@@ -64,6 +64,10 @@ impl ExecPolicy {
                     || command.contains("||")
                     || command.contains("$(")
                     || command.contains('`')
+                    || command.contains('>')
+                    || command.contains('<')
+                    || command.contains('\n')
+                    || command.contains('\0')
                 {
                     return false;
                 }
@@ -103,7 +107,7 @@ impl BashTool {
         #[cfg(feature = "sandbox-wasm")]
         let router = Some(SandboxRouter::new());
         Self {
-            exec_policy: None,
+            exec_policy: Some(ExecPolicy::default()),
             #[cfg(feature = "sandbox-wasm")]
             router,
         }

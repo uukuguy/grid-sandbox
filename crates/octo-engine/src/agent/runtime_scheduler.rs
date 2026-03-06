@@ -1,6 +1,5 @@
 //! Scheduled task execution methods for AgentRuntime.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
@@ -31,11 +30,11 @@ impl AgentRuntime {
         let user_message = ChatMessage::user(config.input.clone());
         let mut messages = vec![user_message];
 
-        // Create tool context
+        // Create tool context with security policy for path validation
         let tool_ctx = ToolContext {
             sandbox_id: sandbox_id.clone(),
-            working_dir: PathBuf::from("/tmp"),
-            path_validator: None,
+            working_dir: self.working_dir.clone(),
+            path_validator: Some(self.security_policy.clone() as std::sync::Arc<dyn octo_types::PathValidator>),
         };
 
         // Create event channel (discard events)

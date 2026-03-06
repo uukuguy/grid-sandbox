@@ -32,6 +32,7 @@ notify-debouncer-mini = { workspace = true }
 rmcp = { workspace = true }
 hex = "0.4"
 sha2 = "0.10"
+hmac = "0.12"
 subtle = "2.5"
 jsonwebtoken = "9"
 thiserror = { workspace = true }

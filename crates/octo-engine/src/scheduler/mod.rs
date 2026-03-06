@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use cron::Schedule;
 use std::path::PathBuf;
 
-use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
+use octo_types::{ChatMessage, ContentBlock, MessageRole, PathValidator, ToolContext, UserId};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -206,6 +206,7 @@ pub struct Scheduler {
     tools: Arc<StdMutex<ToolRegistry>>,
     memory: Arc<dyn WorkingMemory>,
     session_store: Arc<dyn SessionStore>,
+    path_validator: Option<Arc<dyn PathValidator>>,
 }
 
 impl Scheduler {
@@ -216,6 +217,7 @@ impl Scheduler {
         tools: Arc<StdMutex<ToolRegistry>>,
         memory: Arc<dyn WorkingMemory>,
         session_store: Arc<dyn SessionStore>,
+        path_validator: Option<Arc<dyn PathValidator>>,
     ) -> Self {
         let max_concurrent = config.max_concurrent;
         Self {
@@ -228,6 +230,7 @@ impl Scheduler {
             tools,
             memory,
             session_store,
+            path_validator,
         }
     }
 
@@ -347,11 +350,11 @@ impl Scheduler {
         let user_message = ChatMessage::user(config.input.clone());
         let mut messages = vec![user_message];
 
-        // Create tool context
+        // Create tool context with path validation
         let tool_ctx = ToolContext {
             sandbox_id: sandbox_id.clone(),
             working_dir: PathBuf::from("/tmp"),
-            path_validator: None,
+            path_validator: self.path_validator.clone(),
         };
 
         // Create event channel (discard events)

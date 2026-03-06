@@ -217,6 +217,7 @@ async fn main() -> Result<()> {
             agent_runtime.tools().clone(),
             agent_runtime.memory().clone(),
             agent_runtime.session_store().clone(),
+            Some(agent_runtime.security_policy().clone() as std::sync::Arc<dyn octo_types::PathValidator>),
         );
         Some(Arc::new(s))
     } else {

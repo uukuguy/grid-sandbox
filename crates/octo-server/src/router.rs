@@ -149,19 +149,23 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .with_state(audit_state.clone())
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        // Rate limiting middleware
+        // Middleware layers use LIFO ordering: last added = first to run.
+        // Desired execution order: rate_limit → auth → audit
+        // So we add them in reverse: audit first, rate_limit last.
+        //
+        // Audit middleware - logs all requests (runs AFTER auth, so UserContext is available)
         .layer(axum::middleware::from_fn_with_state(
-            rate_limiter,
-            rate_limit_middleware,
+            audit_state,
+            audit_middleware,
         ))
         // Auth middleware - validates API keys and injects UserContext
         .layer(axum::middleware::from_fn_with_state(
             auth_state,
             auth_middleware_wrapper,
         ))
-        // Audit middleware - logs all requests to audit log
+        // Rate limiting middleware (runs FIRST - before auth and audit)
         .layer(axum::middleware::from_fn_with_state(
-            audit_state,
-            audit_middleware,
+            rate_limiter,
+            rate_limit_middleware,
         ))
 }

@@ -1,10 +1,25 @@
 // crates/octo-engine/src/auth/config.rs
 
 use chrono::{DateTime, Utc};
+use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::collections::HashMap;
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Compute HMAC-SHA256 of `key` using `secret`. Returns a lowercase hex string.
+fn hash_api_key(key: &str, secret: &str) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts any key length");
+    mac.update(key.as_bytes());
+    format!("{:x}", mac.finalize().into_bytes())
+}
+
+/// Default HMAC secret used when `OCTO_HMAC_SECRET` is not set.
+/// In production, always set the environment variable.
+const DEFAULT_HMAC_SECRET: &str = "octo-default-hmac-secret-change-in-production";
 
 use super::roles::Role;
 
@@ -54,7 +69,7 @@ impl Permission {
 /// API Key
 #[derive(Debug, Clone)]
 pub struct ApiKey {
-    pub key_hash: String,        // sha256 哈希存储
+    pub key_hash: String,        // HMAC-SHA256 哈希存储
     pub user_id: Option<String>, // 可选用户绑定
     pub permissions: Vec<Permission>,
     pub role: Option<Role>, // 角色信息（用于 RBAC）
@@ -63,10 +78,8 @@ pub struct ApiKey {
 }
 
 impl ApiKey {
-    pub fn new(key: &str, user_id: Option<String>, permissions: Vec<Permission>) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let key_hash = format!("{:x}", hasher.finalize());
+    pub fn new(key: &str, secret: &str, user_id: Option<String>, permissions: Vec<Permission>) -> Self {
+        let key_hash = hash_api_key(key, secret);
 
         Self {
             key_hash,
@@ -98,12 +111,34 @@ impl ApiKey {
 }
 
 /// 认证配置
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub mode: AuthMode,
     pub api_keys: HashMap<String, ApiKey>, // key_hash -> ApiKey
     pub require_user_id: bool,            // 是否要求用户隔离
     pub jwt_secret: Option<String>,        // JWT secret for Full mode
+    /// HMAC secret used when hashing API keys. Loaded from `OCTO_HMAC_SECRET` env var.
+    /// Falls back to a hardcoded default with a warning — always set this in production.
+    pub hmac_secret: String,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        let hmac_secret = std::env::var("OCTO_HMAC_SECRET").unwrap_or_else(|_| {
+            tracing::warn!(
+                "OCTO_HMAC_SECRET is not set. Using insecure default HMAC secret. \
+                 Set this environment variable in production."
+            );
+            DEFAULT_HMAC_SECRET.to_string()
+        });
+        Self {
+            mode: AuthMode::default(),
+            api_keys: HashMap::new(),
+            require_user_id: false,
+            jwt_secret: None,
+            hmac_secret,
+        }
+    }
 }
 
 impl AuthConfig {
@@ -130,7 +165,7 @@ impl AuthConfig {
         user_id: Option<String>,
         permissions: Vec<Permission>,
     ) {
-        let api_key = ApiKey::new(key, user_id, permissions);
+        let api_key = ApiKey::new(key, &self.hmac_secret, user_id, permissions);
         self.api_keys.insert(api_key.key_hash.clone(), api_key);
     }
 
@@ -142,7 +177,7 @@ impl AuthConfig {
         permissions: Vec<Permission>,
         role: Option<Role>,
     ) {
-        let mut api_key = ApiKey::new(key, user_id, permissions);
+        let mut api_key = ApiKey::new(key, &self.hmac_secret, user_id, permissions);
         if let Some(r) = role {
             api_key = api_key.with_role(r);
         }
@@ -155,9 +190,7 @@ impl AuthConfig {
             return self.mode == AuthMode::None;
         }
 
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let key_hash = format!("{:x}", hasher.finalize());
+        let key_hash = hash_api_key(key, &self.hmac_secret);
 
         if let Some(api_key) = self.api_keys.get(&key_hash) {
             !api_key.is_expired()
@@ -168,19 +201,13 @@ impl AuthConfig {
 
     /// 获取用户 ID
     pub fn get_user_id(&self, key: &str) -> Option<String> {
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let key_hash = format!("{:x}", hasher.finalize());
-
+        let key_hash = hash_api_key(key, &self.hmac_secret);
         self.api_keys.get(&key_hash).and_then(|k| k.user_id.clone())
     }
 
     /// 获取权限
     pub fn get_permissions(&self, key: &str) -> Vec<Permission> {
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let key_hash = format!("{:x}", hasher.finalize());
-
+        let key_hash = hash_api_key(key, &self.hmac_secret);
         self.api_keys
             .get(&key_hash)
             .map(|k| k.permissions.clone())
@@ -189,10 +216,7 @@ impl AuthConfig {
 
     /// 获取角色
     pub fn get_role(&self, key: &str) -> Option<Role> {
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let key_hash = format!("{:x}", hasher.finalize());
-
+        let key_hash = hash_api_key(key, &self.hmac_secret);
         self.api_keys.get(&key_hash).and_then(|k| k.role)
     }
 

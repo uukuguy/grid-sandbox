@@ -20,6 +20,7 @@ use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemor
 use crate::metering::Metering;
 use crate::providers::ProviderConfig;
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
+use crate::security::SecurityPolicy;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{SkillLoader, SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
@@ -91,6 +92,8 @@ pub struct AgentRuntime {
     pub(crate) working_dir: PathBuf,
     // Observability: metering for token usage tracking
     pub(crate) metering: Arc<Metering>,
+    // Security policy for path validation (injected into ToolContext)
+    pub(crate) security_policy: Arc<SecurityPolicy>,
     // Tenant isolation (Task 3)
     pub(crate) tenant_context: Option<TenantContext>,
 }
@@ -217,6 +220,11 @@ impl AgentRuntime {
         // 14. Metering initialization (Task 10 - observability)
         let metering = Arc::new(Metering::new());
 
+        // 15. SecurityPolicy initialization (path validation for ToolContext)
+        let security_policy = Arc::new(
+            SecurityPolicy::new().with_workspace(working_dir.clone()),
+        );
+
         Ok(Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
@@ -234,6 +242,7 @@ impl AgentRuntime {
             mcp_manager,
             working_dir,
             metering,
+            security_policy,
             tenant_context,
         })
     }
@@ -311,6 +320,11 @@ impl AgentRuntime {
         self.metering.snapshot()
     }
 
+    /// Get security policy
+    pub fn security_policy(&self) -> &Arc<SecurityPolicy> {
+        &self.security_policy
+    }
+
     /// Get tenant context (if any)
     pub fn tenant_context(&self) -> Option<&TenantContext> {
         self.tenant_context.as_ref()
@@ -357,12 +371,14 @@ impl AgentRuntime {
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
     ) -> AgentExecutorHandle {
-        // 先检查是否已有 primary handle
-        {
-            let guard = self.primary_handle.lock().await;
-            if let Some(ref handle) = *guard {
-                return handle.clone();
-            }
+        // Hold the lock for the entire operation to prevent TOCTOU races.
+        // Two concurrent callers cannot both pass the "already started" check
+        // and each create a separate executor.
+        let mut handle_guard = self.primary_handle.lock().await;
+
+        // Return existing handle if already started
+        if let Some(ref handle) = *handle_guard {
+            return handle.clone();
         }
 
         // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
@@ -394,6 +410,7 @@ impl AgentRuntime {
             config,
             self.working_dir.clone(),
             self.event_bus.clone(),
+            Some(self.security_policy.clone() as Arc<dyn octo_types::PathValidator>),
         );
 
         // Spawn 持久化主循环
@@ -409,10 +426,8 @@ impl AgentRuntime {
 
         info!(session_id = %session_id.as_str(), "Primary AgentExecutor started");
 
-        // 保存 primary handle
-        let mut handle_guard = self.primary_handle.lock().await;
+        // Store handle and return — all within the same lock scope
         *handle_guard = Some(handle.clone());
-
         handle
     }
 

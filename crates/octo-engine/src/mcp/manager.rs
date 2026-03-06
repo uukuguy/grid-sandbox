@@ -162,7 +162,11 @@ impl McpManager {
     /// Bridge all MCP tools into a ToolRegistry.
     pub fn bridge_tools(&self, registry: &mut ToolRegistry) {
         for (server_name, tools) in &self.tool_infos {
-            let client = self.clients.get(server_name).unwrap().clone();
+            let Some(client) = self.clients.get(server_name) else {
+                warn!(server = %server_name, "tool_infos has entry but clients map does not; skipping bridge");
+                continue;
+            };
+            let client = client.clone();
             for tool_info in tools {
                 let bridge =
                     McpToolBridge::new(client.clone(), server_name.clone(), tool_info.clone());

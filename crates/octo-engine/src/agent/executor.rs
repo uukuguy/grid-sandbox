@@ -6,7 +6,7 @@ use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{info, warn};
 
-use octo_types::{ChatMessage, SandboxId, SessionId, ToolContext, UserId};
+use octo_types::{ChatMessage, PathValidator, SandboxId, SessionId, ToolContext, UserId};
 
 use crate::agent::{AgentConfig, AgentEvent, AgentLoop};
 use crate::memory::store_traits::MemoryStore;
@@ -84,6 +84,8 @@ pub struct AgentExecutor {
     working_dir: PathBuf,
     // 事件总线
     event_bus: Option<Arc<crate::event::EventBus>>,
+    // 路径安全验证器
+    path_validator: Option<Arc<dyn PathValidator>>,
 }
 
 impl AgentExecutor {
@@ -105,6 +107,7 @@ impl AgentExecutor {
         config: AgentConfig,
         working_dir: PathBuf,
         event_bus: Option<Arc<crate::event::EventBus>>,
+        path_validator: Option<Arc<dyn PathValidator>>,
     ) -> Self {
         Self {
             session_id,
@@ -124,6 +127,7 @@ impl AgentExecutor {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             working_dir,
             event_bus,
+            path_validator,
         }
     }
 
@@ -177,7 +181,7 @@ impl AgentExecutor {
                     let tool_ctx = ToolContext {
                         sandbox_id: self.sandbox_id.clone(),
                         working_dir: self.working_dir.clone(),
-                        path_validator: None,
+                        path_validator: self.path_validator.clone(),
                     };
                     let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
 
