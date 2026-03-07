@@ -93,6 +93,8 @@ pub struct AgentLoop {
     /// Kept for backward compatibility.
     #[deprecated(since = "0.1.0", note = "Use with_manifest() instead")]
     system_prompt_override: Option<String>,
+    /// AIDefence: injection + PII detection on user input (optional, disabled by default).
+    defence: Option<Arc<crate::security::AiDefence>>,
 }
 
 impl AgentLoop {
@@ -119,7 +121,13 @@ impl AgentLoop {
             manifest: None,
             #[allow(deprecated)]
             system_prompt_override: None,
+            defence: None,
         }
+    }
+
+    pub fn with_defence(mut self, defence: Arc<crate::security::AiDefence>) -> Self {
+        self.defence = Some(defence);
+        self
     }
 
     pub fn with_model(mut self, model: String) -> Self {
@@ -254,8 +262,36 @@ impl AgentLoop {
             self.config.max_rounds
         };
 
+        // SessionStart hook
+        if let Some(ref hooks) = self.hook_registry {
+            let ctx = HookContext::new().with_session(session_id.as_str());
+            hooks.execute(HookPoint::SessionStart, &ctx).await;
+        }
+
         for round in 0..max_rounds {
             debug!(round, "Agent round starting");
+
+            // PreTask hook (fires once before the first round)
+            if round == 0 {
+                if let Some(ref hooks) = self.hook_registry {
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round);
+                    if let crate::hooks::HookAction::Abort(reason) =
+                        hooks.execute(HookPoint::PreTask, &ctx).await
+                    {
+                        let _ = tx.send(AgentEvent::Error {
+                            message: reason.clone(),
+                        });
+                        let _ = tx.send(AgentEvent::Done);
+                        if let Some(ref hooks) = self.hook_registry {
+                            let ctx = HookContext::new().with_session(session_id.as_str());
+                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                        }
+                        return Err(anyhow::anyhow!("PreTask hook aborted: {}", reason));
+                    }
+                }
+            }
 
             // 发布 LoopTurnStarted 事件（用于指标统计）
             if let Some(ref bus) = self.event_bus {
@@ -265,6 +301,27 @@ impl AgentLoop {
                 })
                 .await;
             }
+
+            // LoopTurnStart hook
+            if let Some(ref hooks) = self.hook_registry {
+                let ctx = HookContext::new()
+                    .with_session(session_id.as_str())
+                    .with_turn(round);
+                if let crate::hooks::HookAction::Abort(reason) =
+                    hooks.execute(HookPoint::LoopTurnStart, &ctx).await
+                {
+                    let _ = tx.send(AgentEvent::Error {
+                        message: reason.clone(),
+                    });
+                    let _ = tx.send(AgentEvent::Done);
+                    if let Some(ref hooks) = self.hook_registry {
+                        let ctx = HookContext::new().with_session(session_id.as_str());
+                        hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                    }
+                    return Err(anyhow::anyhow!("LoopTurnStart hook aborted: {}", reason));
+                }
+            }
+            let turn_start = std::time::Instant::now();
 
             // Check for cancellation
             if let Some(flag) = &cancel_flag {
@@ -301,6 +358,15 @@ impl AgentLoop {
                 }
 
                 self.pruner.apply(messages, level);
+
+                // ContextDegraded hook
+                if let Some(ref hooks) = self.hook_registry {
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round)
+                        .with_degradation(format!("{:?}", level));
+                    hooks.execute(HookPoint::ContextDegraded, &ctx).await;
+                }
             }
 
             let request = CompletionRequest {
@@ -463,6 +529,16 @@ impl AgentLoop {
                             if sent_typing && self.config.enable_typing_signal {
                                 let _ = tx.send(AgentEvent::Typing { state: false });
                             }
+                            if let Some(ref hooks) = self.hook_registry {
+                                let elapsed = turn_start.elapsed().as_millis() as u64;
+                                let ctx = HookContext::new()
+                                    .with_session(session_id.as_str())
+                                    .with_turn(round)
+                                    .with_result(true, elapsed);
+                                hooks.execute(HookPoint::PostTask, &ctx).await;
+                                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+                                hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                            }
                             let _ = tx.send(AgentEvent::Done);
                             return Ok(());
                         }
@@ -472,6 +548,10 @@ impl AgentLoop {
                         let _ = tx.send(AgentEvent::Error {
                             message: e.to_string(),
                         });
+                        if let Some(ref hooks) = self.hook_registry {
+                            let ctx = HookContext::new().with_session(session_id.as_str());
+                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                        }
                         return Err(e);
                     }
                 }
@@ -490,6 +570,16 @@ impl AgentLoop {
                     let _ = tx.send(AgentEvent::TextComplete {
                         text: full_text.clone(),
                     });
+                }
+                if let Some(ref hooks) = self.hook_registry {
+                    let elapsed = turn_start.elapsed().as_millis() as u64;
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round)
+                        .with_result(true, elapsed);
+                    hooks.execute(HookPoint::PostTask, &ctx).await;
+                    hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+                    hooks.execute(HookPoint::SessionEnd, &ctx).await;
                 }
                 let _ = tx.send(AgentEvent::Done);
                 return Ok(());
@@ -667,6 +757,16 @@ impl AgentLoop {
                 content: tool_results,
             });
 
+            // LoopTurnEnd hook after tool round completes
+            if let Some(ref hooks) = self.hook_registry {
+                let elapsed = turn_start.elapsed().as_millis() as u64;
+                let ctx = HookContext::new()
+                    .with_session(session_id.as_str())
+                    .with_turn(round)
+                    .with_result(true, elapsed);
+                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+            }
+
             // Reset for next round
             full_text = String::new();
         }
@@ -680,6 +780,10 @@ impl AgentLoop {
         let _ = tx.send(AgentEvent::Error {
             message: format!("Max rounds ({MAX_ROUNDS}) exceeded"),
         });
+        if let Some(ref hooks) = self.hook_registry {
+            let ctx = HookContext::new().with_session(session_id.as_str());
+            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+        }
         let _ = tx.send(AgentEvent::Done);
         Ok(())
     }
