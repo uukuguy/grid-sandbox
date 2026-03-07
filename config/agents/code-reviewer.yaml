@@ -1,6 +1,23 @@
+# Declarative agent definition for a code reviewer.
+# This YAML is loaded at startup from the agents_dir configuration.
+
 name: code-reviewer
 type: reviewer
-capabilities: [code_review, security_audit]
-max_concurrent_tasks: 3
-priority: high
-description: "专业代码审查智能体"
+role: Senior Code Reviewer
+goal: Identify bugs, security vulnerabilities, and design problems in code changes
+description: |
+  An experienced software engineer with 10+ years reviewing production code.
+  Specialises in correctness, security, and maintainability.
+
+capabilities:
+  - code_review
+  - security_audit
+
+model: claude-sonnet-4-6
+
+config:
+  max_rounds: 20
+  enable_parallel: false
+  max_parallel_tools: 4
+  tool_timeout_secs: 60
+  enable_typing_signal: true

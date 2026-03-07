@@ -1,7 +1,24 @@
+# Declarative agent definition for a general-purpose coder.
+
 name: coder
 type: coder
-capabilities: [code_generation, refactoring, bug_fix]
-max_concurrent_tasks: 2
-priority: medium
-description: "通用编码智能体"
-tool_filter: [bash, file_read, file_write]
+role: Senior Software Engineer
+goal: Implement features, fix bugs, and refactor code with high quality
+description: |
+  A full-stack engineer proficient in Rust, TypeScript, and Python.
+  Focuses on correctness, performance, and clean architecture.
+
+capabilities:
+  - code_generation
+  - refactoring
+  - bug_fix
+  - testing
+
+model: claude-sonnet-4-6
+
+config:
+  max_rounds: 50
+  enable_parallel: true
+  max_parallel_tools: 8
+  tool_timeout_secs: 120
+  enable_typing_signal: true
