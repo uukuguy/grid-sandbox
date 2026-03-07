@@ -80,6 +80,7 @@ mod tests {
     fn make_event(event_type: &str, seq: i64) -> StoredEvent {
         StoredEvent {
             id: seq,
+            aggregate_id: None,
             event_type: event_type.to_string(),
             payload: serde_json::Value::Null,
             session_id: None,
