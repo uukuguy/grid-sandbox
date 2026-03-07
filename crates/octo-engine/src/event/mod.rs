@@ -3,5 +3,5 @@ pub mod projection;
 pub mod store;
 
 pub use bus::{EventBus, OctoEvent};
-pub use projection::{EventCountProjection, Projection};
+pub use projection::{EventCountProjection, Projection, ProjectionEngine};
 pub use store::{EventStore, StoredEvent};
