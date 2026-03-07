@@ -14,7 +14,10 @@ pub struct HookRegistry {
 fn validate_redirect_target(target: &str) -> bool {
     !target.is_empty()
         && target.len() <= 128
-        && target.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+        // Restrict to ASCII alphanumeric + underscore + hyphen only.
+        // is_ascii_alphanumeric() excludes Unicode letters (Cyrillic, CJK, etc.)
+        // which could be used to bypass keyword filters.
+        && target.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 impl HookRegistry {
@@ -221,6 +224,63 @@ mod tests {
         assert!(
             matches!(action, HookAction::Continue),
             "expected Continue, got {:?}",
+            action
+        );
+    }
+
+    // validate_redirect_target() tests
+    #[test]
+    fn test_redirect_target_valid() {
+        assert!(validate_redirect_target("agent-b"));
+        assert!(validate_redirect_target("my_agent_1"));
+        assert!(validate_redirect_target("A"));
+        assert!(validate_redirect_target(&"x".repeat(128)));
+    }
+
+    #[test]
+    fn test_redirect_target_rejects_empty() {
+        assert!(!validate_redirect_target(""));
+    }
+
+    #[test]
+    fn test_redirect_target_rejects_too_long() {
+        assert!(!validate_redirect_target(&"a".repeat(129)));
+    }
+
+    #[test]
+    fn test_redirect_target_rejects_special_chars() {
+        assert!(!validate_redirect_target("agent/../etc/passwd"), "path traversal rejected");
+        assert!(!validate_redirect_target("agent b"), "space rejected");
+        assert!(!validate_redirect_target("agent@host"), "@ rejected");
+        assert!(!validate_redirect_target("http://evil.com"), "URL rejected");
+        assert!(!validate_redirect_target("agent\x00name"), "null byte rejected");
+    }
+
+    #[test]
+    fn test_redirect_target_rejects_unicode() {
+        assert!(!validate_redirect_target("агент"), "Cyrillic rejected");
+        assert!(!validate_redirect_target("代理"), "CJK rejected");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_redirect_target_falls_through_to_continue() {
+        // When a handler returns Redirect with an invalid target the registry
+        // should log a warning and return Continue instead of passing it on.
+        struct BadRedirectHandler;
+        #[async_trait]
+        impl HookHandler for BadRedirectHandler {
+            fn name(&self) -> &str { "bad-redirect" }
+            async fn execute(&self, _ctx: &HookContext) -> anyhow::Result<HookAction> {
+                Ok(HookAction::Redirect("../../etc/passwd".to_string()))
+            }
+        }
+        let registry = HookRegistry::new();
+        registry.register(HookPoint::AgentRoute, Arc::new(BadRedirectHandler)).await;
+        let ctx = HookContext::new();
+        let action = registry.execute(HookPoint::AgentRoute, &ctx).await;
+        assert!(
+            matches!(action, HookAction::Continue),
+            "invalid redirect target must fall through to Continue, got {:?}",
             action
         );
     }
