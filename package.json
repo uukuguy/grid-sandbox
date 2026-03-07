@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@claude-flow/memory": "^3.0.0-alpha.11",
     "agentic-flow": "^2.0.7"
   },
   "devDependencies": {
