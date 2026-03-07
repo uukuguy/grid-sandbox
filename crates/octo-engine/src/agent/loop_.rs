@@ -369,6 +369,35 @@ impl AgentLoop {
                 }
             }
 
+            // AIDefence: check user input before the first LLM call.
+            if round == 0 {
+                if let Some(ref defence) = self.defence {
+                    let user_text: Option<String> = messages
+                        .iter()
+                        .rev()
+                        .find(|m| m.role == MessageRole::User)
+                        .and_then(|m| {
+                            m.content.iter().find_map(|b| {
+                                if let ContentBlock::Text { text } = b {
+                                    Some(text.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                        });
+                    if let Some(ref text) = user_text {
+                        if let Err(violation) = defence.check_input(text) {
+                            tracing::warn!(violation = %violation, "AIDefence blocked input");
+                            let _ = tx.send(AgentEvent::Error {
+                                message: format!("Security check failed: {violation}"),
+                            });
+                            let _ = tx.send(AgentEvent::Done);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+
             let request = CompletionRequest {
                 model: self.model.clone(),
                 system: Some(system_prompt.clone()),
