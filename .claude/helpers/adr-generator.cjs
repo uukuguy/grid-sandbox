@@ -90,6 +90,21 @@ const CATEGORY_TOPICS = {
   'dependency-change': 'DEPENDENCY',
   'api-change': 'API_CHANGE',
   'structural-change': 'STRUCTURAL',
+  // ==== NEW: Expanded category coverage ====
+  'hooks-system': 'HOOKS_SYSTEM',
+  'event-system': 'EVENT_SYSTEM',
+  'scheduler-system': 'SCHEDULER_SYSTEM',
+  'secret-manager': 'SECRET_MANAGER',
+  'observability': 'OBSERVABILITY',
+  'sandbox-system': 'SANDBOX_SYSTEM',
+  'extension-system': 'EXTENSION_SYSTEM',
+  'session-management': 'SESSION_MANAGEMENT',
+  'audit-system': 'AUDIT_SYSTEM',
+  'context-engineering': 'CONTEXT_ENGINEERING',
+  'logging-system': 'LOGGING_SYSTEM',
+  'skill-system': 'SKILL_SYSTEM',
+  'tools-system': 'TOOLS_SYSTEM',
+  'database-layer': 'DATABASE_LAYER',
 };
 
 // ── ADR Generation ──────────────────────────────────────────────────────────
@@ -276,6 +291,21 @@ function getCategoryTitle(category) {
     'dependency-change': '依赖变更',
     'api-change': 'API 接口变更',
     'structural-change': '结构性变更',
+    // ==== NEW: Expanded category titles (Chinese) ====
+    'hooks-system': 'Hooks 系统变更',
+    'event-system': 'Event 系统变更',
+    'scheduler-system': '调度器系统变更',
+    'secret-manager': '密钥管理器变更',
+    'observability': '可观测性变更',
+    'sandbox-system': '沙箱系统变更',
+    'extension-system': '扩展系统变更',
+    'session-management': '会话管理变更',
+    'audit-system': '审计系统变更',
+    'context-engineering': '上下文工程变更',
+    'logging-system': '日志系统变更',
+    'skill-system': 'Skill 系统变更',
+    'tools-system': '工具系统变更',
+    'database-layer': '数据库层变更',
   };
   return titles[category] || category;
 }
@@ -291,6 +321,21 @@ const CONTEXT_MAPPING = {
   'provider-chain':     'Provider Context',
   'api-change':         'API Interface Context',
   'structural-change':  'Common Structure',
+  // ==== NEW: Expanded context mapping ====
+  'hooks-system':       'Orchestration Context',
+  'event-system':       'Observability Context',
+  'scheduler-system':    'Scheduler Context',
+  'secret-manager':     'Security Policy Context',
+  'observability':      'Observability Context',
+  'sandbox-system':    'Sandbox Execution Context',
+  'extension-system':   'Extension System Context',
+  'session-management': 'Session Management Context',
+  'audit-system':       'Observability Context',
+  'context-engineering': 'Agent Execution Context',
+  'logging-system':     'Observability Context',
+  'skill-system':       'Skill Execution Context',
+  'tools-system':       'Tool Execution Context',
+  'database-layer':     'Persistence Context',
 };
 
 const CONTEXT_MAPPING_ZH = {
@@ -301,6 +346,21 @@ const CONTEXT_MAPPING_ZH = {
   'provider-chain':     'Provider 上下文',
   'api-change':         'API 接口上下文',
   'structural-change':  '通用结构',
+  // ==== NEW: Expanded context mapping (Chinese) ====
+  'hooks-system':       '编排上下文',
+  'event-system':       '可观测性上下文',
+  'scheduler-system':    '调度器上下文',
+  'secret-manager':     '安全策略上下文',
+  'observability':      '可观测性上下文',
+  'sandbox-system':    '沙箱执行上下文',
+  'extension-system':   '扩展系统上下文',
+  'session-management': '会话管理上下文',
+  'audit-system':       '可观测性上下文',
+  'context-engineering': 'Agent 执行上下文',
+  'logging-system':     '可观测性上下文',
+  'skill-system':       'Skill 执行上下文',
+  'tools-system':       '工具执行上下文',
+  'database-layer':     '持久化上下文',
 };
 
 // File path patterns → bounded context
@@ -317,6 +377,18 @@ const PATH_TO_CONTEXT = [
   { pattern: /hooks?\//,    context: 'Orchestration Context' },
   { pattern: /orchestrat/,  context: 'Orchestration Context' },
   { pattern: /sandbox\//,   context: 'Sandbox Execution Context' },
+  // ==== NEW: Expanded path mapping ====
+  { pattern: /scheduler\//, context: 'Scheduler Context' },
+  { pattern: /secret\//,   context: 'Security Policy Context' },
+  { pattern: /metrics\//,  context: 'Observability Context' },
+  { pattern: /metering\//,  context: 'Observability Context' },
+  { pattern: /extension\//, context: 'Extension System Context' },
+  { pattern: /audit\//,     context: 'Observability Context' },
+  { pattern: /context\//,   context: 'Agent Execution Context' },
+  { pattern: /logging\//,   context: 'Observability Context' },
+  { pattern: /skill_runtime\//, context: 'Skill Execution Context' },
+  { pattern: /skills\//,    context: 'Skill Execution Context' },
+  { pattern: /db\//,        context: 'Persistence Context' },
 ];
 
 const PATH_TO_CONTEXT_ZH = [
@@ -332,6 +404,18 @@ const PATH_TO_CONTEXT_ZH = [
   { pattern: /hooks?\//,    context: '编排上下文' },
   { pattern: /orchestrat/,  context: '编排上下文' },
   { pattern: /sandbox\//,   context: '沙箱执行上下文' },
+  // ==== NEW: Expanded path mapping (Chinese) ====
+  { pattern: /scheduler\//, context: '调度器上下文' },
+  { pattern: /secret\//,   context: '安全策略上下文' },
+  { pattern: /metrics\//,  context: '可观测性上下文' },
+  { pattern: /metering\//,  context: '可观测性上下文' },
+  { pattern: /extension\//, context: '扩展系统上下文' },
+  { pattern: /audit\//,     context: '可观测性上下文' },
+  { pattern: /context\//,   context: 'Agent 执行上下文' },
+  { pattern: /logging\//,   context: '可观测性上下文' },
+  { pattern: /skill_runtime\//, context: 'Skill 执行上下文' },
+  { pattern: /skills\//,    context: 'Skill 执行上下文' },
+  { pattern: /db\//,        context: '持久化上下文' },
 ];
 
 /**

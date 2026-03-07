@@ -1,20 +1,26 @@
 # Domain-Driven Design Models
 
-> **Note**: Current DDD files use a single-file mode.
-> **Target**: Migrate to RuView mode (one file per bounded context).
+> **Note**: DDD files are organized by bounded context (RuView style).
+> Each file documents one domain with Ubiquitous Language, Aggregates, Value Objects, and Invariants.
 
 This folder contains Domain-Driven Design (DDD) specifications for the octo-sandbox project.
 
-## Current Structure
+## Bounded Context Files
 
-| File | Description |
-|------|-------------|
-| [DDD_DOMAIN_ANALYSIS.md](DDD_DOMAIN_ANALYSIS.md) | Comprehensive domain analysis with bounded contexts, aggregate roots, and ubiquitous language |
-| [DDD_CHANGE_LOG.md](DDD_CHANGE_LOG.md) | Change tracking log for architecture modifications |
+| File | Context | Description |
+|------|---------|-------------|
+| [DDD_AGENT_EXECUTION.md](DDD_AGENT_EXECUTION.md) | Agent Execution | Agent lifecycle, runtime, executor, loop, catalog |
+| [DDD_MEMORY.md](DDD_MEMORY.md) | Memory | Multi-layer memory, vector search, knowledge graph |
+| [DDD_MCP_INTEGRATION.md](DDD_MCP_INTEGRATION.md) | MCP Integration | MCP server lifecycle, tool bridge, protocol support |
+| [DDD_TOOL_EXECUTION.md](DDD_TOOL_EXECUTION.md) | Tool Execution | Tool registry, execution, risk assessment |
+| [DDD_PROVIDER.md](DDD_PROVIDER.md) | Provider | LLM provider chain, failover, load balancing |
+| [DDD_SECURITY.md](DDD_SECURITY.md) | Security Policy | Path validation, autonomy levels, action tracking |
+| [DDD_EVENT_SYSTEM.md](DDD_EVENT_SYSTEM.md) | Event System | Event bus, event sourcing, projections |
+| [DDD_HOOK_SYSTEM.md](DDD_HOOK_SYSTEM.md) | Hook System | Hook registry, handlers, context propagation |
+| [DDD_DOMAIN_ANALYSIS.md](DDD_DOMAIN_ANALYSIS.md) | (Legacy) | Comprehensive domain analysis (Chinese) |
+| [DDD_CHANGE_LOG.md](DDD_CHANGE_LOG.md) | (Legacy) | Change tracking log |
 
-## Domain Model (from DDD_DOMAIN_ANALYSIS.md)
-
-### Bounded Contexts
+## Domain Model Overview
 
 | # | Context | Responsibility | Key Modules |
 |---|---------|---------------|-------------|

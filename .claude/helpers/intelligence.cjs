@@ -909,7 +909,7 @@ const ARCH_PATTERNS = [
   // MCP integration
   /crates\/octo-engine\/src\/mcp\/manager\.rs$/,
   // Memory architecture
-  /crates\/octo-engine\/src\/memory\/(?:mod|graph_store|fts)\.rs$/,
+  /crates\/octo-engine\/src\/memory\/(?:mod|graph_store|fts|vector_index|embedding|hybrid_query)\.rs$/,
   // Provider chain
   /crates\/octo-engine\/src\/providers\/(?:mod|chain)\.rs$/,
   // Server routing / middleware
@@ -918,6 +918,38 @@ const ARCH_PATTERNS = [
   /Cargo\.toml$/,
   // API types (public interface)
   /crates\/octo-types\/src\//,
+  // ==== NEW: Expanded module coverage ====
+  // Hooks system
+  /crates\/octo-engine\/src\/hooks\//,
+  // Event system (EventBus, EventStore)
+  /crates\/octo-engine\/src\/event\//,
+  // Scheduler (Cron tasks)
+  /crates\/octo-engine\/src\/scheduler\//,
+  // Secret manager
+  /crates\/octo-engine\/src\/secret\//,
+  // Metrics and metering
+  /crates\/octo-engine\/src\/metrics\//,
+  /crates\/octo-engine\/src\/metering\//,
+  // Sandbox system
+  /crates\/octo-engine\/src\/sandbox\//,
+  // Extension system (WASM plugins)
+  /crates\/octo-engine\/src\/extension\//,
+  // Session management
+  /crates\/octo-engine\/src\/session\//,
+  // Audit system
+  /crates\/octo-engine\/src\/audit\//,
+  // Context engineering (system prompt, budget, pruning)
+  /crates\/octo-engine\/src\/context\//,
+  // Logging
+  /crates\/octo-engine\/src\/logging\//,
+  // Skill runtime
+  /crates\/octo-engine\/src\/skill_runtime\//,
+  // Skills (YAML manifests)
+  /crates\/octo-engine\/src\/skills\//,
+  // Tools (registry, execution)
+  /crates\/octo-engine\/src\/tools\//,
+  // Database
+  /crates\/octo-engine\/src\/db\//,
 ];
 
 /**
@@ -934,7 +966,21 @@ function detectArchChange(file) {
         ? 'agent-architecture' : normalized.includes('/mcp/')
         ? 'mcp-integration' : normalized.includes('/memory/')
         ? 'memory-architecture' : normalized.includes('/providers/')
-        ? 'provider-chain' : normalized.includes('Cargo.toml')
+        ? 'provider-chain' : normalized.includes('/hooks/')
+        ? 'hooks-system' : normalized.includes('/event/')
+        ? 'event-system' : normalized.includes('/scheduler/')
+        ? 'scheduler-system' : normalized.includes('/secret/')
+        ? 'secret-manager' : normalized.includes('/metrics/') || normalized.includes('/metering/')
+        ? 'observability' : normalized.includes('/sandbox/')
+        ? 'sandbox-system' : normalized.includes('/extension/')
+        ? 'extension-system' : normalized.includes('/session/')
+        ? 'session-management' : normalized.includes('/audit/')
+        ? 'audit-system' : normalized.includes('/context/')
+        ? 'context-engineering' : normalized.includes('/logging/')
+        ? 'logging-system' : normalized.includes('/skill_runtime/') || normalized.includes('/skills/')
+        ? 'skill-system' : normalized.includes('/tools/')
+        ? 'tools-system' : normalized.includes('/db/')
+        ? 'database-layer' : normalized.includes('Cargo.toml')
         ? 'dependency-change' : normalized.includes('/octo-types/')
         ? 'api-change' : 'structural-change';
       return { isArch: true, category };

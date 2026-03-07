@@ -1,8 +1,5 @@
 # Architecture Decision Records
 
-> **Note**: Current ADR files use "multi-section" mode (one file contains multiple ADR sections).
-> **Target**: Migrate to RuView mode (one file per ADR).
-
 This folder contains Architecture Decision Records (ADRs) that document every significant technical choice in the octo-sandbox project.
 
 ## Why ADRs?
@@ -23,40 +20,47 @@ The project uses [Domain-Driven Design](../ddd/) (DDD) to organize code into bou
 - **DDD models define the language**: Domain models define terms that ADRs reference precisely.
 - **Together they prevent drift**: An AI agent reading ADR-010 knows how the AgentRouter works, because the ADR documents it.
 
-### How ADRs are structured
+### ADR File Structure
 
-Each ADR follows a consistent format:
+Each ADR follows this format (one file per ADR):
 
-- **Context** — What problem or gap prompted this decision
-- **Decision** — What we chose to do and how
-- **Consequences** — What improved, what got harder, and what risks remain
-- **References** — Related ADRs, papers, and code paths
+```markdown
+# ADR-XXX: Title
 
-Statuses: **Proposed** (under discussion), **Accepted** (approved and/or implemented), **Superseded** (replaced by a later ADR), **Completed** (implemented and verified).
+## Status
+Accepted | Completed | Proposed | Superseded
+
+## Context
+What problem or gap prompted this decision?
+
+## Decision
+What we chose to do and how (with code examples if applicable)
+
+## Consequences
+### Positive
+- What improved
+
+### Negative
+- What got harder or what risks remain
+
+## References
+- Related ADRs
+- External papers or documentation
+- Code paths
+```
+
+### Status Definitions
+
+| Status | Meaning |
+|--------|---------|
+| **Proposed** | Under discussion, not yet approved |
+| **Accepted** | Approved, awaiting implementation |
+| **Completed** | Implemented and verified |
+| **Superseded** | Replaced by a later ADR |
 
 ---
 
 ## ADR Index
-
-### Agent Architecture
-
-| ADR | Title | Status |
-|-----|-------|--------|
-| ADR-014 | AgentRuntime Modularization | Completed |
-| ADR-015 | AgentRouter Routing Decision | Completed |
-| ADR-016 | ManifestLoader YAML Declarative Agent | Completed |
-
-### Multi-Agent Orchestration
-
-| ADR | Title | Status |
-|-----|-------|--------|
-| ADR-006 | Three-Tier Architecture (Engine/Workbench/Platform) | Accepted |
-| ADR-007 | Hook Engine Introduction | Proposed |
-| ADR-008 | Event Sourcing Introduction | Proposed |
-| ADR-009 | HNSW Vector Index Introduction | Proposed |
-| ADR-010 | Agent Router Introduction | Proposed |
-| ADR-011 | Multi-Agent Topology and Orchestration | Proposed |
-| ADR-012 | ADR/DDD Documents as Agent Constraint System | Proposed |
 
 ### Security
 
@@ -67,8 +71,27 @@ Statuses: **Proposed** (under discussion), **Accepted** (approved and/or impleme
 | ADR-003 | API Key Hash Algorithm Upgrade to HMAC-SHA256 | Accepted |
 | ADR-004 | Middleware Execution Order Fix (LIFO) | Accepted |
 | ADR-005 | AgentRuntime Modular Split | Accepted |
-| ADR-006-HMAC | HMAC Secret Force Check (Fail-Fast) | Accepted |
-| ADR-007-MCP | MCP call_mcp_tool Lock-Free I/O | Accepted |
+| ADR-006 | HMAC Secret Force Check (Fail-Fast) | Accepted |
+| ADR-007 | MCP call_mcp_tool Lock-Free I/O | Accepted |
+
+### Multi-Agent Orchestration
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| ADR-006 (Three-Tier) | Three-Tier Architecture (Engine/Workbench/Platform) | Accepted |
+| ADR-007 (Hook) | Hook Engine Introduction | Proposed |
+| ADR-009 | HNSW Vector Index Introduction | Proposed |
+| ADR-010 | Agent Router Introduction | Proposed |
+| ADR-011 | Multi-Agent Topology and Orchestration | Proposed |
+| ADR-012 | ADR/DDD Documents as Agent Constraint System | Proposed |
+
+### Agent Architecture
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| ADR-014 | AgentRuntime Modularization | Completed |
+| ADR-015 | AgentRouter Routing Decision | Completed |
+| ADR-016 | ManifestLoader YAML Declarative Agent | Completed |
 
 ### MCP Integration
 
@@ -142,3 +165,15 @@ This will allow agents to automatically search and inject relevant ADR/DDD const
 - [DDD Domain Models](../ddd/) — Bounded context definitions and ubiquitous language
 - [CLAUDE.md](../../CLAUDE.md) — Project instructions for AI agents
 - [Design Documents](../design/) — Technical design documents
+
+---
+
+## References
+
+### External
+- [Michael Nygard's ADR Template](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+- [RuView ADR Structure](https://github.com/ruvnet/wifi-densepose-rs/tree/main/docs/adr)
+
+### Internal
+- [ADR-012: ADR/DDD Documents as Agent Constraint System](./ADR-012-ADR_DDD_CONSTRAINT.md) — Future ConstraintInjector design
+- [DDD Domain Models](../ddd/) — Bounded context definitions
