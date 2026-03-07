@@ -35,6 +35,8 @@ octo-sandbox        (1) — Sandbox runtime adapters (subprocess, WASM, Docker)
     ↓                      depends on: octo-types
 octo-engine         (1) — Core engine: agent, memory, MCP, providers, tools
     ↓                      depends on: octo-types
+octo-cli            (2) — Local CLI for agent interaction (binary)
+                           depends on: octo-types, octo-engine, octo-sandbox
 octo-server         (2) — Workbench HTTP/WS server (Axum)
                            depends on: octo-types, octo-engine, octo-sandbox
 octo-platform-server(2) — Platform multi-tenant server (Axum + JWT auth)
@@ -112,6 +114,19 @@ Single-user Axum HTTP + WebSocket server. Modules:
 | `middleware.rs` | Request middleware |
 | `session.rs` | Session HTTP helpers |
 | `api/` | REST endpoints: agents, sessions, memories, tools, executions, MCP servers/tools/logs, budget, config, scheduler, tasks, metrics, audit, providers, user_context |
+
+### `octo-cli` — Local CLI (binary)
+
+Command-line interface for local agent interaction. See [ADR-045](docs/adr/ADR-045-CLI_INTERFACE.md).
+
+| Command | Description |
+|---------|-------------|
+| `octo agent list` | List all available agents |
+| `octo agent info <id>` | Show agent details |
+| `octo session list` | List all sessions |
+| `octo session create` | Create new session |
+| `octo config show` | Display current configuration |
+| `octo config validate` | Validate configuration |
 
 ### `octo-platform-server` — Platform Server (binary, WIP)
 

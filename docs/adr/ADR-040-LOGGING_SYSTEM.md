@@ -1,43 +1,83 @@
-# ADR-040: LOGGING SYSTEM
+# ADR-040: Logging System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-040: 日志系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires structured logging for:
+- Debugging and troubleshooting
+- Production monitoring
+- Log aggregation
+- Compliance requirements
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/logging/mod.rs`
+Implement structured logging system:
 
-### Change Category
+### Core Components
 
-- **Category**: logging-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Logger configuration
+pub struct Logger {
+    level: LogLevel,
+    format: LogFormat,
+    output: LogSink,
+    subscriber: Option<TracingSubscriber>,
+}
 
-### Decision
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+pub enum LogFormat {
+    Pretty,
+    Json,
+    Compact,
+}
+```
 
-### Consequences
+### Output Sinks
 
-#### Positive
-- (To be added)
+| Sink | Description | Use Case |
+|------|-------------|----------|
+| Stdout | Console output | Development |
+| File | Rotating file | Production |
+| Custom | External system | Integration |
 
-#### Negative
-- (To be added)
+### Structured Logging
 
-### Affected Files
+```rust
+// Example usage
+logger.info("agent_execution {
+    agent_id = %s,
+    duration_ms = %d,
+    status = %s
+}", agent_id, duration, status);
+```
 
-| `crates/octo-engine/src/logging/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Structured format for parsing
+- Multiple output options
+- Performance optimized
+
+### Negative
+
+- JSON verbosity in development
+- Storage management needed
+
+## Related
+
+- [ADR-034: Observability](ADR-034-OBSERVABILITY.md)

@@ -1,43 +1,79 @@
-# ADR-043: TOOLS SYSTEM
+# ADR-043: Tools System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-043: 工具系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires tool execution for:
+- File system operations
+- Command execution
+- HTTP requests
+- Data processing
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/tools/mod.rs`
+Implement tool registry and execution system:
 
-### Change Category
+### Core Components
 
-- **Category**: tools-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Tool registry
+pub struct ToolRegistry {
+    tools: Arc<RwLock<HashMap<ToolName, ToolDefinition>>>,
+    executor: ToolExecutor,
+}
 
-### Decision
+// Tool definition
+pub struct ToolDefinition {
+    pub name: ToolName,
+    pub description: String,
+    pub parameters: ParameterSchema,
+    pub handler: Box<dyn ToolHandler>,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Tool executor
+pub struct ToolExecutor {
+    sandbox: SandboxManager,
+    recorder: ExecutionRecorder,
+}
+```
 
-### Consequences
+### Built-in Tools
 
-#### Positive
-- (To be added)
+| Tool | Description | Risk Level |
+|------|-------------|-------------|
+| bash | Execute shell commands | High |
+| file_read | Read file contents | Medium |
+| file_write | Write to files | High |
+| http_request | Make HTTP requests | Medium |
+| search | Search the web | Low |
 
-#### Negative
-- (To be added)
+### Execution Recording
 
-### Affected Files
+- **Parameters**: Tool input capture
+- **Output**: Result logging
+- **Duration**: Execution time tracking
+- **Error**: Error details
 
-| `crates/octo-engine/src/tools/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Unified tool interface
+- Risk assessment integration
+- Execution audit trail
+
+### Negative
+
+- Tool definition maintenance
+- Security risk management
+
+## Related
+
+- [ADR-002: Bash Tool Exec Policy](ADR-002-BASH_TOOL_EXEC_POLICY.md)

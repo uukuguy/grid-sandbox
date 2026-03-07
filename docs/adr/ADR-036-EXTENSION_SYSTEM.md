@@ -1,43 +1,89 @@
-# ADR-036: EXTENSION SYSTEM
+# ADR-036: Extension System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-036: 扩展系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires a plugin architecture for extensibility:
+- Load WASM-based plugins at runtime
+- Sandboxed plugin execution
+- Host function interception
+- Plugin lifecycle management
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/extension/mod.rs`
+Implement WASM-based extension system:
 
-### Change Category
+### Core Architecture
 
-- **Category**: extension-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Extension host
+pub struct ExtensionHost {
+    engine: WasmtimeEngine,
+    plugins: Arc<RwLock<HashMap<PluginId, LoadedPlugin>>>,
+    host_functions: HostFunctionRegistry,
+}
 
-### Decision
+// Loaded plugin
+pub struct LoadedPlugin {
+    id: PluginId,
+    name: String,
+    instance: WasmtimeInstance,
+    exports: PluginExports,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Host function registry
+pub struct HostFunctionRegistry {
+    functions: Arc<RwLock<HashMap<String, HostFunction>>>,
+}
+```
 
-### Consequences
+### Plugin Interface
 
-#### Positive
-- (To be added)
+```rust
+// Plugin trait
+pub trait Plugin: Send + Sync {
+    fn name(&self) -> &str;
+    fn version(&self) -> &str;
+    fn initialize(&mut self, ctx: &PluginContext) -> Result<()>;
+    fn execute(&self, input: &PluginInput) -> Result<PluginOutput>;
+}
 
-#### Negative
-- (To be added)
+// Plugin context
+pub struct PluginContext {
+    pub config: PluginConfig,
+    pub http_client: HttpClient,
+    pub logger: Logger,
+}
+```
 
-### Affected Files
+### Host Call Interception
 
-| `crates/octo-engine/src/extension/mod.rs` | Change |
+- File system access
+- Network requests
+- Environment variables
+- Tool execution
 
+## Consequences
+
+### Positive
+
+- Runtime plugin loading
+- Strong isolation via WASM
+- Language-agnostic plugins
+
+### Negative
+
+- WASM compilation complexity
+- Performance overhead
+- Debugging challenges
+
+## Related
+
+- [ADR-035: Sandbox System](ADR-035-SANDBOX_SYSTEM.md)

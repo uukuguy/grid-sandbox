@@ -1,43 +1,76 @@
-# ADR-038: AUDIT SYSTEM
+# ADR-038: Audit System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-038: 审计系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires comprehensive audit logging for:
+- Security compliance
+- Access pattern analysis
+- Incident investigation
+- Regulatory requirements
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/audit/mod.rs`
+Implement audit system with structured logging:
 
-### Change Category
+### Core Components
 
-- **Category**: audit-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Audit event
+pub struct AuditEvent {
+    pub id: AuditEventId,
+    pub timestamp: DateTime<Utc>,
+    pub actor: Actor,
+    pub action: Action,
+    pub resource: Resource,
+    pub outcome: Outcome,
+    pub metadata: HashMap<String, String>,
+}
 
-### Decision
+// Audit storage
+pub struct AuditStorage {
+    db: SqlitePool,
+    buffer: AsyncBuffer<AuditEvent>,
+}
+```
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+### Audit Categories
 
-### Consequences
+| Category | Description |
+|----------|-------------|
+| Authentication | Login, logout, token operations |
+| Authorization | Permission checks, access denials |
+| DataAccess | Read, write, delete operations |
+| Configuration | System configuration changes |
+| Security | Suspicious activities, breaches |
 
-#### Positive
-- (To be added)
+### Storage Strategy
 
-#### Negative
-- (To be added)
+- **SQLite**: Primary persistent storage
+- **Async Buffer**: Batch writes for performance
+- **Retention**: Configurable retention period
 
-### Affected Files
+## Consequences
 
-| `crates/octo-engine/src/audit/mod.rs` | Change |
+### Positive
 
+- Complete audit trail
+- Compliance support
+- Security incident investigation
+
+### Negative
+
+- Storage growth
+- Performance overhead for sync operations
+
+## Related
+
+- [ADR-031: Event System](ADR-031-EVENT_SYSTEM.md)
+- [ADR-033: Secret Manager](ADR-033-SECRET_MANAGER.md)

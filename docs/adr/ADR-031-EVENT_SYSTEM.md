@@ -1,43 +1,80 @@
-# ADR-031: EVENT SYSTEM
+# ADR-031: Event System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-031: Event 系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The agent system requires an event-driven architecture for loose-coupled communication between components, supporting:
+- Real-time state change notifications
+- Event sourcing
+- Cross-component async communication
+- Observability and debugging
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/event/mod.rs`
+Implement a publish-subscribe based event system:
 
-### Change Category
+### Core Components
 
-- **Category**: event-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Event Bus - Publish-Subscribe
+pub struct EventBus {
+    sender: broadcast::Sender<SystemEvent>,
+    subscriptions: Arc<RwLock<HashMap<String, broadcast::Receiver<SystemEvent>>>>,
+}
 
-### Decision
+// Event Structure
+pub struct SystemEvent {
+    pub event_type: EventType,
+    pub payload: serde_json::Value,
+    pub timestamp: DateTime<Utc>,
+    pub source: ModuleSource,
+    pub correlation_id: Option<String>,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Event Sourcing Store
+pub struct EventStore {
+    db: SqlitePool,
+}
+```
 
-### Consequences
+### Event Types
 
-#### Positive
-- (To be added)
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| AgentCreated | Agent creation | AgentId, Config |
+| AgentStateChanged | Agent state change | AgentId, OldState, NewState |
+| ToolExecuted | Tool execution | ToolName, Input, Output, Duration |
+| SessionCreated | Session creation | SessionId, AgentId |
+| MemoryIndexed | Memory indexing | MemoryId, Vector |
 
-#### Negative
-- (To be added)
+### Event Sourcing Support
 
-### Affected Files
+- **EventStore**: Persist events to SQLite
+- **ProjectionEngine**: Materialized view construction
+- **StateReconstructor**: Reconstruct state from event replay
 
-| `crates/octo-engine/src/event/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Complete decoupling between components
+- Support multiple subscribers
+- Built-in event filtering
+- Support event replay and state reconstruction
+
+### Negative
+
+- Event routing adds complexity
+- Slow subscribers may cause message backlog
+- Requires careful topic design
+
+## References
+
+- Code paths: `crates/octo-engine/src/event/`

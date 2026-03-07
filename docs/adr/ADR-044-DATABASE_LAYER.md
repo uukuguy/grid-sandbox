@@ -1,43 +1,80 @@
-# ADR-044: DATABASE LAYER
+# ADR-044: Database Layer
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-044: 数据库层变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires database persistence for:
+- Session storage
+- Agent state
+- Event logs
+- Configuration
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/db/mod.rs`
+Implement SQLite database layer:
 
-### Change Category
+### Core Components
 
-- **Category**: database-layer
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Database wrapper
+pub struct Database {
+    pool: SqlitePool,
+    migrations: MigrationRunner,
+}
 
-### Decision
+// Migration runner
+pub struct MigrationRunner {
+    migrations: Vec<Migration>,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Connection pool
+pub struct SqlitePool {
+    connections: Vec<Mutex<SqliteConnection>>,
+}
+```
 
-### Consequences
+### Schema Overview
 
-#### Positive
-- (To be added)
+| Table | Description |
+|-------|-------------|
+| sessions | Session metadata |
+| agents | Agent configurations |
+| events | Event store |
+| audit | Audit logs |
+| tools_executions | Tool execution records |
 
-#### Negative
-- (To be added)
+### Migrations
 
-### Affected Files
+- **Versioned**: Each migration has version number
+- **Idempotent**: Safe to run multiple times
+- **Rollback**: Support migration rollback
 
-| `crates/octo-engine/src/db/mod.rs` | Change |
+### Async Support
 
+- **tokio-rusqlite**: Async database operations
+- **Connection Pool**: Reuse connections
+- **Prepared Statements**: Performance optimization
+
+## Consequences
+
+### Positive
+
+- Simple deployment
+- ACID compliance
+- Single file storage
+
+### Negative
+
+- Limited scalability
+- Single-node only
+
+## References
+
+- Code path: `crates/octo-engine/src/db/`

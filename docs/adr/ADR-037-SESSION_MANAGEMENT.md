@@ -1,43 +1,80 @@
-# ADR-037: SESSION MANAGEMENT
+# ADR-037: Session Management
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-037: 会话管理变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires session management for:
+- Conversation state persistence
+- Multi-session support per agent
+- Session metadata tracking
+- Session lifecycle management
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/session/mod.rs`
+Implement session store with SQLite persistence:
 
-### Change Category
+### Core Architecture
 
-- **Category**: session-management
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Session store
+pub struct SessionStore {
+    db: SqlitePool,
+    cache: SessionCache,
+}
 
-### Decision
+// Session model
+pub struct Session {
+    pub id: SessionId,
+    pub agent_id: AgentId,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub status: SessionStatus,
+    pub metadata: SessionMetadata,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+pub enum SessionStatus {
+    Active,
+    Paused,
+    Completed,
+    Failed,
+}
+```
 
-### Consequences
+### Session Operations
 
-#### Positive
-- (To be added)
+| Operation | Description |
+|-----------|-------------|
+| create | Create new session |
+| resume | Resume paused session |
+| pause | Pause active session |
+| complete | Mark session as completed |
+| delete | Delete session and associated data |
 
-#### Negative
-- (To be added)
+### Storage Backends
 
-### Affected Files
+- **SQLite**: Persistent storage for production
+- **InMemory**: Ephemeral for testing
 
-| `crates/octo-engine/src/session/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Persistent conversation state
+- Support for session resumption
+- Session metadata for analytics
+
+### Negative
+
+- Database storage growth
+- Cleanup strategy required
+
+## Related
+
+- [ADR-044: Database Layer](ADR-044-DATABASE_LAYER.md)

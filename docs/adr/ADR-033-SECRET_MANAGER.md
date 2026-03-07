@@ -1,43 +1,81 @@
-# ADR-033: SECRET MANAGER
+# ADR-033: Secret Manager
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-033: 密钥管理器变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires secure management of sensitive information:
+- Encrypted API key storage
+- Provider authentication credentials
+- Webhook callback addresses
+- Database connection strings
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/secret/mod.rs`
+Implement an AES-GCM based secret manager:
 
-### Change Category
+### Core Architecture
 
-- **Category**: secret-manager
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Secret manager
+pub struct SecretManager {
+    cipher: Aes256Gcm,
+    key_store: Arc<RwLock<HashMap<String, EncryptedSecret>>>,
+    keyring: Option<Box<dyn KeyringBackend>>,
+}
 
-### Decision
+// Encrypted secret
+pub struct EncryptedSecret {
+    id: SecretId,
+    encrypted_value: Vec<u8>,
+    nonce: [u8; 12],
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+```
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+### Encryption Scheme
 
-### Consequences
+- **Algorithm**: AES-256-GCM
+- **Key Derivation**: Argon2id
+- **Storage**: Encrypted value stored in database
 
-#### Positive
-- (To be added)
+### Keyring Integration
 
-#### Negative
-- (To be added)
+- **Linux**: D-Bus Secret Service
+- **macOS**: Keychain
+- **Windows**: Credential Manager
 
-### Affected Files
+### Operation Interface
 
-| `crates/octo-engine/src/secret/mod.rs` | Change |
+```rust
+pub trait SecretStore: Send + Sync {
+    fn get(&self, key: &str) -> Result<String>;
+    fn set(&self, key: &str, value: &str) -> Result<()>;
+    fn delete(&self, key: &str) -> Result<()>;
+    fn list(&self) -> Result<Vec<SecretMeta>>;
+}
+```
 
+## Consequences
+
+### Positive
+
+- Sensitive data encrypted at rest
+- System Keyring integration support
+- Audit logging for access
+
+### Negative
+
+- Master key management complexity
+- Keyring depends on platform features
+
+## Related
+
+- [ADR-003: API Key HMAC](ADR-003-API_KEY_HMAC.md)

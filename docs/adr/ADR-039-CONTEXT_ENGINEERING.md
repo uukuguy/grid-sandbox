@@ -1,43 +1,76 @@
-# ADR-039: CONTEXT ENGINEERING
+# ADR-039: Context Engineering
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-039: 上下文工程变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires context management for LLM interactions:
+- System prompt building
+- Context budget management
+- Token budget optimization
+- Context pruning strategies
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/context/mod.rs`
+Implement context engineering system:
 
-### Change Category
+### Core Components
 
-- **Category**: context-engineering
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// System prompt builder
+pub struct SystemPromptBuilder {
+    templates: PromptTemplateRegistry,
+    variables: HashMap<String, String>,
+}
 
-### Decision
+// Context budget manager
+pub struct ContextBudgetManager {
+    max_tokens: usize,
+    pruning_strategy: PruningStrategy,
+    priority_fn: MessagePriorityFn,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Context pruner
+pub struct ContextPruner {
+    strategy: PruningStrategy,
+    preserve_recent: usize,
+}
+```
 
-### Consequences
+### Pruning Strategies
 
-#### Positive
-- (To be added)
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| Truncate | Remove oldest messages | Simple truncation |
+| Summarize | Compress via LLM | Long conversations |
+| Relevance | Keep relevant via embedding | Search-heavy conversations |
+| Hybrid | Combine multiple | Production use |
 
-#### Negative
-- (To be added)
+### Budget Management
 
-### Affected Files
+- **Token Budget**: Configurable max tokens
+- **Priority Messages**: System prompt, recent messages have priority
+- **Dynamic Adjustment**: Adapt based on response length
 
-| `crates/octo-engine/src/context/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Optimize token usage
+- Prevent context overflow
+- Configurable strategies
+
+### Negative
+
+- Pruning may lose context
+- Summarization adds latency
+
+## References
+
+- `crates/octo-engine/src/context/`

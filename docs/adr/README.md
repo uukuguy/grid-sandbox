@@ -127,6 +127,32 @@ What we chose to do and how (with code examples if applicable)
 | ADR-028 | ProjectionEngine Projection Engine | Completed |
 | ADR-029 | StateReconstructor State Replay | Completed |
 
+### Engine Subsystems
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| ADR-030 | Hooks System | Accepted |
+| ADR-031 | Event System | Accepted |
+| ADR-032 | Scheduler System | Accepted |
+| ADR-033 | Secret Manager | Accepted |
+| ADR-034 | Observability | Accepted |
+| ADR-035 | Sandbox System | Accepted |
+| ADR-036 | Extension System | Accepted |
+| ADR-037 | Session Management | Accepted |
+| ADR-038 | Audit System | Accepted |
+| ADR-039 | Context Engineering | Accepted |
+| ADR-040 | Logging System | Accepted |
+| ADR-041 | Skill System | Accepted |
+| ADR-042 | Skill Runtime | Accepted |
+| ADR-043 | Tools System | Accepted |
+| ADR-044 | Database Layer | Accepted |
+
+### CLI & Interface
+
+| ADR | Title | Status |
+|-----|-------|--------|
+| ADR-045 | CLI Interface (octo-cli) | Accepted |
+
 ---
 
 ## How Agents Use ADR/DDD

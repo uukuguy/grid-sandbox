@@ -1,43 +1,78 @@
-# ADR-032: SCHEDULER SYSTEM
+# ADR-032: Scheduler System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-032: 调度器系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The agent system requires scheduled task execution capabilities, supporting:
+- Periodic agent execution
+- Delayed task execution
+- Cron expression configuration
+- Persistent task state
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/scheduler/mod.rs`
+Implement a Cron-based task scheduler:
 
-### Change Category
+### Core Architecture
 
-- **Category**: scheduler-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Scheduler main structure
+pub struct TaskScheduler {
+    runtime: Runtime,
+    jobs: Arc<RwLock<HashMap<JobId, ScheduledJob>>>,
+    store: SqliteJobStore,
+}
 
-### Decision
+// Job definition
+pub struct ScheduledJob {
+    pub id: JobId,
+    pub name: String,
+    pub schedule: CronSchedule,
+    pub task: TaskDefinition,
+    pub enabled: bool,
+    pub next_run: Option<DateTime<Utc>>,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Task types
+pub enum TaskDefinition {
+    AgentExecution(AgentExecutionTask),
+    Webhook(WebhookTask),
+    Cleanup(CleanupTask),
+}
+```
 
-### Consequences
+### Storage Backend
 
-#### Positive
-- (To be added)
+- **SQLite**: Default persistent storage
+- Support CRUD operations for tasks
+- Auto-track next execution time
 
-#### Negative
-- (To be added)
+### Scheduling Strategy
 
-### Affected Files
+1. **Precise Scheduling**: Use Cron parsing library to calculate exact execution times
+2. **Persistence**: Store task state in database
+3. **Fault Tolerance**: Auto skip or retry missed executions
 
-| `crates/octo-engine/src/scheduler/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Support complex Cron expressions
+- Task persistence not lost
+- Easy to manage and monitor
+
+### Negative
+
+- Single-node scheduling without high availability
+- Cluster environment requires external scheduler
+
+## Related
+
+- [ADR-037: Session Management](ADR-037-SESSION_MANAGEMENT.md)

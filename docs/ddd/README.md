@@ -33,6 +33,7 @@ This folder contains Domain-Driven Design (DDD) specifications for the octo-sand
 | 7 | Session Management | Session store, lifecycle, state management | `session/store.rs` |
 | 8 | Event System | Event bus, event sourcing, projections | `event/bus.rs`, `event/store.rs` |
 | 9 | Hook System | Hook registry, handlers, context propagation | `hooks/registry.rs` |
+| 10 | CLI Interface | Local command-line interface for agent interaction | `octo-cli/` |
 
 ## How to Read
 

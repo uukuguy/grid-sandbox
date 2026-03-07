@@ -1,43 +1,76 @@
-# ADR-035: SANDBOX SYSTEM
+# ADR-035: Sandbox System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-035: 沙箱系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires sandboxed execution environments for untrusted code:
+- Code execution isolation
+- Resource limits
+- System call filtering
+- Network access control
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/sandbox/mod.rs`
+Implement multi-runtime sandbox system supporting:
 
-### Change Category
+### Runtime Adapters
 
-- **Category**: sandbox-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Sandbox runtime trait
+pub trait RuntimeAdapter: Send + Sync {
+    fn execute(&self, code: &str, config: &SandboxConfig) -> Result<SandboxOutput>;
+    fn terminate(&self, execution_id: &ExecutionId) -> Result<()>;
+    fn get_status(&self, execution_id: &ExecutionId) -> Result<ExecutionStatus>;
+}
 
-### Decision
+// Sandbox configuration
+pub struct SandboxConfig {
+    pub timeout_ms: u64,
+    pub memory_limit_mb: u64,
+    pub allowed_syscalls: Vec<String>,
+    pub network_policy: NetworkPolicy,
+}
+```
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+### Runtime Implementations
 
-### Consequences
+| Runtime | Use Case | Isolation Level |
+|---------|----------|----------------|
+| Native | Trusted local execution | Process |
+| WASM | Lightweight sandboxing | Wasmtime |
+| Docker | Full isolation | Container |
 
-#### Positive
-- (To be added)
+### Network Policy
 
-#### Negative
-- (To be added)
+```rust
+pub enum NetworkPolicy {
+    AllowAll,
+    DenyAll,
+    AllowList(Vec<IpCidr>),
+    AllowInternal,
+}
+```
 
-### Affected Files
+## Consequences
 
-| `crates/octo-engine/src/sandbox/mod.rs` | Change |
+### Positive
 
+- Multiple isolation levels for different trust levels
+- Resource limits prevent runaway execution
+- Portable WASM runtime
+
+### Negative
+
+- Docker requires container runtime
+- Performance overhead for strong isolation
+
+## Related
+
+- `crates/octo-sandbox/` - Sandbox runtime adapters

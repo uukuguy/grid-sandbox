@@ -894,95 +894,205 @@ function stats(outputJson) {
 
 const ADR_SIGNAL_PATH = path.join(DATA_DIR, 'adr-pending-changes.json');
 
-// Patterns that indicate architecture-level changes worthy of ADR/DDD docs
-const ARCH_PATTERNS = [
-  // Core module structure changes
-  /crates\/[^/]+\/src\/(?:lib|main|mod)\.rs$/,
-  /crates\/[^/]+\/src\/[^/]+\/mod\.rs$/,
-  // Agent/runtime architecture
-  /crates\/octo-engine\/src\/agent\/runtime[^/]*\.rs$/,
-  /crates\/octo-engine\/src\/agent\/executor\.rs$/,
-  /crates\/octo-engine\/src\/agent\/loop_\.rs$/,
-  // Security policy changes
-  /crates\/octo-engine\/src\/security\//,
-  /crates\/octo-engine\/src\/auth\//,
-  // MCP integration
-  /crates\/octo-engine\/src\/mcp\/manager\.rs$/,
-  // Memory architecture
-  /crates\/octo-engine\/src\/memory\/(?:mod|graph_store|fts|vector_index|embedding|hybrid_query)\.rs$/,
-  // Provider chain
-  /crates\/octo-engine\/src\/providers\/(?:mod|chain)\.rs$/,
-  // Server routing / middleware
-  /crates\/octo-(?:server|platform-server)\/src\/(?:router|middleware|main)\.rs$/,
-  // Cargo workspace config
-  /Cargo\.toml$/,
-  // API types (public interface)
-  /crates\/octo-types\/src\//,
-  // ==== NEW: Expanded module coverage ====
-  // Hooks system
-  /crates\/octo-engine\/src\/hooks\//,
-  // Event system (EventBus, EventStore)
-  /crates\/octo-engine\/src\/event\//,
-  // Scheduler (Cron tasks)
-  /crates\/octo-engine\/src\/scheduler\//,
-  // Secret manager
-  /crates\/octo-engine\/src\/secret\//,
-  // Metrics and metering
-  /crates\/octo-engine\/src\/metrics\//,
-  /crates\/octo-engine\/src\/metering\//,
-  // Sandbox system
-  /crates\/octo-engine\/src\/sandbox\//,
-  // Extension system (WASM plugins)
-  /crates\/octo-engine\/src\/extension\//,
-  // Session management
-  /crates\/octo-engine\/src\/session\//,
-  // Audit system
-  /crates\/octo-engine\/src\/audit\//,
-  // Context engineering (system prompt, budget, pruning)
-  /crates\/octo-engine\/src\/context\//,
-  // Logging
-  /crates\/octo-engine\/src\/logging\//,
-  // Skill runtime
-  /crates\/octo-engine\/src\/skill_runtime\//,
-  // Skills (YAML manifests)
-  /crates\/octo-engine\/src\/skills\//,
-  // Tools (registry, execution)
-  /crates\/octo-engine\/src\/tools\//,
-  // Database
-  /crates\/octo-engine\/src\/db\//,
-];
+/**
+ * Dynamically discover all workspace crates from Cargo.toml
+ * Returns array of crate names (e.g., ['octo-types', 'octo-engine', 'octo-cli'])
+ */
+function discoverWorkspaceCrates() {
+  const crates = [];
+  const workspacePath = path.join(process.cwd(), 'Cargo.toml');
+  try {
+    const content = fs.readFileSync(workspacePath, 'utf-8');
+    // Match members = ["crates/*"] pattern
+    const membersMatch = content.match(/members\s*=\s*\[\s*"crates\/\*"\s*\]/);
+    if (membersMatch) {
+      // Scan crates directory
+      const cratesDir = path.join(process.cwd(), 'crates');
+      if (fs.existsSync(cratesDir)) {
+        const entries = fs.readdirSync(cratesDir);
+        for (const entry of entries) {
+          const cratePath = path.join(cratesDir, entry);
+          if (fs.statSync(cratePath).isDirectory()) {
+            const cargoPath = path.join(cratePath, 'Cargo.toml');
+            if (fs.existsSync(cargoPath)) {
+              crates.push(entry);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) { /* ignore errors */ }
+  return crates;
+}
+
+/**
+ * Dynamically discover all ADR files (ADR-*.md in docs/adr/)
+ * Returns array of ADR file paths
+ */
+function discoverAdrFiles() {
+  const adrDir = path.join(process.cwd(), 'docs', 'adr');
+  const files = [];
+  try {
+    if (fs.existsSync(adrDir)) {
+      const entries = fs.readdirSync(adrDir);
+      for (const entry of entries) {
+        if (entry.match(/^ADR-\d+.*\.md$/i)) {
+          files.push(path.join(adrDir, entry));
+        }
+      }
+    }
+  } catch (e) { /* ignore errors */ }
+  return files;
+}
+
+/**
+ * Dynamically discover all DDD files (DDD_*.md in docs/ddd/)
+ * Returns array of DDD file paths
+ */
+function discoverDddFiles() {
+  const dddDir = path.join(process.cwd(), 'docs', 'ddd');
+  const files = [];
+  try {
+    if (fs.existsSync(dddDir)) {
+      const entries = fs.readdirSync(dddDir);
+      for (const entry of entries) {
+        if (entry.match(/^DDD_.*\.md$/i)) {
+          files.push(path.join(dddDir, entry));
+        }
+      }
+    }
+  } catch (e) { /* ignore errors */ }
+  return files;
+}
+
+/**
+ * Build dynamic ARCH_PATTERNS based on actual workspace crates and ADR/DDD files
+ * This ensures automatic detection of new crates and ADRs without manual updates
+ */
+function buildDynamicArchPatterns() {
+  const patterns = [];
+  const crates = discoverWorkspaceCrates();
+  const adrFiles = discoverAdrFiles();
+  const dddFiles = discoverDddFiles();
+
+  // 1. Generic Rust source patterns (all crates) - NO leading /
+  patterns.push(/crates\/[^/]+\/src\/(?:lib|main|mod)\.rs$/);
+  patterns.push(/crates\/[^/]+\/src\/[^/]+\/mod\.rs$/);
+
+  // 2. Dynamic crate-specific patterns - NO leading /
+  for (const crate of crates) {
+    // Match any file in the crate directory
+    patterns.push(new RegExp(`crates/${crate}/`));
+  }
+
+  // 3. Dynamic ADR file patterns (matches any ADR-*.md)
+  for (const adrFile of adrFiles) {
+    const basename = path.basename(adrFile, '.md');
+    // Match the specific ADR file - NO leading /
+    patterns.push(new RegExp(`docs/adr/${basename}\\.md$`));
+  }
+  // Also add a catch-all for new ADR files
+  patterns.push(/docs\/adr\/ADR-\d+/);
+
+  // 4. Dynamic DDD file patterns
+  for (const dddFile of dddFiles) {
+    const basename = path.basename(dddFile, '.md');
+    patterns.push(new RegExp(`docs/ddd/${basename}\\.md$`));
+  }
+  // Also add a catch-all for new DDD files
+  patterns.push(/docs\/ddd\/DDD_/);
+
+  // 5. Cargo workspace configuration
+  patterns.push(/Cargo\.toml$/);
+
+  return { patterns, crates, adrCount: adrFiles.length, dddCount: dddFiles.length };
+}
+
+// Build dynamic patterns once at startup (cached)
+let _dynamicArchPatterns = null;
+function getDynamicArchPatterns() {
+  if (!_dynamicArchPatterns) {
+    _dynamicArchPatterns = buildDynamicArchPatterns();
+    // Debug output
+    const info = _dynamicArchPatterns;
+    console.log(`[INTELLIGENCE] Dynamic ARCH_PATTERNS: ${info.patterns.length} patterns, ${info.crates.length} crates, ${info.adrCount} ADRs, ${info.dddCount} DDDs`);
+  }
+  return _dynamicArchPatterns;
+}
+
+/**
+ * Determine category based on file path using dynamic detection
+ * Note: normalized path does NOT have a leading /
+ */
+function determineCategory(normalized, crates) {
+  // Check for ADR files (no leading /)
+  if (normalized.includes('docs/adr/ADR-')) {
+    return 'adr-documentation';
+  }
+  // Check for DDD files (no leading /)
+  if (normalized.includes('docs/ddd/')) {
+    return 'ddd-documentation';
+  }
+  // Check for Cargo.toml (workspace config)
+  if (normalized.endsWith('Cargo.toml')) {
+    return 'dependency-change';
+  }
+  // Check which crate was modified
+  for (const crate of crates) {
+    if (normalized.includes(`crates/${crate}/`)) {
+      // Map crate name to category
+      if (crate === 'octo-cli') return 'cli-interface';
+      if (crate === 'octo-types') return 'api-change';
+      if (crate === 'octo-engine') {
+        // For octo-engine, check subdirectory (no leading /)
+        if (normalized.includes('src/agent/')) return 'agent-architecture';
+        if (normalized.includes('src/security/') || normalized.includes('src/auth/')) return 'security';
+        if (normalized.includes('src/mcp/')) return 'mcp-integration';
+        if (normalized.includes('src/memory/')) return 'memory-architecture';
+        if (normalized.includes('src/providers/')) return 'provider-chain';
+        if (normalized.includes('src/hooks/')) return 'hooks-system';
+        if (normalized.includes('src/event/')) return 'event-system';
+        if (normalized.includes('src/scheduler/')) return 'scheduler-system';
+        if (normalized.includes('src/secret/')) return 'secret-manager';
+        if (normalized.includes('src/metrics/') || normalized.includes('src/metering/')) return 'observability';
+        if (normalized.includes('src/sandbox/')) return 'sandbox-system';
+        if (normalized.includes('src/extension/')) return 'extension-system';
+        if (normalized.includes('src/session/')) return 'session-management';
+        if (normalized.includes('src/audit/')) return 'audit-system';
+        if (normalized.includes('src/context/')) return 'context-engineering';
+        if (normalized.includes('src/logging/')) return 'logging-system';
+        if (normalized.includes('src/skill_runtime/') || normalized.includes('src/skills/')) return 'skill-system';
+        if (normalized.includes('src/tools/')) return 'tools-system';
+        if (normalized.includes('src/db/')) return 'database-layer';
+        return 'engine-core';
+      }
+      if (crate === 'octo-server' || crate === 'octo-platform-server') {
+        return 'server-api';
+      }
+      if (crate === 'octo-sandbox') {
+        return 'sandbox-runtime';
+      }
+      return 'crate-change';
+    }
+  }
+  return 'structural-change';
+}
 
 /**
  * detectArchChange(file) — Check if a file edit represents an architecture change.
+ * Uses dynamic pattern matching for automatic crate/ADR/DDD detection.
  * Returns { isArch: boolean, category: string } in <1ms.
  */
 function detectArchChange(file) {
   if (!file) return { isArch: false, category: null };
   const normalized = file.replace(/\\/g, '/');
-  for (const pat of ARCH_PATTERNS) {
+
+  // Use dynamic patterns
+  const { patterns, crates } = getDynamicArchPatterns();
+
+  for (const pat of patterns) {
     if (pat.test(normalized)) {
-      const category = normalized.includes('/security/') || normalized.includes('/auth/')
-        ? 'security' : normalized.includes('/agent/')
-        ? 'agent-architecture' : normalized.includes('/mcp/')
-        ? 'mcp-integration' : normalized.includes('/memory/')
-        ? 'memory-architecture' : normalized.includes('/providers/')
-        ? 'provider-chain' : normalized.includes('/hooks/')
-        ? 'hooks-system' : normalized.includes('/event/')
-        ? 'event-system' : normalized.includes('/scheduler/')
-        ? 'scheduler-system' : normalized.includes('/secret/')
-        ? 'secret-manager' : normalized.includes('/metrics/') || normalized.includes('/metering/')
-        ? 'observability' : normalized.includes('/sandbox/')
-        ? 'sandbox-system' : normalized.includes('/extension/')
-        ? 'extension-system' : normalized.includes('/session/')
-        ? 'session-management' : normalized.includes('/audit/')
-        ? 'audit-system' : normalized.includes('/context/')
-        ? 'context-engineering' : normalized.includes('/logging/')
-        ? 'logging-system' : normalized.includes('/skill_runtime/') || normalized.includes('/skills/')
-        ? 'skill-system' : normalized.includes('/tools/')
-        ? 'tools-system' : normalized.includes('/db/')
-        ? 'database-layer' : normalized.includes('Cargo.toml')
-        ? 'dependency-change' : normalized.includes('/octo-types/')
-        ? 'api-change' : 'structural-change';
+      const category = determineCategory(normalized, crates);
       return { isArch: true, category };
     }
   }

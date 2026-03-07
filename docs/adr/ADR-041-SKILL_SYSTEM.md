@@ -1,43 +1,88 @@
-# ADR-041: SKILL SYSTEM
+# ADR-041: Skill System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-041: Skill 系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+The system requires a skill system for:
+- Reusable agent capabilities
+- Declarative skill definitions
+- Skill discovery and matching
+- Runtime skill invocation
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/skill_runtime/mod.rs`
+Implement skill system with YAML manifests:
 
-### Change Category
+### Core Components
 
-- **Category**: skill-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Skill manifest
+pub struct SkillManifest {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub triggers: Vec<Trigger>,
+    pub actions: Vec<Action>,
+    pub parameters: Vec<Parameter>,
+}
 
-### Decision
+// Skill loader
+pub struct SkillLoader {
+    fs: FileSystem,
+    parser: YamlParser,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+// Skill registry
+pub struct SkillRegistry {
+    skills: Arc<RwLock<HashMap<SkillId, SkillManifest>>>>,
+}
+```
 
-### Consequences
+### Skill Definition
 
-#### Positive
-- (To be added)
+```yaml
+name: code_review
+version: 1.0.0
+description: Automated code review skill
+triggers:
+  - event: pr_created
+actions:
+  - type: llm_analysis
+    model: claude-3-5-sonnet
+  - type: post_comment
+parameters:
+  - name: pr_url
+    required: true
+```
 
-#### Negative
-- (To be added)
+### Trigger Types
 
-### Affected Files
+| Trigger | Description |
+|---------|-------------|
+| Event | Based on system events |
+| Intent | Based on user intent |
+| Schedule | Cron-based execution |
 
-| `crates/octo-engine/src/skill_runtime/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Declarative skill definition
+- Reusable capabilities
+- Easy to add new skills
+
+### Negative
+
+- YAML parsing overhead
+- Limited dynamic behavior
+
+## Related
+
+- [ADR-042: Skill Runtime](ADR-042-SKILL_SYSTEM.md)

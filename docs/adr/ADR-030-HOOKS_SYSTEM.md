@@ -1,43 +1,85 @@
-# ADR-030: HOOKS SYSTEM
+# ADR-030: Hooks System
 
-**Project**: octo-sandbox
-**Date**: 2026-03-07
-**Status**: Pending Review
-**Auto-generated**: By RuFlo post-task hook
+## Status
 
----
+Accepted
 
-## ADR-030: Hooks 系统变更
+## Date
 
-### Status
+2026-03-07
 
-**Pending Review** — 2026-03-07 (auto-generated)
+## Context
 
-### Context
+octo-sandbox requires an extensible hook system that allows inserting custom logic at critical points in the agent execution lifecycle. This is essential for:
+- Workflow automation triggers
+- Auditing and monitoring
+- Custom business logic injection
+- External system integration
 
-The following files have architecture-level changes that require decision recording:
+## Decision
 
-- `crates/octo-engine/src/hooks/mod.rs`
+Implement a registry-based hooks system supporting the following core capabilities:
 
-### Change Category
+### Architecture Design
 
-- **Category**: hooks-system
-- **Impact Scope**: 1 files
-- **Detection Time**: 2026-03-07
+```rust
+// Core type definitions
+pub trait HookHandler: Send + Sync {
+    fn handle(&self, context: &HookContext) -> Result<HookResult>;
+}
 
-### Decision
+pub struct HookRegistry {
+    handlers: Arc<RwLock<HashMap<String, Vec<Box<dyn HookHandler>>>>>,
+}
 
-> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+pub enum HookTrigger {
+    PreAgentExecution,
+    PostAgentExecution,
+    PreToolExecution,
+    PostToolExecution,
+    PreProviderCall,
+    PostProviderCall,
+    SessionStart,
+    SessionEnd,
+}
+```
 
-### Consequences
+### Key Features
 
-#### Positive
-- (To be added)
+1. **Multi-trigger Support**: Triggers at agent execution, tool execution, provider calls
+2. **Context Propagation**: HookContext carries execution context information
+3. **Async Processing**: Support for async hook handling
+4. **Priority Mechanism**: Support for priority-based execution ordering
+5. **Error Handling Strategies**: Fail-stop, Continue, Fallback three strategies
 
-#### Negative
-- (To be added)
+### Alternatives Considered
 
-### Affected Files
+- **Option A (Chosen)**: In-memory registry + runtime registration - Flexible but requires lifecycle management
+- **Option B**: Static compile-time hooks - Performant but inflexible
+- **Option C**: External message queue - Suitable for distributed but adds complexity
 
-| `crates/octo-engine/src/hooks/mod.rs` | Change |
+## Consequences
 
+### Positive
+
+- Decouples core logic from extension features
+- Supports runtime dynamic registration
+- Unified hook interface easy to use
+- Supports sync/async processing
+
+### Negative
+
+- Introduces additional execution overhead
+- Requires hook lifecycle management
+- Error handling complexity increases
+
+### Limitations
+
+- Currently does not support hook chain termination signal propagation
+- Async hook timeout handling needs improvement
+
+## Related
+
+- [ADR-023: Hook Registry](ADR-023_HOOK_REGISTRY.md)
+- [ADR-024: Hook Handler](ADR-024_HOOK_HANDLER.md)
+- [ADR-025: Hook Context](ADR-025_HOOK_CONTEXT.md)

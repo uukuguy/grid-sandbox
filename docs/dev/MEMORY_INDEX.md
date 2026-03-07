@@ -7,6 +7,9 @@
 
 ## [Active Work]
 
+- 19:30 | Completed ADR-030 to ADR-045: Filled all architecture decision records with English content including Context, Decision (with code examples), Consequences, Related sections. Topics: Hooks, Event, Scheduler, Secret Manager, Observability, Sandbox, Extension, Session, Audit, Context Engineering, Logging, Skill, Skill Runtime, Tools, Database, CLI. All TODO placeholders removed.
+- 19:00 | Dynamic ADR/DDD auto-detection: Replaced hardcoded ARCH_PATTERNS with dynamic discovery (discoverWorkspaceCrates, discoverAdrFiles, discoverDddFiles). Now automatically detects new crates/ADRs without code changes. 13/13 tests passed
+- 18:30 | octo-cli ADR/DDD auto-update fix: Expanded ARCH_PATTERNS in intelligence.cjs to include octo-cli and ADR-045 patterns, added cli-interface category detection, mem-save completed
 - 18:00 | ADR/DDD auto闭环 fix: Expanded ARCH_PATTERNS in intelligence.cjs to cover all 22 octo-engine modules, updated CATEGORY_TOPICS and CONTEXT_MAPPING in adr-generator.cjs for 15 new categories (hooks-system, event-system, scheduler-system, secret-manager, observability, sandbox-system, extension-system, session-management, audit-system, context-engineering, logging-system, skill-system, tools-system, database-layer), verified detection works for all modules, mem-save completed
 - 17:10 | ADR file cleanup complete: Deleted 8 old multi-section files, updated README to one-file-per-ADR structure, mem-save completed
 - 17:00 | ADR migration complete: Extracted all 29 ADRs from multi-section files to individual files with full Context/Decision/Consequences/References format in English, mem-save completed
