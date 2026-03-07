@@ -111,8 +111,16 @@ impl InjectionDetector {
     }
 
     fn excerpt(text: &str, pos: usize) -> String {
-        let start = pos.saturating_sub(20);
-        let end = (pos + 40).min(text.len());
+        // H-02: pos comes from str::find() which is a byte offset.  When the
+        // match sits inside a multi-byte sequence (CJK, emoji) the raw byte
+        // offsets pos±N are not guaranteed to land on char boundaries, so we
+        // must snap every boundary to the nearest valid UTF-8 char boundary
+        // before slicing.
+        let pos = (0..=pos).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+        let raw_start = pos.saturating_sub(20);
+        let start = (0..=raw_start).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+        let raw_end = (pos + 40).min(text.len());
+        let end = (raw_end..=text.len()).find(|&i| text.is_char_boundary(i)).unwrap_or(text.len());
         text[start..end].chars().take(60).collect()
     }
 }
@@ -251,9 +259,9 @@ pub struct AiDefence {
     injection: InjectionDetector,
     pii: PiiScanner,
     output: OutputValidator,
-    pub injection_enabled: bool,
-    pub pii_enabled: bool,
-    pub output_validation_enabled: bool,
+    injection_enabled: bool,
+    pii_enabled: bool,
+    output_validation_enabled: bool,
 }
 
 impl AiDefence {
@@ -320,6 +328,11 @@ impl AiDefence {
     pub fn has_injection(&self, text: &str) -> bool {
         self.injection.has_injection(text)
     }
+
+    // ── Read-only accessors for flag fields (H-01) ────────────────────────────
+    pub fn injection_enabled(&self) -> bool { self.injection_enabled }
+    pub fn pii_enabled(&self) -> bool { self.pii_enabled }
+    pub fn output_validation_enabled(&self) -> bool { self.output_validation_enabled }
 }
 
 impl Default for AiDefence {
