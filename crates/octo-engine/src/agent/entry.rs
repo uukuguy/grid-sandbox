@@ -55,6 +55,12 @@ pub struct AgentManifest {
     pub tool_filter: Vec<String>, // empty = all tools available
     #[serde(default)]
     pub config: AgentConfig,
+    /// Maximum number of concurrent tasks (0 = unlimited)
+    #[serde(default)]
+    pub max_concurrent_tasks: u32,
+    /// Priority level hint (e.g. "high", "medium", "low")
+    #[serde(default)]
+    pub priority: Option<String>,
 }
 
 impl AgentManifest {
