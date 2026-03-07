@@ -386,6 +386,69 @@ mod hnsw_impl {
 #[cfg(feature = "hnsw")]
 pub use hnsw_impl::HnswIndex;
 
+// ── VectorBackend ─────────────────────────────────────────────────────────
+
+/// Unified interface over BruteForce and HNSW vector backends.
+pub enum VectorBackend {
+    BruteForce(VectorIndex),
+    #[cfg(feature = "hnsw")]
+    Hnsw(HnswIndex),
+}
+
+impl VectorBackend {
+    /// Create a brute-force backend.
+    pub fn brute_force(config: VectorIndexConfig) -> Self {
+        Self::BruteForce(VectorIndex::new(config))
+    }
+
+    /// Create an HNSW backend (only available with `features = ["hnsw"]`).
+    #[cfg(feature = "hnsw")]
+    pub fn hnsw(config: HnswConfig) -> Self {
+        Self::Hnsw(HnswIndex::new(config))
+    }
+
+    /// Insert or replace a vector entry.
+    pub async fn insert(&self, entry: VectorEntry) -> anyhow::Result<()> {
+        match self {
+            Self::BruteForce(idx) => idx.insert(entry).await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.upsert(entry).await,
+        }
+    }
+
+    /// Search for the `limit` most similar vectors.
+    pub async fn search(
+        &self,
+        query: &[f32],
+        limit: usize,
+        threshold: Option<f32>,
+    ) -> Vec<VectorSearchResult> {
+        match self {
+            Self::BruteForce(idx) => idx.search(query, limit, threshold).await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.search(query, limit, threshold).await,
+        }
+    }
+
+    /// Number of indexed vectors.
+    pub async fn len(&self) -> usize {
+        match self {
+            Self::BruteForce(idx) => idx.len().await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.len().await,
+        }
+    }
+
+    /// Backend identifier for logging/metrics.
+    pub fn backend_name(&self) -> &'static str {
+        match self {
+            Self::BruteForce(_) => "brute-force",
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(_) => "hnsw",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
