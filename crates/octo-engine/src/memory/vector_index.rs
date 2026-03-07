@@ -219,6 +219,236 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
+// ── HnswIndex (feature = "hnsw") ─────────────────────────────────────────
+
+/// Configuration for HNSW approximate nearest-neighbour index.
+#[derive(Debug, Clone)]
+pub struct HnswConfig {
+    /// Number of bi-directional links per node (default 16).
+    pub m: usize,
+    /// Size of the dynamic candidate list during construction (default 200).
+    pub ef_construction: usize,
+    /// Embedding dimensionality (default 1536 for OpenAI, 1024 for Voyage).
+    pub dimensions: usize,
+    /// Expected maximum number of elements (default 100_000).
+    pub max_elements: usize,
+    /// Minimum cosine similarity to include in search results (default 0.7).
+    pub default_threshold: f32,
+}
+
+impl Default for HnswConfig {
+    fn default() -> Self {
+        Self {
+            m: 16,
+            ef_construction: 200,
+            dimensions: 1536,
+            max_elements: 100_000,
+            default_threshold: 0.7,
+        }
+    }
+}
+
+#[cfg(feature = "hnsw")]
+mod hnsw_impl {
+    use std::collections::HashMap;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    };
+
+    use hnsw_rs::prelude::*;
+    use tokio::sync::RwLock;
+
+    use super::{HnswConfig, VectorEntry, VectorSearchResult};
+
+    /// HNSW-backed approximate nearest-neighbour index.
+    ///
+    /// All access to the inner `Hnsw` goes through `tokio::task::spawn_blocking`
+    /// to keep CPU-bound graph traversal off the async executor.
+    pub struct HnswIndex {
+        config: HnswConfig,
+        inner: Arc<Mutex<Hnsw<'static, f32, DistCosine>>>,
+        /// usize internal ID → VectorEntry
+        id_map: Arc<RwLock<HashMap<usize, VectorEntry>>>,
+        /// entry.id string → usize internal ID
+        rev_map: Arc<RwLock<HashMap<String, usize>>>,
+        next_id: Arc<AtomicUsize>,
+    }
+
+    impl HnswIndex {
+        pub fn new(config: HnswConfig) -> Self {
+            let hnsw = Hnsw::new(
+                config.m,
+                config.max_elements,
+                16,
+                config.ef_construction,
+                DistCosine,
+            );
+            Self {
+                config,
+                inner: Arc::new(Mutex::new(hnsw)),
+                id_map: Arc::new(RwLock::new(HashMap::new())),
+                rev_map: Arc::new(RwLock::new(HashMap::new())),
+                next_id: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        /// Insert or replace a vector entry.
+        pub async fn upsert(&self, entry: VectorEntry) -> anyhow::Result<()> {
+            // Assign (or reuse) an internal usize ID.
+            let internal_id = {
+                let rev = self.rev_map.read().await;
+                if let Some(&id) = rev.get(&entry.id) {
+                    id
+                } else {
+                    drop(rev);
+                    self.next_id.fetch_add(1, Ordering::Relaxed)
+                }
+            };
+
+            // Update maps.
+            self.rev_map
+                .write()
+                .await
+                .insert(entry.id.clone(), internal_id);
+            self.id_map
+                .write()
+                .await
+                .insert(internal_id, entry.clone());
+
+            // Insert into HNSW (spawn_blocking for CPU-bound graph construction).
+            let inner = self.inner.clone();
+            let vec = entry.embedding.clone();
+            tokio::task::spawn_blocking(move || {
+                let hnsw = inner.lock().unwrap();
+                hnsw.insert((&vec, internal_id));
+            })
+            .await?;
+
+            Ok(())
+        }
+
+        /// Search for the `limit` most similar vectors above `threshold`.
+        pub async fn search(
+            &self,
+            query: &[f32],
+            limit: usize,
+            threshold: Option<f32>,
+        ) -> Vec<VectorSearchResult> {
+            let threshold = threshold.unwrap_or(self.config.default_threshold);
+            let inner = self.inner.clone();
+            let query_vec = query.to_vec();
+            let ef_search = (limit * 4).max(50);
+
+            let neighbours = tokio::task::spawn_blocking(move || {
+                let hnsw = inner.lock().unwrap();
+                hnsw.search(&query_vec, limit, ef_search)
+            })
+            .await
+            .unwrap_or_default();
+
+            let id_map = self.id_map.read().await;
+            let mut results = Vec::new();
+            for nb in neighbours {
+                // DistCosine returns cosine distance; convert to similarity.
+                let similarity = 1.0 - nb.distance;
+                if similarity >= threshold {
+                    if let Some(entry) = id_map.get(&nb.d_id) {
+                        results.push(VectorSearchResult {
+                            id: entry.id.clone(),
+                            similarity,
+                            metadata: entry.metadata.clone(),
+                        });
+                    }
+                }
+            }
+            // Highest similarity first.
+            results.sort_by(|a, b| {
+                b.similarity
+                    .partial_cmp(&a.similarity)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            results
+        }
+
+        /// Number of vectors currently indexed.
+        pub async fn len(&self) -> usize {
+            self.id_map.read().await.len()
+        }
+
+        /// `true` if no vectors have been indexed.
+        pub async fn is_empty(&self) -> bool {
+            self.len().await == 0
+        }
+    }
+}
+
+#[cfg(feature = "hnsw")]
+pub use hnsw_impl::HnswIndex;
+
+// ── VectorBackend ─────────────────────────────────────────────────────────
+
+/// Unified interface over BruteForce and HNSW vector backends.
+pub enum VectorBackend {
+    BruteForce(VectorIndex),
+    #[cfg(feature = "hnsw")]
+    Hnsw(HnswIndex),
+}
+
+impl VectorBackend {
+    /// Create a brute-force backend.
+    pub fn brute_force(config: VectorIndexConfig) -> Self {
+        Self::BruteForce(VectorIndex::new(config))
+    }
+
+    /// Create an HNSW backend (only available with `features = ["hnsw"]`).
+    #[cfg(feature = "hnsw")]
+    pub fn hnsw(config: HnswConfig) -> Self {
+        Self::Hnsw(HnswIndex::new(config))
+    }
+
+    /// Insert or replace a vector entry.
+    pub async fn insert(&self, entry: VectorEntry) -> anyhow::Result<()> {
+        match self {
+            Self::BruteForce(idx) => idx.insert(entry).await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.upsert(entry).await,
+        }
+    }
+
+    /// Search for the `limit` most similar vectors.
+    pub async fn search(
+        &self,
+        query: &[f32],
+        limit: usize,
+        threshold: Option<f32>,
+    ) -> Vec<VectorSearchResult> {
+        match self {
+            Self::BruteForce(idx) => idx.search(query, limit, threshold).await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.search(query, limit, threshold).await,
+        }
+    }
+
+    /// Number of indexed vectors.
+    pub async fn len(&self) -> usize {
+        match self {
+            Self::BruteForce(idx) => idx.len().await,
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(idx) => idx.len().await,
+        }
+    }
+
+    /// Backend identifier for logging/metrics.
+    pub fn backend_name(&self) -> &'static str {
+        match self {
+            Self::BruteForce(_) => "brute-force",
+            #[cfg(feature = "hnsw")]
+            Self::Hnsw(_) => "hnsw",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

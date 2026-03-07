@@ -55,6 +55,41 @@ pub struct AgentManifest {
     pub tool_filter: Vec<String>, // empty = all tools available
     #[serde(default)]
     pub config: AgentConfig,
+    /// Maximum number of concurrent tasks (0 = unlimited)
+    #[serde(default)]
+    pub max_concurrent_tasks: u32,
+    /// Priority level hint (e.g. "high", "medium", "low")
+    #[serde(default)]
+    pub priority: Option<String>,
+}
+
+impl AgentManifest {
+    /// Build an AgentProfile from this manifest for use with AgentRouter.
+    /// Capabilities are inferred from tags using "cap:" prefix convention.
+    pub fn to_agent_profile(&self, agent_id: impl Into<String>) -> crate::agent::router::AgentProfile {
+        use crate::agent::capability::AgentCapability;
+        use crate::agent::router::AgentProfile;
+
+        let capabilities: Vec<AgentCapability> = if self.tags.is_empty() {
+            vec![AgentCapability::General]
+        } else {
+            let caps: Vec<AgentCapability> = self.tags.iter()
+                .filter(|t| t.starts_with("cap:"))
+                .map(|t| AgentCapability::from_str_loose(&t[4..]))
+                .collect();
+            if caps.is_empty() {
+                vec![AgentCapability::General]
+            } else {
+                caps
+            }
+        };
+
+        AgentProfile {
+            agent_id: agent_id.into(),
+            capabilities,
+            priority: 100,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

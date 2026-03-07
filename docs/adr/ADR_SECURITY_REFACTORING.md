@@ -476,6 +476,161 @@ impl AgentRuntime {
 
 ---
 
+## ADR-006：HMAC Secret 强制检查（启动失败保护）
+
+### 状态
+
+**已接受** — 2026-03-07
+
+### 上下文
+
+ADR-003 将 API Key 哈希升级为 HMAC-SHA256，并通过 `OCTO_HMAC_SECRET` 环境变量注入密钥。
+然而原实现在密钥未设置时仅输出 `tracing::warn` 并回退到硬编码默认值
+`"octo-default-hmac-secret-change-in-production"`：
+
+```rust
+const DEFAULT_HMAC_SECRET: &str = "octo-default-hmac-secret-change-in-production";
+
+let hmac_secret = std::env::var("OCTO_HMAC_SECRET").unwrap_or_else(|_| {
+    tracing::warn!("OCTO_HMAC_SECRET is not set. Using insecure default...");
+    DEFAULT_HMAC_SECRET.to_string()
+});
+```
+
+代码审查（安全 agent）发现此默认值已提交到公开代码仓库，任何人都可获取。
+在 `AuthMode::ApiKey` 或 `AuthMode::Full` 模式下使用此默认值意味着：
+
+1. 攻击者知晓 HMAC Secret → 可伪造任意 API Key 的哈希值
+2. 服务器无法区分合法 Key 和伪造 Key → 完全认证绕过
+3. 服务可在不安全配置下成功启动 → 运维人员可能不知情地部署了存在漏洞的服务
+
+### 决策
+
+在 `AuthConfig::warn_if_insecure()` 中增加强制检查：
+当认证模式为非 `None` 时，若 `hmac_secret` 仍等于硬编码默认值，立即 `panic!` 阻止服务启动。
+
+```rust
+pub fn warn_if_insecure(&self) {
+    if self.mode == AuthMode::None {
+        tracing::warn!("Authentication is DISABLED (mode=none)...");
+    } else if self.hmac_secret == DEFAULT_HMAC_SECRET {
+        panic!(
+            "OCTO_HMAC_SECRET is not set but authentication is enabled (mode={:?}). \
+             The hardcoded default HMAC secret must NOT be used in production because \
+             it allows API key hash forgery. Set OCTO_HMAC_SECRET to a strong random \
+             secret before starting the server.",
+            self.mode
+        );
+    }
+}
+```
+
+`warn_if_insecure()` 在 `main.rs` 中的认证配置加载后调用，确保在绑定端口前完成检查。
+
+### 后果
+
+#### 正面
+
+- **快速失败原则**：配置错误在启动时立即暴露，而非在运行时被攻击者利用
+- 生产部署若忘记配置 `OCTO_HMAC_SECRET`，服务无法启动，迫使运维人员修复配置
+- `AuthMode::None` 开发模式不受影响（无需 HMAC Secret）
+
+#### 负面
+
+- 现有未设置 `OCTO_HMAC_SECRET` 的部署在升级后无法启动，需要先配置环境变量
+- `.env.example` 需要明确列出 `OCTO_HMAC_SECRET` 并提供生成指引
+
+#### 中立
+
+- 开发环境可通过 `OCTO_AUTH_MODE=none` 绕过此检查
+- `panic!` 选择优于 `process::exit(1)`，因为 panic 会打印完整错误信息和调用栈
+
+### 涉及文件
+
+| 文件 | 变更类型 |
+|------|--------|
+| `crates/octo-engine/src/auth/config.rs` | `warn_if_insecure()` 增加 panic 保护 |
+
+---
+
+## ADR-007：MCP call_mcp_tool 锁外网络 I/O（并发安全修复）
+
+### 状态
+
+**已接受** — 2026-03-07
+
+### 上下文
+
+`AgentRuntime::add_mcp_server()` 已在 ADR-005 的基础上完成了 connect-outside-mutex 重构：
+通过短暂持锁标记 `Starting` 状态 → 在锁外执行慢速 connect/list_tools → 再次持锁插入已连接客户端。
+
+然而 `call_mcp_tool()` 方法仍保持了旧模式——在持有 `Mutex<McpManager>` 的情况下执行全程网络 I/O：
+
+```rust
+pub async fn call_mcp_tool(&self, server_id: &str, tool_name: &str, arguments: serde_json::Value)
+    -> Result<serde_json::Value, String>
+{
+    let guard = self.mcp_manager.lock().await;  // 持锁
+    guard.call_tool(server_id, tool_name, arguments).await  // 网络 I/O（可能数百毫秒）
+}
+```
+
+`call_tool()` 内部进一步持有 `RwLock<Box<dyn McpClient>>` 读锁执行 `client.call_tool().await`。
+在并发场景下（多个工具调用同时触发），所有调用者都在等待同一个 `Mutex<McpManager>` 释放，
+实际上序列化了所有 MCP 工具调用，吞吐量退化为单线程。
+
+代码审查（架构 + 质量 agent）将此列为 CRITICAL 级别问题。
+
+### 决策
+
+采用与 `add_mcp_server()` 相同的 "clone-under-lock, call-outside-lock" 模式：
+
+```rust
+pub async fn call_mcp_tool(&self, server_id: &str, tool_name: &str, arguments: serde_json::Value)
+    -> Result<serde_json::Value, String>
+{
+    // 短暂持锁：仅克隆 Arc<RwLock<...>>，无 I/O
+    let client = {
+        let guard = self.mcp_manager.lock().await;
+        guard.clients().get(server_id).cloned()
+            .ok_or_else(|| format!("MCP server not found: {server_id}"))?
+    };
+    // 网络 I/O 在锁外执行：并发调用可同时进行
+    let client_guard = client.read().await;
+    client_guard.call_tool(tool_name, arguments).await.map_err(|e| e.to_string())
+}
+```
+
+`McpManager::clients()` 返回 `&HashMap<String, Arc<RwLock<Box<dyn McpClient>>>>`，
+克隆 `Arc` 是 O(1) 的原子引用计数操作，不持锁时间几乎为零。
+
+### 后果
+
+#### 正面
+
+- N 个并发 MCP 工具调用可真正并发执行，不再序列化
+- `McpManager` mutex 持有时间从 "工具调用全程" 降至 "一次 HashMap 查找 + Arc clone"
+- 与 `add_mcp_server()` 并发模式保持一致，降低认知负担
+
+#### 负面
+
+- 需要 `McpManager` 新增 `clients()` 访问器（已存在）
+- 极短窗口内，如果服务器在 clone Arc 后、call_tool 前被移除，
+  仍会持有对已删除服务器的客户端引用（但不会 panic，只会在 I/O 层得到错误）
+
+#### 中立
+
+- `RwLock<Box<dyn McpClient>>` 的读锁仍允许多个并发读（多个工具调用同时使用同一客户端）
+- 若某个 MCP 服务器本身是单线程的，并发调用效果取决于服务器实现，而非客户端
+
+### 涉及文件
+
+| 文件 | 变更类型 |
+|------|--------|
+| `crates/octo-engine/src/agent/runtime_mcp.rs` | `call_mcp_tool()` 改为 clone-under-lock 模式 |
+
+---
+
 ## 变更总览
 
 | ADR | 类别 | 安全影响 | 破坏性变更 |
@@ -485,3 +640,5 @@ impl AgentRuntime {
 | ADR-003 | 安全 / 认证 | 高 — 防彩虹表攻击 | 是（旧 API Key 哈希失效） |
 | ADR-004 | 架构 / 中间件 | 中 — audit 日志完整性 | 否 |
 | ADR-005 | 架构 / 可维护性 | 无 | 否 |
+| ADR-006 | 安全 / 启动保护 | 高 — 阻止默认密钥部署 | 是（未设置 HMAC Secret 时拒绝启动）|
+| ADR-007 | 架构 / 并发安全 | 中 — 消除序列化瓶颈 | 否 |

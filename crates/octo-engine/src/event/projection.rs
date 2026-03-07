@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use super::store::StoredEvent;
+use super::store::{EventStore, StoredEvent};
 
 /// Trait for event projections -- derive read models from event streams.
 ///
@@ -73,6 +74,113 @@ impl Projection for EventCountProjection {
     }
 }
 
+// ── ProjectionEngine ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Default)]
+struct ProjectionCheckpoint {
+    last_sequence: i64,
+}
+
+/// Engine that drives one or more [`Projection`]s over the full event stream.
+///
+/// Tracks a per-projection checkpoint so catch-up replays only process new
+/// events. Supports full rebuild by resetting checkpoints to zero.
+pub struct ProjectionEngine {
+    store: Arc<EventStore>,
+    projections: RwLock<Vec<Arc<dyn Projection>>>,
+    checkpoints: RwLock<HashMap<String, ProjectionCheckpoint>>,
+    replay_batch: usize,
+}
+
+impl ProjectionEngine {
+    /// Create a new engine backed by the given [`EventStore`].
+    pub fn new(store: Arc<EventStore>) -> Self {
+        Self {
+            store,
+            projections: RwLock::new(Vec::new()),
+            checkpoints: RwLock::new(HashMap::new()),
+            replay_batch: 500,
+        }
+    }
+
+    /// Override the batch size used during catch-up (default 500).
+    pub fn with_batch_size(mut self, size: usize) -> Self {
+        self.replay_batch = size;
+        self
+    }
+
+    /// Register a projection. An initial checkpoint at sequence 0 is created
+    /// if none exists yet.
+    pub async fn register(&self, projection: Arc<dyn Projection>) {
+        let name = projection.name().to_string();
+        self.projections.write().await.push(projection);
+        self.checkpoints.write().await.entry(name).or_default();
+    }
+
+    /// Process all events since each projection's last checkpoint.
+    pub async fn catch_up(&self) -> anyhow::Result<()> {
+        let projections = self.projections.read().await;
+        if projections.is_empty() {
+            return Ok(());
+        }
+        // Start from the minimum checkpoint across all registered projections.
+        let start_seq = {
+            let cps = self.checkpoints.read().await;
+            projections
+                .iter()
+                .map(|p| cps.get(p.name()).map_or(0, |c| c.last_sequence))
+                .min()
+                .unwrap_or(0)
+        };
+        let mut after = start_seq;
+        loop {
+            let batch = self.store.read_after(after, self.replay_batch).await?;
+            if batch.is_empty() {
+                break;
+            }
+            let last_seq = batch.last().unwrap().sequence;
+            for event in &batch {
+                for proj in projections.iter() {
+                    let proj_last = self
+                        .checkpoints
+                        .read()
+                        .await
+                        .get(proj.name())
+                        .map_or(0, |c| c.last_sequence);
+                    if event.sequence > proj_last {
+                        proj.apply(event).await?;
+                        self.checkpoints.write().await.insert(
+                            proj.name().to_string(),
+                            ProjectionCheckpoint { last_sequence: event.sequence },
+                        );
+                    }
+                }
+            }
+            after = last_seq;
+            if batch.len() < self.replay_batch {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Reset all checkpoints to zero and replay the full event stream.
+    pub async fn rebuild_all(&self) -> anyhow::Result<()> {
+        {
+            let mut cps = self.checkpoints.write().await;
+            for cp in cps.values_mut() {
+                cp.last_sequence = 0;
+            }
+        }
+        self.catch_up().await
+    }
+
+    /// Return the last processed sequence number for a named projection.
+    pub async fn checkpoint(&self, name: &str) -> i64 {
+        self.checkpoints.read().await.get(name).map_or(0, |c| c.last_sequence)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,6 +188,7 @@ mod tests {
     fn make_event(event_type: &str, seq: i64) -> StoredEvent {
         StoredEvent {
             id: seq,
+            aggregate_id: None,
             event_type: event_type.to_string(),
             payload: serde_json::Value::Null,
             session_id: None,

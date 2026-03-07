@@ -1,4 +1,5 @@
 pub mod budget;
+pub mod embedding;
 pub mod extractor;
 pub mod fts;
 pub mod graph;
@@ -24,6 +25,7 @@ use tokio::task;
 use super::session::SqliteSessionStore;
 
 pub use budget::TokenBudgetManager;
+pub use embedding::{EmbeddingClient, EmbeddingConfig, EmbeddingProvider};
 pub use fts::FtsStore;
 pub use graph::{Entity, GraphStats, KnowledgeGraph, Relation};
 pub use graph_store::GraphStore;
@@ -32,7 +34,9 @@ pub use sqlite_store::SqliteMemoryStore;
 pub use sqlite_working::SqliteWorkingMemory;
 pub use store_traits::MemoryStore;
 pub use traits::WorkingMemory;
-pub use vector_index::{VectorEntry, VectorIndex, VectorIndexConfig, VectorSearchResult};
+pub use vector_index::{VectorBackend, VectorEntry, VectorIndex, VectorIndexConfig, VectorSearchResult};
+#[cfg(feature = "hnsw")]
+pub use vector_index::{HnswConfig, HnswIndex};
 pub use hybrid_query::{HybridQueryEngine, HybridSearchResult, QueryType};
 pub use working::InMemoryWorkingMemory;
 

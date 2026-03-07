@@ -17,6 +17,10 @@ pub enum AgentCapability {
     DevOps,
     FrontendDev,
     BackendDev,
+    /// Data analysis, analytics, metrics, statistics, reporting
+    DataAnalysis,
+    /// General-purpose agent with no specific specialization
+    General,
     /// Custom capability with a name
     Custom(String),
 }
@@ -25,18 +29,20 @@ impl AgentCapability {
     /// Parse from string (case-insensitive)
     pub fn from_str_loose(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "code-generation" | "coding" | "implementation" => Self::CodeGeneration,
-            "code-review" | "review" => Self::CodeReview,
+            "code-generation" | "code_generation" | "coding" | "implementation" => Self::CodeGeneration,
+            "code-review" | "code_review" | "review" => Self::CodeReview,
             "testing" | "test" => Self::Testing,
-            "security" | "security-audit" => Self::SecurityAudit,
+            "security" | "security-audit" | "security_audit" => Self::SecurityAudit,
             "research" | "analysis" => Self::Research,
             "architecture" | "design" => Self::Architecture,
             "debugging" | "debug" => Self::Debugging,
-            "refactoring" | "refactor" => Self::Refactoring,
+            "refactoring" | "refactor" | "bug-fix" | "bug_fix" => Self::Refactoring,
             "documentation" | "docs" => Self::Documentation,
             "devops" | "deployment" => Self::DevOps,
             "frontend" | "ui" => Self::FrontendDev,
             "backend" | "api" => Self::BackendDev,
+            "data-analysis" | "data_analysis" | "analytics" | "data" => Self::DataAnalysis,
+            "general" | "any" | "all" => Self::General,
             other => Self::Custom(other.to_string()),
         }
     }
@@ -79,6 +85,12 @@ impl AgentCapability {
             ],
             Self::BackendDev => &[
                 "api", "endpoint", "server", "database",
+            ],
+            Self::DataAnalysis => &[
+                "data", "analysis", "analytics", "metrics", "statistics", "report",
+            ],
+            Self::General => &[
+                "help", "assist", "general", "anything",
             ],
             Self::Custom(_) => &[],
         }

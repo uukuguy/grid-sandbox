@@ -45,6 +45,8 @@ pub struct AgentRuntimeConfig {
     pub working_dir: Option<PathBuf>,
     /// Enable event bus for observability
     pub enable_event_bus: bool,
+    /// Optional directory to scan for declarative YAML agent definitions
+    pub agents_dir: Option<std::path::PathBuf>,
 }
 
 impl AgentRuntimeConfig {
@@ -64,6 +66,7 @@ impl AgentRuntimeConfig {
             provider_chain,
             working_dir,
             enable_event_bus,
+            agents_dir: None,
         }
     }
 }
@@ -99,6 +102,8 @@ pub struct AgentRuntime {
     pub(crate) hook_registry: Arc<HookRegistry>,
     // Tenant isolation (Task 3)
     pub(crate) tenant_context: Option<TenantContext>,
+    // Agent router for task-to-agent matching
+    router: tokio::sync::RwLock<crate::agent::router::AgentRouter>,
 }
 
 impl AgentRuntime {
@@ -228,7 +233,7 @@ impl AgentRuntime {
             SecurityPolicy::new().with_workspace(working_dir.clone()),
         );
 
-        Ok(Self {
+        let runtime = Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
             catalog,
@@ -248,7 +253,19 @@ impl AgentRuntime {
             security_policy,
             hook_registry: Arc::new(HookRegistry::new()),
             tenant_context,
-        })
+            router: tokio::sync::RwLock::new(crate::agent::router::AgentRouter::new()),
+        };
+
+        // 16. Load declarative YAML agent definitions (if configured)
+        if let Some(ref dir) = config.agents_dir {
+            let loader = crate::agent::AgentManifestLoader::new(dir);
+            match loader.load_all(&runtime.catalog) {
+                Ok(n) => tracing::info!(count = n, "Loaded YAML agent manifests"),
+                Err(e) => tracing::warn!(error = %e, "Failed to load agent YAML manifests"),
+            }
+        }
+
+        Ok(runtime)
     }
 
     pub fn with_skill_registry(mut self, skills: Arc<SkillRegistry>) -> Self {
@@ -452,6 +469,32 @@ impl AgentRuntime {
         if _dropped_handle.is_some() {
             info!("Primary AgentExecutor stopped (tx dropped)");
         }
+    }
+
+    /// Register an agent's capabilities with the router.
+    pub async fn router_register(&self, profile: crate::agent::router::AgentProfile) {
+        self.router.write().await.register(profile);
+    }
+
+    /// Remove a registered agent from the router by agent_id.
+    pub async fn router_unregister(&self, agent_id: &str) {
+        self.router.write().await.unregister(agent_id);
+    }
+
+    /// Route a task description to the best matching agent.
+    /// Returns `None` if no agents are registered.
+    pub async fn route_task(&self, task: &str) -> Option<crate::agent::router::RouteResult> {
+        self.router.read().await.route(task)
+    }
+
+    /// Register an agent manifest's capabilities with the router using its profile.
+    pub async fn router_register_manifest(
+        &self,
+        agent_id: impl Into<String>,
+        manifest: &crate::agent::AgentManifest,
+    ) {
+        let profile = manifest.to_agent_profile(agent_id);
+        self.router.write().await.register(profile);
     }
 
     /// 按 tool_filter 构建 ToolRegistry（含 SkillRegistry 热重载 overlay）

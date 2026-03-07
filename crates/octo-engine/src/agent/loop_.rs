@@ -93,6 +93,8 @@ pub struct AgentLoop {
     /// Kept for backward compatibility.
     #[deprecated(since = "0.1.0", note = "Use with_manifest() instead")]
     system_prompt_override: Option<String>,
+    /// AIDefence: injection + PII detection on user input (optional, disabled by default).
+    defence: Option<Arc<crate::security::AiDefence>>,
 }
 
 impl AgentLoop {
@@ -119,7 +121,13 @@ impl AgentLoop {
             manifest: None,
             #[allow(deprecated)]
             system_prompt_override: None,
+            defence: None,
         }
+    }
+
+    pub fn with_defence(mut self, defence: Arc<crate::security::AiDefence>) -> Self {
+        self.defence = Some(defence);
+        self
     }
 
     pub fn with_model(mut self, model: String) -> Self {
@@ -254,8 +262,36 @@ impl AgentLoop {
             self.config.max_rounds
         };
 
+        // SessionStart hook
+        if let Some(ref hooks) = self.hook_registry {
+            let ctx = HookContext::new().with_session(session_id.as_str());
+            hooks.execute(HookPoint::SessionStart, &ctx).await;
+        }
+
         for round in 0..max_rounds {
             debug!(round, "Agent round starting");
+
+            // PreTask hook (fires once before the first round)
+            if round == 0 {
+                if let Some(ref hooks) = self.hook_registry {
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round);
+                    if let crate::hooks::HookAction::Abort(reason) =
+                        hooks.execute(HookPoint::PreTask, &ctx).await
+                    {
+                        let _ = tx.send(AgentEvent::Error {
+                            message: reason.clone(),
+                        });
+                        let _ = tx.send(AgentEvent::Done);
+                        if let Some(ref hooks) = self.hook_registry {
+                            let ctx = HookContext::new().with_session(session_id.as_str());
+                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                        }
+                        return Err(anyhow::anyhow!("PreTask hook aborted: {}", reason));
+                    }
+                }
+            }
 
             // 发布 LoopTurnStarted 事件（用于指标统计）
             if let Some(ref bus) = self.event_bus {
@@ -265,6 +301,27 @@ impl AgentLoop {
                 })
                 .await;
             }
+
+            // LoopTurnStart hook
+            if let Some(ref hooks) = self.hook_registry {
+                let ctx = HookContext::new()
+                    .with_session(session_id.as_str())
+                    .with_turn(round);
+                if let crate::hooks::HookAction::Abort(reason) =
+                    hooks.execute(HookPoint::LoopTurnStart, &ctx).await
+                {
+                    let _ = tx.send(AgentEvent::Error {
+                        message: reason.clone(),
+                    });
+                    let _ = tx.send(AgentEvent::Done);
+                    if let Some(ref hooks) = self.hook_registry {
+                        let ctx = HookContext::new().with_session(session_id.as_str());
+                        hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                    }
+                    return Err(anyhow::anyhow!("LoopTurnStart hook aborted: {}", reason));
+                }
+            }
+            let turn_start = std::time::Instant::now();
 
             // Check for cancellation
             if let Some(flag) = &cancel_flag {
@@ -301,6 +358,44 @@ impl AgentLoop {
                 }
 
                 self.pruner.apply(messages, level);
+
+                // ContextDegraded hook
+                if let Some(ref hooks) = self.hook_registry {
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round)
+                        .with_degradation(format!("{:?}", level));
+                    hooks.execute(HookPoint::ContextDegraded, &ctx).await;
+                }
+            }
+
+            // AIDefence: check user input before the first LLM call.
+            if round == 0 {
+                if let Some(ref defence) = self.defence {
+                    let user_text: Option<String> = messages
+                        .iter()
+                        .rev()
+                        .find(|m| m.role == MessageRole::User)
+                        .and_then(|m| {
+                            m.content.iter().find_map(|b| {
+                                if let ContentBlock::Text { text } = b {
+                                    Some(text.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                        });
+                    if let Some(ref text) = user_text {
+                        if let Err(violation) = defence.check_input(text) {
+                            tracing::warn!(violation = %violation, "AIDefence blocked input");
+                            let _ = tx.send(AgentEvent::Error {
+                                message: format!("Security check failed: {violation}"),
+                            });
+                            let _ = tx.send(AgentEvent::Done);
+                            return Ok(());
+                        }
+                    }
+                }
             }
 
             let request = CompletionRequest {
@@ -447,6 +542,20 @@ impl AgentLoop {
 
                         // If no tool uses, this is final response
                         if stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
+                            // C-01: AIDefence output validation on every LLM response.
+                            if !full_text.is_empty() {
+                                if let Some(ref defence) = self.defence {
+                                    if let Err(violation) = defence.check_output(&full_text) {
+                                        tracing::warn!(violation = %violation, "AIDefence blocked output");
+                                        let _ = tx.send(AgentEvent::Error {
+                                            message: format!("Output security check failed: {violation}"),
+                                        });
+                                        let _ = tx.send(AgentEvent::Done);
+                                        return Ok(());
+                                    }
+                                }
+                            }
+
                             // Always append an assistant message so the conversation history
                             // stays well-formed (no two consecutive user messages).
                             messages.push(ChatMessage::assistant(if full_text.is_empty() {
@@ -463,6 +572,16 @@ impl AgentLoop {
                             if sent_typing && self.config.enable_typing_signal {
                                 let _ = tx.send(AgentEvent::Typing { state: false });
                             }
+                            if let Some(ref hooks) = self.hook_registry {
+                                let elapsed = turn_start.elapsed().as_millis() as u64;
+                                let ctx = HookContext::new()
+                                    .with_session(session_id.as_str())
+                                    .with_turn(round)
+                                    .with_result(true, elapsed);
+                                hooks.execute(HookPoint::PostTask, &ctx).await;
+                                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+                                hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                            }
                             let _ = tx.send(AgentEvent::Done);
                             return Ok(());
                         }
@@ -472,6 +591,10 @@ impl AgentLoop {
                         let _ = tx.send(AgentEvent::Error {
                             message: e.to_string(),
                         });
+                        if let Some(ref hooks) = self.hook_registry {
+                            let ctx = HookContext::new().with_session(session_id.as_str());
+                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+                        }
                         return Err(e);
                     }
                 }
@@ -480,6 +603,20 @@ impl AgentLoop {
             // If we have tool uses, execute them
             if tool_uses.is_empty() {
                 // Stream ended without explicit MessageStop with tool_use.
+                // C-01: AIDefence output validation.
+                if !full_text.is_empty() {
+                    if let Some(ref defence) = self.defence {
+                        if let Err(violation) = defence.check_output(&full_text) {
+                            tracing::warn!(violation = %violation, "AIDefence blocked output");
+                            let _ = tx.send(AgentEvent::Error {
+                                message: format!("Output security check failed: {violation}"),
+                            });
+                            let _ = tx.send(AgentEvent::Done);
+                            return Ok(());
+                        }
+                    }
+                }
+
                 // Ensure an assistant message is always appended.
                 messages.push(ChatMessage::assistant(if full_text.is_empty() {
                     "(no response)"
@@ -490,6 +627,16 @@ impl AgentLoop {
                     let _ = tx.send(AgentEvent::TextComplete {
                         text: full_text.clone(),
                     });
+                }
+                if let Some(ref hooks) = self.hook_registry {
+                    let elapsed = turn_start.elapsed().as_millis() as u64;
+                    let ctx = HookContext::new()
+                        .with_session(session_id.as_str())
+                        .with_turn(round)
+                        .with_result(true, elapsed);
+                    hooks.execute(HookPoint::PostTask, &ctx).await;
+                    hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+                    hooks.execute(HookPoint::SessionEnd, &ctx).await;
                 }
                 let _ = tx.send(AgentEvent::Done);
                 return Ok(());
@@ -590,12 +737,21 @@ impl AgentLoop {
                 // Sequential execution (original behavior)
                 let mut outputs = Vec::new();
                 for (tu, input) in &parsed_tools {
-                    // PreToolUse hook
+                    // PreToolUse hook — C-02: Block stops tool execution.
                     if let Some(ref hooks) = self.hook_registry {
                         let ctx = HookContext::new()
                             .with_session(session_id.as_str())
                             .with_tool(&tu.name, input.clone());
-                        hooks.execute(HookPoint::PreToolUse, &ctx).await;
+                        if let crate::hooks::HookAction::Block(reason) =
+                            hooks.execute(HookPoint::PreToolUse, &ctx).await
+                        {
+                            tracing::warn!(tool = %tu.name, reason = %reason, "PreToolUse hook blocked tool");
+                            let _ = tx.send(AgentEvent::Error {
+                                message: format!("Tool '{}' blocked by security policy: {reason}", tu.name),
+                            });
+                            let _ = tx.send(AgentEvent::Done);
+                            return Ok(());
+                        }
                     }
 
                     let exec_start = std::time::Instant::now();
@@ -647,6 +803,27 @@ impl AgentLoop {
                 // Soft-trim large tool results before injecting into messages
                 let trimmed_output = maybe_trim_tool_result(&result.output);
 
+                // C-03: AIDefence injection check on tool results (indirect prompt injection).
+                // Only check injection (not PII blocking) — external tools can legitimately
+                // return data containing personal information.
+                if let Some(ref defence) = self.defence {
+                    if let Err(violation) = defence.check_injection(&trimmed_output) {
+                        tracing::warn!(
+                            tool = %tu.name,
+                            violation = %violation,
+                            "AIDefence detected injection in tool result"
+                        );
+                        let _ = tx.send(AgentEvent::Error {
+                            message: format!(
+                                "Tool '{}' result contains injection attempt: {violation}",
+                                tu.name
+                            ),
+                        });
+                        let _ = tx.send(AgentEvent::Done);
+                        return Ok(());
+                    }
+                }
+
                 // Record outcome for result-aware loop detection
                 if let Some(outcome_warning) =
                     self.loop_guard
@@ -667,6 +844,16 @@ impl AgentLoop {
                 content: tool_results,
             });
 
+            // LoopTurnEnd hook after tool round completes
+            if let Some(ref hooks) = self.hook_registry {
+                let elapsed = turn_start.elapsed().as_millis() as u64;
+                let ctx = HookContext::new()
+                    .with_session(session_id.as_str())
+                    .with_turn(round)
+                    .with_result(true, elapsed);
+                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+            }
+
             // Reset for next round
             full_text = String::new();
         }
@@ -680,6 +867,10 @@ impl AgentLoop {
         let _ = tx.send(AgentEvent::Error {
             message: format!("Max rounds ({MAX_ROUNDS}) exceeded"),
         });
+        if let Some(ref hooks) = self.hook_registry {
+            let ctx = HookContext::new().with_session(session_id.as_str());
+            hooks.execute(HookPoint::SessionEnd, &ctx).await;
+        }
         let _ = tx.send(AgentEvent::Done);
         Ok(())
     }
