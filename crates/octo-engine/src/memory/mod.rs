@@ -1,4 +1,5 @@
 pub mod budget;
+pub mod embedding;
 pub mod extractor;
 pub mod fts;
 pub mod graph;
@@ -24,6 +25,7 @@ use tokio::task;
 use super::session::SqliteSessionStore;
 
 pub use budget::TokenBudgetManager;
+pub use embedding::{EmbeddingClient, EmbeddingConfig, EmbeddingProvider};
 pub use fts::FtsStore;
 pub use graph::{Entity, GraphStats, KnowledgeGraph, Relation};
 pub use graph_store::GraphStore;
