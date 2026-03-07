@@ -11,6 +11,12 @@ pub struct HookRegistry {
     handlers: RwLock<HashMap<HookPoint, Vec<Arc<dyn HookHandler>>>>,
 }
 
+fn validate_redirect_target(target: &str) -> bool {
+    !target.is_empty()
+        && target.len() <= 128
+        && target.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+}
+
 impl HookRegistry {
     pub fn new() -> Self {
         Self {
@@ -67,6 +73,15 @@ impl HookRegistry {
                     return HookAction::Block(reason);
                 }
                 Ok(HookAction::Redirect(target)) => {
+                    if !validate_redirect_target(&target) {
+                        warn!(
+                            hook_point = ?point,
+                            handler = handler.name(),
+                            target = %target,
+                            "HookRegistry: invalid Redirect target, treating as Continue"
+                        );
+                        return HookAction::Continue;
+                    }
                     debug!(
                         hook_point = ?point,
                         handler = handler.name(),

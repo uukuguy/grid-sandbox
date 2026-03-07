@@ -10,7 +10,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Which embedding API to call.
 #[derive(Debug, Clone)]
@@ -21,7 +21,7 @@ pub enum EmbeddingProvider {
 }
 
 /// Configuration for EmbeddingClient.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EmbeddingConfig {
     pub provider: EmbeddingProvider,
     pub api_key: String,
@@ -31,6 +31,21 @@ pub struct EmbeddingConfig {
     pub dimensions: usize,
     /// Max texts per API call.
     pub batch_size: usize,
+}
+
+impl std::fmt::Debug for EmbeddingConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let key_preview = if self.api_key.len() > 4 {
+            format!("{}***", &self.api_key[..4])
+        } else {
+            "***".to_string()
+        };
+        f.debug_struct("EmbeddingConfig")
+            .field("provider", &self.provider)
+            .field("api_key", &key_preview)
+            .field("model", &self.model)
+            .finish()
+    }
 }
 
 impl EmbeddingConfig {
@@ -172,8 +187,8 @@ impl EmbeddingClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            warn!("OpenAI embedding error {}: {}", status, body);
-            anyhow::bail!("OpenAI embedding API error {}: {}", status, body);
+            tracing::debug!("OpenAI embedding raw error body: {}", body);
+            anyhow::bail!("OpenAI embedding request failed (status {})", status);
         }
 
         let parsed: OpenAiResponse = resp
@@ -199,8 +214,8 @@ impl EmbeddingClient {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            warn!("Voyage embedding error {}: {}", status, body);
-            anyhow::bail!("Voyage embedding API error {}: {}", status, body);
+            tracing::debug!("Voyage embedding raw error body: {}", body);
+            anyhow::bail!("Voyage embedding request failed (status {})", status);
         }
 
         let parsed: VoyageResponse = resp
