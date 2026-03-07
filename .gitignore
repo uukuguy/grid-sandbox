@@ -27,6 +27,9 @@ output/
 tmp/
 
 data/
+octo.db
+octo.db-shm
+octo.db-wal
 
 .playwright-cli/
 .playwright-mcp/
