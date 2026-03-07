@@ -1,13 +1,13 @@
-# ADR：MEMORY SYSTEM 架构决策记录
+# ADR-006: MEMORY SYSTEM
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-07
-**状态**：已完成
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-07
+**Status**: Completed
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-019：四层记忆架构](#adr-019四层记忆架构)
 - [ADR-020：HNSW 向量索引](#adr-020hnsw-向量索引)

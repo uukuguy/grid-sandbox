@@ -37,10 +37,11 @@ function getAdrConfig() {
   const cf = (settings && settings.claudeFlow) || {};
   return {
     directory: ((cf.adr && cf.adr.directory) || '/docs/adr').replace(/^\//, ''),
-    naming: (cf.adr && cf.adr.naming) || 'ADR_{TOPIC}.md',
+    naming: (cf.adr && cf.adr.naming) || 'ADR-{NUM}-{TOPIC}.md',
     template: (cf.adr && cf.adr.template) || 'madr',
     sectionPattern: (cf.adr && cf.adr.sectionPattern) || '^## ADR-\\d+',
     autoGenerate: cf.adr && cf.adr.autoGenerate !== undefined ? cf.adr.autoGenerate : true,
+    language: (cf.adr && cf.adr.language) || 'en',
   };
 }
 
@@ -51,6 +52,7 @@ function getDddConfig() {
     directory: ((cf.ddd && cf.ddd.directory) || '/docs/ddd').replace(/^\//, ''),
     trackDomains: cf.ddd && cf.ddd.trackDomains !== undefined ? cf.ddd.trackDomains : true,
     validateBoundedContexts: cf.ddd && cf.ddd.validateBoundedContexts !== undefined ? cf.ddd.validateBoundedContexts : true,
+    language: (cf.ddd && cf.ddd.language) || 'en',
   };
 }
 
@@ -121,14 +123,17 @@ function generateAdr(changes) {
 
   for (const [category, catChanges] of Object.entries(byCategory)) {
     const topic = CATEGORY_TOPICS[category] || category.toUpperCase().replace(/-/g, '_');
-    const fileName = config.naming.replace('{TOPIC}', topic);
+    const nextNum = getNextAdrNumber(adrDir, config.sectionPattern);
+    // Support both {TOPIC} and {NUM} placeholders
+    let fileName = config.naming
+      .replace('{TOPIC}', topic)
+      .replace('{NUM}', String(nextNum).padStart(3, '0'));
     const filePath = path.join(adrDir, fileName);
 
     // Check if ADR file for this topic already exists
     if (fs.existsSync(filePath)) {
       // Append new section to existing file
       const existing = fs.readFileSync(filePath, 'utf-8');
-      const nextNum = getNextAdrNumber(adrDir, config.sectionPattern);
 
       const newSection = generateAdrSection(nextNum, category, catChanges);
 
@@ -137,7 +142,6 @@ function generateAdr(changes) {
       result.appended.push(filePath);
     } else {
       // Create new ADR file
-      const nextNum = getNextAdrNumber(adrDir, config.sectionPattern);
       const content = generateAdrFile(nextNum, topic, category, catChanges);
       fs.writeFileSync(filePath, content, 'utf-8');
       result.created.push(filePath);
@@ -148,9 +152,25 @@ function generateAdr(changes) {
 }
 
 function generateAdrFile(startNum, topic, category, changes) {
+  const config = getAdrConfig();
+  const isEnglish = config.language === 'en';
   const date = new Date().toISOString().split('T')[0];
   const title = topic.replace(/_/g, ' ');
   const section = generateAdrSection(startNum, category, changes);
+
+  if (isEnglish) {
+    return `# ADR-${String(startNum).padStart(3, '0')}: ${title}
+
+**Project**: octo-sandbox
+**Date**: ${date}
+**Status**: Pending Review
+**Auto-generated**: By RuFlo post-task hook
+
+---
+
+${section}
+`;
+  }
 
   return `# ADR：${title} 架构决策记录
 
@@ -166,10 +186,49 @@ ${section}
 }
 
 function generateAdrSection(num, category, changes) {
+  const config = getAdrConfig();
+  const isEnglish = config.language === 'en';
   const date = new Date().toISOString().split('T')[0];
   const padNum = String(num).padStart(3, '0');
   const files = changes.map(c => c.file);
   const title = getCategoryTitle(category);
+
+  if (isEnglish) {
+    return `## ADR-${padNum}: ${title}
+
+### Status
+
+**Pending Review** — ${date} (auto-generated)
+
+### Context
+
+The following files have architecture-level changes that require decision recording:
+
+${files.map(f => '- `' + f + '`').join('\n')}
+
+### Change Category
+
+- **Category**: ${category}
+- **Impact Scope**: ${files.length} files
+- **Detection Time**: ${date}
+
+### Decision
+
+> **TODO**: Please review the above changes and document the architecture decision, alternatives, and rationale.
+
+### Consequences
+
+#### Positive
+- (To be added)
+
+#### Negative
+- (To be added)
+
+### Affected Files
+
+${files.map(f => '| `' + f + '` | Change |').join('\n')}
+`;
+  }
 
   return `## ADR-${padNum}：${title}
 
@@ -225,6 +284,16 @@ function getCategoryTitle(category) {
 
 // Map architecture changes to DDD bounded contexts
 const CONTEXT_MAPPING = {
+  'agent-architecture': 'Agent Execution Context',
+  'security':           'Security Policy Context',
+  'mcp-integration':    'MCP Integration Context',
+  'memory-architecture': 'Memory Management Context',
+  'provider-chain':     'Provider Context',
+  'api-change':         'API Interface Context',
+  'structural-change':  'Common Structure',
+};
+
+const CONTEXT_MAPPING_ZH = {
   'agent-architecture': 'Agent 执行上下文',
   'security':           '安全策略上下文',
   'mcp-integration':    'MCP 集成上下文',
@@ -236,6 +305,21 @@ const CONTEXT_MAPPING = {
 
 // File path patterns → bounded context
 const PATH_TO_CONTEXT = [
+  { pattern: /agent\//,    context: 'Agent Execution Context' },
+  { pattern: /security\//,  context: 'Security Policy Context' },
+  { pattern: /mcp\//,       context: 'MCP Integration Context' },
+  { pattern: /memory\//,    context: 'Memory Management Context' },
+  { pattern: /tools\//,     context: 'Tool Execution Context' },
+  { pattern: /providers?\//,context: 'Provider Context' },
+  { pattern: /auth\//,      context: 'Authentication Context' },
+  { pattern: /event\//,     context: 'Observability Context' },
+  { pattern: /session\//,   context: 'Session Management Context' },
+  { pattern: /hooks?\//,    context: 'Orchestration Context' },
+  { pattern: /orchestrat/,  context: 'Orchestration Context' },
+  { pattern: /sandbox\//,   context: 'Sandbox Execution Context' },
+];
+
+const PATH_TO_CONTEXT_ZH = [
   { pattern: /agent\//,    context: 'Agent 执行上下文' },
   { pattern: /security\//,  context: '安全策略上下文' },
   { pattern: /mcp\//,       context: 'MCP 集成上下文' },
@@ -258,6 +342,7 @@ const PATH_TO_CONTEXT = [
  */
 function updateDddTracking(changes) {
   const config = getDddConfig();
+  const isEnglish = config.language === 'en';
 
   // Respect trackDomains flag from settings.json
   if (!config.trackDomains) {
@@ -272,15 +357,17 @@ function updateDddTracking(changes) {
 
   // Identify affected bounded contexts
   const contextsSet = new Set();
+  const mapping = config.language === 'en' ? CONTEXT_MAPPING : CONTEXT_MAPPING_ZH;
+  const pathMapping = config.language === 'en' ? PATH_TO_CONTEXT : PATH_TO_CONTEXT_ZH;
   for (const change of changes) {
     // By category
-    const catCtx = CONTEXT_MAPPING[change.category];
+    const catCtx = mapping[change.category];
     if (catCtx) contextsSet.add(catCtx);
 
     // By file path
-    for (const mapping of PATH_TO_CONTEXT) {
-      if (mapping.pattern.test(change.file)) {
-        contextsSet.add(mapping.context);
+    for (const m of pathMapping) {
+      if (m.pattern.test(change.file)) {
+        contextsSet.add(m.context);
       }
     }
   }
@@ -294,7 +381,24 @@ function updateDddTracking(changes) {
   const time = new Date().toISOString().split('T')[1].substring(0, 5);
   const files = changes.map(c => c.file);
 
-  const entry = `
+  let entry;
+  if (isEnglish) {
+    entry = `
+### ${date} ${time} — Bounded Context Change
+
+**Affected Bounded Contexts**: ${result.contextsAffected.join(', ')}
+
+**Changed Files**:
+${files.map(f => '- `' + f + '`').join('\n')}
+
+**Change Categories**: ${[...new Set(changes.map(c => getCategoryTitle(c.category)))].join(', ')}
+
+> Please check \`DDD_DOMAIN_ANALYSIS.md\` for updated type definitions and aggregate roots.
+
+---
+`;
+  } else {
+    entry = `
 ### ${date} ${time} — 限界上下文变更
 
 **受影响的限界上下文**：${result.contextsAffected.join('、')}
@@ -308,13 +412,22 @@ ${files.map(f => '- `' + f + '`').join('\n')}
 
 ---
 `;
+  }
 
   // Append or create log file
   if (fs.existsSync(logFile)) {
     const existing = fs.readFileSync(logFile, 'utf-8');
     fs.writeFileSync(logFile, existing + entry, 'utf-8');
   } else {
-    const header = `# DDD 变更追踪日志
+    const header = isEnglish
+      ? `# DDD Change Log
+
+> Auto-generated by RuFlo post-task hook.
+> Records architecture changes affecting bounded contexts.
+
+---
+`
+      : `# DDD 变更追踪日志
 
 > 由 RuFlo post-task hook 自动生成。
 > 记录每次架构变更对限界上下文的影响，提醒更新 DDD 领域模型。

@@ -1,13 +1,13 @@
-# ADR：EVENT SOURCING 架构决策记录
+# ADR-008: EVENT SOURCING
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-07
-**状态**：已完成
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-07
+**Status**: Completed
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-026：EventBus 事件总线](#adr-026eventbus-事件总线)
 - [ADR-027：EventStore 事件持久化](#adr-027eventstore-事件持久化)

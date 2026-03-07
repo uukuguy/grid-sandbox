@@ -1,13 +1,13 @@
-# ADR：安全加固重构架构决策记录
+# ADR-003: SECURITY REFACTORING
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-06
-**状态**：全部已接受
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-06
+**Status**: Accepted
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-001：PathValidator 安全策略注入](#adr-001pathvalidator-安全策略注入)
 - [ADR-002：BashTool ExecPolicy 默认启用](#adr-002bashtool-execpolicy-默认启用)

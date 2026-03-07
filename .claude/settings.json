@@ -312,14 +312,16 @@
       "autoGenerate": true,
       "directory": "/docs/adr",
       "template": "madr",
-      "filePattern": "ADR_*.md",
+      "filePattern": "ADR-*.md",
       "sectionPattern": "^## ADR-\\d+",
-      "naming": "ADR_{TOPIC}.md"
+      "naming": "ADR-{NUM}-{TOPIC}.md",
+      "language": "en"
     },
     "ddd": {
       "trackDomains": true,
       "validateBoundedContexts": true,
-      "directory": "/docs/ddd"
+      "directory": "/docs/ddd",
+      "language": "en"
     },
     "security": {
       "autoScan": true,

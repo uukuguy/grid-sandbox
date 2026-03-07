@@ -1,13 +1,13 @@
-# ADR：MCP INTEGRATION 架构决策记录
+# ADR-005: MCP INTEGRATION
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-07
-**状态**：已完成
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-07
+**Status**: Completed
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-013：MCP Manager 生命周期管理](#adr-013mcp-manager-生命周期管理)
 - [ADR-017：MCP Client 多传输协议支持](#adr-017mcp-client-多传输协议支持)

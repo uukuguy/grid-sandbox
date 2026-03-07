@@ -1,13 +1,13 @@
-# ADR：HOOKS SYSTEM 架构决策记录
+# ADR-007: HOOKS SYSTEM
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-07
-**状态**：已完成
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-07
+**Status**: Completed
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-023：HookRegistry 全局钩子注册](#adr-023hookregistry-全局钩子注册)
 - [ADR-024：HookHandler 事件处理机制](#adr-024hookhandler-事件处理机制)

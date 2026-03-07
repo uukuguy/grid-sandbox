@@ -1,13 +1,13 @@
-# ADR：AGENT 架构决策记录
+# ADR-004: AGENT ARCHITECTURE
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-07
-**状态**：已完成
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-07
+**Status**: Completed
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-014：AgentRuntime 模块化架构](#adr-014agentruntime-模块化架构)
 - [ADR-015：AgentRouter 路由决策](#adr-015agentrouter-路由决策)

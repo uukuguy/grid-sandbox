@@ -1,13 +1,13 @@
-# ADR：多智能体编排架构决策记录
+# ADR-002: MULTI AGENT ORCHESTRATION
 
-**项目**：octo-sandbox
-**版本**：v1.0
-**日期**：2026-03-06
-**状态**：已提议
+**Project**: octo-sandbox
+**Version**: v1.0
+**Date**: 2026-03-06
+**Status**: Accepted
 
 ---
 
-## 目录
+## Table of Contents
 
 - [ADR-006：三层架构职责边界（Engine/Workbench/Platform）](#adr-006三层架构职责边界)
 - [ADR-007：octo-engine 引入通用 Hook 引擎](#adr-007octo-engine-引入通用-hook-引擎)

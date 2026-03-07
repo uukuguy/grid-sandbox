@@ -113,3 +113,16 @@
 > 本次更新补充了完整的 ADR 文档体系，覆盖全部核心架构模块。
 
 ---
+
+### 2026-03-07 08:04 — Bounded Context Change
+
+**Affected Bounded Contexts**: Agent Execution Context
+
+**Changed Files**:
+- `crates/octo-engine/src/agent/mod.rs`
+
+**Change Categories**: Agent 架构变更
+
+> Please check `DDD_DOMAIN_ANALYSIS.md` for updated type definitions and aggregate roots.
+
+---
