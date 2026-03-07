@@ -234,6 +234,19 @@ npx @claude-flow/cli@latest daemon start
 - 检查网络连接（需要下载 `@claude-flow/cli@latest`）
 - 尝试先 `npm install -g @claude-flow/cli` 本地安装
 
+**Q: SessionStart/Stop hook 报 "Memory package not available — skipping"？**
+- `auto-memory-hook.mjs` 依赖 `@claude-flow/memory` npm 包，需单独安装：
+  ```bash
+  npm install @claude-flow/memory@latest
+  ```
+- 安装后验证：
+  ```bash
+  node .claude/helpers/auto-memory-hook.mjs import
+  # 应输出：Learning: active / Graph: active / Agent scopes: active
+  ```
+- 安装后将 `node_modules/@claude-flow/` 加入 `.gitignore`（已有 `node_modules/` 规则则无需额外配置）
+- 此包负责 SONA/LearningBridge/MemoryGraph 高级学习功能；缺失时核心记忆（`MEMORY.md`）和本地 PageRank 图仍正常工作
+
 **Q: 直接用 Task tool 绕过 RuFlo 可以吗？**
 - 可以执行代码，但会跳过 post-edit / post-task hooks
 - ADR/DDD 文档不会自动更新，架构文档会脱节
