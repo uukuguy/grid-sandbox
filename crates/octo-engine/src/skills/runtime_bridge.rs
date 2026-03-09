@@ -48,6 +48,7 @@ impl SkillRuntimeBridge {
             "py" | "python" => Some(RuntimeType::Python),
             "js" | "mjs" | "node" => Some(RuntimeType::NodeJS),
             "wasm" => Some(RuntimeType::WASM),
+            "sh" | "bash" | "shell" => Some(RuntimeType::Shell),
             "rs" | "builtin" => Some(RuntimeType::Builtin),
             _ => None,
         }

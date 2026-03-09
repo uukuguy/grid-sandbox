@@ -2,10 +2,14 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub mod nodejs;
 pub mod python;
+pub mod shell;
 pub mod traits;
 
+pub use nodejs::NodeJsRuntime;
 pub use python::PythonRuntime;
+pub use shell::ShellRuntime;
 pub use traits::{RuntimeType, SkillRuntime};
 
 /// Information about a tool available to the skill.

@@ -16,6 +16,8 @@ pub enum RuntimeType {
     NodeJS,
     /// Built-in runtime (native Rust)
     Builtin,
+    /// Shell/Bash runtime
+    Shell,
 }
 
 impl std::fmt::Display for RuntimeType {
@@ -25,6 +27,7 @@ impl std::fmt::Display for RuntimeType {
             RuntimeType::WASM => write!(f, "WASM"),
             RuntimeType::NodeJS => write!(f, "NodeJS"),
             RuntimeType::Builtin => write!(f, "Builtin"),
+            RuntimeType::Shell => write!(f, "Shell"),
         }
     }
 }
@@ -93,6 +96,7 @@ mod tests {
         assert_eq!(format!("{}", RuntimeType::WASM), "WASM");
         assert_eq!(format!("{}", RuntimeType::NodeJS), "NodeJS");
         assert_eq!(format!("{}", RuntimeType::Builtin), "Builtin");
+        assert_eq!(format!("{}", RuntimeType::Shell), "Shell");
     }
 
     #[tokio::test]

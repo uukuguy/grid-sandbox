@@ -3,6 +3,7 @@ pub mod chain;
 pub mod config;
 pub mod metering_provider;
 pub mod openai;
+pub mod pipeline;
 pub mod retry;
 pub mod traits;
 
@@ -11,6 +12,7 @@ pub use chain::*;
 pub use config::*;
 pub use metering_provider::MeteringProvider;
 pub use openai::create_openai_provider;
+pub use pipeline::{CircuitBreakerConfig, CircuitState, CostBudget, ProviderPipelineBuilder};
 pub use retry::{ErrorStrategy, LlmErrorKind, RetryPolicy};
 pub use traits::{CompletionStream, Provider};
 
