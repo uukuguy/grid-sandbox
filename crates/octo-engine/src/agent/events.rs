@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use octo_types::StopReason;
+use octo_types::{ChatMessage, StopReason};
 
 /// Events sent from AgentLoop to consumers (WebSocket handler, CLI, etc.)
 #[derive(Debug, Clone, Serialize)]
@@ -70,6 +70,11 @@ pub struct AgentLoopResult {
     pub rounds: u32,
     pub tool_calls: u32,
     pub stop_reason: NormalizedStopReason,
+    /// Final conversation messages after the agent loop completes (D1).
+    /// Enables consumers to access the full message history without
+    /// reconstructing it from the event stream.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub final_messages: Vec<ChatMessage>,
 }
 
 /// Normalized stop reason (ZeroClaw pattern) — covers all agent-level stop reasons.

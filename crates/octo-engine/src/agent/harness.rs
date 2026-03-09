@@ -521,6 +521,7 @@ async fn run_agent_loop_inner(
                     rounds: round + 1,
                     tool_calls: total_tool_calls,
                     stop_reason: NormalizedStopReason::from(stop_reason),
+                    final_messages: messages.clone(),
                 }))
                 .await;
             let _ = tx.send(AgentEvent::Done).await;
@@ -790,6 +791,7 @@ async fn run_agent_loop_inner(
             rounds: max_rounds,
             tool_calls: total_tool_calls,
             stop_reason: NormalizedStopReason::MaxIterations,
+            final_messages: messages.clone(),
         }))
         .await;
     fire_session_end(&config, &tx).await;

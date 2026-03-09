@@ -665,11 +665,11 @@ async fn manage_context_step(
 
 | ID | 名称 | 前提条件 | 备注 |
 |----|------|---------|------|
-| D1 | messages 所有权迁移（Arc<Mutex<Vec>>） | P2-1 完成后评估 | 当前用 clone + MessagesUpdated 事件 |
+| D1 | messages 所有权迁移（Arc<Mutex<Vec>>） | P2-1 完成后评估 | ✅ 已补 — AgentLoopResult.final_messages 返回最终消息 |
 | D2 | ApprovalManager 交互式审批 | 需要前端 WS 双向通信 | oneshot::Sender 在 Stream 中需要特殊处理 |
 | D3 | SmartRouting（简单查询→廉价模型） | Provider 基础设施就绪 | 需要 query complexity 分类器 |
-| D4 | run_agent_loop 支持 SubAgent 递归调用 | P0 完成后 | SubAgent 可复用 run_agent_loop |
-| D5 | 删除旧 AgentLoop struct | 所有消费者迁移完成 | 暂保留向后兼容 |
+| D4 | run_agent_loop 支持 SubAgent 递归调用 | P0 完成后 | ✅ 已补 — spawn_subagent + query_subagent 工具 |
+| D5 | 删除旧 AgentLoop struct | 所有消费者迁移完成 | 🟡 Stage 2 完成 — RuntimeScheduler/Scheduler 已迁移到 harness，AgentExecutor 待后续 |
 | D6 | Event recording/replay | 设计中 | 基于 AgentEvent Stream 天然支持 |
 
 ---

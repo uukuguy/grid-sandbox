@@ -10,10 +10,14 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
-use tokio::sync::{broadcast, Semaphore};
+use tokio::sync::Semaphore;
 use uuid::Uuid;
 
-use crate::agent::{AgentEvent, AgentLoop};
+use futures_util::StreamExt;
+
+use crate::agent::events::AgentEvent;
+use crate::agent::harness::run_agent_loop;
+use crate::agent::loop_config::AgentLoopConfig;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
 use crate::session::SessionStore;
@@ -331,7 +335,7 @@ impl Scheduler {
         Ok(execution)
     }
 
-    /// Run an agent task
+    /// Run an agent task via harness (D5 migration).
     async fn run_agent_task(&self, task: &ScheduledTask) -> Result<String, SchedulerError> {
         let config = &task.agent_config;
 
@@ -348,7 +352,7 @@ impl Scheduler {
 
         // Prepare initial message with the task input
         let user_message = ChatMessage::user(config.input.clone());
-        let mut messages = vec![user_message];
+        let messages = vec![user_message];
 
         // Create tool context with path validation
         let tool_ctx = ToolContext {
@@ -356,9 +360,6 @@ impl Scheduler {
             working_dir: PathBuf::from("/tmp"),
             path_validator: self.path_validator.clone(),
         };
-
-        // Create event channel (discard events)
-        let (_tx, _) = broadcast::channel::<AgentEvent>(100);
 
         // Build a snapshot of the tool registry for this task execution
         let tools_snapshot = {
@@ -370,56 +371,34 @@ impl Scheduler {
             Arc::new(snapshot)
         };
 
-        // Create and configure agent loop
-        let mut agent_loop =
-            AgentLoop::new(self.provider.clone(), tools_snapshot, self.memory.clone())
-                .with_model(config.model.clone());
+        // Build AgentLoopConfig for the harness
+        let loop_config = AgentLoopConfig {
+            provider: Some(self.provider.clone()),
+            tools: Some(tools_snapshot),
+            memory: Some(self.memory.clone()),
+            model: config.model.clone(),
+            session_id: session_id.clone(),
+            user_id,
+            sandbox_id,
+            tool_ctx: Some(tool_ctx),
+            ..AgentLoopConfig::default()
+        };
 
-        // Run agent with timeout
+        // Run agent via harness with timeout
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_secs),
-            #[allow(deprecated)]
-            agent_loop.run(
-                &session_id,
-                &user_id,
-                &sandbox_id,
-                &mut messages,
-                _tx.clone(),
-                tool_ctx,
-                None,
-            ),
+            Self::collect_response(loop_config, messages),
         )
         .await;
 
         match result {
-            Ok(Ok(_)) => {
-                // Extract response from last assistant message
-                let response = messages
-                    .iter()
-                    .rev()
-                    .find(|m| m.role == MessageRole::Assistant)
-                    .and_then(|m| {
-                        m.content.iter().find_map(|c| {
-                            if let ContentBlock::Text { text } = c {
-                                Some(text.clone())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .unwrap_or_else(|| "Task completed".to_string());
-
+            Ok(response) => {
                 tracing::info!(
                     task_id = %task.id,
                     session_id = %session_id,
                     "Scheduled task completed successfully"
                 );
-
                 Ok(response)
-            }
-            Ok(Err(e)) => {
-                tracing::error!(task_id = %task.id, error = %e, "Agent execution error");
-                Err(SchedulerError::ExecutionFailed(e.to_string()))
             }
             Err(_) => {
                 tracing::error!(task_id = %task.id, "Agent execution timed out");
@@ -429,6 +408,33 @@ impl Scheduler {
                 )))
             }
         }
+    }
+
+    /// Consume harness stream and extract assistant response from final_messages.
+    async fn collect_response(config: AgentLoopConfig, messages: Vec<ChatMessage>) -> String {
+        let mut stream = run_agent_loop(config, messages);
+        let mut final_messages: Vec<ChatMessage> = Vec::new();
+
+        while let Some(event) = stream.next().await {
+            if let AgentEvent::Completed(result) = event {
+                final_messages = result.final_messages;
+            }
+        }
+
+        final_messages
+            .iter()
+            .rev()
+            .find(|m| m.role == MessageRole::Assistant)
+            .and_then(|m| {
+                m.content.iter().find_map(|c| {
+                    if let ContentBlock::Text { text } = c {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or_else(|| "Task completed".to_string())
     }
 
     // === Public API ===

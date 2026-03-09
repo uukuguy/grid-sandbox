@@ -15,6 +15,7 @@ use crate::tools::ToolRegistry;
 use super::config::AgentConfig;
 use super::entry::AgentManifest;
 use super::loop_guard::LoopGuard;
+use super::subagent::SubAgentManager;
 use super::CancellationToken;
 
 /// Agent Loop configuration — serves as the complete dependency injection container
@@ -83,6 +84,10 @@ pub struct AgentLoopConfig {
     // === Agent behavior ===
     /// Agent-level behavior configuration.
     pub agent_config: AgentConfig,
+
+    // === Sub-agent support (D4) ===
+    /// Sub-agent manager for recursive agent spawning.
+    pub subagent_manager: Option<Arc<SubAgentManager>>,
 }
 
 impl Default for AgentLoopConfig {
@@ -114,6 +119,7 @@ impl Default for AgentLoopConfig {
             tool_ctx: None,
             cancel_token: CancellationToken::new(),
             agent_config: AgentConfig::default(),
+            subagent_manager: None,
         }
     }
 }
@@ -275,6 +281,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn agent_config(mut self, v: AgentConfig) -> Self {
         self.config.agent_config = v;
+        self
+    }
+
+    pub fn subagent_manager(mut self, v: Arc<SubAgentManager>) -> Self {
+        self.config.subagent_manager = Some(v);
         self
     }
 

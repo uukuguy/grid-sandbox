@@ -1,4 +1,5 @@
 use octo_engine::agent::{AgentEvent, AgentLoopResult, NormalizedStopReason};
+use octo_types::ChatMessage;
 
 #[test]
 fn test_all_agent_event_variants_serialize() {
@@ -43,6 +44,7 @@ fn test_all_agent_event_variants_serialize() {
             rounds: 3,
             tool_calls: 5,
             stop_reason: NormalizedStopReason::EndTurn,
+            final_messages: vec![],
         }),
     ];
 
@@ -64,11 +66,31 @@ fn test_agent_loop_result_serialize() {
         rounds: 5,
         tool_calls: 10,
         stop_reason: NormalizedStopReason::MaxIterations,
+        final_messages: vec![],
     };
     let json = serde_json::to_string(&result).unwrap();
     assert!(json.contains("\"rounds\":5"));
     assert!(json.contains("\"tool_calls\":10"));
     assert!(json.contains("MaxIterations"));
+    // final_messages should be skipped when empty
+    assert!(!json.contains("final_messages"));
+}
+
+#[test]
+fn test_agent_loop_result_with_final_messages() {
+    let result = AgentLoopResult {
+        rounds: 2,
+        tool_calls: 1,
+        stop_reason: NormalizedStopReason::EndTurn,
+        final_messages: vec![
+            ChatMessage::user("hello"),
+            ChatMessage::assistant("hi there"),
+        ],
+    };
+    let json = serde_json::to_string(&result).unwrap();
+    assert!(json.contains("final_messages"));
+    assert!(json.contains("hello"));
+    assert!(json.contains("hi there"));
 }
 
 #[test]

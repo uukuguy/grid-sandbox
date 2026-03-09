@@ -14,6 +14,7 @@ pub mod memory_search;
 pub mod memory_store;
 pub mod memory_update;
 pub mod recorder;
+pub mod subagent;
 pub mod traits;
 pub mod truncation;
 pub mod web_fetch;

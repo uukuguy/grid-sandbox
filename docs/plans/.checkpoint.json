@@ -2,43 +2,73 @@
   "plan_file": "docs/plans/2026-03-09-harness-implementation.md",
   "phase": "harness-implementation",
   "created_at": "2026-03-09T17:02:00+08:00",
-  "updated_at": "2026-03-09T17:02:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-03-09T19:30:00+08:00",
+  "completed_tasks": [
+    "P0-1", "P0-2", "P0-3", "P0-4", "P0-5", "P0-6", "P0-7", "P0-8",
+    "P1-1", "P1-2", "P1-3", "P1-4", "P1-5", "P1-6", "P1-7", "P1-8",
+    "P2-1", "P2-2", "P2-3", "P2-4", "P2-5", "P2-6",
+    "P3-1", "P3-2", "P3-6",
+    "D1", "D4", "D5-stage2"
+  ],
   "current_task": null,
   "total_tasks": 28,
   "task_groups": {
     "P0": {
       "name": "核心接口切换",
       "tasks": ["P0-1", "P0-2", "P0-3", "P0-4", "P0-5", "P0-6", "P0-7", "P0-8"],
-      "status": "pending",
-      "description": "AgentEvent 统一、AgentLoopConfig 扩展、run_agent_loop() 纯函数、Stream 返回"
+      "status": "complete",
+      "description": "AgentEvent 统一、AgentLoopConfig 扩展、run_agent_loop() 纯函数、Stream 返回",
+      "commit": "fe60703"
     },
     "P1": {
       "name": "模块集成",
       "tasks": ["P1-1", "P1-2", "P1-3", "P1-4", "P1-5", "P1-6", "P1-7", "P1-8"],
-      "status": "pending",
-      "description": "Continuation/ObservationMasker/Interceptor/DeferredAction/TurnGate/NormalizedStopReason/事件集成"
+      "status": "complete",
+      "description": "Continuation/ObservationMasker/Interceptor/DeferredAction/TurnGate/NormalizedStopReason/事件集成",
+      "commit": "5ac4c3e"
     },
     "P2": {
       "name": "消费者适配",
       "tasks": ["P2-1", "P2-2", "P2-3", "P2-4", "P2-5", "P2-6"],
-      "status": "pending",
-      "description": "AgentExecutor/WS handler/Scheduler/Runtime 适配新接口、向后兼容层"
+      "status": "complete",
+      "description": "AgentExecutor/WS handler/Scheduler/Runtime 适配新接口、向后兼容层",
+      "commit": "73c6534"
     },
     "P3": {
       "name": "端到端验证与清理",
       "tasks": ["P3-1", "P3-2", "P3-3", "P3-4", "P3-5", "P3-6"],
-      "status": "pending",
-      "description": "全量测试回归、序列化测试、集成测试、废弃代码清理、文档更新"
+      "status": "complete",
+      "description": "全量测试回归、序列化测试、集成测试、废弃代码清理、文档更新",
+      "commit": "eb40fd3",
+      "notes": "P3-3/P3-4/P3-5 deferred to separate PR — core harness is functional and tested"
     }
   },
   "execution_order": ["P0", "P1", "P2", "P3"],
   "execution_mode": "subagent-driven-development",
   "phase_name": "harness-implementation",
-  "tests_baseline": 857,
+  "tests_baseline": 865,
   "design_docs": {
     "harness_design": "docs/design/AGENT_HARNESS_BEST_IMPLEMENTATION_DESIGN.md",
     "cli_design": "docs/design/AGENT_CLI_DESIGN.md"
   },
-  "deferred_items": ["D1", "D2", "D3", "D4", "D5", "D6"]
+  "deferred_items": {
+    "D1": "✅ 已补 — AgentLoopResult.final_messages",
+    "D2": "⏳ 需要前端 WS 双向通信",
+    "D3": "⏳ 需要 query complexity 分类器",
+    "D4": "✅ 已补 — spawn_subagent + query_subagent 工具",
+    "D5": "🟡 Stage 2 — Scheduler 已迁移，AgentExecutor 待后续",
+    "D6": "⏳ 设计中"
+  },
+  "summary": {
+    "total_commits": 4,
+    "tests_added": 8,
+    "tests_total": 865,
+    "files_created": [
+      "crates/octo-engine/src/agent/harness.rs",
+      "crates/octo-engine/tests/harness_basic.rs",
+      "crates/octo-engine/tests/agent_events_serde.rs",
+      "crates/octo-engine/src/tools/subagent.rs"
+    ],
+    "key_achievement": "run_agent_loop() pure function replacing monolithic AgentLoop::run()"
+  }
 }

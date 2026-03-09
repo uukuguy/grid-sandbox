@@ -1,13 +1,18 @@
 //! Scheduled task execution methods for AgentRuntime.
+//! Migrated from AgentLoop to harness::run_agent_loop() (D5 Stage 2).
 
 use std::sync::Arc;
 
+use futures_util::StreamExt;
 use octo_types::{ChatMessage, ContentBlock, MessageRole, ToolContext, UserId};
 
 use crate::scheduler::ScheduledTask;
 
+use super::events::AgentEvent;
+use super::harness::run_agent_loop;
+use super::loop_config::AgentLoopConfig;
 use super::runtime::AgentRuntime;
-use super::{AgentError, AgentEvent, AgentLoop};
+use super::AgentError;
 
 impl AgentRuntime {
     /// Execute a scheduled task: create session, run agent, return result.
@@ -28,69 +33,49 @@ impl AgentRuntime {
 
         // Prepare initial message with the task input
         let user_message = ChatMessage::user(config.input.clone());
-        let mut messages = vec![user_message];
+        let messages = vec![user_message];
 
         // Create tool context with security policy for path validation
         let tool_ctx = ToolContext {
             sandbox_id: sandbox_id.clone(),
             working_dir: self.working_dir.clone(),
             path_validator: Some(
-                self.security_policy.clone() as std::sync::Arc<dyn octo_types::PathValidator>
+                self.security_policy.clone() as std::sync::Arc<dyn octo_types::PathValidator>,
             ),
         };
 
-        // Create event channel (discard events)
-        let (tx, _) = tokio::sync::broadcast::channel::<AgentEvent>(100);
-
-        // Create and configure agent loop using this runtime's dependencies
+        // Create tool snapshot
         let tools = {
             let tools_guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
             Arc::new(tools_guard.snapshot())
         };
 
-        let mut agent_loop = AgentLoop::new(self.provider.clone(), tools, self.memory.clone())
-            .with_model(config.model.clone());
+        // Build AgentLoopConfig for the harness
+        let loop_config = AgentLoopConfig {
+            provider: Some(self.provider.clone()),
+            tools: Some(tools),
+            memory: Some(self.memory.clone()),
+            model: config.model.clone(),
+            session_id,
+            user_id,
+            sandbox_id,
+            tool_ctx: Some(tool_ctx),
+            ..AgentLoopConfig::default()
+        };
 
-        // Run agent with timeout
+        // Run agent via harness with timeout
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(config.timeout_secs),
-            #[allow(deprecated)]
-            agent_loop.run(
-                &session_id,
-                &user_id,
-                &sandbox_id,
-                &mut messages,
-                tx,
-                tool_ctx,
-                None,
-            ),
+            Self::collect_harness_response(loop_config, messages),
         )
         .await;
 
         match result {
-            Ok(Ok(_)) => {
-                // Extract response from last assistant message
-                let response = messages
-                    .iter()
-                    .rev()
-                    .find(|m| m.role == MessageRole::Assistant)
-                    .and_then(|m| {
-                        m.content.iter().find_map(|c| {
-                            if let ContentBlock::Text { text } = c {
-                                Some(text.clone())
-                            } else {
-                                None
-                            }
-                        })
-                    })
-                    .unwrap_or_else(|| "Task completed".to_string());
-
+            Ok(Ok(response)) => {
                 tracing::info!(
                     task_id = %task.id,
-                    session_id = %session_id,
                     "Scheduled task completed successfully"
                 );
-
                 Ok(response)
             }
             Ok(Err(e)) => {
@@ -105,5 +90,51 @@ impl AgentRuntime {
                 )))
             }
         }
+    }
+
+    /// Run the harness and extract the assistant response from final_messages.
+    async fn collect_harness_response(
+        config: AgentLoopConfig,
+        messages: Vec<ChatMessage>,
+    ) -> Result<String, String> {
+        let mut stream = run_agent_loop(config, messages);
+        let mut final_messages: Option<Vec<ChatMessage>> = None;
+        let mut last_error: Option<String> = None;
+
+        while let Some(event) = stream.next().await {
+            match event {
+                AgentEvent::Completed(result) => {
+                    final_messages = Some(result.final_messages);
+                }
+                AgentEvent::Error { message } => {
+                    last_error = Some(message);
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(err) = last_error {
+            if final_messages.is_none() {
+                return Err(err);
+            }
+        }
+
+        let msgs = final_messages.unwrap_or_default();
+        let response = msgs
+            .iter()
+            .rev()
+            .find(|m| m.role == MessageRole::Assistant)
+            .and_then(|m| {
+                m.content.iter().find_map(|c| {
+                    if let ContentBlock::Text { text } = c {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .unwrap_or_else(|| "Task completed".to_string());
+
+        Ok(response)
     }
 }
