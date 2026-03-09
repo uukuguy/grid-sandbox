@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tracing::debug;
 
-use octo_types::{ToolContext, ToolResult, ToolSource};
+use octo_types::{RiskLevel, ToolContext, ToolResult, ToolSource};
 
 use super::traits::Tool;
 
@@ -119,5 +119,9 @@ impl Tool for FileReadTool {
 
     fn source(&self) -> ToolSource {
         ToolSource::BuiltIn
+    }
+
+    fn risk_level(&self) -> RiskLevel {
+        RiskLevel::ReadOnly
     }
 }

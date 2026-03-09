@@ -86,6 +86,19 @@ pub fn maybe_trim_tool_result(result: &str, soft_limit: usize) -> String {
     )
 }
 
+/// Determine whether the current round should force a text-only response.
+///
+/// When `round >= max_iterations - 1` and `force_text_at_last` is `true`,
+/// returns `true`. The caller should omit the `tools` parameter from the
+/// LLM request so the model is forced to produce a summary text response
+/// instead of issuing further tool calls.
+///
+/// Returns `false` when `max_iterations == 0` (unlimited mode) or when
+/// `force_text_at_last` is disabled.
+pub fn should_force_text_only(round: u32, max_iterations: u32, force_text_at_last: bool) -> bool {
+    force_text_at_last && max_iterations > 0 && round >= max_iterations - 1
+}
+
 /// Compute the effective max rounds from config.
 /// 0 means unlimited (maps to `u32::MAX`).
 pub fn effective_max_rounds(configured: u32) -> u32 {
@@ -94,4 +107,30 @@ pub fn effective_max_rounds(configured: u32) -> u32 {
     } else {
         configured
     }
+}
+
+/// Generate a guidance hint after a tool execution failure.
+///
+/// When a tool returns an error, this produces a short prompt that helps
+/// the LLM consider alternative strategies instead of blindly retrying.
+pub fn generate_error_hint(tool_name: &str, error_message: &str) -> String {
+    format!(
+        "The tool '{}' failed with error: {}\n\n\
+         Consider alternative approaches:\n\
+         1. Try a different tool that can achieve the same goal\n\
+         2. Modify the parameters and retry\n\
+         3. Break the task into smaller steps\n\
+         4. Ask the user for clarification if the task is unclear",
+        tool_name, error_message
+    )
+}
+
+/// Decide whether an error guidance hint should be appended.
+///
+/// Returns `true` when the tool reported an error (`is_error == true`)
+/// **and** the number of consecutive errors has not exceeded 3.
+/// After 3 consecutive failures the hint is suppressed to avoid
+/// flooding the context with repetitive guidance.
+pub fn should_append_error_hint(is_error: bool, consecutive_errors: u32) -> bool {
+    is_error && consecutive_errors <= 3
 }

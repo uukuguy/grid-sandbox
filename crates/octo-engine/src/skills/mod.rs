@@ -1,5 +1,6 @@
 pub mod index;
 pub mod loader;
+pub mod manager;
 pub mod metadata;
 pub mod registry;
 pub mod runtime_bridge;
@@ -8,6 +9,7 @@ pub mod tool;
 pub mod trust;
 
 pub use index::{SkillLoader, SkillMetadata};
+pub use manager::{SkillIndexEntry, SkillManager};
 pub use registry::SkillRegistry;
 pub use runtime_bridge::SkillRuntimeBridge;
 pub use standards::{validate_allowed_tools, validate_skill_structure};

@@ -1,4 +1,6 @@
+pub mod approval;
 pub mod bash;
+pub mod cast_params;
 pub mod file_edit;
 pub mod file_read;
 pub mod file_write;
@@ -13,6 +15,7 @@ pub mod memory_store;
 pub mod memory_update;
 pub mod recorder;
 pub mod traits;
+pub mod truncation;
 pub mod web_fetch;
 pub mod web_search;
 

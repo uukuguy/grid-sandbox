@@ -1,4 +1,5 @@
 use super::context::HookContext;
+use super::handler::HookFailureMode;
 use super::{HookAction, HookHandler, HookPoint};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -94,13 +95,30 @@ impl HookRegistry {
                     return HookAction::Redirect(target);
                 }
                 Err(e) => {
-                    // Hook errors are non-fatal -- log and continue
-                    warn!(
-                        hook_point = ?point,
-                        handler = handler.name(),
-                        error = %e,
-                        "Hook handler error, continuing"
-                    );
+                    match handler.failure_mode() {
+                        HookFailureMode::FailOpen => {
+                            // Hook errors are non-fatal -- log and continue
+                            warn!(
+                                hook_point = ?point,
+                                handler = handler.name(),
+                                error = %e,
+                                "Hook handler error (FailOpen), continuing"
+                            );
+                        }
+                        HookFailureMode::FailClosed => {
+                            warn!(
+                                hook_point = ?point,
+                                handler = handler.name(),
+                                error = %e,
+                                "Hook handler error (FailClosed), aborting"
+                            );
+                            return HookAction::Abort(format!(
+                                "FailClosed hook '{}' error: {}",
+                                handler.name(),
+                                e
+                            ));
+                        }
+                    }
                 }
             }
         }

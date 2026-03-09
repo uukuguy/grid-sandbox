@@ -8,7 +8,7 @@ mod handler;
 mod registry;
 
 pub use context::HookContext;
-pub use handler::{BoxHookHandler, HookAction, HookHandler};
+pub use handler::{BoxHookHandler, HookAction, HookFailureMode, HookHandler};
 pub use registry::HookRegistry;
 
 /// Hook points in the agent lifecycle

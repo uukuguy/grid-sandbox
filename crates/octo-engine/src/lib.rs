@@ -37,7 +37,9 @@ pub use context::{
 };
 pub use db::Database;
 pub use event::{EventBus, EventCountProjection, EventStore, OctoEvent, Projection, StoredEvent};
-pub use hooks::{BoxHookHandler, HookAction, HookContext, HookHandler, HookPoint, HookRegistry};
+pub use hooks::{
+    BoxHookHandler, HookAction, HookContext, HookFailureMode, HookHandler, HookPoint, HookRegistry,
+};
 pub use extension::{
     AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
     ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,

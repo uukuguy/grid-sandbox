@@ -2,6 +2,15 @@ use super::context::HookContext;
 use async_trait::async_trait;
 use std::fmt;
 
+/// Hook failure mode — determines behavior when a hook handler returns an error
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookFailureMode {
+    /// Hook errors are non-fatal: log a warning and continue (default)
+    FailOpen,
+    /// Hook errors are fatal: abort the operation (for security-critical hooks)
+    FailClosed,
+}
+
 /// Action returned by a hook handler
 #[derive(Debug, Clone)]
 pub enum HookAction {
@@ -26,6 +35,11 @@ pub trait HookHandler: Send + Sync {
     /// Priority (lower = runs first, default 100)
     fn priority(&self) -> u32 {
         100
+    }
+
+    /// Failure mode: FailOpen (default) or FailClosed
+    fn failure_mode(&self) -> HookFailureMode {
+        HookFailureMode::FailOpen
     }
 
     /// Execute the hook
