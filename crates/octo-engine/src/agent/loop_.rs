@@ -141,6 +141,7 @@ impl AgentLoop {
         self
     }
 
+    #[deprecated(since = "0.2.0", note = "Use harness::run_agent_loop() directly")]
     pub async fn run(
         &mut self,
         session_id: &SessionId,

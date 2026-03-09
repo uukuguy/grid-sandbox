@@ -79,6 +79,31 @@ enum ServerMessage {
 
     #[serde(rename = "done")]
     Done { session_id: String },
+
+    #[serde(rename = "context_degraded")]
+    ContextDegraded {
+        session_id: String,
+        level: String,
+        usage_pct: f32,
+    },
+
+    #[serde(rename = "memory_flushed")]
+    MemoryFlushed {
+        session_id: String,
+        facts_count: usize,
+    },
+
+    #[serde(rename = "approval_required")]
+    ApprovalRequired {
+        session_id: String,
+        tool_name: String,
+    },
+
+    #[serde(rename = "security_blocked")]
+    SecurityBlocked {
+        session_id: String,
+        reason: String,
+    },
 }
 
 pub async fn ws_handler(
@@ -232,7 +257,32 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                     }
                                     break;
                                 }
-                                // New event variants not yet mapped to ServerMessage — skip
+                                AgentEvent::ContextDegraded { level, usage_pct } => {
+                                    ServerMessage::ContextDegraded {
+                                        session_id: sid_str.clone(),
+                                        level,
+                                        usage_pct,
+                                    }
+                                }
+                                AgentEvent::MemoryFlushed { facts_count } => {
+                                    ServerMessage::MemoryFlushed {
+                                        session_id: sid_str.clone(),
+                                        facts_count,
+                                    }
+                                }
+                                AgentEvent::ApprovalRequired { tool_name } => {
+                                    ServerMessage::ApprovalRequired {
+                                        session_id: sid_str.clone(),
+                                        tool_name,
+                                    }
+                                }
+                                AgentEvent::SecurityBlocked { reason } => {
+                                    ServerMessage::SecurityBlocked {
+                                        session_id: sid_str.clone(),
+                                        reason,
+                                    }
+                                }
+                                // IterationStart/IterationEnd are internal — skip
                                 _ => continue,
                             };
 
