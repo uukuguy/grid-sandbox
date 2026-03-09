@@ -7,6 +7,16 @@
 
 ## [Active Work]
 
+- 12:40 | Agent Skills 最佳实现方案研究完成 (RuFlo 3 智能体并行)
+  - 分析 7 个 Rust 项目 Skills 支持: IronClaw(9.5) > OpenFang(9) > Moltis(8.5) > ZeroClaw(8)
+  - octo-sandbox 评分 5.5/10，关键问题: SkillTool 与 SkillRuntimeBridge 断联
+  - 设计: TrustManager 三级信任 + allowed-tools 运行时强制 + SkillManager 统一入口
+  - 文档: docs/design/AGENT_SKILLS_BEST_IMPLEMENTATION_DESIGN.md
+- 11:58 | Agent Harness 最佳实现方案研究完成 (RuFlo 5 智能体并行)
+  - 分析 10 个项目: Goose/IronClaw/ZeroClaw/Moltis/AutoAgents/OpenFang/pi_agent_rust/LocalGPT + nanobot/nanoclaw
+  - 架构决策: 纯函数式 AgentLoop + Stream 输出 + 装饰器 Provider 链 + 三级 Tool 审批 + SafetyLayer
+  - 文档: docs/design/AGENT_HARNESS_BEST_IMPLEMENTATION_DESIGN.md
+  - 文档: docs/design/AGENT_HARNESS_INDUSTRY_RESEARCH_2025_2026.md
 - 19:30 | Completed ADR-030 to ADR-045: Filled all architecture decision records with English content including Context, Decision (with code examples), Consequences, Related sections. Topics: Hooks, Event, Scheduler, Secret Manager, Observability, Sandbox, Extension, Session, Audit, Context Engineering, Logging, Skill, Skill Runtime, Tools, Database, CLI. All TODO placeholders removed.
 - 19:00 | Dynamic ADR/DDD auto-detection: Replaced hardcoded ARCH_PATTERNS with dynamic discovery (discoverWorkspaceCrates, discoverAdrFiles, discoverDddFiles). Now automatically detects new crates/ADRs without code changes. 13/13 tests passed
 - 18:30 | octo-cli ADR/DDD auto-update fix: Expanded ARCH_PATTERNS in intelligence.cjs to include octo-cli and ADR-045 patterns, added cli-interface category detection, mem-save completed
