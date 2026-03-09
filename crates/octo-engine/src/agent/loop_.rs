@@ -4,35 +4,30 @@ use std::sync::Arc;
 use anyhow::Result;
 use futures_util::StreamExt;
 use tokio::sync::broadcast;
-use tracing::{debug, info, warn};
+use tracing::info;
 
-use octo_types::{
-    ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, SessionId, StopReason,
-    StreamEvent, ToolContext, UserId,
-};
+use octo_types::{ChatMessage, SandboxId, SessionId, ToolContext, UserId};
 
-use crate::context::{
-    ContextBudgetManager,
-    ContextPruner,
-    DegradationLevel,
-    MemoryFlusher,
-    NewSystemPromptBuilder as SystemPromptBuilder, // Zone A builder
-};
-use crate::hooks::{HookContext, HookPoint, HookRegistry};
+use crate::context::ContextBudgetManager;
+use crate::context::ContextPruner;
+use crate::hooks::HookRegistry;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
-use crate::providers::{LlmErrorKind, Provider, RetryPolicy};
+use crate::providers::Provider;
 use crate::tools::ToolRegistry;
 
 use super::config::AgentConfig;
 use super::entry::AgentManifest;
 use super::events::AgentEvent;
-use super::parallel::execute_parallel;
+use super::harness::run_agent_loop;
+use super::loop_config::AgentLoopConfig;
 use super::CancellationToken;
 
-const MAX_ROUNDS: u32 = 30;
-const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
-
+/// Backward-compatible wrapper around [`run_agent_loop()`].
+///
+/// New code should use [`run_agent_loop()`] directly with [`AgentLoopConfig`].
+/// This struct exists solely so that [`AgentExecutor`] (and any other legacy
+/// consumer) can continue to work without modification.
 pub struct AgentLoop {
     provider: Arc<dyn Provider>,
     tools: Arc<ToolRegistry>,
@@ -141,6 +136,11 @@ impl AgentLoop {
         self
     }
 
+    /// Run the agent loop by delegating to [`run_agent_loop()`].
+    ///
+    /// Builds an [`AgentLoopConfig`] from `self` fields and method parameters,
+    /// spawns the harness, and bridges the returned event stream to the
+    /// broadcast sender expected by legacy consumers.
     #[deprecated(since = "0.2.0", note = "Use harness::run_agent_loop() directly")]
     #[allow(clippy::too_many_arguments)]
     pub async fn run(
@@ -161,683 +161,96 @@ impl AgentLoop {
 
         info!(
             session = %session_id,
-            "AgentLoop starting, {} messages in history",
+            "AgentLoop starting (delegating to harness), {} messages in history",
             messages.len()
         );
 
-        // Zone A: static system prompt (agent identity + capabilities)
-        //
-        // Priority:
-        // 1. system_prompt_override (deprecated, for backward compatibility)
-        // 2. manifest with role/goal/backstory/system_prompt
-        // 3. default SystemPromptBuilder
-        #[allow(deprecated)]
-        let system_prompt = if let Some(ref r#override) = self.system_prompt_override {
-            r#override.clone()
-        } else if let Some(ref manifest) = self.manifest {
-            SystemPromptBuilder::new()
-                .with_manifest(manifest.clone())
-                .build()
-        } else {
-            SystemPromptBuilder::new().build()
-        };
-
-        debug!("System prompt length: {} chars", system_prompt.len());
-
-        // Zone B: dynamic context injected as first human message
-        // Working memory (UserProfile, TaskContext, AutoExtracted, Custom blocks)
-        // is compiled into a <context> XML block and prepended to the conversation.
-        let memory_xml = self
-            .memory
-            .compile(user_id, sandbox_id)
-            .await
-            .unwrap_or_default();
-
-        if !memory_xml.is_empty() {
-            let zone_b = ChatMessage {
-                role: MessageRole::User,
-                content: vec![ContentBlock::Text {
-                    text: memory_xml.clone(),
-                }],
-            };
-            // Replace existing Zone B injection (if any) or prepend a new one.
-            let first_is_context = messages
-                .first()
-                .and_then(|m| m.content.first())
-                .map(|b| matches!(b, ContentBlock::Text { text } if text.starts_with("<context>")))
-                .unwrap_or(false);
-            if first_is_context {
-                messages[0] = zone_b;
-            } else {
-                messages.insert(0, zone_b);
-            }
-        }
-
-        debug!("Zone B injected: working memory {} chars", memory_xml.len());
-
-        let tool_specs = self.tools.specs();
-
-        // Determine max rounds: 0 means infinite
-        let max_rounds = if self.config.max_rounds == 0 {
-            u32::MAX
-        } else {
-            self.config.max_rounds
-        };
-
-        // SessionStart hook
-        if let Some(ref hooks) = self.hook_registry {
-            let ctx = HookContext::new().with_session(session_id.as_str());
-            hooks.execute(HookPoint::SessionStart, &ctx).await;
-        }
-
-        for round in 0..max_rounds {
-            debug!(round, "Agent round starting");
-
-            // PreTask hook (fires once before the first round)
-            if round == 0 {
-                if let Some(ref hooks) = self.hook_registry {
-                    let ctx = HookContext::new()
-                        .with_session(session_id.as_str())
-                        .with_turn(round);
-                    if let crate::hooks::HookAction::Abort(reason) =
-                        hooks.execute(HookPoint::PreTask, &ctx).await
-                    {
-                        let _ = tx.send(AgentEvent::Error {
-                            message: reason.clone(),
-                        });
-                        let _ = tx.send(AgentEvent::Done);
-                        if let Some(ref hooks) = self.hook_registry {
-                            let ctx = HookContext::new().with_session(session_id.as_str());
-                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
-                        }
-                        return Err(anyhow::anyhow!("PreTask hook aborted: {}", reason));
-                    }
-                }
-            }
-
-            // 发布 LoopTurnStarted 事件（用于指标统计）
-            if let Some(ref bus) = self.event_bus {
-                bus.publish(crate::event::OctoEvent::LoopTurnStarted {
-                    session_id: session_id.as_str().to_string(),
-                    turn: round,
-                })
-                .await;
-            }
-
-            // LoopTurnStart hook
-            if let Some(ref hooks) = self.hook_registry {
-                let ctx = HookContext::new()
-                    .with_session(session_id.as_str())
-                    .with_turn(round);
-                if let crate::hooks::HookAction::Abort(reason) =
-                    hooks.execute(HookPoint::LoopTurnStart, &ctx).await
-                {
-                    let _ = tx.send(AgentEvent::Error {
-                        message: reason.clone(),
-                    });
-                    let _ = tx.send(AgentEvent::Done);
-                    if let Some(ref hooks) = self.hook_registry {
-                        let ctx = HookContext::new().with_session(session_id.as_str());
-                        hooks.execute(HookPoint::SessionEnd, &ctx).await;
-                    }
-                    return Err(anyhow::anyhow!("LoopTurnStart hook aborted: {}", reason));
-                }
-            }
-            let turn_start = std::time::Instant::now();
-
-            // Check for cancellation
-            if let Some(flag) = &cancel_flag {
-                if flag.load(Ordering::Relaxed) {
-                    info!(session = %session_id, "Agent loop cancelled");
-                    break;
-                }
-            }
-
-            // Apply context pruning based on budget
-            let level =
-                self.budget
-                    .compute_degradation_level(&system_prompt, messages, &tool_specs);
-            if level != DegradationLevel::None {
-                debug!(?level, "Applying context degradation");
-
-                // At OverflowCompaction level: flush facts before pruning to prevent info loss
-                if level >= DegradationLevel::OverflowCompaction
-                    && level != DegradationLevel::FinalError
-                {
-                    let boundary = ContextPruner::find_compaction_boundary(messages, 20_000);
-                    if boundary > 0 {
-                        let _ = MemoryFlusher::flush(
-                            messages,
-                            boundary,
-                            &*self.provider,
-                            &*self.memory,
-                            self.memory_store.as_deref(),
-                            &self.model,
-                            user_id.as_str(),
-                        )
-                        .await;
-                    }
-                }
-
-                self.pruner.apply(messages, level);
-
-                // ContextDegraded hook
-                if let Some(ref hooks) = self.hook_registry {
-                    let ctx = HookContext::new()
-                        .with_session(session_id.as_str())
-                        .with_turn(round)
-                        .with_degradation(format!("{:?}", level));
-                    hooks.execute(HookPoint::ContextDegraded, &ctx).await;
-                }
-            }
-
-            // AIDefence: check user input before the first LLM call.
-            if round == 0 {
-                if let Some(ref defence) = self.defence {
-                    let user_text: Option<String> = messages
-                        .iter()
-                        .rev()
-                        .find(|m| m.role == MessageRole::User)
-                        .and_then(|m| {
-                            m.content.iter().find_map(|b| {
-                                if let ContentBlock::Text { text } = b {
-                                    Some(text.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                        });
-                    if let Some(ref text) = user_text {
-                        if let Err(violation) = defence.check_input(text) {
-                            tracing::warn!(violation = %violation, "AIDefence blocked input");
-                            let _ = tx.send(AgentEvent::Error {
-                                message: format!("Security check failed: {violation}"),
-                            });
-                            let _ = tx.send(AgentEvent::Done);
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-
-            let request = CompletionRequest {
-                model: self.model.clone(),
-                system: Some(system_prompt.clone()),
-                messages: messages.clone(),
-                max_tokens: self.max_tokens,
-                temperature: None,
-                tools: tool_specs.clone(),
-                stream: true,
-            };
-
-            // Retry on transient API errors using LlmErrorKind classification + exponential backoff
-            let retry_policy = RetryPolicy::default();
-            let mut stream = None;
-            let mut last_err = None;
-            let mut attempt = 0u32;
-            loop {
-                match self.provider.stream(request.clone()).await {
-                    Ok(s) => {
-                        stream = Some(s);
+        // Build a CancellationToken and bridge the legacy AtomicBool flag
+        let cancel_token = CancellationToken::new();
+        if let Some(ref flag) = cancel_flag {
+            let flag_clone = flag.clone();
+            let token_clone = cancel_token.clone();
+            tokio::spawn(async move {
+                loop {
+                    if flag_clone.load(Ordering::Relaxed) {
+                        token_clone.cancel();
                         break;
                     }
-                    Err(e) => {
-                        let err_str = e.to_string().to_lowercase();
-                        if retry_policy.should_retry_str(&err_str, attempt) {
-                            let delay = retry_policy.delay_for(attempt);
-                            let kind = LlmErrorKind::classify_from_str(&err_str);
-                            warn!(
-                                "LLM stream failed (attempt {}/{}, kind={:?}), retrying in {:?}: {}",
-                                attempt + 1, retry_policy.max_retries, kind, delay, e
-                            );
-                            tokio::time::sleep(delay).await;
-                            last_err = Some(e);
-                            attempt += 1;
-                            continue;
-                        } else {
-                            let kind = LlmErrorKind::classify_from_str(&err_str);
-                            tracing::error!(
-                                "LLM stream failed (non-retryable, kind={:?}): {}",
-                                kind,
-                                e
-                            );
-                            last_err = Some(e);
-                            break;
-                        }
-                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
-            }
-
-            let mut stream = match stream {
-                Some(s) => s,
-                None => {
-                    let e = last_err.unwrap_or_else(|| anyhow::anyhow!("stream failed"));
-                    let _ = tx.send(AgentEvent::Error {
-                        message: e.to_string(),
-                    });
-                    let _ = tx.send(AgentEvent::Done);
-                    return Err(e);
-                }
-            };
-
-            let mut full_text = String::new();
-            let mut full_thinking = String::new();
-            let mut tool_uses: Vec<PendingToolUse> = Vec::new();
-            let mut current_tool: Option<PendingToolUse> = None;
-            let mut sent_typing = false;
-
-            while let Some(event) = stream.next().await {
-                match event {
-                    Ok(StreamEvent::MessageStart { .. }) => {}
-                    Ok(StreamEvent::TextDelta { text }) => {
-                        // Send typing indicator when LLM starts responding
-                        if !sent_typing && self.config.enable_typing_signal {
-                            let _ = tx.send(AgentEvent::Typing { state: true });
-                            sent_typing = true;
-                        }
-                        full_text.push_str(&text);
-                        let _ = tx.send(AgentEvent::TextDelta { text });
-                    }
-                    Ok(StreamEvent::ThinkingDelta { text }) => {
-                        // Send typing indicator when thinking starts
-                        if !sent_typing && self.config.enable_typing_signal {
-                            let _ = tx.send(AgentEvent::Typing { state: true });
-                            sent_typing = true;
-                        }
-                        full_thinking.push_str(&text);
-                        let _ = tx.send(AgentEvent::ThinkingDelta { text });
-                    }
-                    Ok(StreamEvent::ToolUseStart { id, name, .. }) => {
-                        current_tool = Some(PendingToolUse {
-                            id,
-                            name,
-                            input_json: String::new(),
-                        });
-                    }
-                    Ok(StreamEvent::ToolUseInputDelta { partial_json, .. }) => {
-                        if let Some(ref mut tool) = current_tool {
-                            tool.input_json.push_str(&partial_json);
-                        }
-                    }
-                    Ok(StreamEvent::ToolUseComplete {
-                        id, name, input, ..
-                    }) => {
-                        tool_uses.push(PendingToolUse {
-                            id,
-                            name,
-                            input_json: input.to_string(),
-                        });
-                        current_tool = None;
-                    }
-                    Ok(StreamEvent::MessageStop { stop_reason, usage }) => {
-                        debug!(
-                            ?stop_reason,
-                            input_tokens = usage.input_tokens,
-                            output_tokens = usage.output_tokens,
-                            "Message complete"
-                        );
-
-                        // Update budget with actual usage
-                        self.budget
-                            .update_actual_usage(usage.input_tokens, messages.len());
-
-                        // Emit budget snapshot to frontend
-                        let snapshot = self.budget.snapshot(&system_prompt, messages, &tool_specs);
-                        let _ = tx.send(AgentEvent::TokenBudgetUpdate { budget: snapshot });
-
-                        // If there's thinking but no text, the model put everything
-                        // in thinking blocks (common with proxy/relay models like MiniMax).
-                        // Fall back: treat thinking as the reply text.
-                        if full_text.is_empty() && !full_thinking.is_empty() {
-                            debug!("No text content, falling back thinking to text");
-                            full_text = full_thinking.clone();
-                            full_thinking.clear();
-                        }
-
-                        // Emit ThinkingComplete if there was thinking content
-                        if !full_thinking.is_empty() {
-                            let _ = tx.send(AgentEvent::ThinkingComplete {
-                                text: full_thinking.clone(),
-                            });
-                            full_thinking.clear();
-                        }
-
-                        // If no tool uses, this is final response
-                        if stop_reason != StopReason::ToolUse || tool_uses.is_empty() {
-                            // C-01: AIDefence output validation on every LLM response.
-                            if !full_text.is_empty() {
-                                if let Some(ref defence) = self.defence {
-                                    if let Err(violation) = defence.check_output(&full_text) {
-                                        tracing::warn!(violation = %violation, "AIDefence blocked output");
-                                        let _ = tx.send(AgentEvent::Error {
-                                            message: format!(
-                                                "Output security check failed: {violation}"
-                                            ),
-                                        });
-                                        let _ = tx.send(AgentEvent::Done);
-                                        return Ok(());
-                                    }
-                                }
-                            }
-
-                            // Always append an assistant message so the conversation history
-                            // stays well-formed (no two consecutive user messages).
-                            messages.push(ChatMessage::assistant(if full_text.is_empty() {
-                                "(no response)"
-                            } else {
-                                &full_text
-                            }));
-                            if !full_text.is_empty() {
-                                let _ = tx.send(AgentEvent::TextComplete {
-                                    text: full_text.clone(),
-                                });
-                            }
-                            // Stop typing indicator
-                            if sent_typing && self.config.enable_typing_signal {
-                                let _ = tx.send(AgentEvent::Typing { state: false });
-                            }
-                            if let Some(ref hooks) = self.hook_registry {
-                                let elapsed = turn_start.elapsed().as_millis() as u64;
-                                let ctx = HookContext::new()
-                                    .with_session(session_id.as_str())
-                                    .with_turn(round)
-                                    .with_result(true, elapsed);
-                                hooks.execute(HookPoint::PostTask, &ctx).await;
-                                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
-                                hooks.execute(HookPoint::SessionEnd, &ctx).await;
-                            }
-                            let _ = tx.send(AgentEvent::Done);
-                            return Ok(());
-                        }
-                    }
-                    Err(e) => {
-                        warn!("Stream error: {e}");
-                        let _ = tx.send(AgentEvent::Error {
-                            message: e.to_string(),
-                        });
-                        if let Some(ref hooks) = self.hook_registry {
-                            let ctx = HookContext::new().with_session(session_id.as_str());
-                            hooks.execute(HookPoint::SessionEnd, &ctx).await;
-                        }
-                        return Err(e);
-                    }
-                }
-            }
-
-            // If we have tool uses, execute them
-            if tool_uses.is_empty() {
-                // Stream ended without explicit MessageStop with tool_use.
-                // C-01: AIDefence output validation.
-                if !full_text.is_empty() {
-                    if let Some(ref defence) = self.defence {
-                        if let Err(violation) = defence.check_output(&full_text) {
-                            tracing::warn!(violation = %violation, "AIDefence blocked output");
-                            let _ = tx.send(AgentEvent::Error {
-                                message: format!("Output security check failed: {violation}"),
-                            });
-                            let _ = tx.send(AgentEvent::Done);
-                            return Ok(());
-                        }
-                    }
-                }
-
-                // Ensure an assistant message is always appended.
-                messages.push(ChatMessage::assistant(if full_text.is_empty() {
-                    "(no response)"
-                } else {
-                    &full_text
-                }));
-                if !full_text.is_empty() {
-                    let _ = tx.send(AgentEvent::TextComplete {
-                        text: full_text.clone(),
-                    });
-                }
-                if let Some(ref hooks) = self.hook_registry {
-                    let elapsed = turn_start.elapsed().as_millis() as u64;
-                    let ctx = HookContext::new()
-                        .with_session(session_id.as_str())
-                        .with_turn(round)
-                        .with_result(true, elapsed);
-                    hooks.execute(HookPoint::PostTask, &ctx).await;
-                    hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
-                    hooks.execute(HookPoint::SessionEnd, &ctx).await;
-                }
-                let _ = tx.send(AgentEvent::Done);
-                return Ok(());
-            }
-
-            // Build assistant message with text + tool_use blocks
-            let mut assistant_content: Vec<ContentBlock> = Vec::new();
-            if !full_text.is_empty() {
-                assistant_content.push(ContentBlock::Text {
-                    text: full_text.clone(),
-                });
-            }
-            for tu in &tool_uses {
-                let input: serde_json::Value =
-                    serde_json::from_str(&tu.input_json).unwrap_or_default();
-                assistant_content.push(ContentBlock::ToolUse {
-                    id: tu.id.clone(),
-                    name: tu.name.clone(),
-                    input,
-                });
-            }
-            messages.push(ChatMessage {
-                role: MessageRole::Assistant,
-                content: assistant_content,
             });
+        }
 
-            // Execute tools and build tool result messages
-            let mut tool_results: Vec<ContentBlock> = Vec::new();
+        // Resolve manifest: if system_prompt_override is set, wrap it into a manifest
+        #[allow(deprecated)]
+        let manifest = if let Some(ref prompt_override) = self.system_prompt_override {
+            Some(AgentManifest {
+                name: String::new(),
+                tags: Vec::new(),
+                role: None,
+                goal: None,
+                backstory: None,
+                system_prompt: Some(prompt_override.clone()),
+                model: None,
+                tool_filter: Vec::new(),
+                config: AgentConfig::default(),
+                max_concurrent_tasks: 0,
+                priority: None,
+            })
+        } else {
+            self.manifest.clone()
+        };
 
-            // Parse tool inputs first for loop guard check
-            let parsed_tools: Vec<_> = tool_uses
-                .iter()
-                .map(|tu| {
-                    let input: serde_json::Value =
-                        serde_json::from_str(&tu.input_json).unwrap_or_default();
-                    (tu, input)
-                })
-                .collect();
-
-            // Loop Guard: check all tools before execution
-            use super::loop_guard::LoopGuardVerdict;
-            for (tu, input) in &parsed_tools {
-                let verdict = self.loop_guard.check(&tu.name, input);
-                match &verdict {
-                    LoopGuardVerdict::Block(msg) | LoopGuardVerdict::CircuitBreak(msg) => {
-                        tracing::warn!("Loop Guard blocked: {}", msg);
-                        return Err(anyhow::anyhow!("Loop Guard: {}", msg));
-                    }
-                    LoopGuardVerdict::Warn(msg) => {
-                        tracing::warn!("Loop Guard warning: {}", msg);
-                    }
-                    LoopGuardVerdict::Allow => {}
-                }
-            }
-
-            // Send ToolStart events for all tools
-            for (tu, input) in &parsed_tools {
-                let _ = tx.send(AgentEvent::ToolStart {
-                    tool_id: tu.id.clone(),
-                    tool_name: tu.name.clone(),
-                    input: input.clone(),
-                });
-                if let Some(ref bus) = self.event_bus {
-                    bus.publish(crate::event::OctoEvent::ToolCallStarted {
-                        session_id: session_id.as_str().to_string(),
-                        tool_name: tu.name.clone(),
-                    })
-                    .await;
-                }
-            }
-
-            // Execute tools - parallel or sequential based on config
-            let cancellation_token = CancellationToken::new();
-
-            let tool_outputs: Vec<_> = if self.config.enable_parallel {
-                // Parallel execution
-                let tools_to_run: Vec<_> = parsed_tools
-                    .iter()
-                    .map(|(tu, input)| (tu.name.clone(), input.clone()))
-                    .collect();
-
-                let results = execute_parallel(
-                    tools_to_run,
-                    &self.tools,
-                    self.config.max_parallel_tools,
-                    &cancellation_token,
-                    &tool_ctx,
-                )
-                .await;
-
-                // Map results back to tool order
-                parsed_tools
-                    .iter()
-                    .zip(results)
-                    .map(|((tu, input), (_, result))| (tu, input.clone(), result))
-                    .collect()
+        // Build AgentLoopConfig from self fields
+        let loop_config = AgentLoopConfig {
+            max_iterations: if self.config.max_rounds == 0 {
+                u32::MAX
             } else {
-                // Sequential execution (original behavior)
-                let mut outputs = Vec::new();
-                for (tu, input) in &parsed_tools {
-                    // PreToolUse hook — C-02: Block stops tool execution.
-                    if let Some(ref hooks) = self.hook_registry {
-                        let ctx = HookContext::new()
-                            .with_session(session_id.as_str())
-                            .with_tool(&tu.name, input.clone());
-                        if let crate::hooks::HookAction::Block(reason) =
-                            hooks.execute(HookPoint::PreToolUse, &ctx).await
-                        {
-                            tracing::warn!(tool = %tu.name, reason = %reason, "PreToolUse hook blocked tool");
-                            let _ = tx.send(AgentEvent::Error {
-                                message: format!(
-                                    "Tool '{}' blocked by security policy: {reason}",
-                                    tu.name
-                                ),
-                            });
-                            let _ = tx.send(AgentEvent::Done);
-                            return Ok(());
-                        }
-                    }
+                self.config.max_rounds
+            },
+            model: self.model.clone(),
+            max_tokens: self.max_tokens,
+            provider: Some(self.provider.clone()),
+            tools: Some(self.tools.clone()),
+            memory: Some(self.memory.clone()),
+            memory_store: self.memory_store.clone(),
+            budget: Some(self.budget.clone()),
+            pruner: Some(self.pruner.clone()),
+            loop_guard: Some(self.loop_guard.clone()),
+            recorder: self.recorder.clone(),
+            event_bus: self.event_bus.clone(),
+            hook_registry: self.hook_registry.clone(),
+            defence: self.defence.clone(),
+            manifest,
+            session_id: session_id.clone(),
+            user_id: user_id.clone(),
+            sandbox_id: sandbox_id.clone(),
+            tool_ctx: Some(tool_ctx),
+            cancel_token,
+            agent_config: self.config.clone(),
+            ..AgentLoopConfig::default()
+        };
 
-                    let exec_start = std::time::Instant::now();
+        // Call the harness and consume the event stream
+        let mut stream = run_agent_loop(loop_config, messages.clone());
 
-                    let result = if let Some(tool) = self.tools.get(&tu.name) {
-                        match tool.execute(input.clone(), &tool_ctx).await {
-                            Ok(r) => r,
-                            Err(e) => octo_types::ToolResult::error(format!("Tool error: {e}")),
-                        }
-                    } else {
-                        octo_types::ToolResult::error(format!("Unknown tool: {}", tu.name))
-                    };
-
-                    let exec_duration = exec_start.elapsed().as_millis() as u64;
-
-                    // PostToolUse hook
-                    if let Some(ref hooks) = self.hook_registry {
-                        let mut ctx = HookContext::new()
-                            .with_session(session_id.as_str())
-                            .with_tool(&tu.name, input.clone())
-                            .with_result(!result.is_error, exec_duration);
-                        ctx.tool_result = Some(serde_json::Value::String(result.output.clone()));
-                        hooks.execute(HookPoint::PostToolUse, &ctx).await;
-                    }
-
-                    if let Some(ref bus) = self.event_bus {
-                        bus.publish(crate::event::OctoEvent::ToolCallCompleted {
-                            session_id: session_id.as_str().to_string(),
-                            tool_name: tu.name.clone(),
-                            duration_ms: exec_duration,
-                        })
-                        .await;
-                    }
-
-                    outputs.push((tu, input.clone(), result));
+        while let Some(event) = stream.next().await {
+            // Capture final_messages from the Completed event to update caller's messages
+            if let AgentEvent::Completed(ref result) = event {
+                if !result.final_messages.is_empty() {
+                    *messages = result.final_messages.clone();
                 }
-                outputs
-            };
-
-            // Process results and send events
-            for (tu, input, result) in tool_outputs {
-                let _ = tx.send(AgentEvent::ToolResult {
-                    tool_id: tu.id.clone(),
-                    output: result.output.clone(),
-                    success: !result.is_error,
-                });
-
-                // Soft-trim large tool results before injecting into messages
-                let trimmed_output = maybe_trim_tool_result(&result.output);
-
-                // C-03: AIDefence injection check on tool results (indirect prompt injection).
-                // Only check injection (not PII blocking) — external tools can legitimately
-                // return data containing personal information.
-                if let Some(ref defence) = self.defence {
-                    if let Err(violation) = defence.check_injection(&trimmed_output) {
-                        tracing::warn!(
-                            tool = %tu.name,
-                            violation = %violation,
-                            "AIDefence detected injection in tool result"
-                        );
-                        let _ = tx.send(AgentEvent::Error {
-                            message: format!(
-                                "Tool '{}' result contains injection attempt: {violation}",
-                                tu.name
-                            ),
-                        });
-                        let _ = tx.send(AgentEvent::Done);
-                        return Ok(());
-                    }
-                }
-
-                // Record outcome for result-aware loop detection
-                if let Some(outcome_warning) =
-                    self.loop_guard
-                        .record_outcome(&tu.name, &input, &result.output)
-                {
-                    tracing::warn!("Loop Guard outcome: {}", outcome_warning);
-                }
-
-                tool_results.push(ContentBlock::ToolResult {
-                    tool_use_id: tu.id.clone(),
-                    content: trimmed_output,
-                    is_error: result.is_error,
-                });
             }
 
-            messages.push(ChatMessage {
-                role: MessageRole::User,
-                content: tool_results,
-            });
+            // Forward every event to the broadcast sender
+            let is_done = matches!(event, AgentEvent::Done);
+            let _ = tx.send(event);
 
-            // LoopTurnEnd hook after tool round completes
-            if let Some(ref hooks) = self.hook_registry {
-                let elapsed = turn_start.elapsed().as_millis() as u64;
-                let ctx = HookContext::new()
-                    .with_session(session_id.as_str())
-                    .with_turn(round)
-                    .with_result(true, elapsed);
-                hooks.execute(HookPoint::LoopTurnEnd, &ctx).await;
+            if is_done {
+                break;
             }
-
-            // Reset for next round
-            full_text = String::new();
         }
 
-        warn!("Max rounds ({MAX_ROUNDS}) exceeded");
-        // Append a sentinel assistant message so history stays well-formed.
-        messages.push(ChatMessage::assistant(format!(
-            "(max rounds {} exceeded)",
-            MAX_ROUNDS
-        )));
-        let _ = tx.send(AgentEvent::Error {
-            message: format!("Max rounds ({MAX_ROUNDS}) exceeded"),
-        });
-        if let Some(ref hooks) = self.hook_registry {
-            let ctx = HookContext::new().with_session(session_id.as_str());
-            hooks.execute(HookPoint::SessionEnd, &ctx).await;
-        }
-        let _ = tx.send(AgentEvent::Done);
         Ok(())
     }
 }
@@ -849,42 +262,12 @@ impl AgentLoop {
 /// Error responses are sent via AgentEvent::Error but never appended to the messages vector.
 ///
 /// The function signature takes `&[ChatMessage]` (immutable slice) rather than
-/// `&mut Vec<ChatMessage>` — this enforces the non-persistence guarantee at the type level.
+/// `&mut Vec<ChatMessage>` -- this enforces the non-persistence guarantee at the type level.
 pub fn handle_provider_error_non_persistent(
     error_msg: &str,
-    _messages: &[ChatMessage], // read-only reference — never mutated
+    _messages: &[ChatMessage], // read-only reference -- never mutated
 ) -> bool {
+    use crate::providers::LlmErrorKind;
     let kind = LlmErrorKind::classify_from_str(&error_msg.to_lowercase());
     kind.is_retryable()
-}
-
-struct PendingToolUse {
-    id: String,
-    name: String,
-    input_json: String,
-}
-
-/// Soft-trim tool result if it exceeds the limit (67% head + 27% tail).
-fn maybe_trim_tool_result(result: &str) -> String {
-    if result.len() <= TOOL_RESULT_SOFT_LIMIT {
-        return result.to_string();
-    }
-    let head_end = result
-        .char_indices()
-        .nth(20_000)
-        .map(|(idx, _)| idx)
-        .unwrap_or(result.len());
-    let char_count = result.chars().count();
-    let tail_start = result
-        .char_indices()
-        .nth(char_count.saturating_sub(8_000))
-        .map(|(idx, _)| idx)
-        .unwrap_or(result.len());
-    let omitted = result.len().saturating_sub(20_000 + 8_000);
-    format!(
-        "{}\n\n[... omitted {} chars ...]\n\n{}",
-        &result[..head_end],
-        omitted,
-        &result[tail_start..]
-    )
 }
