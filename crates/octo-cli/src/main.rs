@@ -159,6 +159,24 @@ enum Commands {
         /// Open browser on start
         #[arg(long)]
         open: bool,
+        /// Enable TLS/HTTPS
+        #[arg(long)]
+        enable_tls: bool,
+        /// Path to TLS certificate (PEM format)
+        #[arg(long)]
+        cert_path: Option<String>,
+        /// Path to TLS private key (PEM format)
+        #[arg(long)]
+        key_path: Option<String>,
+        /// Require API key authentication for protected endpoints
+        #[arg(long)]
+        require_auth: bool,
+        /// Allowed CORS origins (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        allowed_origins: Vec<String>,
+        /// Generate self-signed TLS certificate for development
+        #[arg(long)]
+        generate_cert: bool,
     },
 }
 
@@ -259,8 +277,25 @@ async fn main() -> Result<()> {
         Commands::Completions { action } => match action {
             CompletionsCommands::Generate { shell } => generate_completions(shell)?,
         },
-        Commands::Dashboard { port, host, open } => {
-            let opts = commands::dashboard::DashboardOptions { port, host, open };
+        Commands::Dashboard { port, host, open, enable_tls, cert_path, key_path, require_auth, allowed_origins, generate_cert } => {
+            let (cert_path, key_path, tls_enabled) = if generate_cert {
+                let cert_dir = std::path::PathBuf::from("./data/certs");
+                let (cp, kp) = commands::dashboard_cert::generate_self_signed_cert(&cert_dir)?;
+                (Some(cp), Some(kp), true)
+            } else {
+                (cert_path, key_path, enable_tls)
+            };
+
+            let opts = commands::dashboard::DashboardOptions {
+                port,
+                host,
+                open,
+                tls_enabled,
+                cert_path,
+                key_path,
+                require_auth,
+                allowed_origins,
+            };
             commands::dashboard::run_dashboard(&opts).await?;
         }
     }

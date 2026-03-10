@@ -7,6 +7,11 @@ use anyhow::Result;
 use axum::{extract::Path, extract::Query, routing::get, Json, Router};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use super::dashboard_auth::{DashboardAuthState, dashboard_auth_middleware};
+use super::dashboard_security::{build_cors_layer, security_headers_middleware};
 
 // ── Embedded Assets ──────────────────────────────────────────────
 
@@ -24,6 +29,16 @@ pub struct DashboardOptions {
     pub host: String,
     /// Open browser on start
     pub open: bool,
+    /// Enable TLS/HTTPS
+    pub tls_enabled: bool,
+    /// Path to TLS certificate (PEM)
+    pub cert_path: Option<String>,
+    /// Path to TLS private key (PEM)
+    pub key_path: Option<String>,
+    /// Require API key authentication
+    pub require_auth: bool,
+    /// Allowed CORS origins (empty = same-origin only)
+    pub allowed_origins: Vec<String>,
 }
 
 impl Default for DashboardOptions {
@@ -32,6 +47,11 @@ impl Default for DashboardOptions {
             port: 8080,
             host: "127.0.0.1".to_string(),
             open: false,
+            tls_enabled: false,
+            cert_path: None,
+            key_path: None,
+            require_auth: false,
+            allowed_origins: Vec::new(),
         }
     }
 }
@@ -144,40 +164,94 @@ async fn api_themes_list() -> Json<serde_json::Value> {
 
 // ── Router ──────────────────────────────────────────────────────
 
-fn build_router() -> Router {
-    Router::new()
-        // Static assets
+pub fn build_router(require_auth: bool, allowed_origins: &[String], db_path: Option<PathBuf>) -> Router {
+    // Public routes — no auth required
+    let public_routes = Router::new()
         .route("/", get(index_handler))
         .route("/app.js", get(app_js_handler))
         .route("/style.css", get(style_css_handler))
-        // API endpoints
         .route("/api/health", get(api_health))
-        // D2-3: Chat
-        .route("/api/chat", axum::routing::post(api_chat_send))
-        // D2-4: Sessions
+        .route("/api/themes", get(api_themes_list));
+
+    // Protected routes — auth required when enabled
+    let protected_routes = Router::new()
+        // Viewer+ endpoints
         .route("/api/sessions", get(api_sessions_list))
         .route("/api/sessions/{id}", get(api_session_detail))
-        // D2-5: Memory
         .route("/api/memories", get(api_memories_list))
         .route("/api/memories/search", get(api_memories_search))
-        // D2-6: MCP
-        .route("/api/mcp/servers", get(api_mcp_servers))
-        // D2-7: Themes
-        .route("/api/themes", get(api_themes_list))
+        // User+ endpoints
+        .route("/api/chat", axum::routing::post(api_chat_send))
+        // Admin+ endpoints
+        .route("/api/mcp/servers", get(api_mcp_servers));
+
+    // Apply auth middleware to protected routes
+    let auth_state = Arc::new(DashboardAuthState::new(
+        db_path.unwrap_or_else(|| PathBuf::from("./data/dashboard_keys.db")),
+        require_auth,
+    ));
+
+    let protected_routes = protected_routes.layer(axum::middleware::from_fn_with_state(
+        auth_state,
+        dashboard_auth_middleware,
+    ));
+
+    // Merge and apply global layers
+    public_routes
+        .merge(protected_routes)
+        .layer(axum::middleware::from_fn(security_headers_middleware))
+        .layer(build_cors_layer(allowed_origins))
 }
 
 /// Run the dashboard server.
 pub async fn run_dashboard(opts: &DashboardOptions) -> Result<()> {
-    let addr: SocketAddr = format!("{}:{}", opts.host, opts.port).parse()?;
-    let router = build_router();
+    if opts.host != "127.0.0.1" && opts.host != "localhost" && !opts.require_auth {
+        eprintln!("⚠️  WARNING: Binding to {} without --require-auth. Remote access is unprotected!", opts.host);
+        eprintln!("   Consider adding --require-auth for security.\n");
+    }
 
-    eprintln!("Dashboard running at http://{}", addr);
+    let addr: SocketAddr = format!("{}:{}", opts.host, opts.port).parse()?;
+    let router = build_router(opts.require_auth, &opts.allowed_origins, None);
+
+    let scheme = if opts.tls_enabled { "https" } else { "http" };
+    eprintln!("Dashboard running at {}://{}", scheme, addr);
     eprintln!("Press Ctrl+C to stop.\n");
 
     if opts.open {
-        // Best-effort: try to open the browser
-        let url = format!("http://{}", addr);
+        let url = format!("{}://{}", scheme, addr);
         let _ = open_browser(&url);
+    }
+
+    #[cfg(feature = "dashboard-tls")]
+    if opts.tls_enabled {
+        use axum_server::tls_rustls::RustlsConfig;
+
+        let cert_path = opts
+            .cert_path
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("--cert-path required when TLS is enabled"))?;
+        let key_path = opts
+            .key_path
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("--key-path required when TLS is enabled"))?;
+
+        let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to load TLS certificates: {}", e))?;
+
+        axum_server::bind_rustls(addr, tls_config)
+            .serve(router.into_make_service())
+            .await?;
+
+        return Ok(());
+    }
+
+    #[cfg(not(feature = "dashboard-tls"))]
+    if opts.tls_enabled {
+        anyhow::bail!(
+            "TLS support requires the 'dashboard-tls' feature. \
+             Rebuild with: cargo build --features dashboard-tls"
+        );
     }
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -217,7 +291,7 @@ mod tests {
 
     /// Helper: GET a URI, assert 200, parse JSON body.
     async fn get_json(uri: &str) -> serde_json::Value {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), 200);
@@ -227,7 +301,7 @@ mod tests {
 
     /// Helper: GET a URI, return status code.
     async fn get_status(uri: &str) -> u16 {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
         res.status().as_u16()
@@ -278,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_router_builds() {
-        let _ = build_router();
+        let _ = build_router(false, &[], None);
     }
 
     #[tokio::test]
@@ -293,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_js_endpoint() {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder().uri("/app.js").body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), 200);
@@ -303,7 +377,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_css_endpoint() {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder().uri("/style.css").body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), 200);
@@ -313,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_endpoint() {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder()
             .method("POST")
             .uri("/api/chat")
@@ -375,7 +449,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_all_static_assets_serve() {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
         assert_eq!(res.status(), 200);
@@ -396,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_echoes_message() {
-        let app = build_router();
+        let app = build_router(false, &[], None);
         let req = Request::builder()
             .method("POST")
             .uri("/api/chat")
@@ -488,5 +562,236 @@ mod tests {
     async fn test_unknown_route_returns_404() {
         assert_eq!(get_status("/api/nonexistent").await, 404);
         assert_eq!(get_status("/no-such-page").await, 404);
+    }
+
+    // ── D7-8 Security & Auth Integration Tests ──────────────────────
+
+    #[tokio::test]
+    async fn test_security_headers_present() {
+        let app = build_router(false, &[], None);
+        let req = Request::builder().uri("/api/health").body(Body::empty()).unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200);
+
+        let headers = res.headers();
+        assert!(headers.contains_key("strict-transport-security"), "Missing HSTS header");
+        assert!(headers.contains_key("content-security-policy"), "Missing CSP header");
+        assert!(headers.contains_key("x-frame-options"), "Missing X-Frame-Options");
+        assert!(headers.contains_key("x-content-type-options"), "Missing X-Content-Type-Options");
+        assert!(headers.contains_key("referrer-policy"), "Missing Referrer-Policy");
+    }
+
+    #[tokio::test]
+    async fn test_security_header_values() {
+        let app = build_router(false, &[], None);
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
+        let res = app.oneshot(req).await.unwrap();
+
+        assert_eq!(res.headers()["x-frame-options"], "DENY");
+        assert_eq!(res.headers()["x-content-type-options"], "nosniff");
+        assert!(res.headers()["strict-transport-security"].to_str().unwrap().contains("max-age="));
+        assert!(res.headers()["content-security-policy"].to_str().unwrap().contains("default-src"));
+    }
+
+    #[tokio::test]
+    async fn test_no_auth_public_routes_accessible() {
+        // With auth disabled, all routes should work without tokens
+        let app = build_router(false, &[], None);
+
+        // Public routes
+        for uri in ["/", "/app.js", "/style.css", "/api/health", "/api/themes"] {
+            let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), 200, "Public route {} should return 200", uri);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_no_auth_protected_routes_accessible() {
+        // With auth disabled, protected routes should also work (anonymous pass-through)
+        let app = build_router(false, &[], None);
+
+        for uri in ["/api/sessions", "/api/memories", "/api/memories/search?q=test", "/api/mcp/servers"] {
+            let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), 200, "Route {} should return 200 when auth disabled", uri);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_auth_enabled_public_routes_no_token() {
+        // With auth enabled, public routes should still work without tokens
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+
+        let app = build_router(true, &[], Some(db_path));
+
+        for uri in ["/", "/app.js", "/style.css", "/api/health", "/api/themes"] {
+            let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), 200, "Public route {} should return 200 even with auth enabled", uri);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_auth_enabled_protected_routes_no_token() {
+        // With auth enabled, protected routes should return 401 without token
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+
+        let app = build_router(true, &[], Some(db_path));
+
+        for uri in ["/api/sessions", "/api/memories", "/api/mcp/servers"] {
+            let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            let res = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(res.status(), 401, "Protected route {} should return 401 without token", uri);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_auth_enabled_invalid_token() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+        // Create the DB so ApiKeyStorage can init
+        let _storage = octo_engine::auth::ApiKeyStorage::new(db_path.as_path()).unwrap();
+
+        let app = build_router(true, &[], Some(db_path));
+
+        let req = Request::builder()
+            .uri("/api/sessions")
+            .header("authorization", "Bearer invalid-key-12345")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 401, "Invalid token should return 401");
+    }
+
+    #[tokio::test]
+    async fn test_auth_enabled_valid_token() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+
+        // Create storage and generate a valid API key
+        let storage = octo_engine::auth::ApiKeyStorage::new(db_path.as_path()).unwrap();
+        let (stored_key, raw_key) = octo_engine::auth::StoredApiKey::generate("test-user", octo_engine::auth::Role::Admin);
+        storage.create(&stored_key).unwrap();
+
+        let app = build_router(true, &[], Some(db_path));
+
+        let req = Request::builder()
+            .uri("/api/sessions")
+            .header("authorization", format!("Bearer {}", raw_key))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200, "Valid token should grant access");
+    }
+
+    #[tokio::test]
+    async fn test_auth_bearer_prefix_required() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+        let _storage = octo_engine::auth::ApiKeyStorage::new(db_path.as_path()).unwrap();
+
+        let app = build_router(true, &[], Some(db_path));
+
+        // Token without "Bearer " prefix
+        let req = Request::builder()
+            .uri("/api/sessions")
+            .header("authorization", "just-a-raw-key")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 401, "Token without Bearer prefix should be rejected");
+    }
+
+    #[tokio::test]
+    async fn test_chat_endpoint_auth_required() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+        let _storage = octo_engine::auth::ApiKeyStorage::new(db_path.as_path()).unwrap();
+
+        let app = build_router(true, &[], Some(db_path));
+
+        // POST to chat without auth
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/chat")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"message":"hello"}"#))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 401, "Chat endpoint should require auth");
+    }
+
+    #[tokio::test]
+    async fn test_chat_endpoint_with_valid_auth() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test_keys.db");
+        let storage = octo_engine::auth::ApiKeyStorage::new(db_path.as_path()).unwrap();
+        let (stored_key, raw_key) = octo_engine::auth::StoredApiKey::generate("chat-user", octo_engine::auth::Role::User);
+        storage.create(&stored_key).unwrap();
+
+        let app = build_router(true, &[], Some(db_path));
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/chat")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", raw_key))
+            .body(Body::from(r#"{"message":"hello auth"}"#))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200, "Chat with valid auth should succeed");
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["response"].as_str().unwrap().contains("hello auth"));
+    }
+
+    #[test]
+    fn test_dashboard_options_new_fields_default() {
+        let opts = DashboardOptions::default();
+        assert!(!opts.tls_enabled);
+        assert!(opts.cert_path.is_none());
+        assert!(opts.key_path.is_none());
+        assert!(!opts.require_auth);
+        assert!(opts.allowed_origins.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cors_headers_with_origins() {
+        let origins = vec!["http://example.com".to_string()];
+        let app = build_router(false, &origins, None);
+
+        let req = Request::builder()
+            .uri("/api/health")
+            .header("origin", "http://example.com")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200);
+        // CORS headers should be present when origin matches
+        assert!(
+            res.headers().contains_key("access-control-allow-origin"),
+            "CORS allow-origin header should be present for matching origin"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_cors_without_origins() {
+        let app = build_router(false, &[], None);
+
+        let req = Request::builder()
+            .uri("/api/health")
+            .header("origin", "http://evil.com")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200);
+        // No CORS headers when no origins configured
+        assert!(
+            !res.headers().contains_key("access-control-allow-origin"),
+            "CORS headers should not be present when no origins configured"
+        );
     }
 }

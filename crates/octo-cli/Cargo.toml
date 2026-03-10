@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [features]
 default = []
+dashboard-tls = ["axum-server", "rcgen"]
 
 [dependencies]
 # Internal crates
@@ -69,6 +70,13 @@ directories = "6"
 # Web server (for embedded dashboard)
 axum = { workspace = true }
 tower = { workspace = true }
+tower-http = { workspace = true }
+
+# TLS support (optional, for dashboard remote access)
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+
+# Self-signed certificate generation (optional, for development TLS)
+rcgen = { version = "0.13", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
