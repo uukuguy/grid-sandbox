@@ -13,6 +13,7 @@
 //! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -22,8 +23,10 @@ use tracing::{debug, warn};
 
 use octo_types::{CompletionRequest, CompletionResponse};
 
+use super::response_cache::ResponseCacheProvider;
 use super::retry::{LlmErrorKind, RetryPolicy};
 use super::traits::{CompletionStream, Provider};
+use super::usage_recorder::{UsageRecorderProvider, UsageStats};
 
 // ---------------------------------------------------------------------------
 // Circuit Breaker
@@ -402,6 +405,29 @@ impl ProviderPipelineBuilder {
         Self {
             provider: Box::new(CostGuardProvider::new(self.provider, budget)),
         }
+    }
+
+    /// Add response cache with given capacity and TTL in seconds.
+    pub fn with_response_cache(self, capacity: usize, ttl_secs: u64) -> Self {
+        Self {
+            provider: Box::new(ResponseCacheProvider::new(
+                self.provider,
+                capacity,
+                Duration::from_secs(ttl_secs),
+            )),
+        }
+    }
+
+    /// Add usage recorder (returns a handle to the shared stats).
+    pub fn with_usage_recorder(self) -> (Self, Arc<RwLock<UsageStats>>) {
+        let stats = Arc::new(RwLock::new(UsageStats::default()));
+        let builder = Self {
+            provider: Box::new(UsageRecorderProvider::with_shared_stats(
+                self.provider,
+                Arc::clone(&stats),
+            )),
+        };
+        (builder, stats)
     }
 
     /// Build the final composed provider.

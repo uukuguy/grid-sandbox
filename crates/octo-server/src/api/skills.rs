@@ -2,9 +2,10 @@
 //!
 //! GET    /api/v1/skills              list all loaded skills
 //! GET    /api/v1/skills/:name        get skill details
-//! POST   /api/v1/skills/:name/execute  trigger skill execution (placeholder)
+//! POST   /api/v1/skills/:name/execute  execute a skill via SkillTool
 //! DELETE /api/v1/skills/:name        unload a skill
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
@@ -14,6 +15,8 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+
+use octo_types::{SandboxId, ToolContext};
 
 use crate::state::AppState;
 
@@ -33,16 +36,24 @@ struct SkillInfo {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 struct ExecuteRequest {
+    /// Action to perform: "activate" (default), "run_script", "list_scripts"
+    #[serde(default = "default_action")]
+    action: String,
+    /// Optional arguments (e.g. script name for run_script)
     #[serde(default)]
     args: Option<serde_json::Value>,
+}
+
+fn default_action() -> String {
+    "activate".to_string()
 }
 
 #[derive(Serialize)]
 struct ExecuteResponse {
     status: String,
-    message: String,
+    /// Skill output content or error message
+    result: serde_json::Value,
 }
 
 pub fn router() -> Router<Arc<AppState>> {
@@ -97,29 +108,57 @@ async fn get_skill(
 async fn execute_skill(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(_body): Json<ExecuteRequest>,
+    Json(body): Json<ExecuteRequest>,
 ) -> Result<Json<ExecuteResponse>, StatusCode> {
-    // Verify the skill exists before accepting
+    use octo_engine::skills::SkillTool;
+    use octo_engine::tools::Tool;
+
+    // Look up skill in registry
     let registry = state
         .agent_supervisor
         .skill_registry()
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    if registry.get(&name).is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
+    let skill = registry.get(&name).ok_or(StatusCode::NOT_FOUND)?;
 
-    // Placeholder: actual execution will be wired to SkillRuntime later
-    Ok(Json(ExecuteResponse {
-        status: "accepted".to_string(),
-        message: format!("Skill '{}' execution queued", name),
-    }))
+    // Build the SkillTool wrapper
+    let skill_tool = SkillTool::new(skill);
+
+    // Construct parameters for execute()
+    let params = serde_json::json!({
+        "action": body.action,
+        "args": body.args,
+    });
+
+    // Create a minimal ToolContext for the execution
+    let tool_ctx = ToolContext {
+        sandbox_id: SandboxId::from_string("api-skill-exec"),
+        working_dir: PathBuf::from("."),
+        path_validator: None,
+    };
+
+    match skill_tool.execute(params, &tool_ctx).await {
+        Ok(output) => Ok(Json(ExecuteResponse {
+            status: if output.is_error { "error" } else { "ok" }.to_string(),
+            result: serde_json::json!({
+                "content": output.content,
+                "metadata": output.metadata,
+            }),
+        })),
+        Err(e) => {
+            tracing::error!(skill = %name, error = %e, "Skill execution failed");
+            Ok(Json(ExecuteResponse {
+                status: "error".to_string(),
+                result: serde_json::json!({ "message": e.to_string() }),
+            }))
+        }
+    }
 }
 
 async fn delete_skill(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-) -> Result<Json<ExecuteResponse>, StatusCode> {
+) -> Result<StatusCode, StatusCode> {
     let registry = state
         .agent_supervisor
         .skill_registry()
@@ -129,8 +168,6 @@ async fn delete_skill(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    Ok(Json(ExecuteResponse {
-        status: "ok".to_string(),
-        message: format!("Skill '{}' unloaded", name),
-    }))
+    tracing::info!(skill = %name, "Skill unloaded via REST API");
+    Ok(StatusCode::NO_CONTENT)
 }

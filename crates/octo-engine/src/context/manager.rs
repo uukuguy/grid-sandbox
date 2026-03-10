@@ -100,6 +100,14 @@ impl ContextManager {
         }
     }
 
+    /// Create a `ContextManager` using the best available token counter.
+    ///
+    /// Uses `TiktokenCounter` when the `tiktoken` feature is enabled,
+    /// otherwise falls back to `EstimateCounter`.
+    pub fn with_default_counter(max_context_tokens: usize) -> Self {
+        Self::new(super::default_token_counter(), max_context_tokens)
+    }
+
     /// Override the default system-prompt reserve percentage.
     pub fn with_system_reserve_pct(mut self, pct: f32) -> Self {
         self.system_reserve_pct = pct;

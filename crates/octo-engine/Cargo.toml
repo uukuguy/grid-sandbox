@@ -50,7 +50,7 @@ hnsw_rs = { workspace = true, optional = true }
 tiktoken-rs = { version = "0.6", optional = true }
 
 [features]
-default = ["sandbox-wasm", "sandbox-docker"]
+default = ["sandbox-wasm", "sandbox-docker", "tiktoken"]
 sandbox-wasm = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:base64"]
 sandbox-docker = ["dep:bollard", "dep:base64"]
 keyring = ["dep:keyring"]

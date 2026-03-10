@@ -24,3 +24,18 @@ pub use token_counter::CjkAwareCounter;
 pub mod tiktoken_counter;
 #[cfg(feature = "tiktoken")]
 pub use tiktoken_counter::TiktokenCounter;
+
+/// Create the best available token counter.
+///
+/// Returns `TiktokenCounter` when the `tiktoken` feature is enabled,
+/// otherwise falls back to the lightweight `EstimateCounter`.
+pub fn default_token_counter() -> Box<dyn TokenCounter> {
+    #[cfg(feature = "tiktoken")]
+    {
+        Box::new(TiktokenCounter::new())
+    }
+    #[cfg(not(feature = "tiktoken"))]
+    {
+        Box::new(EstimateCounter)
+    }
+}
