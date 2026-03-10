@@ -1,3 +1,4 @@
+pub mod auto_extractor;
 pub mod budget;
 pub mod embedding;
 pub mod extractor;
@@ -6,6 +7,7 @@ pub mod graph;
 pub mod graph_store;
 pub mod hybrid_query;
 pub mod injector;
+pub mod memory_injector;
 pub mod semantic;
 pub mod sqlite_store;
 pub mod sqlite_working;
@@ -24,12 +26,16 @@ use tokio::task;
 
 use super::session::SqliteSessionStore;
 
+pub use auto_extractor::{
+    AutoMemoryCategory, ExtractedMemory, MemoryExtractor, RuleBasedExtractor,
+};
 pub use budget::TokenBudgetManager;
 pub use embedding::{EmbeddingClient, EmbeddingConfig, EmbeddingProvider};
 pub use fts::FtsStore;
 pub use graph::{Entity, GraphStats, KnowledgeGraph, Relation};
 pub use graph_store::GraphStore;
 pub use hybrid_query::{HybridQueryEngine, HybridSearchResult, QueryType};
+pub use memory_injector::{MemoryInjectionConfig, MemoryInjector};
 pub use semantic::{EntityRelation, SemanticEntity, SemanticMemory};
 pub use sqlite_store::SqliteMemoryStore;
 pub use sqlite_working::SqliteWorkingMemory;

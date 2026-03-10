@@ -56,10 +56,11 @@ pub use mcp::{
     McpToolInfo, McpTransport, SseMcpClient, StdioMcpClient,
 };
 pub use memory::{
-    Entity, FtsStore, GraphStats, GraphStore, HybridQueryEngine, HybridSearchResult,
-    InMemoryWorkingMemory, KnowledgeGraph, MemoryStore, MemorySystem, QueryType, Relation,
-    SqliteMemoryStore, SqliteWorkingMemory, TokenBudgetManager, VectorEntry, VectorIndex,
-    VectorIndexConfig, VectorSearchResult, WorkingMemory,
+    AutoMemoryCategory, Entity, ExtractedMemory, FtsStore, GraphStats, GraphStore,
+    HybridQueryEngine, HybridSearchResult, InMemoryWorkingMemory, KnowledgeGraph, MemoryExtractor,
+    MemoryStore, MemorySystem, QueryType, Relation, RuleBasedExtractor, SqliteMemoryStore,
+    SqliteWorkingMemory, TokenBudgetManager, VectorEntry, VectorIndex, VectorIndexConfig,
+    VectorSearchResult, WorkingMemory,
 };
 pub use metering::{Metering, MeteringSnapshot};
 pub use metrics::{Counter, Gauge, Histogram, MetricsRegistry};
