@@ -7,6 +7,12 @@
 
 ## [Active Work]
 
+- 09:05 | Octo-CLI 重新设计实施方案完成 (docs/plans/2026-03-10-octo-cli-redesign.md)
+  - 3 个并行研究智能体: REPL 库对比、octo-engine API 分析、OpenFang TUI 架构
+  - 决策: rustyline v17 (IronClaw+ZeroClaw 验证), Ratatui 0.29 (fork OpenFang), TuiBackend trait
+  - 34 tasks / 5 phases: CLI 基础(R1-R8) → REPL(R9-R14) → 管理命令(R15-R20) → TUI(T1-T8) → 高级(A1-A6)
+  - Engine 需新增 4 个 API: send_message_streaming, create_session_and_start, delete_session, most_recent_session
+  - Phase stack: 'Octo-Cli 设计与实现' active, 'Harness 实现' suspended (100%, 904 tests)
 - 21:15 | P3-3/P3-4/P3-5 完成 — Harness 计划 28/28 全部完成, 872 tests
   - P3-3: harness_integration.rs 7 个集成测试 (MockProvider + MockTool 完整流程)
   - P3-4: loop_.rs 891→273 行 (-69%), AgentLoop::run() 改为 thin wrapper

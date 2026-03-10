@@ -1,8 +1,52 @@
 # octo-sandbox 下一会话指南
 
-**最后更新**: 2026-03-10 08:50 GMT+8
+**最后更新**: 2026-03-10 10:00 GMT+8
 **当前分支**: `main`
-**当前状态**: Harness + Skills 完整实现已完成 — 904 tests passing
+**当前状态**: Octo-CLI 重新设计 — 计划已就绪，待执行
+
+---
+
+## 当前活跃阶段：Octo-CLI 设计与实现
+
+### 计划文档
+
+- **实施方案**: `docs/plans/2026-03-10-octo-cli-redesign.md` (34 tasks, 5 phases)
+- **设计文档**: `docs/design/AGENT_CLI_DESIGN.md` (1,694 行，6 部分)
+- **配色方案**: `docs/design/color_comparison.html` (12 种内置主题)
+- **Checkpoint**: `docs/plans/.checkpoint.json` (status: READY)
+
+### 技术决策
+
+| 决策 | 选择 | 依据 |
+|------|------|------|
+| REPL 库 | rustyline v17 | IronClaw + ZeroClaw 验证 |
+| TUI 框架 | Ratatui 0.29 | OpenFang fork |
+| Web Dashboard | Deferred (Alpine.js) | Phase 4 完成后启动 |
+| 配色方案 | 12 种内置主题 | 冷/暖/渐变/无色系全覆盖 |
+
+### 需新增的 Engine API
+
+| API | 位置 | 说明 |
+|-----|------|------|
+| `AgentRuntime::send_message_streaming()` | `agent/runtime.rs` | CLI 高层消息 API |
+| `AgentRuntime::create_session_and_start()` | `agent/runtime.rs` | Session 创建+Agent 启动一步完成 |
+| `SessionStore::delete_session()` | `session/mod.rs` | Session 删除 |
+| `SessionStore::most_recent_session()` | `session/mod.rs` | `--continue` 恢复最近会话 |
+
+### Phase 概览
+
+| Phase | 任务 | 内容 | 状态 |
+|-------|------|------|------|
+| Phase 1 | R1-R8 | CLI 核心基础设施 | pending |
+| Phase 2 | R9-R14 | REPL 交互模式 | pending |
+| Phase 3 | R15-R20 | 管理子命令补全 | pending |
+| Phase 4 | T1-T8 | TUI 全屏模式 | pending |
+| Phase 5 | A1-A6 | 高级功能 | pending |
+
+### 下一步行动
+
+1. **开始 Phase 1** — 从 R1(命令结构) + R2(输出系统) + R3(UI 组件) + R5(Engine 接口) 并行开始
+2. 执行命令: `/dev-phase-manager:resume-plan` 进入执行模式
 
 ---
 
@@ -12,37 +56,12 @@
 |------|------|------|--------|------|
 | pre-harness-refactor | 42/42 + 5 Deferred | 857 | 3117721 | 基础重构 |
 | harness-implementation | 28/28 | 872 | 9ada808 | Agent Harness 核心 |
-| **harness-skills-completion** | **34/34** | **904** | **71dc7fc** | 类型统一、Skills集成、安全审批、Pipeline |
+| harness-skills-completion | 34/34 | 904 | 71dc7fc | 类型统一、Skills集成、安全审批、Pipeline |
 | octo-platform Phase 1 | P1+P2 | — | — | 多租户基础 |
-
-### harness-skills-completion 交付物（本次完成）
-
-| Phase | 名称 | 关键交付 |
-|-------|------|---------|
-| Phase 1 | 类型统一 | ToolOutput 统一（ToolResult 已删除）、TelemetryEvent/TelemetryBus 命名 |
-| Phase 2 | Skills 集成 | tool_bridge 注册、SystemPrompt 注入、ContextPruner 豁免、Symlink 防护、LRU 缓存 |
-| Phase 3 | 安全审批 | ApprovalManager 三级执行、SafetyPipeline（Injection/PII/Canary）、WS 审批回调 |
-| Phase 4 | Pipeline | ResponseCache/UsageRecorder 装饰器、Tiktoken 默认、Skills REST API |
 
 ---
 
-## 待办 / 可选后续工作
-
-### 远期特性（Phase 5 — 低优先级）
-
-| ID | 特性 | 复杂度 | 说明 |
-|----|------|--------|------|
-| T5-1 | SmartRouting 查询分类器 | 高 | 需要规则引擎 |
-| T5-2 | ToolProgress 实时进度 | 中 | 改 Tool trait 签名 |
-| T5-3 | TelemetryEvent 扩展 | 低 | 按需扩展变体 |
-| T5-4 | 远程 Skill Registry | 高 | 生态功能 |
-| T5-5 | Skill 签名验证 | 中 | 供应链安全 |
-
-### CLI 存根（octo-cli）
-
-`octo-cli` 中有 7 处 TODO 存根（agent interactive, memory CRUD, tools CRUD），可独立计划完善。
-
-### 挂起阶段
+## 挂起阶段
 
 | 阶段 | 进度 | 说明 |
 |------|------|------|
@@ -54,10 +73,11 @@
 
 | 文档 | 状态 |
 |------|------|
-| `docs/design/AGENT_HARNESS_BEST_IMPLEMENTATION_DESIGN.md` | ✅ 已同步到 Phase 3 |
-| `docs/design/AGENT_SKILLS_BEST_IMPLEMENTATION_DESIGN.md` | ✅ 已同步（7.5/10） |
-| `docs/plans/2026-03-09-harness-skills-completion.md` | ✅ 34/34 COMPLETE |
-| `docs/plans/.checkpoint.json` | ✅ COMPLETE |
+| `docs/design/AGENT_CLI_DESIGN.md` | 参考文档（6 部分，1,694 行） |
+| `docs/design/AGENT_HARNESS_BEST_IMPLEMENTATION_DESIGN.md` | 已同步到 Phase 3 |
+| `docs/design/AGENT_SKILLS_BEST_IMPLEMENTATION_DESIGN.md` | 已同步（7.5/10） |
+| `docs/design/color_comparison.html` | 12 种配色方案预览 |
+| `docs/plans/2026-03-10-octo-cli-redesign.md` | 实施方案（34 tasks, 5 phases） |
 
 ---
 
@@ -68,4 +88,5 @@ cargo check --workspace
 cargo test --workspace -- --test-threads=1
 cargo clippy --workspace -- -D warnings
 cargo fmt --all -- --check
+open docs/design/color_comparison.html    # 查看配色方案
 ```

@@ -165,6 +165,18 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #fff; }
 .theme-violet { --accent: #8B5CF6; --accent-dim: #7c3aed; --accent-glow: rgba(139,92,246,0.15); --accent-text: #a78bfa; }
 /* 6. 翡翠绿 Emerald */
 .theme-emerald { --accent: #10B981; --accent-dim: #059669; --accent-glow: rgba(16,185,129,0.15); --accent-text: #34D399; }
+/* 7. 琥珀金 Amber */
+.theme-amber { --accent: #F59E0B; --accent-dim: #d97706; --accent-glow: rgba(245,158,11,0.15); --accent-text: #FBBF24; }
+/* 8. 珊瑚橙 Coral */
+.theme-coral { --accent: #F97316; --accent-dim: #ea580c; --accent-glow: rgba(249,115,22,0.15); --accent-text: #FB923C; }
+/* 9. 玫瑰红 Rose */
+.theme-rose { --accent: #F43F5E; --accent-dim: #e11d48; --accent-glow: rgba(244,63,94,0.15); --accent-text: #FB7185; }
+/* 10. 薄荷蓝 Teal */
+.theme-teal { --accent: #14B8A6; --accent-dim: #0d9488; --accent-glow: rgba(20,184,166,0.15); --accent-text: #2DD4BF; }
+/* 11. 日落渐变 Sunset */
+.theme-sunset { --accent: #EC4899; --accent-dim: #be185d; --accent-glow: rgba(236,72,153,0.15); --accent-text: #F472B6; --accent2: #F59E0B; --accent2-text: #FBBF24; }
+/* 12. 月光银 Slate */
+.theme-slate { --accent: #94A3B8; --accent-dim: #64748b; --accent-glow: rgba(148,163,184,0.12); --accent-text: #CBD5E1; }
 
 /* Octo 图标 */
 .octo-icon { width: 22px; height: 22px; vertical-align: middle; margin-right: 4px; transform: rotate(25deg); }
@@ -203,7 +215,7 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #fff; }
 <body>
 
 <h1>Octo Workbench 配色方案对比</h1>
-<p class="subtitle">暗色主题下 5 种主色调的 Workbench 模式 + 终端 TUI 效果预览</p>
+<p class="subtitle">暗色主题下 12 种主色调的 Workbench 模式 + 终端 TUI 效果预览</p>
 
 <div class="schemes">
 
@@ -717,10 +729,521 @@ h1 { text-align: center; margin-bottom: 8px; font-size: 24px; color: #fff; }
     </div>
 </div>
 
+<!-- ===== 7. 琥珀金 ===== -->
+<div class="scheme theme-amber">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">7. 琥珀金</div>
+            <div class="scheme-tags">
+                <span class="tag">暖色系</span>
+                <span class="tag">Warp 风格</span>
+                <span class="tag">醒目温暖</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#F59E0B</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span class="bar">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span class="accent">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#F59E0B">#F59E0B</div>
+        <div class="swatch" style="background:#d97706">#d97706</div>
+        <div class="swatch" style="background:#FBBF24">#FBBF24</div>
+        <div class="swatch" style="background:rgba(245,158,11,0.3)">glow</div>
+    </div>
+</div>
+
+<!-- ===== 8. 珊瑚橙 ===== -->
+<div class="scheme theme-coral">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">8. 珊瑚橙</div>
+            <div class="scheme-tags">
+                <span class="tag">Rust 品牌色</span>
+                <span class="tag">OpenFang 原色</span>
+                <span class="tag">活力温暖</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#F97316</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span class="bar">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span class="accent">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#F97316">#F97316</div>
+        <div class="swatch" style="background:#ea580c">#ea580c</div>
+        <div class="swatch" style="background:#FB923C">#FB923C</div>
+        <div class="swatch" style="background:rgba(249,115,22,0.3)">glow</div>
+    </div>
+</div>
+
+<!-- ===== 9. 玫瑰红 ===== -->
+<div class="scheme theme-rose">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">9. 玫瑰红</div>
+            <div class="scheme-tags">
+                <span class="tag">Vercel/v0 风格</span>
+                <span class="tag">Zed Editor</span>
+                <span class="tag">现代设计感</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#F43F5E</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span class="bar">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span class="accent">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#F43F5E">#F43F5E</div>
+        <div class="swatch" style="background:#e11d48">#e11d48</div>
+        <div class="swatch" style="background:#FB7185">#FB7185</div>
+        <div class="swatch" style="background:rgba(244,63,94,0.3)">glow</div>
+    </div>
+</div>
+
+<!-- ===== 10. 薄荷蓝 ===== -->
+<div class="scheme theme-teal">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">10. 薄荷蓝</div>
+            <div class="scheme-tags">
+                <span class="tag">Tailwind Teal</span>
+                <span class="tag">Mintlify</span>
+                <span class="tag">柔和青绿</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#14B8A6</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span class="bar">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span class="accent">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#14B8A6">#14B8A6</div>
+        <div class="swatch" style="background:#0d9488">#0d9488</div>
+        <div class="swatch" style="background:#2DD4BF">#2DD4BF</div>
+        <div class="swatch" style="background:rgba(20,184,166,0.3)">glow</div>
+    </div>
+</div>
+
+<!-- ===== 11. 日落渐变 ===== -->
+<div class="scheme theme-sunset">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">11. 日落渐变</div>
+            <div class="scheme-tags">
+                <span class="tag">Copilot 风格</span>
+                <span class="tag">Cursor</span>
+                <span class="tag">AI 产品标配</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#EC4899 → #F59E0B</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent" style="background: linear-gradient(135deg, var(--accent-glow), rgba(245,158,11,0.15)); border-image: linear-gradient(135deg, var(--accent-dim), #d97706) 1;">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%; background: linear-gradient(90deg, #EC4899, #F59E0B);"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span style="background:linear-gradient(90deg,#EC4899,#F59E0B);-webkit-background-clip:text;-webkit-text-fill-color:transparent">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span style="color:#FBBF24">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#EC4899">#EC4899</div>
+        <div class="swatch" style="background:#be185d">#be185d</div>
+        <div class="swatch" style="background:#F472B6">#F472B6</div>
+        <div class="swatch" style="background:#F59E0B">#F59E0B</div>
+        <div class="swatch" style="background:#FBBF24">#FBBF24</div>
+    </div>
+</div>
+
+<!-- ===== 12. 月光银 ===== -->
+<div class="scheme theme-slate">
+    <div class="scheme-header">
+        <div>
+            <div class="scheme-name">12. 月光银</div>
+            <div class="scheme-tags">
+                <span class="tag">Ghostty 风格</span>
+                <span class="tag">极简无色系</span>
+                <span class="tag">专注内容</span>
+            </div>
+        </div>
+        <div class="scheme-meta">#94A3B8</div>
+    </div>
+    <div class="workbench">
+        <div class="topbar">
+            <span class="logo"><span class="emoji-icon">🦑</span>octo workbench</span>
+            <span class="session">Session: dev-01</span>
+            <span class="model">claude-3.5</span>
+        </div>
+        <div class="sidebar">
+            <div class="tree-item tree-group">Agents</div>
+            <div class="tree-item tree-leaf active">dev-agent</div>
+            <div class="tree-item tree-leaf">test-agent</div>
+            <div class="tree-item tree-group">Skills</div>
+            <div class="tree-item tree-leaf">web-search</div>
+            <div class="tree-item tree-leaf">code-review</div>
+            <div class="tree-item tree-group">MCP</div>
+            <div class="tree-item tree-leaf">filesystem</div>
+            <div class="tree-item tree-leaf">memory</div>
+        </div>
+        <div class="chat">
+            <div class="msg msg-user">帮我重构这个模块的错误处理</div>
+            <div class="msg msg-agent">
+                好的，我来分析现有的错误处理模式...
+                <div class="msg-code">
+                    <span style="color:#c678dd">pub fn</span> handle_error(e: Error) -&gt; Result&lt;()&gt; {<br>
+                    &nbsp;&nbsp;<span style="color:#e5c07b">match</span> e.kind() {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;ErrorKind::NotFound =&gt; ...<span class="streaming"></span>
+                </div>
+            </div>
+        </div>
+        <div class="inspector">
+            <div class="insp-section">
+                <div class="insp-title">Context Budget</div>
+                <div class="budget-bar"><div class="budget-fill" style="width:62%"></div></div>
+                <div class="budget-row"><span>124K / 200K</span><span>62%</span></div>
+                <div class="budget-row"><span>System</span><span>2.1K</span></div>
+                <div class="budget-row"><span>History</span><span>8.4K</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Memory Live</div>
+                <div class="mem-row"><span class="mem-label">L0 Working</span><span class="count">3</span></div>
+                <div class="mem-row"><span class="mem-label">L1 Session</span><span class="count">12</span></div>
+                <div class="mem-row"><span class="mem-label">L2 Long-term</span><span class="count">47</span></div>
+            </div>
+            <div class="insp-section">
+                <div class="insp-title">Tool Trace</div>
+                <div class="tool-item"><span>file_read</span><span class="tool-status ok">OK 0.1s</span></div>
+                <div class="tool-item"><span>bash</span><span class="tool-status ok">OK 2.3s</span></div>
+                <div class="tool-item"><span>grep</span><span class="tool-status ok">OK 0.05s</span></div>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span><span class="dot"></span>MCP: 3 servers</span>
+            <span>Memory: 62</span>
+            <span>Tools: 24</span>
+            <span>124K tokens</span>
+        </div>
+    </div>
+    <div class="terminal-label">Terminal TUI 效果</div>
+    <div class="terminal-preview">
+        <span class="prompt">$</span> octo run<br>
+        <span class="accent">🦑 octo</span> <span class="dim">v0.1.0</span> | Session: <span class="accent">dev-01</span> | Model: claude-3.5<br>
+        <span class="accent">></span> 帮我重构错误处理<br>
+        <span class="dim">---</span><br>
+        Context: [<span class="bar">████████</span><span style="color:#333">░░░</span>] 62% | Mem: <span class="accent">62</span> | Tools: <span class="accent">24</span>
+    </div>
+    <div class="swatch-row">
+        <div class="swatch" style="background:#94A3B8">#94A3B8</div>
+        <div class="swatch" style="background:#64748b">#64748b</div>
+        <div class="swatch" style="background:#CBD5E1">#CBD5E1</div>
+        <div class="swatch" style="background:rgba(148,163,184,0.3)">glow</div>
+    </div>
+</div>
+
 </div>
 
 <div style="text-align:center; margin-top:30px; color:#666; font-size:13px;">
-    <p><strong>终端 TUI 兼容性说明</strong>：以上 6 种主色调均为 24-bit true color，在支持 true color 的终端（iTerm2, Alacritty, Windows Terminal, Kitty）中与 Web 完全一致。<br>
+    <p><strong>终端 TUI 兼容性说明</strong>：以上 12 种主色调均为 24-bit true color，在支持 true color 的终端（iTerm2, Alacritty, Windows Terminal, Kitty）中与 Web 完全一致。<br>
     在 256 色终端中会自动降级到最接近的 ANSI 颜色。Ratatui 的 Color::Rgb() 原生支持 true color。</p>
     <p style="margin-top:12px">打开方式：<code>open docs/design/color_comparison.html</code></p>
 </div>
