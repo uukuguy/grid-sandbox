@@ -1,82 +1,56 @@
 {
-  "plan_file": "docs/plans/2026-03-10-octo-cli-redesign.md",
-  "phase": "octo-cli-redesign",
-  "created_at": "2026-03-10T09:30:00+08:00",
+  "plan_file": "docs/plans/2026-03-10-deferred-d2-d4-d5.md",
+  "phase": "deferred-d2-d4-d5",
+  "created_at": "2026-03-10T13:30:00+08:00",
   "updated_at": "2026-03-10T13:30:00+08:00",
-  "completed_tasks": ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "R16", "R17", "R18", "R19", "R20", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "A1", "A2", "A3", "A4", "A5", "A6"],
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 34,
+  "total_tasks": 20,
   "task_groups": {
-    "Phase1": {
-      "name": "CLI 核心基础设施",
-      "tasks": ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"],
-      "status": "complete",
-      "description": "命令结构 + 输出系统 + UI 组件 + Engine 接口增强 + Headless 模式 + Agent/Session 子命令",
-      "commit": "343381f"
+    "Phase6": {
+      "name": "双 Agent 模式 (D5)",
+      "tasks": ["D5-1", "D5-2", "D5-3", "D5-4", "D5-5", "D5-6"],
+      "status": "pending",
+      "description": "AgentProfile + DualAgentManager + /switch 命令 + 上下文传递 + TUI 双面板"
     },
-    "Phase2": {
-      "name": "REPL 交互模式",
-      "tasks": ["R9", "R10", "R11", "R12", "R13", "R14"],
-      "status": "complete",
-      "description": "流式渲染 + ReplHelper + REPL 主循环 + Slash 命令 + 历史管理 + @file 引用",
-      "commit": "6cebf35"
+    "Phase7": {
+      "name": "Auto-memory 跨 Session (D4)",
+      "tasks": ["D4-1", "D4-2", "D4-3", "D4-4", "D4-5", "D4-6"],
+      "status": "pending",
+      "description": "MemoryExtractor + LLM Extractor + SessionEndHook + 记忆注入 + /memory auto"
     },
-    "Phase3": {
-      "name": "管理子命令补全",
-      "tasks": ["R15", "R16", "R17", "R18", "R19", "R20"],
-      "status": "complete",
-      "description": "Memory/Tool/MCP/Config/Doctor/Completions 子命令 — 统一输出系统",
-      "commit": "2fa3c54"
-    },
-    "Phase4": {
-      "name": "TUI 全屏模式",
-      "tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"],
-      "status": "complete",
-      "description": "App Shell + TuiBackend + Theme + Chat/Welcome/Launcher + Agent/Session + 功能屏幕",
-      "commit": "ccc52c0"
-    },
-    "Phase5": {
-      "name": "高级功能",
-      "tasks": ["A1", "A2", "A3", "A4", "A5", "A6"],
-      "status": "complete",
-      "description": "Plan/Build 模式 + Cost 追踪 + 上下文压缩 + Session 导出 + Hook 集成 + --add-dir",
-      "commit": "d690b0d"
+    "Phase8": {
+      "name": "嵌入式 Web Dashboard (D2)",
+      "tasks": ["D2-1", "D2-2", "D2-3", "D2-4", "D2-5", "D2-6", "D2-7", "D2-8"],
+      "status": "pending",
+      "description": "Dashboard 命令 + Alpine.js SPA + Chat/Session/Memory/MCP 面板 + 主题"
     }
   },
-  "execution_order": ["Phase1", "Phase2", "Phase3", "Phase4", "Phase5"],
+  "execution_order": ["Phase6", "Phase7", "Phase8"],
   "execution_mode": "subagent-driven-development",
-  "phase_name": "octo-cli-redesign",
-  "tests_baseline": 904,
+  "phase_name": "deferred-d2-d4-d5",
+  "tests_baseline": 1071,
   "tests_current": 1071,
   "design_docs": {
     "cli_design": "docs/design/AGENT_CLI_DESIGN.md",
     "color_comparison": "docs/design/color_comparison.html"
   },
   "technology_decisions": {
-    "repl": "rustyline v17 (validated by IronClaw + ZeroClaw)",
-    "tui": "Ratatui 0.29 (fork from OpenFang)",
-    "web_dashboard": "Deferred (Alpine.js embedded)",
-    "theme": "12 built-in color schemes (CSS variable pattern)"
+    "dual_agent": "DualAgentManager with AgentProfile, tool_filter for Plan/Build separation",
+    "auto_memory": "MemoryExtractor trait + L2 MemoryStore + SessionEndHook",
+    "web_dashboard": "Alpine.js embedded via include_str!(), Axum HTTP server"
   },
-  "engine_api_additions": [
-    "SessionStore::delete_session()",
-    "SessionStore::most_recent_session()",
-    "SessionStore::most_recent_session_for_user()",
-    "AgentLoopResult::input_tokens",
-    "AgentLoopResult::output_tokens"
-  ],
   "deferred": {
     "D1": "web/ React 前端 — 保持现状",
-    "D2": "嵌入式 Web Dashboard — Phase 4 完成后",
     "D3": "Tauri Desktop — D2 完成后",
-    "D4": "Auto-memory 跨 Session — Phase 5 完成后",
-    "D5": "双 Agent 模式 — A1 完成后"
+    "D6": "Agent 协作模式（多 Agent 协同）— D5 完成后",
+    "D7": "Dashboard 远程访问（认证 + HTTPS）— D2 完成后"
   },
   "previous_plan": {
-    "file": "docs/plans/2026-03-09-harness-skills-completion.md",
+    "file": "docs/plans/2026-03-10-octo-cli-redesign.md",
     "status": "COMPLETE",
     "tasks_completed": 34,
-    "final_commit": "71dc7fc"
+    "final_commit": "3f3b4f5"
   },
-  "plan_status": "COMPLETE"
+  "plan_status": "READY"
 }
