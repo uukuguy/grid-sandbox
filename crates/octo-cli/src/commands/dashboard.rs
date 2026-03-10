@@ -370,4 +370,123 @@ mod tests {
         assert!(themes.contains(&serde_json::json!("cyan")));
         assert!(themes.contains(&serde_json::json!("slate")));
     }
+
+    // ── D2-8 Integration Tests ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_all_static_assets_serve() {
+        let app = build_router();
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200);
+        let ct = res.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(ct.contains("text/html"), "index content-type: {ct}");
+
+        assert_eq!(get_status("/app.js").await, 200);
+        assert_eq!(get_status("/style.css").await, 200);
+    }
+
+    #[tokio::test]
+    async fn test_health_json_structure() {
+        let json = get_json("/api/health").await;
+        assert_eq!(json["status"], "ok");
+        assert!(json["version"].as_str().is_some(), "missing version field");
+        assert!(!json["version"].as_str().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_chat_echoes_message() {
+        let app = build_router();
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/chat")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"message":"test input"}"#))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), 200);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json["response"].as_str().unwrap().contains("test input"));
+    }
+
+    #[tokio::test]
+    async fn test_sessions_returns_array_with_ids() {
+        let json = get_json("/api/sessions").await;
+        let arr = json.as_array().expect("sessions should be an array");
+        assert!(!arr.is_empty());
+        for entry in arr {
+            assert!(entry["id"].as_str().is_some(), "session entry missing id");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_session_detail_uses_id() {
+        let json = get_json("/api/sessions/my-session-123").await;
+        assert_eq!(json["id"], "my-session-123");
+    }
+
+    #[tokio::test]
+    async fn test_memories_have_categories() {
+        let json = get_json("/api/memories").await;
+        let arr = json.as_array().expect("memories should be an array");
+        for entry in arr {
+            assert!(entry["category"].as_str().is_some(), "missing category");
+            assert!(entry["content"].as_str().is_some(), "missing content");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_memory_search_accepts_query() {
+        let json = get_json("/api/memories/search?q=test").await;
+        assert_eq!(json["query"], "test");
+        assert!(json["results"].as_array().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_mcp_servers_have_fields() {
+        let json = get_json("/api/mcp/servers").await;
+        let servers = json.as_array().unwrap();
+        for s in servers {
+            assert!(s["name"].as_str().is_some(), "missing name");
+            assert!(s["running"].is_boolean(), "missing running");
+            assert!(s["tools"].is_number(), "missing tools");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_themes_returns_12() {
+        let json = get_json("/api/themes").await;
+        let themes = json.as_array().unwrap();
+        assert_eq!(themes.len(), 12);
+        assert!(themes.contains(&serde_json::json!("cyan")));
+        assert!(themes.contains(&serde_json::json!("slate")));
+    }
+
+    #[test]
+    fn test_html_alpine_completeness() {
+        for directive in ["x-data", "x-show", "x-for", "@click", "x-model"] {
+            assert!(INDEX_HTML.contains(directive), "Missing directive: {directive}");
+        }
+    }
+
+    #[test]
+    fn test_css_has_all_themes() {
+        for theme in [
+            "cyan", "sgcc", "blue", "indigo", "violet", "emerald",
+            "amber", "coral", "rose", "teal", "sunset", "slate",
+        ] {
+            assert!(
+                STYLE_CSS.contains(&format!("[data-theme=\"{}\"]", theme)),
+                "Missing theme: {}",
+                theme
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unknown_route_returns_404() {
+        assert_eq!(get_status("/api/nonexistent").await, 404);
+        assert_eq!(get_status("/no-such-page").await, 404);
+    }
 }
