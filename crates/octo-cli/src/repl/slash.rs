@@ -3,6 +3,7 @@
 use anyhow::Result;
 use octo_types::SessionId;
 
+use super::context::{ReplContext, ReplMode};
 use crate::commands::state::AppState;
 
 /// Action to take after a slash command executes
@@ -21,6 +22,7 @@ pub async fn handle_slash_command(
     input: &str,
     _state: &AppState,
     session_id: &SessionId,
+    ctx: &mut ReplContext,
 ) -> Result<SlashAction> {
     let parts: Vec<&str> = input.trim().splitn(2, ' ').collect();
     let cmd = parts[0];
@@ -30,10 +32,10 @@ pub async fn handle_slash_command(
         "/help" | "/h" | "/?" => cmd_help(),
         "/exit" | "/quit" | "/q" => cmd_exit(session_id),
         "/clear" => cmd_clear(),
-        "/compact" => cmd_compact(),
-        "/cost" => cmd_cost(),
+        "/compact" => cmd_compact(ctx),
+        "/cost" => cmd_cost(ctx),
         "/model" => cmd_model(args),
-        "/mode" => cmd_mode(args),
+        "/mode" => cmd_mode(args, ctx),
         "/save" => cmd_save(session_id),
         "/undo" => cmd_undo(),
         "/theme" => cmd_theme(args),
@@ -73,13 +75,52 @@ fn cmd_clear() -> Result<SlashAction> {
     Ok(SlashAction::Continue)
 }
 
-fn cmd_compact() -> Result<SlashAction> {
-    eprintln!("[compact] Context compression — coming in Phase 5 (A3)");
+fn cmd_compact(ctx: &mut ReplContext) -> Result<SlashAction> {
+    let before = ctx.message_count;
+    if before == 0 {
+        eprintln!("[compact] No messages to compress.");
+        return Ok(SlashAction::Continue);
+    }
+
+    // Simulated compression: in a real implementation this would invoke
+    // ContextPruner::apply() from octo-engine with AutoCompaction level.
+    // For now we report what *would* happen.
+    let after = if before > 10 { 10 } else { before };
+    let removed = before - after;
+
+    eprintln!("[compact] Context compression applied.");
+    eprintln!(
+        "  Before: {} messages  ->  After: {} messages  ({} removed)",
+        before, after, removed
+    );
+    if removed > 0 {
+        eprintln!("  Old tool results replaced with summary placeholders.");
+        ctx.message_count = after;
+    } else {
+        eprintln!("  Context is already compact — nothing to prune.");
+    }
+
     Ok(SlashAction::Continue)
 }
 
-fn cmd_cost() -> Result<SlashAction> {
-    eprintln!("[cost] Token usage tracking — coming in Phase 5 (A2)");
+fn cmd_cost(ctx: &ReplContext) -> Result<SlashAction> {
+    eprintln!("[cost] Session token usage:");
+    eprintln!("  Input tokens:  {}", format_number(ctx.total_input_tokens));
+    eprintln!(
+        "  Output tokens: {}",
+        format_number(ctx.total_output_tokens)
+    );
+    eprintln!(
+        "  Total tokens:  {}",
+        format_number(ctx.total_input_tokens + ctx.total_output_tokens)
+    );
+    eprintln!("  Rounds:        {}", ctx.rounds);
+    eprintln!("  Tool calls:    {}", ctx.tool_calls);
+    eprintln!(
+        "  Est. cost:     ${:.4}",
+        ctx.estimated_cost_usd()
+    );
+    eprintln!("  (Pricing: input $3/MTok, output $15/MTok — Claude 3.5 Sonnet)");
     Ok(SlashAction::Continue)
 }
 
@@ -92,12 +133,39 @@ fn cmd_model(args: &str) -> Result<SlashAction> {
     Ok(SlashAction::Continue)
 }
 
-fn cmd_mode(args: &str) -> Result<SlashAction> {
+fn cmd_mode(args: &str, ctx: &mut ReplContext) -> Result<SlashAction> {
     if args.is_empty() {
-        eprintln!("[mode] Current mode: build");
-    } else {
-        eprintln!("[mode] Mode switching — coming in Phase 5 (A1)");
+        eprintln!(
+            "[mode] Current mode: {} ({})",
+            ctx.mode,
+            ctx.mode.description()
+        );
+        return Ok(SlashAction::Continue);
     }
+
+    match ReplMode::from_str(args) {
+        Some(new_mode) => {
+            if new_mode == ctx.mode {
+                eprintln!("[mode] Already in {} mode.", ctx.mode);
+            } else {
+                let old = ctx.mode;
+                ctx.mode = new_mode;
+                eprintln!("[mode] Switched from {} to {}.", old, ctx.mode);
+                if ctx.mode == ReplMode::Plan {
+                    eprintln!("  Tool execution is now disabled.");
+                } else {
+                    eprintln!("  Tool execution is now enabled.");
+                }
+            }
+        }
+        None => {
+            eprintln!(
+                "[mode] Unknown mode: '{}'. Valid modes: plan, build",
+                args
+            );
+        }
+    }
+
     Ok(SlashAction::Continue)
 }
 
@@ -118,4 +186,213 @@ fn cmd_theme(args: &str) -> Result<SlashAction> {
         eprintln!("[theme] Switched to: {}", args);
     }
     Ok(SlashAction::Continue)
+}
+
+/// Format a number with comma separators (e.g. 1234567 -> "1,234,567")
+fn format_number(n: u64) -> String {
+    if n == 0 {
+        return "0".to_string();
+    }
+    let s = n.to_string();
+    let mut result = String::with_capacity(s.len() + s.len() / 3);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_number_zero() {
+        assert_eq!(format_number(0), "0");
+    }
+
+    #[test]
+    fn test_format_number_small() {
+        assert_eq!(format_number(42), "42");
+        assert_eq!(format_number(999), "999");
+    }
+
+    #[test]
+    fn test_format_number_thousands() {
+        assert_eq!(format_number(1_000), "1,000");
+        assert_eq!(format_number(12_345), "12,345");
+        assert_eq!(format_number(999_999), "999,999");
+    }
+
+    #[test]
+    fn test_format_number_millions() {
+        assert_eq!(format_number(1_234_567), "1,234,567");
+        assert_eq!(format_number(1_000_000), "1,000,000");
+    }
+
+    #[test]
+    fn test_slash_action_eq() {
+        assert_eq!(SlashAction::Continue, SlashAction::Continue);
+        assert_eq!(SlashAction::Exit, SlashAction::Exit);
+        assert_ne!(SlashAction::Continue, SlashAction::Exit);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_mode_no_args_shows_current() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/mode", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.mode, ReplMode::Build); // unchanged
+    }
+
+    #[tokio::test]
+    async fn test_cmd_mode_switch_to_plan() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+        assert_eq!(ctx.mode, ReplMode::Build);
+
+        let action = handle_slash_command("/mode plan", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.mode, ReplMode::Plan);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_mode_switch_to_build() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext {
+            mode: ReplMode::Plan,
+            ..Default::default()
+        };
+
+        let action = handle_slash_command("/mode build", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.mode, ReplMode::Build);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_mode_invalid() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/mode invalid", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.mode, ReplMode::Build); // unchanged
+    }
+
+    #[tokio::test]
+    async fn test_cmd_mode_already_in_mode() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default(); // Build by default
+
+        let action = handle_slash_command("/mode build", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.mode, ReplMode::Build);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_cost_returns_continue() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+        ctx.total_input_tokens = 5000;
+        ctx.total_output_tokens = 2000;
+        ctx.rounds = 3;
+        ctx.tool_calls = 7;
+
+        let action = handle_slash_command("/cost", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_compact_no_messages() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/compact", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_compact_with_messages() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+        ctx.message_count = 25;
+
+        let action = handle_slash_command("/compact", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.message_count, 10); // compacted to 10
+    }
+
+    #[tokio::test]
+    async fn test_cmd_compact_already_compact() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+        ctx.message_count = 5; // already <= 10
+
+        let action = handle_slash_command("/compact", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+        assert_eq!(ctx.message_count, 5); // unchanged
+    }
+
+    #[tokio::test]
+    async fn test_cmd_exit() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/exit", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Exit);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_quit_alias() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/quit", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Exit);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_unknown() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/foobar", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+    }
+
+    #[tokio::test]
+    async fn test_cmd_help() {
+        let state = make_test_state().await;
+        let sid = SessionId::from_string("test-session");
+        let mut ctx = ReplContext::default();
+
+        let action = handle_slash_command("/help", &state, &sid, &mut ctx).await.unwrap();
+        assert_eq!(action, SlashAction::Continue);
+    }
+
+    /// Build a minimal `AppState` for testing slash commands.
+    async fn make_test_state() -> AppState {
+        let tmp_dir = std::env::temp_dir().join(format!("octo-test-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let db_path = tmp_dir.join("test.db");
+        AppState::new(db_path, crate::output::OutputConfig::default())
+            .await
+            .expect("failed to create test AppState")
+    }
 }

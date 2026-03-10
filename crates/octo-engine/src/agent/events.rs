@@ -72,6 +72,10 @@ pub struct AgentLoopResult {
     pub rounds: u32,
     pub tool_calls: u32,
     pub stop_reason: NormalizedStopReason,
+    /// Total input tokens consumed across all rounds
+    pub input_tokens: u64,
+    /// Total output tokens consumed across all rounds
+    pub output_tokens: u64,
     /// Final conversation messages after the agent loop completes (D1).
     /// Enables consumers to access the full message history without
     /// reconstructing it from the event stream.

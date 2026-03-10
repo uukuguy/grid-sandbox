@@ -10,6 +10,8 @@ pub struct RunOptions {
     pub session_id: Option<String>,
     pub agent_id: Option<String>,
     pub theme: String,
+    /// Additional directories to include as context
+    pub add_dirs: Vec<String>,
 }
 
 /// Execute the run command: start an interactive REPL session

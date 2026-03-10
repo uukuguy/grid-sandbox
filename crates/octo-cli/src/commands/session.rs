@@ -103,17 +103,212 @@ async fn delete_session(session_id: String, state: &AppState) -> Result<()> {
     Ok(())
 }
 
-/// Export a session
+/// Export a session in json, markdown, or html format
 async fn export_session(
     session_id: String,
     format: String,
     output: Option<String>,
-    _state: &AppState,
+    state: &AppState,
 ) -> Result<()> {
-    println!("Exporting session: {} (format: {})", session_id, format);
-    if let Some(out) = &output {
-        println!("  Output: {}", out);
+    let session_store = state.agent_runtime.session_store();
+    let sid = SessionId::from_string(&session_id);
+
+    let session = session_store
+        .get_session(&sid)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
+
+    let messages = session_store
+        .get_messages(&sid)
+        .await
+        .unwrap_or_default();
+
+    let content = match format.as_str() {
+        "json" => export_json(&session, &messages)?,
+        "markdown" | "md" => export_markdown(&session, &messages),
+        "html" => export_html(&session, &messages),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Unsupported format: {}. Use json, markdown, or html.",
+                format
+            ));
+        }
+    };
+
+    match output {
+        Some(path) => {
+            std::fs::write(&path, &content)?;
+            println!("Exported session {} to {}", session_id, path);
+        }
+        None => {
+            print!("{}", content);
+        }
     }
-    println!("Session export — coming in Phase 5 (A4)");
+
     Ok(())
+}
+
+fn role_label(role: &octo_types::MessageRole) -> &'static str {
+    match role {
+        octo_types::MessageRole::User => "User",
+        octo_types::MessageRole::Assistant => "Assistant",
+        octo_types::MessageRole::System => "System",
+    }
+}
+
+fn export_json(
+    session: &octo_engine::session::SessionData,
+    messages: &[octo_types::ChatMessage],
+) -> Result<String> {
+    let export = serde_json::json!({
+        "session_id": session.session_id.to_string(),
+        "user_id": session.user_id.to_string(),
+        "sandbox_id": session.sandbox_id.to_string(),
+        "created_at": session.created_at,
+        "messages": messages,
+    });
+    Ok(serde_json::to_string_pretty(&export)?)
+}
+
+fn export_markdown(
+    session: &octo_engine::session::SessionData,
+    messages: &[octo_types::ChatMessage],
+) -> String {
+    let mut md = format!("# Session: {}\n\n", session.session_id);
+    let created = chrono::DateTime::from_timestamp(session.created_at, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| session.created_at.to_string());
+    md.push_str(&format!("Created: {}\n\n---\n\n", created));
+
+    for msg in messages {
+        md.push_str(&format!("## {}\n\n", role_label(&msg.role)));
+        md.push_str(&format!("{}\n\n", msg.text_content()));
+    }
+
+    md
+}
+
+fn export_html(
+    session: &octo_engine::session::SessionData,
+    messages: &[octo_types::ChatMessage],
+) -> String {
+    let css = "body{font-family:sans-serif;max-width:800px;margin:0 auto;padding:20px}\
+        .user{background:#e3f2fd;padding:12px;border-radius:8px;margin:8px 0}\
+        .assistant{background:#f5f5f5;padding:12px;border-radius:8px;margin:8px 0}\
+        .system{background:#fff3e0;padding:12px;border-radius:8px;margin:8px 0}\
+        .role{font-weight:bold;margin-bottom:4px}";
+    let sid = html_escape(&session.session_id.to_string());
+    let mut html = format!(
+        "<!DOCTYPE html>\n<html>\n<head>\n<title>Session {sid}</title>\n\
+         <style>\n{css}\n</style>\n</head>\n<body>\n<h1>Session: {sid}</h1>\n"
+    );
+    for msg in messages {
+        let role = role_label(&msg.role);
+        let cls = match msg.role {
+            octo_types::MessageRole::User => "user",
+            octo_types::MessageRole::Assistant => "assistant",
+            octo_types::MessageRole::System => "system",
+        };
+        html.push_str(&format!(
+            "<div class=\"{cls}\">\n<div class=\"role\">{role}</div>\n\
+             <div>{}</div>\n</div>\n",
+            html_escape(&msg.text_content())
+        ));
+    }
+    html.push_str("</body>\n</html>\n");
+    html
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use octo_engine::session::SessionData;
+    use octo_types::{ChatMessage, MessageRole, SandboxId, SessionId, UserId};
+
+    fn test_session() -> SessionData {
+        SessionData {
+            session_id: SessionId::from_string("test-session-001"),
+            user_id: UserId::from_string("user-1"),
+            sandbox_id: SandboxId::from_string("sandbox-1"),
+            created_at: 1700000000,
+        }
+    }
+
+    fn test_messages() -> Vec<ChatMessage> {
+        vec![
+            ChatMessage::user("Hello, how are you?"),
+            ChatMessage::assistant("I'm doing well, thanks!"),
+        ]
+    }
+
+    #[test]
+    fn test_html_escape() {
+        assert_eq!(html_escape(""), "");
+        assert_eq!(html_escape("hello"), "hello");
+        assert_eq!(
+            html_escape("<script>alert(\"xss\")&</script>"),
+            "&lt;script&gt;alert(&quot;xss&quot;)&amp;&lt;/script&gt;"
+        );
+    }
+
+    #[test]
+    fn test_role_label() {
+        assert_eq!(role_label(&MessageRole::User), "User");
+        assert_eq!(role_label(&MessageRole::Assistant), "Assistant");
+        assert_eq!(role_label(&MessageRole::System), "System");
+    }
+
+    #[test]
+    fn test_export_json() {
+        let session = test_session();
+        let json_str = export_json(&session, &test_messages()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["session_id"], "test-session-001");
+        assert_eq!(v["user_id"], "user-1");
+        assert_eq!(v["created_at"], 1700000000);
+        assert_eq!(v["messages"].as_array().unwrap().len(), 2);
+        // empty messages
+        let j2 = export_json(&session, &[]).unwrap();
+        let v2: serde_json::Value = serde_json::from_str(&j2).unwrap();
+        assert_eq!(v2["messages"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_export_markdown() {
+        let session = test_session();
+        let md = export_markdown(&session, &test_messages());
+        assert!(md.starts_with("# Session: test-session-001\n"));
+        assert!(md.contains("---"));
+        assert!(md.contains("## User\n\nHello, how are you?"));
+        assert!(md.contains("## Assistant\n\nI'm doing well, thanks!"));
+        // empty messages
+        let md2 = export_markdown(&session, &[]);
+        assert!(md2.contains("# Session:"));
+        assert!(!md2.contains("## User"));
+    }
+
+    #[test]
+    fn test_export_html() {
+        let session = test_session();
+        let html = export_html(&session, &test_messages());
+        assert!(html.starts_with("<!DOCTYPE html>"));
+        assert!(html.contains("<title>Session test-session-001</title>"));
+        assert!(html.contains("<div class=\"user\">"));
+        assert!(html.contains("<div class=\"assistant\">"));
+        assert!(html.contains("</html>"));
+        // XSS escaping
+        let html2 = export_html(&session, &[ChatMessage::user("<b>bold</b>")]);
+        assert!(html2.contains("&lt;b&gt;bold&lt;/b&gt;"));
+        assert!(!html2.contains("<b>bold</b>"));
+        // empty
+        let html3 = export_html(&session, &[]);
+        assert!(!html3.contains("class=\"user\""));
+    }
 }

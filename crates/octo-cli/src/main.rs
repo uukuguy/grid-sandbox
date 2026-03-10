@@ -69,6 +69,9 @@ enum Commands {
         /// Color theme
         #[arg(long, default_value = "cyan")]
         theme: String,
+        /// Additional directories to include as context
+        #[arg(long = "add-dir")]
+        add_dirs: Vec<String>,
     },
 
     /// Send a single query (headless mode)
@@ -194,6 +197,7 @@ async fn main() -> Result<()> {
             session,
             agent,
             theme,
+            add_dirs,
         } => {
             execute_run(
                 commands::run::RunOptions {
@@ -201,6 +205,7 @@ async fn main() -> Result<()> {
                     session_id: session,
                     agent_id: agent,
                     theme,
+                    add_dirs,
                 },
                 &state,
             )

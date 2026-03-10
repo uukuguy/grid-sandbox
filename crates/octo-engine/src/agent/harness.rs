@@ -154,6 +154,8 @@ async fn run_agent_loop_inner(
     }
 
     let mut total_tool_calls: u32 = 0;
+    let mut total_input_tokens: u64 = 0;
+    let mut total_output_tokens: u64 = 0;
 
     // P1-1: ContinuationTracker for max_tokens auto-continuation
     let mut continuation_tracker = ContinuationTracker::new(ContinuationConfig {
@@ -454,6 +456,10 @@ async fn run_agent_loop_inner(
         // Update budget with actual usage
         budget.update_actual_usage(stream_result.input_tokens, messages.len());
 
+        // Accumulate token usage across rounds
+        total_input_tokens += stream_result.input_tokens as u64;
+        total_output_tokens += stream_result.output_tokens as u64;
+
         // Emit budget snapshot
         let snapshot = budget.snapshot(&system_prompt, &messages, &tool_specs);
         let _ = tx
@@ -596,6 +602,8 @@ async fn run_agent_loop_inner(
                     rounds: round + 1,
                     tool_calls: total_tool_calls,
                     stop_reason: NormalizedStopReason::from(stop_reason),
+                    input_tokens: total_input_tokens,
+                    output_tokens: total_output_tokens,
                     final_messages: messages.clone(),
                 }))
                 .await;
@@ -1029,6 +1037,8 @@ async fn run_agent_loop_inner(
             rounds: max_rounds,
             tool_calls: total_tool_calls,
             stop_reason: NormalizedStopReason::MaxIterations,
+            input_tokens: total_input_tokens,
+            output_tokens: total_output_tokens,
             final_messages: messages.clone(),
         }))
         .await;

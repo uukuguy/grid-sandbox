@@ -1,8 +1,10 @@
 //! REPL main loop — interactive chat with an Octo agent via rustyline
 
+pub mod context;
 pub mod file_ref;
 pub mod helper;
 pub mod history;
+pub mod hooks;
 pub mod slash;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -98,6 +100,23 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
     eprintln!("Octo REPL — Session: {}", session_id);
     eprintln!("Type a message to chat. /help for commands. Ctrl+D to exit.\n");
 
+    // Show additional context directories if provided
+    if !opts.add_dirs.is_empty() {
+        eprintln!("Additional context directories:");
+        for dir in &opts.add_dirs {
+            let path = std::path::Path::new(dir);
+            if path.is_dir() {
+                eprintln!("  - {}", dir);
+            } else {
+                eprintln!("  - {} (warning: not found or not a directory)", dir);
+            }
+        }
+        eprintln!();
+    }
+
+    // ── REPL context (mutable state for slash commands) ─────────────────
+    let mut repl_ctx = context::ReplContext::default();
+
     // ── 5. Main loop ────────────────────────────────────────────────────
     let prompt = "octo> ".to_string();
 
@@ -122,6 +141,7 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
                     line.trim(),
                     state,
                     &session_id,
+                    &mut repl_ctx,
                 )
                 .await?;
                 if action == slash::SlashAction::Exit {
@@ -148,12 +168,23 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
 
                 // Render the streaming response
                 is_streaming.store(true, Ordering::Relaxed);
-                crate::ui::streaming::render_streaming_response(
+                let loop_result = crate::ui::streaming::render_streaming_response(
                     &mut rx,
                     &state.output_config,
                 )
                 .await?;
                 is_streaming.store(false, Ordering::Relaxed);
+
+                // Update REPL context with token usage from the completed round
+                if let Some(result) = loop_result {
+                    repl_ctx.record_completion(
+                        result.rounds,
+                        result.tool_calls,
+                        result.input_tokens,
+                        result.output_tokens,
+                    );
+                    repl_ctx.message_count += result.final_messages.len();
+                }
             }
 
             Err(ReadlineError::Interrupted) => {
