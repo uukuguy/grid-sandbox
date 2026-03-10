@@ -8,6 +8,7 @@ use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
 
 mod commands;
+mod dashboard;
 mod output;
 mod repl;
 mod tui;
@@ -146,6 +147,19 @@ enum Commands {
         #[command(subcommand)]
         action: CompletionsCommands,
     },
+
+    /// Launch embedded web dashboard
+    Dashboard {
+        /// Port to listen on
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+        /// Host to bind to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// Open browser on start
+        #[arg(long)]
+        open: bool,
+    },
 }
 
 fn init_logging(verbose: bool) {
@@ -245,6 +259,10 @@ async fn main() -> Result<()> {
         Commands::Completions { action } => match action {
             CompletionsCommands::Generate { shell } => generate_completions(shell)?,
         },
+        Commands::Dashboard { port, host, open } => {
+            let opts = commands::dashboard::DashboardOptions { port, host, open };
+            commands::dashboard::run_dashboard(&opts).await?;
+        }
     }
 
     Ok(())

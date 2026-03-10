@@ -66,5 +66,11 @@ rustyline = { version = "17", features = ["with-file-history"] }
 # XDG paths
 directories = "6"
 
+# Web server (for embedded dashboard)
+axum = { workspace = true }
+tower = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3"
+tower = { workspace = true }
+http-body-util = "0.1"

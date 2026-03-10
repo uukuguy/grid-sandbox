@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octo Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body x-data="app()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-brand">
+            <span class="nav-logo">&#x1F419;</span>
+            <span class="nav-title">Octo Dashboard</span>
+        </div>
+        <div class="nav-tabs">
+            <button
+                :class="{ 'nav-tab-active': tab === 'chat' }"
+                @click="tab = 'chat'"
+                class="nav-tab">Chat</button>
+            <button
+                :class="{ 'nav-tab-active': tab === 'sessions' }"
+                @click="tab = 'sessions'"
+                class="nav-tab">Sessions</button>
+            <button
+                :class="{ 'nav-tab-active': tab === 'memory' }"
+                @click="tab = 'memory'"
+                class="nav-tab">Memory</button>
+            <button
+                :class="{ 'nav-tab-active': tab === 'mcp' }"
+                @click="tab = 'mcp'"
+                class="nav-tab">MCP</button>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot" :class="connected ? 'status-connected' : 'status-disconnected'"></span>
+            <span x-text="connected ? 'Connected' : 'Disconnected'"></span>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Chat Panel -->
+        <div x-show="tab === 'chat'" class="panel">
+            <div class="panel-header">
+                <h2>Chat</h2>
+            </div>
+            <div class="panel-body" id="chat-messages">
+                <template x-for="msg in messages" :key="msg.id">
+                    <div class="message" :class="msg.role">
+                        <div class="message-role" x-text="msg.role"></div>
+                        <div class="message-content" x-text="msg.content"></div>
+                    </div>
+                </template>
+                <div x-show="messages.length === 0" class="empty-state">
+                    No messages yet. Start a conversation!
+                </div>
+            </div>
+            <div class="panel-footer">
+                <input
+                    type="text"
+                    x-model="input"
+                    @keyup.enter="sendMessage()"
+                    placeholder="Type a message..."
+                    class="chat-input"
+                    :disabled="!connected">
+                <button @click="sendMessage()" class="btn btn-primary" :disabled="!connected">Send</button>
+            </div>
+        </div>
+
+        <!-- Sessions Panel -->
+        <div x-show="tab === 'sessions'" class="panel">
+            <div class="panel-header">
+                <h2>Sessions</h2>
+                <button @click="refreshSessions()" class="btn btn-sm">Refresh</button>
+            </div>
+            <div class="panel-body">
+                <div x-show="sessions.length === 0" class="empty-state">
+                    No sessions found.
+                </div>
+                <template x-for="session in sessions" :key="session.id">
+                    <div class="list-item">
+                        <span class="list-item-title" x-text="session.id"></span>
+                        <span class="list-item-meta" x-text="session.created_at"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Memory Panel -->
+        <div x-show="tab === 'memory'" class="panel">
+            <div class="panel-header">
+                <h2>Memory</h2>
+                <button @click="refreshMemories()" class="btn btn-sm">Refresh</button>
+            </div>
+            <div class="panel-body">
+                <div x-show="memories.length === 0" class="empty-state">
+                    No memories stored.
+                </div>
+                <template x-for="mem in memories" :key="mem.id">
+                    <div class="list-item">
+                        <span class="list-item-tag" x-text="mem.category"></span>
+                        <span class="list-item-title" x-text="mem.content"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- MCP Panel -->
+        <div x-show="tab === 'mcp'" class="panel">
+            <div class="panel-header">
+                <h2>MCP Servers</h2>
+                <button @click="refreshMcp()" class="btn btn-sm">Refresh</button>
+            </div>
+            <div class="panel-body">
+                <div x-show="mcpServers.length === 0" class="empty-state">
+                    No MCP servers configured.
+                </div>
+                <template x-for="server in mcpServers" :key="server.name">
+                    <div class="list-item">
+                        <span class="list-item-status" :class="server.running ? 'running' : 'stopped'"></span>
+                        <span class="list-item-title" x-text="server.name"></span>
+                        <span class="list-item-meta" x-text="server.tools + ' tools'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

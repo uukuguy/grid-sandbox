@@ -4,6 +4,7 @@ pub mod agent;
 pub mod ask;
 pub mod completions;
 pub mod config;
+pub mod dashboard;
 pub mod doctor;
 pub mod mcp;
 pub mod memory;
