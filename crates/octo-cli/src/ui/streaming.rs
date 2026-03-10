@@ -5,17 +5,19 @@ use owo_colors::OwoColorize;
 use std::io::Write;
 use tokio::sync::broadcast;
 
-use octo_engine::agent::AgentEvent;
+use octo_engine::agent::{AgentEvent, AgentLoopResult};
 
 use crate::output::{OutputConfig, OutputFormat};
 
 /// Render a streaming response from an agent event channel.
 ///
 /// Dispatches to text, json, or stream-json renderers based on the output config.
+/// Returns the `AgentLoopResult` if a `Completed` event was received, enabling
+/// callers to extract token usage and round/tool-call counts.
 pub async fn render_streaming_response(
     rx: &mut broadcast::Receiver<AgentEvent>,
     config: &OutputConfig,
-) -> Result<()> {
+) -> Result<Option<AgentLoopResult>> {
     match config.format {
         OutputFormat::Text => render_text_stream(rx, config).await,
         OutputFormat::Json => render_json_stream(rx).await,
@@ -27,8 +29,9 @@ pub async fn render_streaming_response(
 async fn render_text_stream(
     rx: &mut broadcast::Receiver<AgentEvent>,
     _config: &OutputConfig,
-) -> Result<()> {
+) -> Result<Option<AgentLoopResult>> {
     let mut active_spinner: Option<indicatif::ProgressBar> = None;
+    let mut loop_result: Option<AgentLoopResult> = None;
 
     loop {
         match rx.recv().await {
@@ -85,6 +88,7 @@ async fn render_text_stream(
                         )
                         .dimmed()
                     );
+                    loop_result = Some(result);
                     break;
                 }
                 AgentEvent::IterationStart { round } => {
@@ -105,18 +109,33 @@ async fn render_text_stream(
         }
     }
 
-    Ok(())
+    Ok(loop_result)
 }
 
 /// JSON renderer — each event as a single JSON line to stdout.
-async fn render_json_stream(rx: &mut broadcast::Receiver<AgentEvent>) -> Result<()> {
+async fn render_json_stream(
+    rx: &mut broadcast::Receiver<AgentEvent>,
+) -> Result<Option<AgentLoopResult>> {
+    let mut loop_result: Option<AgentLoopResult> = None;
+
     loop {
         match rx.recv().await {
             Ok(event) => {
+                let is_done = matches!(event, AgentEvent::Done);
+                let completed = if let AgentEvent::Completed(ref r) = event {
+                    Some(r.clone())
+                } else {
+                    None
+                };
+
                 let line = serde_json::to_string(&event)?;
                 println!("{}", line);
 
-                if matches!(event, AgentEvent::Done | AgentEvent::Completed(_)) {
+                if let Some(r) = completed {
+                    loop_result = Some(r);
+                    break;
+                }
+                if is_done {
                     break;
                 }
             }
@@ -129,18 +148,33 @@ async fn render_json_stream(rx: &mut broadcast::Receiver<AgentEvent>) -> Result<
         }
     }
 
-    Ok(())
+    Ok(loop_result)
 }
 
 /// Stream-JSON renderer — each event as a JSON line (same format, distinct mode).
-async fn render_stream_json(rx: &mut broadcast::Receiver<AgentEvent>) -> Result<()> {
+async fn render_stream_json(
+    rx: &mut broadcast::Receiver<AgentEvent>,
+) -> Result<Option<AgentLoopResult>> {
+    let mut loop_result: Option<AgentLoopResult> = None;
+
     loop {
         match rx.recv().await {
             Ok(event) => {
+                let is_done = matches!(event, AgentEvent::Done);
+                let completed = if let AgentEvent::Completed(ref r) = event {
+                    Some(r.clone())
+                } else {
+                    None
+                };
+
                 let line = serde_json::to_string(&event)?;
                 println!("{}", line);
 
-                if matches!(event, AgentEvent::Done | AgentEvent::Completed(_)) {
+                if let Some(r) = completed {
+                    loop_result = Some(r);
+                    break;
+                }
+                if is_done {
                     break;
                 }
             }
@@ -153,7 +187,7 @@ async fn render_stream_json(rx: &mut broadcast::Receiver<AgentEvent>) -> Result<
         }
     }
 
-    Ok(())
+    Ok(loop_result)
 }
 
 /// Truncate a JSON value to a compact string of at most `max_len` characters.

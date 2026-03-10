@@ -46,7 +46,7 @@ fn test_all_agent_event_variants_serialize() {
             rounds: 3,
             tool_calls: 5,
             stop_reason: NormalizedStopReason::EndTurn,
-            final_messages: vec![],
+            ..Default::default()
         }),
     ];
 
@@ -68,7 +68,7 @@ fn test_agent_loop_result_serialize() {
         rounds: 5,
         tool_calls: 10,
         stop_reason: NormalizedStopReason::MaxIterations,
-        final_messages: vec![],
+        ..Default::default()
     };
     let json = serde_json::to_string(&result).unwrap();
     assert!(json.contains("\"rounds\":5"));
@@ -88,6 +88,7 @@ fn test_agent_loop_result_with_final_messages() {
             ChatMessage::user("hello"),
             ChatMessage::assistant("hi there"),
         ],
+        ..Default::default()
     };
     let json = serde_json::to_string(&result).unwrap();
     assert!(json.contains("final_messages"));

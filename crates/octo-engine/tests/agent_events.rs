@@ -31,7 +31,7 @@ fn test_completed_event() {
         rounds: 3,
         tool_calls: 5,
         stop_reason: NormalizedStopReason::MaxIterations,
-        final_messages: vec![],
+        ..Default::default()
     };
     let event = AgentEvent::Completed(result);
     assert!(matches!(event, AgentEvent::Completed(_)));
