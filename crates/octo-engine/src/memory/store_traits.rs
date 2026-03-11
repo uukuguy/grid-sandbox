@@ -12,4 +12,10 @@ pub trait MemoryStore: Send + Sync {
     async fn delete_by_filter(&self, filter: MemoryFilter) -> Result<usize>;
     async fn list(&self, filter: MemoryFilter) -> Result<Vec<MemoryEntry>>;
     async fn batch_store(&self, entries: Vec<MemoryEntry>) -> Result<Vec<MemoryId>>;
+
+    /// Delete memory entries whose TTL has expired.
+    /// Returns the number of deleted entries.
+    async fn delete_expired(&self) -> Result<usize> {
+        Ok(0)
+    }
 }

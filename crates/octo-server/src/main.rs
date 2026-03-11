@@ -249,6 +249,24 @@ async fn main() -> Result<()> {
         });
     }
 
+    // Spawn memory TTL cleanup task (hourly)
+    {
+        let runtime_for_ttl = state.agent_supervisor.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                match runtime_for_ttl.cleanup_expired_memories().await {
+                    Ok(n) if n > 0 => {
+                        tracing::info!(deleted = n, "TTL cleanup: removed expired memories")
+                    }
+                    Ok(_) => tracing::debug!("TTL cleanup: no expired memories"),
+                    Err(e) => tracing::warn!(error = %e, "TTL cleanup failed"),
+                }
+            }
+        });
+    }
+
     let app = router::build_router(state.clone());
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

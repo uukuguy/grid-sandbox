@@ -304,6 +304,25 @@ impl MemoryStore for SqliteMemoryStore {
         Ok(ids)
     }
 
+    async fn delete_expired(&self) -> Result<usize> {
+        let now = chrono::Utc::now().timestamp();
+        let deleted = self
+            .conn
+            .call(move |conn| {
+                conn.execute_batch(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_ttl ON memories(ttl, created_at)",
+                )?;
+                let count = conn.execute(
+                    "DELETE FROM memories WHERE ttl IS NOT NULL AND (created_at + ttl) < ?1",
+                    rusqlite::params![now],
+                )?;
+                Ok(count)
+            })
+            .await?;
+        tracing::debug!(deleted, "Expired memories cleaned up");
+        Ok(deleted)
+    }
+
     async fn search(&self, query: &str, opts: SearchOptions) -> Result<Vec<MemoryResult>> {
         let query_str = query.to_string();
         let has_embedding = opts.query_embedding.is_some();
@@ -560,4 +579,83 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 fn time_decay(accessed_at: i64, now: i64) -> f32 {
     let days = ((now - accessed_at) as f32) / 86400.0;
     (-0.05 * days.max(0.0)).exp()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Database;
+
+    async fn setup_store() -> SqliteMemoryStore {
+        let db = Database::open_in_memory().await.unwrap();
+        SqliteMemoryStore::new(db.conn().clone())
+    }
+
+    fn make_entry(id: &str, ttl: Option<i64>, created_at: i64) -> MemoryEntry {
+        MemoryEntry {
+            id: MemoryId::from_string(id.to_string()),
+            user_id: "test-user".to_string(),
+            sandbox_id: "test-sandbox".to_string(),
+            category: MemoryCategory::Profile,
+            content: format!("content for {id}"),
+            metadata: serde_json::json!({}),
+            embedding: None,
+            importance: 0.5,
+            access_count: 0,
+            source_type: MemorySource::Manual,
+            source_ref: String::new(),
+            ttl,
+            timestamps: MemoryTimestamps {
+                created_at,
+                updated_at: created_at,
+                accessed_at: created_at,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_expired_removes_old() {
+        let store = setup_store().await;
+        let now = chrono::Utc::now().timestamp();
+        // Entry created 100 seconds ago with TTL of 10 seconds -> expired
+        let entry = make_entry("expired-1", Some(10), now - 100);
+        store.store(entry).await.unwrap();
+
+        let deleted = store.delete_expired().await.unwrap();
+        assert_eq!(deleted, 1);
+
+        // Verify it's gone
+        let result = store.get(&MemoryId::from_string("expired-1".to_string())).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_expired_keeps_valid() {
+        let store = setup_store().await;
+        let now = chrono::Utc::now().timestamp();
+
+        // Entry with no TTL -> should survive
+        let entry_no_ttl = make_entry("no-ttl", None, now - 1000);
+        store.store(entry_no_ttl).await.unwrap();
+
+        // Entry with long TTL -> should survive
+        let entry_long_ttl = make_entry("long-ttl", Some(999999), now);
+        store.store(entry_long_ttl).await.unwrap();
+
+        let deleted = store.delete_expired().await.unwrap();
+        assert_eq!(deleted, 0);
+
+        // Both entries should still exist
+        let r1 = store.get(&MemoryId::from_string("no-ttl".to_string())).await.unwrap();
+        assert!(r1.is_some());
+        let r2 = store.get(&MemoryId::from_string("long-ttl".to_string())).await.unwrap();
+        assert!(r2.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_delete_expired_empty_store() {
+        let store = setup_store().await;
+        let deleted = store.delete_expired().await.unwrap();
+        assert_eq!(deleted, 0);
+    }
 }
