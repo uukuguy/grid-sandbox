@@ -75,6 +75,11 @@ impl Tool for FileReadTool {
             }
         }
 
+        // Symlink defense: reject symbolic links
+        if let Some(output) = super::path_safety::reject_symlink(&path) {
+            return Ok(output);
+        }
+
         debug!(?path, offset, limit, "reading file");
 
         // Check file exists

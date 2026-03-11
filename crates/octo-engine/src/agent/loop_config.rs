@@ -68,6 +68,8 @@ pub struct AgentLoopConfig {
     pub defence: Option<Arc<AiDefence>>,
     /// Composable safety pipeline (injection, PII, canary, credentials).
     pub safety_pipeline: Option<Arc<SafetyPipeline>>,
+    /// Canary token to inject into system prompt for exfiltration detection.
+    pub canary_token: Option<String>,
     /// Agent manifest (role/goal/backstory/system_prompt).
     pub manifest: Option<AgentManifest>,
     /// Tool call interceptor for skill-based tool filtering.
@@ -132,6 +134,7 @@ impl Default for AgentLoopConfig {
             hook_registry: None,
             defence: None,
             safety_pipeline: None,
+            canary_token: None,
             manifest: None,
             interceptor: None,
             session_id: SessionId::default(),
@@ -272,6 +275,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn safety_pipeline(mut self, v: Arc<SafetyPipeline>) -> Self {
         self.config.safety_pipeline = Some(v);
+        self
+    }
+
+    pub fn canary_token(mut self, v: String) -> Self {
+        self.config.canary_token = Some(v);
         self
     }
 

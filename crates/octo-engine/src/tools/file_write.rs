@@ -69,6 +69,11 @@ impl Tool for FileWriteTool {
             }
         }
 
+        // Symlink defense: reject symbolic links
+        if let Some(output) = super::path_safety::reject_symlink(&path) {
+            return Ok(output);
+        }
+
         debug!(?path, content_len = content.len(), "writing file");
 
         // Create parent directories

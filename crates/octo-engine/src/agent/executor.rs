@@ -93,6 +93,10 @@ pub struct AgentExecutor {
     path_validator: Option<Arc<dyn PathValidator>>,
     // Hook 系统
     hook_registry: Option<Arc<crate::hooks::HookRegistry>>,
+    // Safety pipeline with canary guard (T1)
+    safety_pipeline: Option<Arc<crate::security::SafetyPipeline>>,
+    // Canary token for system prompt injection (T1)
+    canary_token: Option<String>,
 }
 
 impl AgentExecutor {
@@ -116,6 +120,8 @@ impl AgentExecutor {
         event_bus: Option<Arc<crate::event::TelemetryBus>>,
         path_validator: Option<Arc<dyn PathValidator>>,
         hook_registry: Option<Arc<crate::hooks::HookRegistry>>,
+        safety_pipeline: Option<Arc<crate::security::SafetyPipeline>>,
+        canary_token: Option<String>,
     ) -> Self {
         Self {
             session_id,
@@ -137,6 +143,8 @@ impl AgentExecutor {
             event_bus,
             path_validator,
             hook_registry,
+            safety_pipeline,
+            canary_token,
             turn_gate: super::turn_gate::TurnGate::new(),
         }
     }
@@ -215,6 +223,8 @@ impl AgentExecutor {
                         tool_ctx: Some(tool_ctx),
                         cancel_token: self.cancel_token.clone(),
                         agent_config: self.config.clone(),
+                        safety_pipeline: self.safety_pipeline.clone(),
+                        canary_token: self.canary_token.clone(),
                         ..AgentLoopConfig::default()
                     };
 

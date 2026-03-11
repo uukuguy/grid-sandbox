@@ -81,6 +81,11 @@ impl Tool for FileEditTool {
             }
         }
 
+        // Symlink defense: reject symbolic links
+        if let Some(output) = super::path_safety::reject_symlink(&path) {
+            return Ok(output);
+        }
+
         debug!(
             ?path,
             old_len = old_string.len(),

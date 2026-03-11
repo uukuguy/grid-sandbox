@@ -8,6 +8,7 @@ pub mod find;
 pub mod glob;
 pub mod grep;
 pub mod interceptor;
+pub mod path_safety;
 pub mod memory_forget;
 pub mod memory_recall;
 pub mod memory_search;

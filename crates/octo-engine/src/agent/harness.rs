@@ -122,7 +122,14 @@ async fn run_agent_loop_inner(
         if let Some(ref active_skill) = config.active_skill {
             builder = builder.with_active_skill(active_skill);
         }
-        builder.build()
+        let mut prompt = builder.build();
+        // Canary injection: append token AFTER build to prevent override
+        if let Some(ref canary) = config.canary_token {
+            prompt.push_str("\n\n<!-- CANARY: ");
+            prompt.push_str(canary);
+            prompt.push_str(" -->");
+        }
+        prompt
     };
     debug!("System prompt length: {} chars", system_prompt.len());
 
@@ -279,6 +286,15 @@ async fn run_agent_loop_inner(
                 })
                 .await;
 
+            // TelemetryBus: ContextDegraded
+            if let Some(ref bus) = config.event_bus {
+                bus.publish(crate::event::TelemetryEvent::ContextDegraded {
+                    session_id: config.session_id.as_str().to_string(),
+                    level: format!("{:?}", level),
+                })
+                .await;
+            }
+
             if let Some(ref hooks) = config.hook_registry {
                 let ctx = HookContext::new()
                     .with_session(config.session_id.as_str())
@@ -286,6 +302,20 @@ async fn run_agent_loop_inner(
                     .with_degradation(format!("{:?}", level));
                 hooks.execute(HookPoint::ContextDegraded, &ctx).await;
             }
+        }
+
+        // TelemetryBus: TokenBudgetUpdated (every round)
+        if let Some(ref bus) = config.event_bus {
+            let ratio = budget.usage_ratio(&system_prompt, &messages, &tool_specs);
+            let available = budget.available_space();
+            let used = (ratio * available as f64) as u64;
+            bus.publish(crate::event::TelemetryEvent::TokenBudgetUpdated {
+                session_id: config.session_id.as_str().to_string(),
+                used,
+                total: available,
+                ratio,
+            })
+            .await;
         }
 
         // --- AIDefence input check (round 0 only) ---
@@ -663,6 +693,14 @@ async fn run_agent_loop_inner(
             match &verdict {
                 LoopGuardVerdict::Block(msg) | LoopGuardVerdict::CircuitBreak(msg) => {
                     warn!("Loop Guard blocked: {}", msg);
+                    // TelemetryBus: LoopGuardTriggered
+                    if let Some(ref bus) = config.event_bus {
+                        bus.publish(crate::event::TelemetryEvent::LoopGuardTriggered {
+                            session_id: config.session_id.as_str().to_string(),
+                            reason: msg.clone(),
+                        })
+                        .await;
+                    }
                     let _ = tx
                         .send(AgentEvent::Error {
                             message: format!("Loop Guard: {}", msg),

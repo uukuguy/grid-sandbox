@@ -13,7 +13,7 @@ use crate::agent::{
     AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
 };
 use crate::db::Database;
-use crate::event::TelemetryBus;
+use crate::event::{EventStore, TelemetryBus};
 use crate::hooks::HookRegistry;
 use crate::mcp::manager::McpManager;
 use crate::memory::store_traits::MemoryStore;
@@ -102,8 +102,14 @@ pub struct AgentRuntime {
     pub(crate) hook_registry: Arc<HookRegistry>,
     // Tenant isolation (Task 3)
     pub(crate) tenant_context: Option<TenantContext>,
+    // Persistent event store (wired into TelemetryBus)
+    pub(crate) event_store: Option<Arc<EventStore>>,
     // Agent router for task-to-agent matching
     router: tokio::sync::RwLock<crate::agent::router::AgentRouter>,
+    // Default SafetyPipeline with CanaryGuardLayer (T1)
+    pub(crate) safety_pipeline: Option<Arc<crate::security::SafetyPipeline>>,
+    // Canary token for system prompt injection (T1)
+    pub(crate) canary_token: Option<String>,
 }
 
 impl AgentRuntime {
@@ -198,13 +204,25 @@ impl AgentRuntime {
             None
         };
 
-        // 10. TelemetryBus initialization (default enabled)
+        // 10. TelemetryBus + EventStore initialization
+        let db2 = Database::open(&config.db_path)
+            .await
+            .map_err(|e| AgentError::Internal(format!("Failed to open event DB: {}", e)))?;
+        let event_store = Arc::new(
+            EventStore::new(db2.conn().clone())
+                .await
+                .map_err(|e| AgentError::Internal(format!("Failed to create EventStore: {}", e)))?,
+        );
+
         let event_bus = if config.enable_event_bus {
-            Some(Arc::new(TelemetryBus::new(
-                1000,
-                1000,
-                Arc::new(crate::metrics::MetricsRegistry::new()),
-            )))
+            Some(Arc::new(
+                TelemetryBus::new(
+                    1000,
+                    1000,
+                    Arc::new(crate::metrics::MetricsRegistry::new()),
+                )
+                .with_event_store(event_store.clone()),
+            ))
         } else {
             None
         };
@@ -229,6 +247,13 @@ impl AgentRuntime {
         // 15. SecurityPolicy initialization (path validation for ToolContext)
         let security_policy = Arc::new(SecurityPolicy::new().with_workspace(working_dir.clone()));
 
+        // 16. SafetyPipeline with CanaryGuardLayer (T1 — canary token injection)
+        let canary_guard = crate::security::CanaryGuardLayer::with_default_canary();
+        let canary_token = canary_guard.canary().to_string();
+        let safety_pipeline = Arc::new(
+            crate::security::SafetyPipeline::new().add_layer(Box::new(canary_guard)),
+        );
+
         let runtime = Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
@@ -247,12 +272,15 @@ impl AgentRuntime {
             working_dir,
             metering,
             security_policy,
+            event_store: Some(event_store),
             hook_registry: Arc::new(HookRegistry::new()),
             tenant_context,
             router: tokio::sync::RwLock::new(crate::agent::router::AgentRouter::new()),
+            safety_pipeline: Some(safety_pipeline),
+            canary_token: Some(canary_token),
         };
 
-        // 16. Load declarative YAML agent definitions (if configured)
+        // 17. Load declarative YAML agent definitions (if configured)
         if let Some(ref dir) = config.agents_dir {
             let loader = crate::agent::AgentManifestLoader::new(dir);
             match loader.load_all(&runtime.catalog) {
@@ -347,6 +375,26 @@ impl AgentRuntime {
         &self.hook_registry
     }
 
+    /// Get event store (if any)
+    pub fn event_store(&self) -> Option<&Arc<EventStore>> {
+        self.event_store.as_ref()
+    }
+
+    /// Get canary token (if any)
+    pub fn canary_token(&self) -> Option<&str> {
+        self.canary_token.as_deref()
+    }
+
+    /// Get safety pipeline (if any)
+    pub fn safety_pipeline(&self) -> Option<&Arc<crate::security::SafetyPipeline>> {
+        self.safety_pipeline.as_ref()
+    }
+
+    /// Delete expired memory entries (convenience wrapper).
+    pub async fn cleanup_expired_memories(&self) -> anyhow::Result<usize> {
+        self.memory_store.delete_expired().await
+    }
+
     /// Get skill registry (if any)
     pub fn skill_registry(&self) -> Option<&Arc<SkillRegistry>> {
         self.skill_registry.as_ref()
@@ -439,6 +487,8 @@ impl AgentRuntime {
             self.event_bus.clone(),
             Some(self.security_policy.clone() as Arc<dyn octo_types::PathValidator>),
             Some(self.hook_registry.clone()),
+            self.safety_pipeline.clone(),
+            self.canary_token.clone(),
         );
 
         // Spawn 持久化主循环
