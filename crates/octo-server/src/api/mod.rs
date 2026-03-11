@@ -14,6 +14,7 @@ pub mod providers;
 pub mod scheduler;
 pub mod sessions;
 pub mod skills;
+pub mod sync;
 pub mod tasks;
 pub mod tools;
 pub mod user_context;
@@ -89,4 +90,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .nest("/v1", skills::router())
         // Collaboration dashboard (T9)
         .merge(collaboration::router())
+        // Offline sync (D6)
+        .merge(sync::router())
 }
