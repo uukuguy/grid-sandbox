@@ -8,6 +8,7 @@ import Tools from "./pages/Tools";
 import Memory from "./pages/Memory";
 import Debug from "./pages/Debug";
 import McpWorkbench from "./pages/McpWorkbench";
+import Collaboration from "./pages/Collaboration";
 
 export default function App() {
   const [activeTab] = useAtom(activeTabAtom);
@@ -21,6 +22,7 @@ export default function App() {
       {activeTab === "memory" && <Memory />}
       {activeTab === "debug" && <Debug />}
       {activeTab === "mcp" && <McpWorkbench />}
+      {activeTab === "collaboration" && <Collaboration />}
     </AppLayout>
   );
 }

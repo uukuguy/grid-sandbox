@@ -54,4 +54,15 @@ export type ServerMessage =
         usage_percent: number;
         degradation_level: number;
       };
-    };
+    }
+  | { type: "context_degraded"; session_id: string; level: string; usage_pct: number }
+  | { type: "memory_flushed"; session_id: string; facts_count: number }
+  | {
+      type: "approval_required";
+      session_id: string;
+      tool_name: string;
+      tool_id: string;
+      risk_level: string;
+    }
+  | { type: "security_blocked"; session_id: string; reason: string }
+  | { type: "typing"; session_id: string; state: boolean };

@@ -814,6 +814,42 @@ fn test_full_collaboration_workflow() {
     assert_eq!(proposals[0].votes.len(), 1);
 }
 
+// ── 11. Manager agents() accessor (T9) ──
+
+#[test]
+fn test_collaboration_manager_agents_accessor() {
+    let sid = SessionId::from_string("agents-accessor");
+    let mut mgr = CollaborationManager::new(sid);
+
+    // Empty manager returns empty vec
+    assert!(mgr.agents().is_empty());
+
+    mgr.add_agent(
+        "coder".into(),
+        "Coder Agent".into(),
+        vec![AgentCapability::CodeGeneration],
+        make_test_handle("coder-s"),
+    );
+    mgr.add_agent(
+        "reviewer".into(),
+        "Reviewer Agent".into(),
+        vec![AgentCapability::CodeReview, AgentCapability::Testing],
+        make_test_handle("reviewer-s"),
+    );
+
+    let agents = mgr.agents();
+    assert_eq!(agents.len(), 2);
+
+    // Verify both agents are present with correct data
+    let coder = agents.iter().find(|a| a.id == "coder").unwrap();
+    assert_eq!(coder.name, "Coder Agent");
+    assert_eq!(coder.capabilities, vec![AgentCapability::CodeGeneration]);
+
+    let reviewer = agents.iter().find(|a| a.id == "reviewer").unwrap();
+    assert_eq!(reviewer.name, "Reviewer Agent");
+    assert_eq!(reviewer.capabilities.len(), 2);
+}
+
 // ── Bonus: Persistence with manager context roundtrip ──
 
 #[tokio::test]

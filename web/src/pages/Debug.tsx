@@ -1,5 +1,7 @@
 import { useAtom } from "jotai";
 import { TokenBudgetBar } from "@/components/debug/TokenBudgetBar";
+import { ContextStatus } from "@/components/debug/ContextStatus";
+import { EventStream } from "@/components/debug/EventStream";
 import { executionRecordsAtom } from "@/atoms/debug";
 
 export default function Debug() {
@@ -14,16 +16,19 @@ export default function Debug() {
   const failedCount = executions.filter((e) => e.status === "failed").length;
 
   return (
-    <div className="flex flex-1 flex-col overflow-auto">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <div className="px-4 py-2 border-b border-border">
         <h2 className="text-sm font-medium">Debug Dashboard</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Token budget updates after each LLM response. Tool stats update in real time.
+          Real-time agent event stream, token budget, and context degradation status.
         </p>
       </div>
 
       {/* Token Budget */}
       <TokenBudgetBar />
+
+      {/* Context Degradation Status */}
+      <ContextStatus />
 
       {/* Session Tool Stats */}
       <div className="px-4 py-3 border-t border-border">
@@ -57,17 +62,8 @@ export default function Debug() {
         )}
       </div>
 
-      {/* How to use */}
-      <div className="px-4 py-3 border-t border-border mt-auto">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-          Usage Notes
-        </h3>
-        <ul className="text-xs text-muted-foreground space-y-1">
-          <li>• Token bar colors: green &lt;60% → yellow &lt;80% → orange &lt;90% → red</li>
-          <li>• Degradation levels: L0 None → L1 Soft Trim → L2 Hard Clear → L3 Compact</li>
-          <li>• Tool details: see the <strong className="text-foreground">Tools</strong> tab</li>
-        </ul>
-      </div>
+      {/* Live Event Stream — fills remaining space */}
+      <EventStream />
     </div>
   );
 }

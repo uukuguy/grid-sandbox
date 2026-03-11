@@ -216,6 +216,11 @@ impl CollaborationManager {
         &self.session_id
     }
 
+    /// Returns a list of all participating agents (cloned).
+    pub fn agents(&self) -> Vec<CollaborationAgent> {
+        self.agents.values().cloned().collect()
+    }
+
     /// Builds a status snapshot of this collaboration.
     pub fn status(&self) -> CollaborationStatus {
         self.context.status(

@@ -11,6 +11,8 @@ import {
 import {
   executionRecordsAtom,
   tokenBudgetAtom,
+  pushLiveEventAtom,
+  contextStatusAtom,
 } from "../atoms/debug";
 
 let streamBuffer = "";
@@ -67,6 +69,13 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
           status: "running" as const,
         },
       ]);
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "tool_start",
+        summary: `Tool started: ${msg.tool_name}`,
+        data: { tool_id: msg.tool_id, input: msg.input },
+      });
       break;
 
     case "tool_result":
@@ -77,6 +86,13 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
             : t,
         ),
       );
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: msg.success ? "tool_result" : "tool_error",
+        summary: `Tool ${msg.success ? "completed" : "failed"}: ${msg.tool_id}`,
+        data: { tool_id: msg.tool_id, success: msg.success },
+      });
       break;
 
     case "error":
@@ -94,6 +110,12 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
       set(streamingTextAtom, "");
       set(streamingThinkingAtom, "");
       set(isStreamingAtom, false);
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "error",
+        summary: `Error: ${msg.message}`,
+      });
       break;
 
     case "done":
@@ -119,6 +141,55 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
 
     case "token_budget_update":
       set(tokenBudgetAtom, msg.budget);
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "token_budget_update",
+        summary: `Budget ${msg.budget.usage_percent.toFixed(0)}% used (L${msg.budget.degradation_level})`,
+        data: msg.budget,
+      });
+      break;
+
+    case "context_degraded":
+      set(contextStatusAtom, { level: msg.level, usage_pct: msg.usage_pct });
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "context_degraded",
+        summary: `Context degraded to ${msg.level} (${msg.usage_pct.toFixed(0)}%)`,
+      });
+      break;
+
+    case "memory_flushed":
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "memory_flushed",
+        summary: `Memory flushed: ${msg.facts_count} facts extracted`,
+      });
+      break;
+
+    case "approval_required":
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "approval_required",
+        summary: `Approval required: ${msg.tool_name} (${msg.risk_level})`,
+        data: { tool_id: msg.tool_id, tool_name: msg.tool_name, risk_level: msg.risk_level },
+      });
+      break;
+
+    case "security_blocked":
+      set(pushLiveEventAtom, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: "security_blocked",
+        summary: `Security blocked: ${msg.reason}`,
+      });
+      break;
+
+    case "typing":
+      // Typing indicator — no live event needed, just state tracking
       break;
   }
 }

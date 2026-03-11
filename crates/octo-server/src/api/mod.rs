@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod audit;
 pub mod budget;
+pub mod collaboration;
 pub mod events;
 pub mod config;
 pub mod executions;
@@ -86,4 +87,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .nest("/v1", agents::router())
         // Skill catalog
         .nest("/v1", skills::router())
+        // Collaboration dashboard (T9)
+        .merge(collaboration::router())
 }
