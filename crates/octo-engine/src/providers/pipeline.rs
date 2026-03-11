@@ -442,6 +442,28 @@ impl ProviderPipelineBuilder {
         }
     }
 
+    /// Add cross-provider smart routing (V2).
+    ///
+    /// Unlike `with_smart_routing` which only overrides the model name,
+    /// this variant can dispatch to entirely different providers per tier.
+    pub fn with_cross_provider_routing(
+        self,
+        analyzer: QueryAnalyzer,
+        tier_models: std::collections::HashMap<QueryComplexity, String>,
+        tier_providers: std::collections::HashMap<QueryComplexity, std::sync::Arc<dyn Provider>>,
+        default_model: String,
+    ) -> Self {
+        Self {
+            provider: Box::new(SmartRouterProvider::new_cross_provider(
+                self.provider,
+                analyzer,
+                tier_models,
+                tier_providers,
+                default_model,
+            )),
+        }
+    }
+
     /// Add usage recorder (returns a handle to the shared stats).
     pub fn with_usage_recorder(self) -> (Self, Arc<RwLock<UsageStats>>) {
         let stats = Arc::new(RwLock::new(UsageStats::default()));

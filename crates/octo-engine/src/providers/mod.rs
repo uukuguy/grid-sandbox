@@ -19,7 +19,8 @@ pub use pipeline::{CircuitBreakerConfig, CircuitState, CostBudget, ProviderPipel
 pub use response_cache::ResponseCacheProvider;
 pub use retry::{ErrorStrategy, LlmErrorKind, RetryPolicy};
 pub use smart_router::{
-    AnalyzerThresholds, QueryAnalyzer, QueryComplexity, SmartRouterProvider, SmartRoutingConfig,
+    AnalyzerThresholds, QueryAnalyzer, QueryComplexity, RouteDecision, SmartRouterProvider,
+    SmartRoutingConfig, TierConfig,
 };
 pub use traits::{CompletionStream, Provider};
 pub use usage_recorder::{UsageRecorderProvider, UsageStats};
