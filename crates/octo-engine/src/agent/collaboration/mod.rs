@@ -1,4 +1,5 @@
 pub mod channel;
+pub mod consensus;
 pub mod context;
 pub mod handle;
 pub mod injection;
@@ -7,6 +8,7 @@ pub mod persistence;
 pub mod protocol;
 
 pub use channel::{create_channel_pair, CollaborationChannel, CollaborationMessage};
+pub use consensus::{ByzantineProposal, ConsensusPhase, ConsensusVote, PhaseAdvanceResult};
 pub use context::*;
 pub use handle::CollaborationHandle;
 pub use injection::build_collaboration_injection;

@@ -36,6 +36,32 @@ pub enum CollaborationMessage {
         action: String,
         from_agent: String,
     },
+    /// Byzantine consensus protocol message — leader proposes.
+    ConsensusProposal {
+        proposal_id: String,
+        action: String,
+        description: String,
+        proposer: String,
+        total_agents: usize,
+    },
+    /// Prepare phase vote in Byzantine consensus.
+    PrepareVote {
+        proposal_id: String,
+        agent_id: String,
+        approve: bool,
+    },
+    /// Commit phase vote in Byzantine consensus.
+    CommitVote {
+        proposal_id: String,
+        agent_id: String,
+        approve: bool,
+    },
+    /// Consensus result notification.
+    ConsensusResult {
+        proposal_id: String,
+        finalized: bool,
+        phase: String,
+    },
 }
 
 /// A bidirectional communication channel between two agents.
