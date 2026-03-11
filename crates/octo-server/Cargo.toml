@@ -7,6 +7,7 @@ version.workspace = true
 default = []
 sandbox-wasm = ["octo-engine/sandbox-wasm"]
 sandbox-docker = ["octo-engine/sandbox-docker"]
+tls = ["octo-engine/tls", "dep:axum-server"]
 
 [dependencies]
 octo-types = { workspace = true }
@@ -30,3 +31,4 @@ futures-util = { workspace = true }
 tokio-stream = { workspace = true }
 chrono.workspace = true
 rusqlite = { workspace = true }
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }

@@ -269,12 +269,58 @@ async fn main() -> Result<()> {
 
     let app = router::build_router(state.clone());
 
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!("octo-server listening on {addr}");
+    #[cfg(feature = "tls")]
+    if cfg.tls.enabled {
+        use axum_server::tls_rustls::RustlsConfig;
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(state.clone()))
-        .await?;
+        let (cert_path, key_path) = if cfg.tls.self_signed {
+            let tls_dir = cfg
+                .tls
+                .self_signed_dir
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("./data/tls"));
+            tracing::info!("Generating self-signed TLS certificate in {:?}", tls_dir);
+            octo_engine::tls::generate_self_signed_cert("localhost", &tls_dir)?
+        } else {
+            (
+                cfg.tls
+                    .cert_path
+                    .clone()
+                    .expect("TLS cert_path required when tls.enabled=true and self_signed=false"),
+                cfg.tls
+                    .key_path
+                    .clone()
+                    .expect("TLS key_path required when tls.enabled=true and self_signed=false"),
+            )
+        };
+
+        let tls_config = RustlsConfig::from_pem_file(&cert_path, &key_path).await?;
+        tracing::info!("octo-server listening on https://{addr} (TLS enabled)");
+        axum_server::bind_rustls(addr.parse()?, tls_config)
+            .serve(app.into_make_service())
+            .await?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        tracing::info!("octo-server listening on {addr}");
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal(state.clone()))
+            .await?;
+    }
+
+    #[cfg(not(feature = "tls"))]
+    {
+        if cfg.tls.enabled {
+            tracing::warn!(
+                "TLS is enabled in config but the 'tls' feature is not compiled in. \
+                 Rebuild with: cargo build -p octo-server --features tls"
+            );
+        }
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
+        tracing::info!("octo-server listening on {addr}");
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal(state.clone()))
+            .await?;
+    }
 
     // Graceful shutdown: clean up MCP servers
     tracing::info!("Shutting down MCP servers...");

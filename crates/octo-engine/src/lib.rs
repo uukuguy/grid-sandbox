@@ -18,6 +18,7 @@ pub mod security;
 pub mod session;
 pub mod skill_runtime;
 pub mod skills;
+pub mod tls;
 pub mod tools;
 
 pub use agent::{

@@ -49,6 +49,7 @@ regex = "1"
 lru = "0.12"
 hnsw_rs = { workspace = true, optional = true }
 tiktoken-rs = { version = "0.6", optional = true }
+rcgen = { version = "0.13", optional = true }
 
 [features]
 default = ["sandbox-wasm", "sandbox-docker", "tiktoken"]
@@ -57,6 +58,7 @@ sandbox-docker = ["dep:bollard", "dep:base64"]
 keyring = ["dep:keyring"]
 hnsw = ["dep:hnsw_rs"]
 tiktoken = ["dep:tiktoken-rs"]
+tls = ["dep:rcgen"]
 
 [dependencies.wasmtime]
 version = "25"

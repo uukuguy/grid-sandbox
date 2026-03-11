@@ -4,6 +4,38 @@ use octo_engine::scheduler::SchedulerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// TLS configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TlsConfig {
+    /// Enable TLS (default: false)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Path to PEM certificate file
+    #[serde(default)]
+    pub cert_path: Option<PathBuf>,
+    /// Path to PEM private key file
+    #[serde(default)]
+    pub key_path: Option<PathBuf>,
+    /// Auto-generate self-signed certificate (default: false)
+    #[serde(default)]
+    pub self_signed: bool,
+    /// Directory for self-signed cert output (default: ./data/tls)
+    #[serde(default)]
+    pub self_signed_dir: Option<PathBuf>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            cert_path: None,
+            key_path: None,
+            self_signed: false,
+            self_signed_dir: None,
+        }
+    }
+}
+
 /// Main configuration for octo-server
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -43,6 +75,9 @@ pub struct Config {
     /// Smart routing configuration (optional)
     #[serde(default)]
     pub smart_routing: Option<SmartRoutingConfig>,
+    /// TLS configuration
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +261,20 @@ impl Config {
             config.enable_event_bus = enabled.parse().unwrap_or(false);
         }
 
+        // TLS
+        if let Ok(enabled) = std::env::var("OCTO_TLS_ENABLED") {
+            config.tls.enabled = enabled.parse().unwrap_or(false);
+        }
+        if let Ok(path) = std::env::var("OCTO_TLS_CERT_PATH") {
+            config.tls.cert_path = Some(PathBuf::from(path));
+        }
+        if let Ok(path) = std::env::var("OCTO_TLS_KEY_PATH") {
+            config.tls.key_path = Some(PathBuf::from(path));
+        }
+        if let Ok(v) = std::env::var("OCTO_TLS_SELF_SIGNED") {
+            config.tls.self_signed = v.parse().unwrap_or(false);
+        }
+
         // Auth: OCTO_AUTH_MODE and OCTO_API_KEY override config.yaml
         if let Ok(mode) = std::env::var("OCTO_AUTH_MODE") {
             let m = match mode.to_lowercase().as_str() {
@@ -346,6 +395,15 @@ impl Config {
             "# enable_event_bus: {}    # Enable event bus (default: false)\n",
             defaults.enable_event_bus
         ));
+
+        // TLS
+        output.push_str("\n# TLS configuration\n");
+        output.push_str("# tls:\n");
+        output.push_str("#   enabled: false        # Enable HTTPS\n");
+        output.push_str("#   cert_path: null       # Path to PEM certificate\n");
+        output.push_str("#   key_path: null        # Path to PEM private key\n");
+        output.push_str("#   self_signed: false    # Auto-generate self-signed cert\n");
+        output.push_str("#   self_signed_dir: null # Output dir for self-signed certs\n");
 
         // Auth
         output.push_str("\n# Auth configuration\n");

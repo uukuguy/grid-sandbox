@@ -1,0 +1,13 @@
+# Caddy reverse proxy configuration for octo-server
+# Caddy handles ACME certificate automation automatically.
+#
+# Usage:
+#   1. Install Caddy: https://caddyserver.com/docs/install
+#   2. Replace api.example.com with your domain
+#   3. Run: caddy run --config Caddyfile
+#
+# Caddy will automatically obtain and renew TLS certificates.
+
+api.example.com {
+    reverse_proxy localhost:3001
+}

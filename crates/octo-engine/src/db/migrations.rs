@@ -297,3 +297,70 @@ pub fn migration_v6() -> Migration {
         "#,
     )
 }
+
+/// Migration v7: Byzantine consensus persistence tables
+pub fn migration_v7() -> Migration {
+    Migration::new(
+        7,
+        "byzantine_consensus_persistence",
+        r#"
+        -- Byzantine proposals persistence
+        CREATE TABLE IF NOT EXISTS byzantine_proposals (
+            id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            collaboration_id TEXT NOT NULL,
+            proposer TEXT NOT NULL,
+            action TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            phase TEXT NOT NULL DEFAULT 'PrePrepare',
+            prepare_votes TEXT NOT NULL DEFAULT '[]',
+            commit_votes TEXT NOT NULL DEFAULT '[]',
+            total_agents INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            finalized_at TEXT,
+            PRIMARY KEY (id, session_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bp_session ON byzantine_proposals(session_id, collaboration_id);
+        CREATE INDEX IF NOT EXISTS idx_bp_phase ON byzantine_proposals(session_id, phase);
+
+        -- Consensus view state persistence
+        CREATE TABLE IF NOT EXISTS consensus_view_state (
+            session_id TEXT NOT NULL,
+            collaboration_id TEXT NOT NULL,
+            view_number INTEGER NOT NULL DEFAULT 0,
+            leader TEXT NOT NULL,
+            agents TEXT NOT NULL DEFAULT '[]',
+            timeout_ms INTEGER NOT NULL DEFAULT 5000,
+            pending_requests TEXT NOT NULL DEFAULT '[]',
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (session_id, collaboration_id)
+        );
+
+        -- Consensus signatures audit log (immutable)
+        CREATE TABLE IF NOT EXISTS consensus_signatures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            proposal_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            phase TEXT NOT NULL,
+            approve INTEGER NOT NULL,
+            signature BLOB NOT NULL,
+            public_key BLOB NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cs_proposal ON consensus_signatures(session_id, proposal_id);
+
+        -- Consensus keypairs (AES-GCM encrypted private keys)
+        CREATE TABLE IF NOT EXISTS consensus_keypairs (
+            agent_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            public_key BLOB NOT NULL,
+            private_key_encrypted BLOB NOT NULL,
+            encryption_nonce BLOB NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (agent_id, session_id)
+        );
+        "#,
+    )
+}

@@ -7,6 +7,7 @@ pub mod injection;
 pub mod manager;
 pub mod persistence;
 pub mod protocol;
+pub mod sqlite_store;
 
 pub use channel::{create_channel_pair, CollaborationChannel, CollaborationMessage};
 pub use consensus::{
@@ -21,5 +22,9 @@ pub use context::*;
 pub use handle::CollaborationHandle;
 pub use injection::build_collaboration_injection;
 pub use manager::{CollaborationAgent, CollaborationManager};
-pub use persistence::{CollaborationSnapshot, CollaborationStore, InMemoryCollaborationStore};
+pub use persistence::{
+    ByzantineStore, CollaborationSnapshot, CollaborationStore, InMemoryCollaborationStore,
+    SignatureRecord,
+};
 pub use protocol::CollaborationProtocol;
+pub use sqlite_store::SqliteByzantineStore;

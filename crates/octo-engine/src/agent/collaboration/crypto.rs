@@ -5,8 +5,11 @@
 //! votes and proposals. Other agents verify the signature before accepting
 //! a message, preventing impersonation and tampering.
 
+use aes_gcm::aead::Aead;
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// A keypair for signing consensus messages.
@@ -76,6 +79,58 @@ impl ConsensusKeypair {
     /// Returns the raw public key bytes (32 bytes).
     pub fn public_key_bytes(&self) -> Vec<u8> {
         self.verifying_key.to_bytes().to_vec()
+    }
+
+    /// Returns the raw private key bytes (32 bytes).
+    pub fn private_key_bytes(&self) -> Vec<u8> {
+        self.signing_key.to_bytes().to_vec()
+    }
+
+    /// Encrypts the private key using AES-GCM for secure storage.
+    /// Returns (encrypted_data, nonce).
+    pub fn encrypt_private_key(&self, key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>), String> {
+        let cipher = Aes256Gcm::new(key.into());
+        let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let private_bytes = self.signing_key.to_bytes();
+        let encrypted = cipher
+            .encrypt(nonce, private_bytes.as_ref())
+            .map_err(|e| format!("encryption failed: {}", e))?;
+        Ok((encrypted, nonce_bytes.to_vec()))
+    }
+
+    /// Restores a keypair from encrypted private key data.
+    pub fn decrypt_and_restore(
+        agent_id: &str,
+        public_key_bytes: &[u8],
+        encrypted_private: &[u8],
+        nonce: &[u8],
+        key: &[u8; 32],
+    ) -> Result<Self, String> {
+        let cipher = Aes256Gcm::new(key.into());
+        let nonce = Nonce::from_slice(nonce);
+        let private_bytes = cipher
+            .decrypt(nonce, encrypted_private)
+            .map_err(|e| format!("decryption failed: {}", e))?;
+        let private_array: [u8; 32] = private_bytes
+            .try_into()
+            .map_err(|_| "invalid private key length".to_string())?;
+        let signing_key = SigningKey::from_bytes(&private_array);
+        let verifying_key = signing_key.verifying_key();
+
+        // Verify the public key matches
+        let expected: [u8; 32] = public_key_bytes
+            .try_into()
+            .map_err(|_| "invalid public key length".to_string())?;
+        if verifying_key.to_bytes() != expected {
+            return Err("public key mismatch after decryption".to_string());
+        }
+
+        Ok(Self {
+            signing_key,
+            verifying_key,
+            agent_id: agent_id.to_string(),
+        })
     }
 }
 

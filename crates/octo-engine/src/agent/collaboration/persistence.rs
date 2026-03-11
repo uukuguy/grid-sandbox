@@ -12,7 +12,9 @@ use tokio::sync::RwLock;
 
 use octo_types::SessionId;
 
+use super::consensus::{ByzantineProposal, ConsensusPhase, ViewChangeTracker};
 use super::context::{CollaborationEvent, Proposal};
+use super::crypto::{ConsensusKeypair, SignedMessage};
 
 /// A point-in-time snapshot of a collaboration session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +59,111 @@ pub trait CollaborationStore: Send + Sync {
         session_id: &SessionId,
         collaboration_id: &str,
     ) -> anyhow::Result<()>;
+}
+
+/// Record of a signature in the audit log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignatureRecord {
+    pub id: i64,
+    pub session_id: String,
+    pub proposal_id: String,
+    pub agent_id: String,
+    pub phase: String,
+    pub approve: bool,
+    pub signature: Vec<u8>,
+    pub public_key: Vec<u8>,
+    pub payload: String,
+    pub created_at: String,
+}
+
+/// Storage trait for Byzantine consensus persistence.
+#[async_trait]
+pub trait ByzantineStore: Send + Sync {
+    /// Save a Byzantine proposal.
+    async fn save_proposal(
+        &self,
+        session_id: &SessionId,
+        collaboration_id: &str,
+        proposal: &ByzantineProposal,
+    ) -> anyhow::Result<()>;
+
+    /// Load a proposal by ID.
+    async fn load_proposal(
+        &self,
+        session_id: &SessionId,
+        proposal_id: &str,
+    ) -> anyhow::Result<Option<ByzantineProposal>>;
+
+    /// List proposals for a collaboration, optionally filtered by phase.
+    async fn list_proposals(
+        &self,
+        session_id: &SessionId,
+        collaboration_id: &str,
+        phase_filter: Option<ConsensusPhase>,
+    ) -> anyhow::Result<Vec<ByzantineProposal>>;
+
+    /// Update an existing proposal (phase, votes, finalized_at).
+    async fn update_proposal(
+        &self,
+        session_id: &SessionId,
+        proposal: &ByzantineProposal,
+    ) -> anyhow::Result<()>;
+
+    /// Delete all proposals for a collaboration. Returns count deleted.
+    async fn delete_proposals(
+        &self,
+        session_id: &SessionId,
+        collaboration_id: &str,
+    ) -> anyhow::Result<usize>;
+
+    /// Save view change tracker state.
+    async fn save_view_state(
+        &self,
+        session_id: &SessionId,
+        collaboration_id: &str,
+        tracker: &ViewChangeTracker,
+    ) -> anyhow::Result<()>;
+
+    /// Load view change tracker state.
+    async fn load_view_state(
+        &self,
+        session_id: &SessionId,
+        collaboration_id: &str,
+    ) -> anyhow::Result<Option<ViewChangeTracker>>;
+
+    /// Log a signature to the immutable audit log.
+    async fn log_signature(
+        &self,
+        session_id: &SessionId,
+        proposal_id: &str,
+        signed_msg: &SignedMessage,
+        phase: &str,
+        approve: bool,
+    ) -> anyhow::Result<()>;
+
+    /// Get all signatures for a proposal.
+    async fn get_signatures(
+        &self,
+        session_id: &SessionId,
+        proposal_id: &str,
+    ) -> anyhow::Result<Vec<SignatureRecord>>;
+
+    /// Save an encrypted keypair.
+    async fn save_keypair(
+        &self,
+        session_id: &SessionId,
+        agent_id: &str,
+        keypair: &ConsensusKeypair,
+        encryption_key: &[u8; 32],
+    ) -> anyhow::Result<()>;
+
+    /// Load and decrypt a keypair.
+    async fn load_keypair(
+        &self,
+        session_id: &SessionId,
+        agent_id: &str,
+        encryption_key: &[u8; 32],
+    ) -> anyhow::Result<Option<ConsensusKeypair>>;
 }
 
 /// Composite key for the in-memory store: `(session_id, collaboration_id)`.
