@@ -4,8 +4,19 @@ use octo_engine::scheduler::SchedulerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Sync configuration (offline-first sync with HLC timestamps)
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SyncConfig {
+    /// Enable sync (default: false)
+    #[serde(default)]
+    pub enabled: bool,
+    /// Node identifier (auto-generated UUID if not set)
+    #[serde(default)]
+    pub node_id: Option<String>,
+}
+
 /// TLS configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TlsConfig {
     /// Enable TLS (default: false)
     #[serde(default)]
@@ -22,18 +33,6 @@ pub struct TlsConfig {
     /// Directory for self-signed cert output (default: ./data/tls)
     #[serde(default)]
     pub self_signed_dir: Option<PathBuf>,
-}
-
-impl Default for TlsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            cert_path: None,
-            key_path: None,
-            self_signed: false,
-            self_signed_dir: None,
-        }
-    }
 }
 
 /// Main configuration for octo-server
@@ -78,6 +77,9 @@ pub struct Config {
     /// TLS configuration
     #[serde(default)]
     pub tls: TlsConfig,
+    /// Sync configuration (offline-first sync)
+    #[serde(default)]
+    pub sync: SyncConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -381,13 +383,13 @@ impl Config {
         output.push_str("# Skills configuration\n");
         output.push_str("# skills:\n");
         output.push_str(&format!(
-            "#   dirs: {:?}            # List of skills directories\n",
+            "#   dirs: {:?}            # List of skills directories\n\n",
             defaults.skills.dirs
         ));
 
         // Working directory
         output.push_str("# Working directory for sandbox (optional)\n");
-        output.push_str("# working_dir: \"./data/sandbox\"   # Optional working directory\n");
+        output.push_str("# working_dir: \"./data/sandbox\"   # Optional working directory\n\n");
 
         // Event bus
         output.push_str("# Enable event bus for observability\n");
@@ -425,6 +427,54 @@ impl Config {
         output.push_str("#     - key: \"your-secret-key\"\n");
         output.push_str("#       user_id: \"dev\"\n");
         output.push_str("#       permissions: [\"read\", \"write\", \"admin\"]\n");
+
+        // Scheduler
+        output.push_str("\n# Scheduler configuration\n");
+        output.push_str("# scheduler:\n");
+        output.push_str(&format!(
+            "#   enabled: {}          # Enable cron scheduler\n",
+            defaults.scheduler.enabled
+        ));
+        output.push_str(&format!(
+            "#   check_interval_secs: {}  # Interval between task checks (seconds)\n",
+            defaults.scheduler.check_interval_secs
+        ));
+        output.push_str(&format!(
+            "#   max_concurrent: {}       # Max concurrent scheduled tasks\n",
+            defaults.scheduler.max_concurrent
+        ));
+
+        // Provider Chain
+        output.push_str("\n# Provider chain configuration (optional, multi-provider failover)\n");
+        output.push_str("# provider_chain:\n");
+        output.push_str("#   failover_policy: automatic  # automatic | manual\n");
+        output.push_str("#   health_check_interval_sec: 30\n");
+        output.push_str("#   instances:\n");
+        output.push_str("#     - name: primary\n");
+        output.push_str("#       provider: anthropic\n");
+        output.push_str("#       model: claude-sonnet-4-20250514\n");
+        output.push_str("#       priority: 1\n");
+        output.push_str("#     - name: fallback\n");
+        output.push_str("#       provider: openai\n");
+        output.push_str("#       model: gpt-4o\n");
+        output.push_str("#       priority: 2\n");
+
+        // Smart Routing
+        output.push_str("\n# Smart routing configuration (optional, complexity-based model routing)\n");
+        output.push_str("# smart_routing:\n");
+        output.push_str("#   enabled: false         # Enable smart routing\n");
+        output.push_str("#   default_tier: medium    # Default tier: low | medium | high\n");
+        output.push_str("#   tiers: {}               # Custom tier configurations\n");
+        output.push_str("#   thresholds: null        # Custom analyzer thresholds\n");
+
+        // Sync
+        output.push_str("\n# Sync configuration (offline-first sync with HLC timestamps)\n");
+        output.push_str("# sync:\n");
+        output.push_str(&format!(
+            "#   enabled: {}          # Enable offline sync\n",
+            defaults.sync.enabled
+        ));
+        output.push_str("#   node_id: null          # Node identifier (auto-generated UUID if not set)\n");
 
         output
     }

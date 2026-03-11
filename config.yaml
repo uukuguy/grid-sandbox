@@ -24,7 +24,6 @@
 # Logging configuration
 # logging:
 #   level: octo_server=debug,octo_engine=debug,tower_http=debug
-#   format: text        # Log format: "text" (default) or "json" (for ELK)
 
 # MCP configuration
 # mcp:
@@ -34,15 +33,67 @@
 # skills:
 #   dirs: []            # List of skills directories
 
-# Scheduler configuration
-scheduler:
-  enabled: true
-  check_interval_secs: 60
-  max_concurrent: 5
+# Working directory for sandbox (optional)
+# working_dir: "./data/sandbox"   # Optional working directory
+
+# Enable event bus for observability
+# enable_event_bus: false    # Enable event bus (default: false)
+
+# TLS configuration
+# tls:
+#   enabled: false        # Enable HTTPS
+#   cert_path: null       # Path to PEM certificate
+#   key_path: null        # Path to PEM private key
+#   self_signed: false    # Auto-generate self-signed cert
+#   self_signed_dir: null # Output dir for self-signed certs
 
 # Auth configuration
-# API key is loaded from OCTO_API_KEY environment variable (.env)
-# Auth mode is loaded from OCTO_AUTH_MODE environment variable (.env)
+# Configure via environment variables (recommended) or inline below.
+#
+# Option 1: Disable auth (local dev only)
+#   OCTO_AUTH_MODE=none
+#
+# Option 2: API key auth
+#   OCTO_AUTH_MODE=api_key
+#   OCTO_API_KEY=your-secret-key     # key clients use in Authorization: Bearer header
+#   OCTO_API_KEY_USER=dev            # optional user id (default: "default")
+#
 # auth:
-#   mode: api_key
+#   mode: api_key   # none | api_key
+#   api_keys:
+#     - key: "your-secret-key"
+#       user_id: "dev"
+#       permissions: ["read", "write", "admin"]
+
+# Scheduler configuration
+# scheduler:
+#   enabled: false          # Enable cron scheduler
+#   check_interval_secs: 60  # Interval between task checks (seconds)
+#   max_concurrent: 5       # Max concurrent scheduled tasks
+
+# Provider chain configuration (optional, multi-provider failover)
+# provider_chain:
+#   failover_policy: automatic  # automatic | manual
+#   health_check_interval_sec: 30
+#   instances:
+#     - name: primary
+#       provider: anthropic
+#       model: claude-sonnet-4-20250514
+#       priority: 1
+#     - name: fallback
+#       provider: openai
+#       model: gpt-4o
+#       priority: 2
+
+# Smart routing configuration (optional, complexity-based model routing)
+# smart_routing:
+#   enabled: false         # Enable smart routing
+#   default_tier: medium    # Default tier: low | medium | high
+#   tiers: {}               # Custom tier configurations
+#   thresholds: null        # Custom analyzer thresholds
+
+# Sync configuration (offline-first sync with HLC timestamps)
+# sync:
+#   enabled: false          # Enable offline sync
+#   node_id: null          # Node identifier (auto-generated UUID if not set)
 
