@@ -1,64 +1,52 @@
 {
-  "active_phases": [
+  "active_phases": [],
+  "suspended_phases": [],
+  "archived_phases": [
+    {
+      "name": "Wave 6 — Production Hardening",
+      "completed_at": "2026-03-11T17:30:00+08:00",
+      "progress": "100%",
+      "tests": 1594,
+      "commit": "763ab56"
+    },
+    {
+      "name": "Wave 5 — Consensus Persistence + Offline Sync + TLS",
+      "completed_at": "2026-03-11T16:30:00+08:00",
+      "progress": "100%",
+      "tests": 1548,
+      "commit": "d95e468"
+    },
+    {
+      "name": "Wave 4 — Byzantine Consensus + Singleton Agent",
+      "completed_at": "2026-03-11T14:00:00+08:00",
+      "progress": "100%",
+      "tests": 1501,
+      "commit": "6d41b7a"
+    },
     {
       "name": "Deferred 项完成 (Wave 1+2)",
-      "started_at": "2026-03-11T09:30:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "progress": "0%",
-      "plan_file": "docs/plans/2026-03-11-deferred-completion.md",
-      "total_tasks": 10,
-      "completed_tasks": 0,
-      "last_commit": null,
-      "last_updated": "2026-03-11T09:30:00+08:00",
-      "design_artifacts": []
-    }
-  ],
-  "suspended_phases": [
+      "completed_at": "2026-03-11T12:00:00+08:00",
+      "progress": "100%"
+    },
     {
       "name": "Octo-Cli 设计与实现",
-      "started_at": "2026-03-10T09:05:00+08:00",
-      "suspended_at": "2026-03-11T09:30:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint-octo-cli.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "progress": "100%",
-      "reason": "34/34 tasks COMPLETE, 进入 Deferred 项完成阶段"
+      "completed_at": "2026-03-11T09:30:00+08:00",
+      "progress": "100%"
     },
     {
       "name": "Harness 实现",
-      "started_at": "2026-03-09T17:02:00+08:00",
-      "suspended_at": "2026-03-10T09:05:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint-harness.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE-harness.md",
-      "progress": "100%",
-      "reason": "harness-skills-completion 34/34 COMPLETE, 904 tests, 进入 CLI 设计阶段"
+      "completed_at": "2026-03-10T09:05:00+08:00",
+      "progress": "100%"
     },
     {
       "name": "pre-harness-refactor",
-      "started_at": "2026-03-09T13:12:00+08:00",
-      "suspended_at": "2026-03-09T17:02:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint-pre-harness-refactor.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE-pre-harness-refactor.md",
-      "progress": "100%",
-      "reason": "42/42 tasks + 5 Deferred 完成，857 tests passing，进入 Harness 实现阶段"
+      "completed_at": "2026-03-09T17:02:00+08:00",
+      "progress": "100%"
     },
     {
       "name": "octo-platform Phase 1",
-      "started_at": "2026-03-04T11:48:00+08:00",
-      "suspended_at": "2026-03-09T13:12:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint-octo-platform-p1.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE-octo-platform-p1.md",
-      "progress": "100%",
-      "reason": "P1+P2 已完成，切换到 pre-harness-refactor"
-    },
-    {
-      "name": "Phase 2.11: AgentRegistry",
-      "started_at": "2026-03-03T04:27:00+08:00",
-      "suspended_at": "2026-03-04T11:48:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint-phase2-11.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE-phase2-11.md",
-      "progress": "0%",
-      "reason": "切换到 octo-platform 分支开发"
+      "completed_at": "2026-03-09T13:12:00+08:00",
+      "progress": "100%"
     }
   ]
 }
