@@ -4,7 +4,6 @@ pub mod auth;
 pub mod context;
 pub mod db;
 pub mod event;
-pub mod extension;
 pub mod hooks;
 pub mod logging;
 pub mod mcp;
@@ -39,10 +38,6 @@ pub use context::{
 };
 pub use db::Database;
 pub use event::{TelemetryBus, EventCountProjection, EventStore, TelemetryEvent, Projection, StoredEvent};
-pub use extension::{
-    AgentResult, Extension, ExtensionContext, ExtensionEvent, ExtensionHostActions,
-    ExtensionManager, HostcallInterceptor, InMemoryExtensionHostActions, LoggingExtension,
-};
 pub use hooks::{
     BoxHookHandler, HookAction, HookContext, HookFailureMode, HookHandler, HookPoint, HookRegistry,
 };

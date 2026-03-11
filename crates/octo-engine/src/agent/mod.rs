@@ -10,7 +10,6 @@ pub mod deferred_action;
 pub mod entry;
 pub mod events;
 pub mod executor;
-pub mod extension;
 pub mod harness;
 pub mod loop_;
 pub mod loop_config;
@@ -49,7 +48,6 @@ pub use deferred_action::{
 pub use entry::{AgentEntry, AgentError, AgentId, AgentManifest, AgentStatus};
 pub use events::{AgentEvent, AgentLoopResult, NormalizedStopReason};
 pub use executor::{AgentExecutor, AgentExecutorHandle, AgentMessage};
-pub use extension::{AgentExtension, ExtensionEvent, ExtensionRegistry};
 pub use harness::run_agent_loop;
 pub use loop_::AgentLoop;
 pub use loop_config::AgentLoopConfig;
