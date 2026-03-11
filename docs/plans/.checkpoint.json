@@ -1,22 +1,22 @@
 {
   "plan_file": "docs/plans/2026-03-11-deferred-wave3.md",
-  "phase": "design",
+  "phase": "execution",
   "created_at": "2026-03-11T13:00:00+08:00",
-  "updated_at": "2026-03-11T13:00:00+08:00",
-  "completed_tasks": [],
-  "current_task": "D2",
+  "updated_at": "2026-03-11T15:30:00+08:00",
+  "completed_tasks": ["D2", "D7", "D3", "D1-P1", "D5"],
+  "current_task": "D1-P2",
   "total_tasks": 12,
   "task_groups": {
     "Wave3": {
       "name": "架构清理 + 跨 Provider + 多模态",
       "tasks": ["D2", "D7", "D3"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "description": "Extension 废弃 + SmartRouting V2 + Image ContentBlock"
     },
     "Wave4": {
       "name": "Byzantine 共识 + 桌面更新",
       "tasks": ["D1-P1", "D1-P2", "D5"],
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "description": "PBFT-lite 共识 + ED25519 签名 + Tauri 自动更新"
     },
     "Wave5": {
@@ -27,17 +27,17 @@
     }
   },
   "execution_order": ["Wave3", "Wave4", "Wave5"],
-  "execution_mode": null,
+  "execution_mode": "subagent-driven-development",
   "phase_name": "deferred-wave3",
   "tests_baseline": 1408,
-  "tests_current": 1408,
+  "tests_current": 1473,
   "previous_plan": {
     "file": "docs/plans/2026-03-11-deferred-completion.md",
     "status": "COMPLETE",
     "tasks_completed": 10,
     "final_commit": "b5d7e61"
   },
-  "plan_status": "DESIGN",
+  "plan_status": "EXECUTING",
   "final_commit": null,
-  "notes": "Wave 3-5 plan created from 4 research agents. Ready for execution."
+  "notes": "Wave 3 COMPLETE @ 58387b9. Wave 4: D1-P1 COMPLETE (36 new tests, PBFT-lite consensus). D5 COMPLETE (Tauri updater + release workflow). Next: D1-P2 (ED25519 signing + view change)."
 }
