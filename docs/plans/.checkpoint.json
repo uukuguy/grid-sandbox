@@ -1,43 +1,49 @@
 {
-  "plan_file": "docs/plans/2026-03-11-deferred-wave3.md",
+  "plan_file": "docs/plans/2026-03-11-wave5-execution.md",
   "phase": "execution",
-  "created_at": "2026-03-11T13:00:00+08:00",
-  "updated_at": "2026-03-11T16:00:00+08:00",
-  "completed_tasks": ["D2", "D7", "D3", "D1-P1", "D1-P2", "D5"],
+  "created_at": "2026-03-11T15:00:00+08:00",
+  "updated_at": "2026-03-11T15:00:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 12,
+  "total_tasks": 22,
   "task_groups": {
-    "Wave3": {
-      "name": "架构清理 + 跨 Provider + 多模态",
-      "tasks": ["D2", "D7", "D3"],
-      "status": "COMPLETE",
-      "description": "Extension 废弃 + SmartRouting V2 + Image ContentBlock"
+    "Wave5a": {
+      "name": "共识持久化",
+      "tasks": ["D1-P3-T1", "D1-P3-T2", "D1-P3-T3", "D1-P3-T4", "D1-P3-T5", "D1-P3-T6", "D1-P3-T7"],
+      "status": "PENDING",
+      "description": "DB Migration v7 + ByzantineStore + SqliteByzantineStore + 密钥加密 + Manager 集成 + 测试"
     },
-    "Wave4": {
-      "name": "Byzantine 共识 + 桌面更新",
-      "tasks": ["D1-P1", "D1-P2", "D5"],
-      "status": "COMPLETE",
-      "description": "PBFT-lite 共识 + ED25519 签名 + Tauri 自动更新"
+    "Wave5b": {
+      "name": "离线同步 (LWW + HLC)",
+      "tasks": ["D6-T1", "D6-T2", "D6-T3", "D6-T4", "D6-T5", "D6-T6", "D6-T7", "D6-T8", "D6-T9"],
+      "status": "PENDING",
+      "description": "HLC 时钟 + 变更追踪 + LWW 冲突解决 + 同步协议 + REST API + 测试"
     },
-    "Wave5": {
-      "name": "离线同步 + 自动证书",
-      "tasks": ["D6", "D4", "D1-P3"],
-      "status": "DEFERRED",
-      "description": "LWW 同步 + ACME 证书 + 共识持久化"
+    "Wave5c": {
+      "name": "TLS 支持 (缩减版)",
+      "tasks": ["D4-T1", "D4-T2", "D4-T3", "D4-T4", "D4-T5", "D4-T6"],
+      "status": "PENDING",
+      "description": "TLS 配置 + 自签名证书 + Server 集成 + 部署模板 + 测试"
     }
   },
-  "execution_order": ["Wave3", "Wave4", "Wave5"],
+  "execution_order": ["Wave5a", "Wave5c", "Wave5b"],
   "execution_mode": "subagent-driven-development",
-  "phase_name": "deferred-wave3",
-  "tests_baseline": 1408,
+  "phase_name": "wave5-execution",
+  "tests_baseline": 1501,
   "tests_current": 1501,
   "previous_plan": {
-    "file": "docs/plans/2026-03-11-deferred-completion.md",
-    "status": "COMPLETE",
-    "tasks_completed": 10,
-    "final_commit": "b5d7e61"
+    "file": "docs/plans/2026-03-11-deferred-wave3.md",
+    "status": "EXECUTING",
+    "tasks_completed": 6,
+    "final_commit": "6d41b7a",
+    "notes": "Wave 3+4 COMPLETE. Wave 5 moved to new plan."
   },
-  "plan_status": "EXECUTING",
+  "design_decisions": {
+    "D1-P3_keypair": "AES-GCM encrypted persistence to SQLite (agent persistent identity)",
+    "D6_timestamp": "Hybrid Logical Clock (causal ordering, ~50 LOC overhead)",
+    "D4_scope": "Reduced to TLS config + self-signed + Caddy/Nginx templates (no built-in ACME)"
+  },
+  "plan_status": "READY",
   "final_commit": null,
-  "notes": "Wave 3 COMPLETE @ 58387b9. Wave 4 COMPLETE: D1-P1 (PBFT-lite, 36 tests), D1-P2 (ED25519 + view change, 28 tests), D5 (Tauri updater + release workflow). Wave 5 DEFERRED (D6 LWW sync, D4 ACME, D1-P3 persistence)."
+  "notes": "New Wave 5 plan based on deep code analysis of all 3 deferred items. Design doc: docs/design/WAVE5_DEFERRED_DESIGN.md"
 }

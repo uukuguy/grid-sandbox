@@ -222,14 +222,17 @@ Wave 4:
 
 ---
 
-## Deferred（暂缓项）
+## Deferred（暂缓项） → 已迁移至 Wave 5 计划
 
-| ID | 内容 | 前置条件 | 状态 |
-|----|------|---------|------|
-| D1-P3 | Byzantine 共识持久化 + 前端可视化 | D1-P2 完成 | ⏳ |
-| D4 | Let's Encrypt ACME 自动证书 | 公网域名 + 生产部署 | ⏳ |
-| D6 | 离线模式 SQLite 同步 (LWW) | D1+D5 完成 + 协议设计 | ⏳ |
-| D6-V2 | CRDT 离线同步 | D6-LWW 完成 | ⏳ |
+> **所有暂缓项已迁移到**: `docs/plans/2026-03-11-wave5-execution.md`
+> **设计文档**: `docs/design/WAVE5_DEFERRED_DESIGN.md`
+
+| ID | 内容 | 新计划中的 Task | 状态 |
+|----|------|---------------|------|
+| D1-P3 | Byzantine 共识持久化 | Wave 5a: D1-P3-T1~T7 | 📋 READY |
+| D4-lite | TLS 配置 + 自签名 + 部署模板 | Wave 5c: D4-T1~T6 | 📋 READY |
+| D6 | 离线模式 SQLite 同步 (LWW+HLC) | Wave 5b: D6-T1~T9 | 📋 READY |
+| D6-V2 | CRDT 离线同步 | 仍暂缓 | ⏳ |
 
 ---
 
