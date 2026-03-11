@@ -1,37 +1,43 @@
 {
-  "plan_file": "docs/plans/2026-03-11-deferred-completion.md",
-  "phase": "complete",
-  "created_at": "2026-03-11T09:30:00+08:00",
-  "updated_at": "2026-03-11T12:30:00+08:00",
-  "completed_tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"],
-  "current_task": null,
-  "total_tasks": 10,
+  "plan_file": "docs/plans/2026-03-11-deferred-wave3.md",
+  "phase": "design",
+  "created_at": "2026-03-11T13:00:00+08:00",
+  "updated_at": "2026-03-11T13:00:00+08:00",
+  "completed_tasks": [],
+  "current_task": "D2",
+  "total_tasks": 12,
   "task_groups": {
-    "Wave1": {
-      "name": "安全加固 + 可观测性",
-      "tasks": ["T1", "T2", "T3", "T4", "T5"],
-      "status": "COMPLETE",
-      "description": "Canary Token + Symlink 防护 + Observability + EventStore + TTL 清理"
+    "Wave3": {
+      "name": "架构清理 + 跨 Provider + 多模态",
+      "tasks": ["D2", "D7", "D3"],
+      "status": "PENDING",
+      "description": "Extension 废弃 + SmartRouting V2 + Image ContentBlock"
     },
-    "Wave2": {
-      "name": "实时交互 + 平台补全 + 智能路由",
-      "tasks": ["T6", "T7", "T8", "T9", "T10"],
-      "status": "COMPLETE",
-      "description": "Platform WS + ApprovalGate + Dashboard 实时 + 协作面板 + SmartRouting"
+    "Wave4": {
+      "name": "Byzantine 共识 + 桌面更新",
+      "tasks": ["D1-P1", "D1-P2", "D5"],
+      "status": "PENDING",
+      "description": "PBFT-lite 共识 + ED25519 签名 + Tauri 自动更新"
+    },
+    "Wave5": {
+      "name": "离线同步 + 自动证书",
+      "tasks": ["D6", "D4", "D1-P3"],
+      "status": "DEFERRED",
+      "description": "LWW 同步 + ACME 证书 + 共识持久化"
     }
   },
-  "execution_order": ["Wave1", "Wave2"],
-  "execution_mode": "subagent-driven-development",
-  "phase_name": "deferred-completion",
-  "tests_baseline": 1343,
+  "execution_order": ["Wave3", "Wave4", "Wave5"],
+  "execution_mode": null,
+  "phase_name": "deferred-wave3",
+  "tests_baseline": 1408,
   "tests_current": 1408,
   "previous_plan": {
-    "file": "docs/plans/2026-03-10-deferred-d3-d6-d7.md",
+    "file": "docs/plans/2026-03-11-deferred-completion.md",
     "status": "COMPLETE",
-    "tasks_completed": 24,
-    "final_commit": "7ca6ea3"
+    "tasks_completed": 10,
+    "final_commit": "b5d7e61"
   },
-  "plan_status": "COMPLETE",
-  "final_commit": "ed65e5b",
-  "notes": "Wave 1+2 ALL COMPLETE (T1-T10). 1408 tests passing (+65 new). 10/10 tasks done."
+  "plan_status": "DESIGN",
+  "final_commit": null,
+  "notes": "Wave 3-5 plan created from 4 research agents. Ready for execution."
 }
