@@ -16,8 +16,10 @@ pub use flush::MemoryFlusher;
 pub use fork::ContextFork;
 pub use manager::{ContextBudgetSnapshot, ContextManager, EstimateCounter, TokenCounter};
 pub use observation_masker::{ObservationMaskConfig, ObservationMasker};
-pub use pruner::{ContextPruner, SKILL_PROTECTED_MARKER};
-pub use system_prompt::SystemPromptBuilder as NewSystemPromptBuilder;
+pub use pruner::{
+    CompactionAction, CompactionConfig, CompactionStrategy, ContextPruner, SKILL_PROTECTED_MARKER,
+};
+pub use system_prompt::{PromptParts, SystemPromptBuilder as NewSystemPromptBuilder};
 pub use token_counter::CjkAwareCounter;
 
 #[cfg(feature = "tiktoken")]

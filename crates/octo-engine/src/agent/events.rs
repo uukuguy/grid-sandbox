@@ -64,6 +64,8 @@ pub enum AgentEvent {
         round: u32,
     },
     Completed(AgentLoopResult),
+    /// The agent loop was halted by an emergency stop (E-Stop).
+    EmergencyStopped(Option<String>),
 }
 
 /// Structured return result for AgentLoop (Opus §3.2)

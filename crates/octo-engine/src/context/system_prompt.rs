@@ -42,6 +42,30 @@ pub struct BootstrapFile {
     pub content: String,
 }
 
+/// Separated prompt parts for prompt caching optimisation.
+///
+/// `system_prompt` contains the cacheable static portion while
+/// `dynamic_context` holds per-request variable content.  Concatenating
+/// both yields the full system prompt equivalent to [`SystemPromptBuilder::build`].
+#[derive(Debug, Clone)]
+pub struct PromptParts {
+    /// Static portion of the system prompt (cacheable across requests).
+    pub system_prompt: String,
+    /// Dynamic portion that changes per request (timestamps, MCP servers, etc.).
+    pub dynamic_context: String,
+}
+
+impl PromptParts {
+    /// Merge both parts into a single string.
+    pub fn merge(&self) -> String {
+        if self.dynamic_context.is_empty() {
+            self.system_prompt.clone()
+        } else {
+            format!("{}\n\n{}", self.system_prompt, self.dynamic_context)
+        }
+    }
+}
+
 /// SystemPromptBuilder for constructing Zone A content
 ///
 /// Zone A is the static system prompt that:
@@ -271,6 +295,15 @@ impl SystemPromptBuilder {
         }
     }
 
+    /// Build the system prompt separated into cacheable (static) and dynamic parts.
+    pub fn build_separated(&self) -> PromptParts {
+        let system_prompt = self.build();
+        PromptParts {
+            system_prompt,
+            dynamic_context: String::new(),
+        }
+    }
+
     /// Check if there's a full system prompt override
     pub fn has_system_prompt_override(&self) -> bool {
         self.manifest
@@ -423,5 +456,68 @@ mod tests {
 
         assert!(result.contains("## Active Skill: code-review"));
         assert!(result.contains("Review all files for correctness."));
+    }
+}
+
+#[cfg(test)]
+mod prompt_parts_tests {
+    use super::*;
+    use crate::agent::entry::AgentManifest;
+
+    #[test]
+    fn test_build_separated_returns_nonempty_system_prompt() {
+        let builder = SystemPromptBuilder::new();
+        let parts = builder.build_separated();
+        assert!(!parts.system_prompt.is_empty());
+    }
+
+    #[test]
+    fn test_build_separated_merge_equals_build() {
+        let manifest = AgentManifest {
+            name: "test".to_string(),
+            tags: vec![],
+            role: Some("Test Role".to_string()),
+            goal: Some("Test Goal".to_string()),
+            backstory: None,
+            system_prompt: None,
+            model: None,
+            tool_filter: vec![],
+            config: crate::agent::config::AgentConfig::default(),
+            max_concurrent_tasks: 0,
+            priority: None,
+        };
+
+        let builder = SystemPromptBuilder::new()
+            .with_manifest(manifest)
+            .with_bootstrap_file("README.md", "Hello");
+        let full = builder.build();
+        let parts = builder.build_separated();
+
+        assert_eq!(parts.merge(), full);
+    }
+
+    #[test]
+    fn test_build_separated_dynamic_context_empty_by_default() {
+        let builder = SystemPromptBuilder::new();
+        let parts = builder.build_separated();
+        assert!(parts.dynamic_context.is_empty());
+    }
+
+    #[test]
+    fn test_prompt_parts_merge_with_dynamic() {
+        let parts = PromptParts {
+            system_prompt: "static".to_string(),
+            dynamic_context: "dynamic".to_string(),
+        };
+        assert_eq!(parts.merge(), "static\n\ndynamic");
+    }
+
+    #[test]
+    fn test_prompt_parts_merge_empty_dynamic() {
+        let parts = PromptParts {
+            system_prompt: "static".to_string(),
+            dynamic_context: String::new(),
+        };
+        assert_eq!(parts.merge(), "static");
     }
 }

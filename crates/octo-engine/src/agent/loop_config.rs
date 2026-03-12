@@ -16,6 +16,8 @@ use crate::tools::ToolRegistry;
 
 use super::config::AgentConfig;
 use super::entry::AgentManifest;
+use super::estop::EmergencyStop;
+use super::self_repair::SelfRepairManager;
 use super::loop_guard::LoopGuard;
 use super::subagent::SubAgentManager;
 use super::CancellationToken;
@@ -110,6 +112,14 @@ pub struct AgentLoopConfig {
     // === Collaboration (D6) ===
     /// Optional collaboration context for multi-agent mode.
     pub collaboration_context: Option<Arc<super::collaboration::context::CollaborationContext>>,
+
+    // === Emergency Stop (W7-T4) ===
+    /// Optional emergency stop mechanism for cooperative halt.
+    pub estop: Option<EmergencyStop>,
+
+    // === Self-Repair (W7-T1) ===
+    /// Optional self-repair manager for detecting and recovering from stuck agents.
+    pub self_repair: Option<SelfRepairManager>,
 }
 
 impl Default for AgentLoopConfig {
@@ -149,6 +159,8 @@ impl Default for AgentLoopConfig {
             approval_manager: None,
             approval_gate: None,
             collaboration_context: None,
+            estop: None,
+            self_repair: None,
         }
     }
 }
@@ -166,6 +178,8 @@ impl std::fmt::Debug for AgentLoopConfig {
             .field("has_provider", &self.provider.is_some())
             .field("has_tools", &self.tools.is_some())
             .field("has_memory", &self.memory.is_some())
+            .field("has_estop", &self.estop.is_some())
+            .field("has_self_repair", &self.self_repair.is_some())
             .field("session_id", &self.session_id)
             .finish()
     }
@@ -353,6 +367,16 @@ impl AgentLoopConfigBuilder {
         v: Arc<super::collaboration::context::CollaborationContext>,
     ) -> Self {
         self.config.collaboration_context = Some(v);
+        self
+    }
+
+    pub fn estop(mut self, v: EmergencyStop) -> Self {
+        self.config.estop = Some(v);
+        self
+    }
+
+    pub fn self_repair(mut self, v: SelfRepairManager) -> Self {
+        self.config.self_repair = Some(v);
         self
     }
 

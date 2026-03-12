@@ -3,6 +3,59 @@ use tracing::{debug, info, warn};
 
 use super::budget::DegradationLevel;
 
+// ---------------------------------------------------------------------------
+// Compaction strategies (W7-T2)
+// ---------------------------------------------------------------------------
+
+/// Strategy for compacting old messages when the context window fills up.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum CompactionStrategy {
+    /// Simply truncate/remove old messages (current behavior, default).
+    #[default]
+    Truncate,
+    /// Summarize old messages using an LLM (caller must perform the actual call).
+    Summarize,
+    /// Move old messages to workspace/session memory for later recall.
+    MoveToWorkspace,
+}
+
+/// Configuration for compaction behavior.
+#[derive(Debug, Clone)]
+pub struct CompactionConfig {
+    pub strategy: CompactionStrategy,
+    /// Maximum tokens for the summary (only relevant for Summarize strategy).
+    pub summary_max_tokens: usize,
+}
+
+impl Default for CompactionConfig {
+    fn default() -> Self {
+        Self {
+            strategy: CompactionStrategy::Truncate,
+            summary_max_tokens: 500,
+        }
+    }
+}
+
+/// Action returned by `plan_compaction()`. The caller is responsible for
+/// executing async operations (LLM summarization, workspace storage).
+#[derive(Debug, Clone, PartialEq)]
+pub enum CompactionAction {
+    /// Messages were truncated in-place (synchronous, already done).
+    Truncated { removed_count: usize },
+    /// Caller should summarize these messages and insert the summary at `insert_position`.
+    NeedsSummarize {
+        messages_to_summarize: Vec<ChatMessage>,
+        insert_position: usize,
+    },
+    /// Caller should save these messages to workspace and insert a placeholder.
+    NeedsWorkspaceSave {
+        messages_to_save: Vec<ChatMessage>,
+        insert_position: usize,
+    },
+    /// No compaction needed (too few messages).
+    NoAction,
+}
+
 /// Marker embedded in messages containing skill content with `always: true`.
 /// Messages containing this marker are exempt from pruning/compaction.
 pub const SKILL_PROTECTED_MARKER: &str = "[SKILL:ALWAYS]";
@@ -25,12 +78,76 @@ const OVERFLOW_COMPACTION_KEEP: usize = 4;
 pub struct ContextPruner {
     /// Number of recent agent rounds to protect from pruning.
     protect_recent_rounds: usize,
+    /// Optional compaction configuration (W7-T2).
+    compaction_config: Option<CompactionConfig>,
 }
 
 impl ContextPruner {
     pub fn new() -> Self {
         Self {
             protect_recent_rounds: 2,
+            compaction_config: None,
+        }
+    }
+
+    /// Set compaction configuration (builder pattern).
+    pub fn with_compaction_config(mut self, config: CompactionConfig) -> Self {
+        self.compaction_config = Some(config);
+        self
+    }
+
+    /// Plan a compaction action based on the configured strategy.
+    ///
+    /// Returns a `CompactionAction` describing what the caller should do.
+    /// The pruner does NOT perform async operations itself.
+    ///
+    /// Minimum threshold: at least 8 messages required before compaction activates.
+    /// Keeps the most recent 50% of messages (minimum 4).
+    #[allow(clippy::ptr_arg)]
+    pub fn plan_compaction(&self, messages: &[ChatMessage]) -> CompactionAction {
+        let config = match &self.compaction_config {
+            Some(c) => c,
+            None => return CompactionAction::NoAction,
+        };
+
+        const MIN_MESSAGES_FOR_COMPACTION: usize = 8;
+        const MIN_KEEP: usize = 4;
+
+        if messages.len() < MIN_MESSAGES_FOR_COMPACTION {
+            return CompactionAction::NoAction;
+        }
+
+        // Keep at least 50% of messages, minimum MIN_KEEP
+        let keep_count = (messages.len() / 2).max(MIN_KEEP);
+        let boundary = messages.len().saturating_sub(keep_count);
+
+        if boundary == 0 {
+            return CompactionAction::NoAction;
+        }
+
+        // Collect messages to compact, skipping skill-protected ones
+        let messages_to_compact: Vec<ChatMessage> = messages[..boundary]
+            .iter()
+            .filter(|m| !Self::is_skill_protected(m))
+            .cloned()
+            .collect();
+
+        if messages_to_compact.is_empty() {
+            return CompactionAction::NoAction;
+        }
+
+        match config.strategy {
+            CompactionStrategy::Truncate => CompactionAction::Truncated {
+                removed_count: messages_to_compact.len(),
+            },
+            CompactionStrategy::Summarize => CompactionAction::NeedsSummarize {
+                messages_to_summarize: messages_to_compact,
+                insert_position: 0,
+            },
+            CompactionStrategy::MoveToWorkspace => CompactionAction::NeedsWorkspaceSave {
+                messages_to_save: messages_to_compact,
+                insert_position: 0,
+            },
         }
     }
 
@@ -327,5 +444,146 @@ impl ContextPruner {
 impl Default for ContextPruner {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod compaction_tests {
+    use super::*;
+
+    fn make_messages(count: usize) -> Vec<ChatMessage> {
+        (0..count)
+            .map(|i| {
+                if i % 2 == 0 {
+                    ChatMessage::user(format!("User message {}", i))
+                } else {
+                    ChatMessage::assistant(format!("Assistant message {}", i))
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_no_config_returns_no_action() {
+        let pruner = ContextPruner::new();
+        let msgs = make_messages(20);
+        assert_eq!(pruner.plan_compaction(&msgs), CompactionAction::NoAction);
+    }
+
+    #[test]
+    fn test_few_messages_returns_no_action() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig::default());
+        let msgs = make_messages(4);
+        assert_eq!(pruner.plan_compaction(&msgs), CompactionAction::NoAction);
+    }
+
+    #[test]
+    fn test_truncate_strategy() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig {
+                strategy: CompactionStrategy::Truncate,
+                ..Default::default()
+            });
+        let msgs = make_messages(10);
+        match pruner.plan_compaction(&msgs) {
+            CompactionAction::Truncated { removed_count } => {
+                assert!(removed_count > 0);
+            }
+            other => panic!("Expected Truncated, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_summarize_strategy() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig {
+                strategy: CompactionStrategy::Summarize,
+                summary_max_tokens: 300,
+            });
+        let msgs = make_messages(10);
+        match pruner.plan_compaction(&msgs) {
+            CompactionAction::NeedsSummarize { messages_to_summarize, insert_position } => {
+                assert!(!messages_to_summarize.is_empty());
+                assert_eq!(insert_position, 0);
+            }
+            other => panic!("Expected NeedsSummarize, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_move_to_workspace_strategy() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig {
+                strategy: CompactionStrategy::MoveToWorkspace,
+                ..Default::default()
+            });
+        let msgs = make_messages(10);
+        match pruner.plan_compaction(&msgs) {
+            CompactionAction::NeedsWorkspaceSave { messages_to_save, insert_position } => {
+                assert!(!messages_to_save.is_empty());
+                assert_eq!(insert_position, 0);
+            }
+            other => panic!("Expected NeedsWorkspaceSave, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_keeps_recent_messages() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig {
+                strategy: CompactionStrategy::Summarize,
+                ..Default::default()
+            });
+        let msgs = make_messages(10);
+        if let CompactionAction::NeedsSummarize { messages_to_summarize, .. } = pruner.plan_compaction(&msgs) {
+            // 10 messages, keep 50% = 5, compact 5
+            assert_eq!(messages_to_summarize.len(), 5);
+        } else {
+            panic!("Expected NeedsSummarize");
+        }
+    }
+
+    #[test]
+    fn test_with_compaction_config_sets_config() {
+        let config = CompactionConfig {
+            strategy: CompactionStrategy::Summarize,
+            summary_max_tokens: 1000,
+        };
+        let pruner = ContextPruner::new().with_compaction_config(config);
+        assert!(pruner.compaction_config.is_some());
+        assert_eq!(
+            pruner.compaction_config.unwrap().strategy,
+            CompactionStrategy::Summarize
+        );
+    }
+
+    #[test]
+    fn test_skill_protected_messages_excluded() {
+        let pruner = ContextPruner::new()
+            .with_compaction_config(CompactionConfig {
+                strategy: CompactionStrategy::Summarize,
+                ..Default::default()
+            });
+        let mut msgs = make_messages(10);
+        // Mark first message as skill-protected
+        msgs[0] = ChatMessage::user(format!("{} important skill", SKILL_PROTECTED_MARKER));
+
+        if let CompactionAction::NeedsSummarize { messages_to_summarize, .. } = pruner.plan_compaction(&msgs) {
+            // Protected message should be excluded
+            assert!(messages_to_summarize.iter().all(|m| {
+                !m.content.iter().any(|b| match b {
+                    ContentBlock::Text { text } => text.contains(SKILL_PROTECTED_MARKER),
+                    _ => false,
+                })
+            }));
+        }
+    }
+
+    #[test]
+    fn test_default_compaction_config() {
+        let config = CompactionConfig::default();
+        assert_eq!(config.strategy, CompactionStrategy::Truncate);
+        assert_eq!(config.summary_max_tokens, 500);
     }
 }

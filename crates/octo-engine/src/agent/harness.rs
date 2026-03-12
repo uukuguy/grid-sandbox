@@ -1030,6 +1030,7 @@ async fn run_agent_loop_inner(
                 warn!("Loop Guard outcome: {}", outcome_warning);
             }
 
+
             tool_results.push(ContentBlock::ToolResult {
                 tool_use_id: tu.id.clone(),
                 content: trimmed_output,
@@ -1297,4 +1298,167 @@ fn soft_trim_tool_result(result: &str) -> String {
         omitted,
         &result[tail_start..]
     )
+}
+
+// ---------------------------------------------------------------------------
+// Text-based tool call recovery (W7-T3)
+// ---------------------------------------------------------------------------
+// Some LLMs (open-source models via OpenAI-compatible API) emit tool calls as
+// plain text instead of structured `tool_use` blocks.  The functions below
+// attempt to parse those text-based invocations so the agent loop can still
+// execute the requested tools.
+//
+// Integration point: after `consume_stream` returns, if `tool_uses` is empty
+// but `full_text` is non-empty, call `parse_tool_calls_from_text(&full_text)`
+// and merge the results into the tool_uses vector.
+// ---------------------------------------------------------------------------
+
+/// Deserialization helper for JSON-based text tool calls.
+#[allow(dead_code)]
+#[derive(Debug, serde::Deserialize)]
+struct TextToolCall {
+    name: String,
+    arguments: serde_json::Value,
+}
+
+/// Attempt to recover tool calls embedded in plain-text LLM output.
+///
+/// Two strategies are tried in order:
+/// 1. **JSON block parsing** -- matches fenced ```json ... ``` blocks or bare
+///    JSON objects containing `{"name": "...", "arguments": {...}}`.
+/// 2. **XML format** -- matches `<tool_name>...</tool_name>` where the inner
+///    content is valid JSON arguments.
+///
+/// Returns an empty `Vec` when no tool calls can be recovered.
+#[allow(dead_code)]
+fn parse_tool_calls_from_text(text: &str) -> Vec<PendingToolUse> {
+    use std::sync::OnceLock;
+    use regex::Regex;
+
+    // --- Strategy 1: JSON blocks ---
+    static RE_JSON_FENCED: OnceLock<Regex> = OnceLock::new();
+    static RE_JSON_BARE: OnceLock<Regex> = OnceLock::new();
+
+    let re_fenced = RE_JSON_FENCED.get_or_init(|| {
+        Regex::new(r"(?s)```(?:json)?\s*(\{.*?\})\s*```").expect("valid regex")
+    });
+    let re_bare = RE_JSON_BARE.get_or_init(|| {
+        Regex::new(r#"(?s)\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^}]*\}\s*\}"#)
+            .expect("valid regex")
+    });
+
+    let mut results = Vec::new();
+
+    // Try fenced JSON blocks first
+    for cap in re_fenced.captures_iter(text) {
+        if let Some(json_str) = cap.get(1) {
+            if let Ok(tc) = serde_json::from_str::<TextToolCall>(json_str.as_str()) {
+                results.push(PendingToolUse {
+                    id: format!("text-recovery-{}", uuid::Uuid::new_v4()),
+                    name: tc.name,
+                    input_json: tc.arguments.to_string(),
+                });
+            }
+        }
+    }
+
+    // If fenced blocks yielded nothing, try bare JSON objects
+    if results.is_empty() {
+        for m in re_bare.find_iter(text) {
+            if let Ok(tc) = serde_json::from_str::<TextToolCall>(m.as_str()) {
+                results.push(PendingToolUse {
+                    id: format!("text-recovery-{}", uuid::Uuid::new_v4()),
+                    name: tc.name,
+                    input_json: tc.arguments.to_string(),
+                });
+            }
+        }
+    }
+
+    // --- Strategy 2: XML format ---
+    if results.is_empty() {
+        static RE_XML: OnceLock<Regex> = OnceLock::new();
+        let re_xml = RE_XML.get_or_init(|| {
+            Regex::new(r"(?s)<([a-zA-Z_][a-zA-Z0-9_-]*)>([^<]*)</([a-zA-Z_][a-zA-Z0-9_-]*)>").expect("valid regex")
+        });
+
+        for cap in re_xml.captures_iter(text) {
+            let open_tag = cap.get(1).map(|m| m.as_str());
+            let close_tag = cap.get(3).map(|m| m.as_str());
+            let inner = cap.get(2).map(|m| m.as_str().trim());
+            // Ensure opening and closing tags match
+            if open_tag != close_tag { continue; }
+            let tool_name = open_tag.map(|s| s.to_string());
+            if let (Some(name), Some(body)) = (tool_name, inner) {
+                if let Ok(args) = serde_json::from_str::<serde_json::Value>(body) {
+                    if args.is_object() {
+                        results.push(PendingToolUse {
+                            id: format!("text-recovery-{}", uuid::Uuid::new_v4()),
+                            name,
+                            input_json: args.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_tool_calls_json_fenced_block() {
+        let text = "Sure, let me run that.\n```json\n{\"name\":\"bash\",\"arguments\":{\"command\":\"ls -la\"}}\n```\n";
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "bash");
+        assert!(calls[0].id.starts_with("text-recovery-"));
+        let args: serde_json::Value = serde_json::from_str(&calls[0].input_json).unwrap();
+        assert_eq!(args["command"], "ls -la");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_bare_json() {
+        let text = r#"I'll use: {"name": "file_read", "arguments": {"path": "/tmp/x"}} to read."#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "file_read");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_xml_format() {
+        let text = "Execute:\n<bash>{\"command\": \"echo hello\"}</bash>\nDone.";
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "bash");
+        let args: serde_json::Value = serde_json::from_str(&calls[0].input_json).unwrap();
+        assert_eq!(args["command"], "echo hello");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_plain_text_returns_empty() {
+        let text = "Just a normal response with no tool calls at all.";
+        let calls = parse_tool_calls_from_text(text);
+        assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_parse_tool_calls_invalid_json_returns_empty() {
+        let text = "```json\n{\"name\":\"bash\",\"arguments\":{\"command\": broken\n```";
+        let calls = parse_tool_calls_from_text(text);
+        assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_parse_tool_calls_multiple_fenced_blocks() {
+        let text = "```json\n{\"name\":\"bash\",\"arguments\":{\"command\":\"ls\"}}\n```\nAlso:\n```json\n{\"name\":\"file_read\",\"arguments\":{\"path\":\"/tmp/x\"}}\n```\n";
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].name, "bash");
+        assert_eq!(calls[1].name, "file_read");
+    }
 }
