@@ -105,6 +105,8 @@ mod tests {
                     result: row.get(7)?,
                     metadata: row.get(8)?,
                     ip_address: row.get(9)?,
+                    prev_hash: String::new(),
+                    hash: String::new(),
                 })
             })?;
 
@@ -171,6 +173,8 @@ mod tests {
             result: "success".to_string(),
             metadata: Some(r#"{"browser": "Chrome"}"#.to_string()),
             ip_address: Some("192.168.1.1".to_string()),
+            prev_hash: String::new(),
+            hash: String::new(),
         };
 
         assert_eq!(record.id, 1);

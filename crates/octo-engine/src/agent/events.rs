@@ -63,6 +63,12 @@ pub enum AgentEvent {
     IterationEnd {
         round: u32,
     },
+    /// Tool execution progress update (for long-running tools).
+    ToolProgress {
+        tool_id: String,
+        tool_name: String,
+        progress: octo_types::ToolProgress,
+    },
     Completed(AgentLoopResult),
     /// The agent loop was halted by an emergency stop (E-Stop).
     EmergencyStopped(Option<String>),
@@ -136,5 +142,39 @@ impl NormalizedStopReason {
     /// (no further processing needed).
     pub fn is_terminal(&self) -> bool {
         !matches!(self, Self::ToolCall | Self::MaxTokens)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_progress_event_serialization() {
+        let event = AgentEvent::ToolProgress {
+            tool_id: "call_123".into(),
+            tool_name: "bash".into(),
+            progress: octo_types::ToolProgress::percent(0.5, "Processing...")
+                .with_elapsed(1500),
+        };
+        let json = serde_json::to_value(&event).expect("serialization should succeed");
+        assert_eq!(json["type"], "ToolProgress");
+        assert_eq!(json["tool_id"], "call_123");
+        assert_eq!(json["tool_name"], "bash");
+        assert_eq!(json["progress"]["fraction"], 0.5);
+        assert_eq!(json["progress"]["message"], "Processing...");
+        assert_eq!(json["progress"]["elapsed_ms"], 1500);
+    }
+
+    #[test]
+    fn test_tool_progress_complete_flag() {
+        let progress = octo_types::ToolProgress::percent(1.0, "Done");
+        assert!(progress.is_complete());
+
+        let progress_half = octo_types::ToolProgress::percent(0.5, "Half");
+        assert!(!progress_half.is_complete());
+
+        let indeterminate = octo_types::ToolProgress::indeterminate("Working...");
+        assert!(!indeterminate.is_complete());
     }
 }

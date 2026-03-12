@@ -351,39 +351,27 @@ impl MemoryStore for SqliteMemoryStore {
                     Vec::new()
                 };
 
-                // Step 3: Score fusion
+                // Step 3: Score fusion via Reciprocal Rank Fusion (RRF, k=60)
+                let rrf_results = rrf_fuse(&fts_results, &vec_results, 60.0);
+
                 let mut scored: std::collections::HashMap<String, (MemoryEntry, f32, String)> =
                     std::collections::HashMap::new();
 
-                let fts_max = fts_results
-                    .iter()
-                    .map(|(_, s)| *s)
-                    .fold(f32::NEG_INFINITY, f32::max)
-                    .max(1.0);
-                let vec_max = vec_results
-                    .iter()
-                    .map(|(_, s)| *s)
-                    .fold(f32::NEG_INFINITY, f32::max)
-                    .max(1.0);
-
-                for (entry, raw_score) in &fts_results {
-                    let norm = raw_score / fts_max;
-                    let weight = if has_embedding { 0.3 } else { 1.0 };
-                    scored
-                        .entry(entry.id.as_str().to_string())
-                        .and_modify(|(_, s, _)| *s += weight * norm)
-                        .or_insert_with(|| (entry.clone(), weight * norm, "fts".to_string()));
-                }
-
-                for (entry, raw_score) in &vec_results {
-                    let norm = raw_score / vec_max;
-                    scored
-                        .entry(entry.id.as_str().to_string())
-                        .and_modify(|(_, s, src)| {
-                            *s += 0.7 * norm;
-                            *src = "hybrid".to_string();
-                        })
-                        .or_insert_with(|| (entry.clone(), 0.7 * norm, "vector".to_string()));
+                for (entry, rrf_score) in rrf_results {
+                    let entry_id = entry.id.as_str();
+                    let in_fts = fts_results.iter().any(|(e, _)| e.id.as_str() == entry_id);
+                    let in_vec = vec_results.iter().any(|(e, _)| e.id.as_str() == entry_id);
+                    let source = if in_fts && in_vec {
+                        "hybrid".to_string()
+                    } else if in_fts {
+                        "fts".to_string()
+                    } else {
+                        "vector".to_string()
+                    };
+                    scored.insert(
+                        entry.id.as_str().to_string(),
+                        (entry, rrf_score as f32, source),
+                    );
                 }
 
                 // Step 4: Time decay + importance weighting
@@ -556,6 +544,38 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
     })
 }
 
+/// Reciprocal Rank Fusion — rank-based score fusion algorithm.
+/// k=60 is the standard recommendation from Cormack et al. (2009).
+/// Score for each result = sum of 1/(k + rank + 1) across all sources.
+fn rrf_fuse(
+    fts_results: &[(MemoryEntry, f32)],
+    vec_results: &[(MemoryEntry, f32)],
+    k: f64,
+) -> Vec<(MemoryEntry, f64)> {
+    let mut scores: std::collections::HashMap<String, (MemoryEntry, f64)> =
+        std::collections::HashMap::new();
+
+    for (rank, (entry, _score)) in fts_results.iter().enumerate() {
+        let rrf_score = 1.0 / (k + rank as f64 + 1.0);
+        scores
+            .entry(entry.id.as_str().to_string())
+            .and_modify(|(_, s)| *s += rrf_score)
+            .or_insert_with(|| (entry.clone(), rrf_score));
+    }
+
+    for (rank, (entry, _score)) in vec_results.iter().enumerate() {
+        let rrf_score = 1.0 / (k + rank as f64 + 1.0);
+        scores
+            .entry(entry.id.as_str().to_string())
+            .and_modify(|(_, s)| *s += rrf_score)
+            .or_insert_with(|| (entry.clone(), rrf_score));
+    }
+
+    let mut results: Vec<_> = scores.into_values().collect();
+    results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    results
+}
+
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
@@ -657,5 +677,79 @@ mod tests {
         let store = setup_store().await;
         let deleted = store.delete_expired().await.unwrap();
         assert_eq!(deleted, 0);
+    }
+
+    fn make_rrf_entry(id: &str) -> MemoryEntry {
+        make_entry(id, None, chrono::Utc::now().timestamp())
+    }
+
+    #[test]
+    fn test_rrf_fuse_basic() {
+        // Two lists with overlap: entry "b" appears in both
+        let fts = vec![
+            (make_rrf_entry("a"), 10.0f32),
+            (make_rrf_entry("b"), 8.0),
+            (make_rrf_entry("c"), 5.0),
+        ];
+        let vec = vec![
+            (make_rrf_entry("b"), 0.9f32),
+            (make_rrf_entry("d"), 0.7),
+        ];
+
+        let results = rrf_fuse(&fts, &vec, 60.0);
+
+        // "b" appears in both sources, should have highest score
+        assert_eq!(results[0].0.id.as_str(), "b");
+        // All 4 unique entries should appear
+        assert_eq!(results.len(), 4);
+        // "b" score should be greater than any single-source entry
+        let b_score = results[0].1;
+        let a_score = results.iter().find(|(e, _)| e.id.as_str() == "a").expect("a").1;
+        assert!(b_score > a_score, "Intersection item should score higher");
+    }
+
+    #[test]
+    fn test_rrf_fuse_disjoint() {
+        // Two lists with no overlap
+        let fts = vec![
+            (make_rrf_entry("a"), 10.0f32),
+            (make_rrf_entry("b"), 8.0),
+        ];
+        let vec = vec![
+            (make_rrf_entry("c"), 0.9f32),
+            (make_rrf_entry("d"), 0.7),
+        ];
+
+        let results = rrf_fuse(&fts, &vec, 60.0);
+
+        // All 4 items should appear
+        assert_eq!(results.len(), 4);
+        let ids: Vec<&str> = results.iter().map(|(e, _)| e.id.as_str()).collect();
+        assert!(ids.contains(&"a"));
+        assert!(ids.contains(&"b"));
+        assert!(ids.contains(&"c"));
+        assert!(ids.contains(&"d"));
+    }
+
+    #[test]
+    fn test_rrf_fuse_single_source() {
+        // Only FTS results, no vector results
+        let fts = vec![
+            (make_rrf_entry("a"), 10.0f32),
+            (make_rrf_entry("b"), 8.0),
+            (make_rrf_entry("c"), 5.0),
+        ];
+        let vec: Vec<(MemoryEntry, f32)> = Vec::new();
+
+        let results = rrf_fuse(&fts, &vec, 60.0);
+
+        // All 3 items should appear, order preserved by rank
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].0.id.as_str(), "a");
+        assert_eq!(results[1].0.id.as_str(), "b");
+        assert_eq!(results[2].0.id.as_str(), "c");
+        // Scores should be strictly decreasing
+        assert!(results[0].1 > results[1].1);
+        assert!(results[1].1 > results[2].1);
     }
 }

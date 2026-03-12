@@ -3,6 +3,8 @@
 //! Provides a layered safety pipeline that runs multiple [`SafetyLayer`] checks
 //! in sequence. Each layer can Allow, Sanitize, Warn, or Block a message.
 
+use std::sync::Mutex;
+
 use async_trait::async_trait;
 
 /// Decision returned by a safety check layer.
@@ -263,15 +265,19 @@ impl SafetyLayer for PiiScannerLayer {
 /// A canary token is a unique marker embedded in the system prompt. If it
 /// appears in LLM output or tool results, it indicates that the system prompt
 /// was exfiltrated — a critical security event.
+///
+/// Supports per-turn rotation via [`rotate()`](CanaryGuardLayer::rotate) so
+/// that each conversation turn uses a fresh canary, preventing the LLM from
+/// memorizing and later bypassing detection.
 pub struct CanaryGuardLayer {
-    canary: String,
+    canary: Mutex<String>,
 }
 
 impl CanaryGuardLayer {
     /// Create a guard with the given canary string.
     pub fn new(canary: impl Into<String>) -> Self {
         Self {
-            canary: canary.into(),
+            canary: Mutex::new(canary.into()),
         }
     }
 
@@ -280,9 +286,27 @@ impl CanaryGuardLayer {
         Self::new("__CANARY_7f3a9b2e-4d1c-8e5f-a0b6-c3d2e1f09876__")
     }
 
-    /// Return the canary string (so the caller can embed it in prompts).
-    pub fn canary(&self) -> &str {
-        &self.canary
+    /// Return the current canary string (so the caller can embed it in prompts).
+    pub fn canary(&self) -> String {
+        self.canary
+            .lock()
+            .expect("canary mutex poisoned")
+            .clone()
+    }
+
+    /// Generate a new canary token and return it.
+    ///
+    /// The caller should embed the returned value in the system prompt for
+    /// the next turn. The old canary is discarded — any LLM output
+    /// containing the *old* value will no longer trigger detection.
+    pub fn rotate(&self) -> String {
+        let new_canary = format!(
+            "__CANARY_{}__",
+            &uuid::Uuid::new_v4().to_string()[..12]
+        );
+        let mut guard = self.canary.lock().expect("canary mutex poisoned");
+        *guard = new_canary.clone();
+        new_canary
     }
 }
 
@@ -301,7 +325,8 @@ impl SafetyLayer for CanaryGuardLayer {
     // Input is not checked — the canary is expected in the system prompt.
 
     async fn check_output(&self, response: &str) -> SafetyDecision {
-        if response.contains(&self.canary) {
+        let canary = self.canary.lock().expect("canary mutex poisoned").clone();
+        if response.contains(&canary) {
             SafetyDecision::Block(
                 "System prompt canary token detected in LLM output — possible prompt exfiltration"
                     .into(),
@@ -312,7 +337,8 @@ impl SafetyLayer for CanaryGuardLayer {
     }
 
     async fn check_tool_result(&self, _tool_name: &str, result: &str) -> SafetyDecision {
-        if result.contains(&self.canary) {
+        let canary = self.canary.lock().expect("canary mutex poisoned").clone();
+        if result.contains(&canary) {
             SafetyDecision::Block(
                 "System prompt canary token detected in tool result — possible data exfiltration"
                     .into(),
@@ -486,7 +512,7 @@ mod tests {
     #[tokio::test]
     async fn canary_blocks_leaked_tool_result() {
         let guard = CanaryGuardLayer::with_default_canary();
-        let canary = guard.canary().to_string();
+        let canary = guard.canary();
         let result = guard
             .check_tool_result("some_tool", &format!("data contains {canary} oops"))
             .await;
@@ -540,5 +566,39 @@ mod tests {
                 .await,
             SafetyDecision::Block(_)
         ));
+    }
+
+    // ── Canary rotation tests (T5) ──────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_canary_rotate_changes_value() {
+        let guard = CanaryGuardLayer::new("OLD_CANARY");
+        let old = guard.canary();
+        assert_eq!(old, "OLD_CANARY");
+
+        let new = guard.rotate();
+        assert_ne!(new, old);
+
+        // Old canary no longer detected
+        let result = guard.check_output("contains OLD_CANARY here").await;
+        assert_eq!(result, SafetyDecision::Allow);
+    }
+
+    #[tokio::test]
+    async fn test_canary_rotate_new_detection() {
+        let guard = CanaryGuardLayer::new("OLD_CANARY");
+        let new_canary = guard.rotate();
+
+        // New canary IS detected
+        let result = guard
+            .check_output(&format!("output contains {new_canary} leak"))
+            .await;
+        assert!(matches!(result, SafetyDecision::Block(_)));
+
+        // Also detected in tool results
+        let result = guard
+            .check_tool_result("any_tool", &format!("result {new_canary}"))
+            .await;
+        assert!(matches!(result, SafetyDecision::Block(_)));
     }
 }

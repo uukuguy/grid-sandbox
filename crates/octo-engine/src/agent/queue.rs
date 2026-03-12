@@ -11,6 +11,25 @@ pub enum QueueKind {
     FollowUp,
 }
 
+/// Message priority level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MessagePriority {
+    /// Low priority — background tasks.
+    Low = 0,
+    /// Normal priority — default for all messages.
+    Normal = 1,
+    /// High priority — user interrupts.
+    High = 2,
+    /// Critical priority — system steering / E-Stop.
+    Critical = 3,
+}
+
+impl Default for MessagePriority {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 /// Queue processing mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueMode {
@@ -27,18 +46,27 @@ pub struct QueueEntry {
     pub content: String,
     /// Queue kind.
     pub kind: QueueKind,
+    /// Message priority.
+    pub priority: MessagePriority,
     /// Timestamp.
     pub timestamp: std::time::Instant,
 }
 
 impl QueueEntry {
-    /// Create a new queue entry.
+    /// Create a new queue entry with Normal priority.
     pub fn new(content: String, kind: QueueKind) -> Self {
         Self {
             content,
             kind,
+            priority: MessagePriority::Normal,
             timestamp: std::time::Instant::now(),
         }
+    }
+
+    /// Set the priority of this entry (builder pattern).
+    pub fn with_priority(mut self, priority: MessagePriority) -> Self {
+        self.priority = priority;
+        self
     }
 }
 
@@ -89,6 +117,27 @@ impl MessageQueue {
         match kind {
             QueueKind::Steering => self.push_steering(message),
             QueueKind::FollowUp => self.push_followup(message),
+        }
+    }
+
+    /// Push a message with a specific priority.
+    /// Critical and High priority messages are inserted at the front of the queue.
+    /// Normal and Low priority messages are appended to the back.
+    pub fn push_with_priority(
+        &mut self,
+        kind: QueueKind,
+        message: String,
+        priority: MessagePriority,
+    ) {
+        let entry = QueueEntry::new(message, kind).with_priority(priority);
+        let queue = match kind {
+            QueueKind::Steering => &mut self.steering,
+            QueueKind::FollowUp => &mut self.follow_up,
+        };
+        if priority >= MessagePriority::High {
+            queue.push_front(entry);
+        } else {
+            queue.push_back(entry);
         }
     }
 
@@ -276,5 +325,82 @@ mod tests {
 
         queue.clear();
         assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn test_critical_priority_front() {
+        let mut queue = MessageQueue::new(QueueMode::All, QueueMode::All);
+
+        // Push a normal message first
+        queue.push_steering("normal_msg".into());
+
+        // Push a critical message — should go to front
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "critical_msg".into(),
+            MessagePriority::Critical,
+        );
+
+        let msgs = queue.drain_steering();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0], "critical_msg", "Critical message should be first");
+        assert_eq!(msgs[1], "normal_msg");
+    }
+
+    #[test]
+    fn test_normal_priority_back() {
+        let mut queue = MessageQueue::new(QueueMode::All, QueueMode::All);
+
+        queue.push_steering("first".into());
+
+        // Push with Normal priority — should go to back
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "second_normal".into(),
+            MessagePriority::Normal,
+        );
+
+        let msgs = queue.drain_steering();
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0], "first");
+        assert_eq!(msgs[1], "second_normal", "Normal message should be at back");
+    }
+
+    #[test]
+    fn test_mixed_priorities_drain_order() {
+        let mut queue = MessageQueue::new(QueueMode::All, QueueMode::All);
+
+        // Push messages in this order: normal, low, critical, high
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "normal1".into(),
+            MessagePriority::Normal,
+        );
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "low1".into(),
+            MessagePriority::Low,
+        );
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "critical1".into(),
+            MessagePriority::Critical,
+        );
+        queue.push_with_priority(
+            QueueKind::Steering,
+            "high1".into(),
+            MessagePriority::High,
+        );
+
+        let msgs = queue.drain_steering();
+        assert_eq!(msgs.len(), 4);
+
+        // High/Critical go to front (push_front), so high1 is at [0], critical1 at [1]
+        // (high1 was pushed_front after critical1, so high1 is first)
+        assert_eq!(msgs[0], "high1", "High priority pushed last to front should be first");
+        assert_eq!(msgs[1], "critical1", "Critical priority pushed to front should be second");
+        // Normal and Low go to back in insertion order
+        assert_eq!(msgs[2], "normal1");
+        assert_eq!(msgs[3], "low1");
     }
 }

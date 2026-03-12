@@ -109,13 +109,13 @@ impl McpClient for StdioMcpClient {
 
         let arguments = args.as_object().cloned();
 
+        let mut params = CallToolRequestParams::new(name.to_string());
+        if let Some(args_map) = arguments {
+            params = params.with_arguments(args_map);
+        }
+
         let result = service
-            .call_tool(CallToolRequestParams {
-                meta: None,
-                name: name.to_string().into(),
-                arguments,
-                task: None,
-            })
+            .call_tool(params)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to call MCP tool '{name}': {e}"))?;
 
@@ -177,10 +177,7 @@ impl McpClient for StdioMcpClient {
             .ok_or_else(|| anyhow::anyhow!("MCP client not connected"))?;
 
         let result = service
-            .read_resource(ReadResourceRequestParams {
-                meta: None,
-                uri: uri.to_string(),
-            })
+            .read_resource(ReadResourceRequestParams::new(uri.to_string()))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to read MCP resource '{uri}': {e}"))?;
 
@@ -226,12 +223,13 @@ impl McpClient for StdioMcpClient {
             )
         };
 
+        let mut params = GetPromptRequestParams::new(name.to_string());
+        if let Some(args_map) = arguments {
+            params = params.with_arguments(args_map);
+        }
+
         let result = service
-            .get_prompt(GetPromptRequestParams {
-                meta: None,
-                name: name.to_string(),
-                arguments,
-            })
+            .get_prompt(params)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get MCP prompt '{name}': {e}"))?;
 

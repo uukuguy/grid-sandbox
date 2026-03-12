@@ -445,3 +445,39 @@ pub fn migration_v9() -> Migration {
         "#,
     )
 }
+
+/// Migration v10: Audit logs hash chain for tamper detection
+pub fn migration_v10() -> Migration {
+    Migration::new(
+        10,
+        "audit_hash_chain",
+        r#"
+        ALTER TABLE audit_logs ADD COLUMN prev_hash TEXT NOT NULL DEFAULT '';
+        ALTER TABLE audit_logs ADD COLUMN hash TEXT NOT NULL DEFAULT '';
+        CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs(hash);
+        "#,
+    )
+}
+
+/// Migration v11: Metering records persistence table
+pub fn migration_v11() -> Migration {
+    Migration::new(
+        11,
+        "metering_records",
+        r#"
+        CREATE TABLE IF NOT EXISTS metering_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL,
+            input_tokens INTEGER NOT NULL,
+            output_tokens INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            is_error INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_metering_session ON metering_records(session_id);
+        CREATE INDEX IF NOT EXISTS idx_metering_model ON metering_records(model);
+        CREATE INDEX IF NOT EXISTS idx_metering_created ON metering_records(created_at);
+        "#,
+    )
+}

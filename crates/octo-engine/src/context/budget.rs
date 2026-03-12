@@ -62,33 +62,38 @@ impl ContextBudgetManager {
 
     /// Estimate tokens for all messages.
     pub fn estimate_messages_tokens(messages: &[ChatMessage]) -> u64 {
-        let chars: usize = messages
+        messages
             .iter()
             .map(|m| {
                 m.content
                     .iter()
                     .map(|b| match b {
-                        ContentBlock::Text { text } => text.len(),
+                        ContentBlock::Text { text } => text.len() as u64 / CHARS_PER_TOKEN as u64,
                         ContentBlock::ToolUse { input, name, id } => {
-                            name.len() + id.len() + input.to_string().len()
+                            (name.len() + id.len() + input.to_string().len()) as u64
+                                / CHARS_PER_TOKEN as u64
                         }
-                        ContentBlock::ToolResult { content, .. } => content.len(),
-                        ContentBlock::Image { data, .. } => data.len(),
-                        ContentBlock::Document { data, .. } => data.len(),
+                        ContentBlock::ToolResult { content, .. } => {
+                            content.len() as u64 / CHARS_PER_TOKEN as u64
+                        }
+                        ContentBlock::Image { data, .. } => {
+                            estimate_image_tokens_fixed(data.len()) as u64
+                        }
+                        ContentBlock::Document { data, .. } => {
+                            data.len() as u64 / CHARS_PER_TOKEN as u64
+                        }
                     })
-                    .sum::<usize>()
+                    .sum::<u64>()
             })
-            .sum();
-        (chars / CHARS_PER_TOKEN) as u64
+            .sum()
     }
 
     /// Estimate tokens for tool specs (they count against context window).
+    ///
+    /// Uses structured JSON-Schema parsing for more accurate estimation
+    /// rather than naive string-length division.
     pub fn estimate_tool_specs_tokens(tools: &[ToolSpec]) -> u64 {
-        let chars: usize = tools
-            .iter()
-            .map(|t| t.name.len() + t.description.len() + t.input_schema.to_string().len())
-            .sum();
-        (chars / CHARS_PER_TOKEN) as u64
+        estimate_tool_schema_tokens(tools)
     }
 
     /// Compute total estimated context usage using dual-track estimation.
@@ -206,5 +211,206 @@ impl ContextBudgetManager {
 impl Default for ContextBudgetManager {
     fn default() -> Self {
         Self::new(200_000)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Image token estimation (T7)
+// ---------------------------------------------------------------------------
+
+/// Fixed-tier image token estimation based on base64 data size.
+///
+/// Rather than naively dividing base64 length by 4 (which grossly
+/// overestimates because raw bytes are not text tokens), we use
+/// three fixed tiers aligned with Anthropic's documented image token costs.
+///
+/// - `0..=50_000` bytes   -> 85 tokens  (low-res thumbnail)
+/// - `50_001..=500_000`   -> 1600 tokens (standard resolution)
+/// - `> 500_000`          -> 3200 tokens (high resolution)
+fn estimate_image_tokens_fixed(base64_len: usize) -> usize {
+    match base64_len {
+        0..=50_000 => 85,
+        50_001..=500_000 => 1600,
+        _ => 3200,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Schema token estimation (T9)
+// ---------------------------------------------------------------------------
+
+/// Estimate tokens for a collection of tool specs using structured
+/// JSON-Schema parsing.
+///
+/// Reference: <https://docs.anthropic.com/en/docs/build-with-claude/tool-use#token-usage>
+fn estimate_tool_schema_tokens(tools: &[ToolSpec]) -> u64 {
+    tools.iter().map(|t| estimate_single_tool_tokens(t)).sum()
+}
+
+/// Estimate tokens consumed by a single tool definition.
+///
+/// Layout:
+/// - `FUNC_INIT` (7) -- function header boilerplate
+/// - `name_tokens` -- tool name
+/// - `desc_tokens` -- tool description
+/// - Per property: `PROP_OVERHEAD` (3) + key + description + type (1) + enum values
+/// - Fallback: if no `"properties"` object, use raw JSON string length / 4
+fn estimate_single_tool_tokens(tool: &ToolSpec) -> u64 {
+    const FUNC_INIT: u64 = 7;
+    const PROP_OVERHEAD: u64 = 3;
+    const CPT: u64 = CHARS_PER_TOKEN as u64;
+
+    let name_tokens = tool.name.len() as u64 / CPT + 1;
+    let desc_tokens = tool.description.len() as u64 / CPT + 1;
+
+    let prop_tokens = if let Some(props) = tool
+        .input_schema
+        .get("properties")
+        .and_then(|v| v.as_object())
+    {
+        props
+            .iter()
+            .map(|(key, value)| {
+                let key_tokens = key.len() as u64 / CPT + 1;
+                let d_tokens = value
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .map(|d| d.len() as u64 / CPT + 1)
+                    .unwrap_or(0);
+                let enum_tokens = value
+                    .get("enum")
+                    .and_then(|e| e.as_array())
+                    .map(|arr| arr.len() as u64 * 2)
+                    .unwrap_or(0);
+                // +1 for the type token
+                PROP_OVERHEAD + key_tokens + d_tokens + 1 + enum_tokens
+            })
+            .sum::<u64>()
+    } else {
+        // Fallback: estimate from raw JSON string length
+        tool.input_schema.to_string().len() as u64 / CPT
+    };
+
+    FUNC_INIT + name_tokens + desc_tokens + prop_tokens
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- T7: Image token estimation tests --
+
+    #[test]
+    fn test_image_token_estimation_small() {
+        assert_eq!(estimate_image_tokens_fixed(0), 85);
+        assert_eq!(estimate_image_tokens_fixed(1_000), 85);
+        assert_eq!(estimate_image_tokens_fixed(50_000), 85);
+    }
+
+    #[test]
+    fn test_image_token_estimation_large() {
+        assert_eq!(estimate_image_tokens_fixed(50_001), 1600);
+        assert_eq!(estimate_image_tokens_fixed(500_000), 1600);
+        assert_eq!(estimate_image_tokens_fixed(500_001), 3200);
+        assert_eq!(estimate_image_tokens_fixed(2_000_000), 3200);
+    }
+
+    // -- T9: Schema token estimation tests --
+
+    #[test]
+    fn test_schema_tokens_simple_tool() {
+        let tool = ToolSpec {
+            name: "read_file".into(),
+            description: "Read content from a file on disk".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The file path to read"
+                    },
+                    "encoding": {
+                        "type": "string",
+                        "description": "Text encoding"
+                    }
+                },
+                "required": ["path"]
+            }),
+        };
+        let tokens = estimate_single_tool_tokens(&tool);
+        assert!(tokens > 20, "Expected > 20 tokens, got {tokens}");
+        assert!(tokens < 80, "Expected < 80 tokens, got {tokens}");
+    }
+
+    #[test]
+    fn test_schema_tokens_complex_tool() {
+        let tool = ToolSpec {
+            name: "execute_command".into(),
+            description: "Execute a shell command in the sandbox environment".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    },
+                    "shell": {
+                        "type": "string",
+                        "description": "Shell to use",
+                        "enum": ["bash", "zsh", "sh", "fish"]
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds"
+                    },
+                    "working_dir": {
+                        "type": "string",
+                        "description": "Working directory for command execution"
+                    }
+                },
+                "required": ["command"]
+            }),
+        };
+        let tokens = estimate_single_tool_tokens(&tool);
+        assert!(tokens > 40, "Expected > 40 tokens, got {tokens}");
+        assert!(tokens < 150, "Expected < 150 tokens, got {tokens}");
+
+        // Verify enum contributes extra tokens
+        let simple = ToolSpec {
+            name: tool.name.clone(),
+            description: tool.description.clone(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    }
+                }
+            }),
+        };
+        let simple_tokens = estimate_single_tool_tokens(&simple);
+        assert!(
+            tokens > simple_tokens,
+            "Complex tool ({tokens}) should have more tokens than simple ({simple_tokens})"
+        );
+    }
+
+    #[test]
+    fn test_schema_tokens_no_properties() {
+        let tool = ToolSpec {
+            name: "get_time".into(),
+            description: "Return the current UTC time".into(),
+            input_schema: serde_json::json!({
+                "type": "object"
+            }),
+        };
+        let tokens = estimate_single_tool_tokens(&tool);
+        assert!(tokens > 10, "Expected > 10 tokens, got {tokens}");
+        assert!(tokens < 50, "Expected < 50 tokens, got {tokens}");
     }
 }

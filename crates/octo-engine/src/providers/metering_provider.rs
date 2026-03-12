@@ -50,6 +50,7 @@ impl Provider for MeteringProvider {
 
         // Get approximate input token count (this is an estimate - actual count would require a tokenizer)
         let input_tokens = estimate_token_count(&request);
+        let model = request.model.clone();
 
         let result = self.inner.complete(request).await;
         let duration = start.elapsed().as_millis() as u64;
@@ -57,8 +58,15 @@ impl Provider for MeteringProvider {
         match &result {
             Ok(response) => {
                 let output_tokens = response.usage.output_tokens as usize;
-                self.metering
-                    .record_request(input_tokens, output_tokens, duration);
+                // Use extended recording with model info for persistence;
+                // this also updates the atomic counters via record_request().
+                self.metering.record_request_ext(
+                    input_tokens,
+                    output_tokens,
+                    duration,
+                    &model,
+                    "", // session_id not available at provider level
+                );
             }
             Err(_) => {
                 self.metering.record_error();
