@@ -25,7 +25,7 @@ use crate::security::SecurityPolicy;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{register_skills_as_tools, SkillLoader, SkillRegistry, SkillTool};
 use crate::tools::recorder::ToolExecutionRecorder;
-use crate::tools::{default_tools, register_memory_tools, ToolRegistry};
+use crate::tools::{default_tools, register_kg_tools, register_memory_tools, ToolRegistry};
 
 const MPSC_CAPACITY: usize = 32;
 const BROADCAST_CAPACITY: usize = 256;
@@ -115,6 +115,8 @@ pub struct AgentRuntime {
     // Optional collaboration manager for multi-agent sessions (T9)
     pub(crate) collaboration_manager:
         Option<Arc<Mutex<crate::agent::collaboration::manager::CollaborationManager>>>,
+    // Knowledge graph for entity-relation storage (Wave 10 C1)
+    pub(crate) knowledge_graph: Arc<tokio::sync::RwLock<crate::memory::KnowledgeGraph>>,
 }
 
 impl AgentRuntime {
@@ -178,9 +180,15 @@ impl AgentRuntime {
             config.provider.base_url.clone(),
         ));
 
-        // 7. Create ToolRegistry with default + memory + skills
+        // 7. Create ToolRegistry with default + memory + knowledge graph + skills
         let mut tools = default_tools();
         register_memory_tools(&mut tools, memory_store.clone(), provider.clone());
+
+        // 7b. Create KnowledgeGraph and register KG tools
+        let knowledge_graph = Arc::new(tokio::sync::RwLock::new(
+            crate::memory::KnowledgeGraph::new(),
+        ));
+        register_kg_tools(&mut tools, knowledge_graph.clone());
 
         // 8. Create and load SkillRegistry
         let skill_registry = Arc::new(SkillRegistry::new());
@@ -288,6 +296,7 @@ impl AgentRuntime {
             canary_token: Some(canary_token),
             approval_gate: Some(approval_gate),
             collaboration_manager: None,
+            knowledge_graph,
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -440,6 +449,11 @@ impl AgentRuntime {
     /// Delete expired memory entries (convenience wrapper).
     pub async fn cleanup_expired_memories(&self) -> anyhow::Result<usize> {
         self.memory_store.delete_expired().await
+    }
+
+    /// Get knowledge graph
+    pub fn knowledge_graph(&self) -> &Arc<tokio::sync::RwLock<crate::memory::KnowledgeGraph>> {
+        &self.knowledge_graph
     }
 
     /// Get skill registry (if any)

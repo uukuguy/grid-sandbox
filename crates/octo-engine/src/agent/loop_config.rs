@@ -9,7 +9,7 @@ use crate::hooks::HookRegistry;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
-use crate::security::{AiDefence, SafetyPipeline};
+use crate::security::{AiDefence, CanaryGuardLayer, SafetyPipeline};
 use crate::tools::approval::{ApprovalGate, ApprovalManager};
 use crate::tools::recorder::ToolExecutionRecorder;
 use crate::tools::ToolRegistry;
@@ -120,6 +120,10 @@ pub struct AgentLoopConfig {
     // === Self-Repair (W7-T1) ===
     /// Optional self-repair manager for detecting and recovering from stuck agents.
     pub self_repair: Option<SelfRepairManager>,
+
+    // === Canary Guard (W10) ===
+    /// Optional canary guard layer for per-turn canary rotation.
+    pub canary_guard: Option<CanaryGuardLayer>,
 }
 
 impl Default for AgentLoopConfig {
@@ -161,6 +165,7 @@ impl Default for AgentLoopConfig {
             collaboration_context: None,
             estop: None,
             self_repair: None,
+            canary_guard: None,
         }
     }
 }
@@ -377,6 +382,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn self_repair(mut self, v: SelfRepairManager) -> Self {
         self.config.self_repair = Some(v);
+        self
+    }
+
+    pub fn with_canary_guard(mut self, cg: CanaryGuardLayer) -> Self {
+        self.config.canary_guard = Some(cg);
         self
     }
 

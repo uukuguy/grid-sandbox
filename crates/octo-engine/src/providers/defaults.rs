@@ -114,6 +114,76 @@ static PROVIDER_DEFAULTS: LazyLock<HashMap<&str, ProviderDefaults>> = LazyLock::
             api_key_env: "MISTRAL_API_KEY",
         },
     );
+    m.insert(
+        "openrouter",
+        ProviderDefaults {
+            base_url: "https://openrouter.ai/api/v1",
+            api_key_env: "OPENROUTER_API_KEY",
+        },
+    );
+    m.insert(
+        "perplexity",
+        ProviderDefaults {
+            base_url: "https://api.perplexity.ai",
+            api_key_env: "PERPLEXITY_API_KEY",
+        },
+    );
+    m.insert(
+        "cohere",
+        ProviderDefaults {
+            base_url: "https://api.cohere.com/v2",
+            api_key_env: "COHERE_API_KEY",
+        },
+    );
+    m.insert(
+        "google",
+        ProviderDefaults {
+            base_url: "https://generativelanguage.googleapis.com/v1beta",
+            api_key_env: "GOOGLE_API_KEY",
+        },
+    );
+    m.insert(
+        "sambanova",
+        ProviderDefaults {
+            base_url: "https://api.sambanova.ai/v1",
+            api_key_env: "SAMBANOVA_API_KEY",
+        },
+    );
+    m.insert(
+        "cerebras",
+        ProviderDefaults {
+            base_url: "https://api.cerebras.ai/v1",
+            api_key_env: "CEREBRAS_API_KEY",
+        },
+    );
+    m.insert(
+        "hyperbolic",
+        ProviderDefaults {
+            base_url: "https://api.hyperbolic.xyz/v1",
+            api_key_env: "HYPERBOLIC_API_KEY",
+        },
+    );
+    m.insert(
+        "anyscale",
+        ProviderDefaults {
+            base_url: "https://api.endpoints.anyscale.com/v1",
+            api_key_env: "ANYSCALE_API_KEY",
+        },
+    );
+    m.insert(
+        "replicate",
+        ProviderDefaults {
+            base_url: "https://api.replicate.com/v1",
+            api_key_env: "REPLICATE_API_TOKEN",
+        },
+    );
+    m.insert(
+        "lepton",
+        ProviderDefaults {
+            base_url: "https://api.lepton.ai/v1",
+            api_key_env: "LEPTON_API_TOKEN",
+        },
+    );
     m
 });
 
@@ -219,7 +289,7 @@ mod tests {
     #[test]
     fn test_known_providers_not_empty() {
         let providers = known_providers();
-        assert!(providers.len() >= 15);
+        assert!(providers.len() >= 25);
         assert!(providers.contains(&"openai"));
         assert!(providers.contains(&"anthropic"));
     }

@@ -86,6 +86,19 @@ pub struct SystemPromptBuilder {
     skill_index_section: Option<String>,
     /// Active skill section (L2 body injection)
     active_skill_section: Option<String>,
+
+    // -- Dynamic (per-request) fields --
+    // These are separated into `dynamic_context` by `build_separated()`
+    // to enable Anthropic prompt caching on the static portion.
+
+    /// Current date/time string (changes every request)
+    datetime: Option<String>,
+    /// MCP server status listing (changes as servers start/stop)
+    mcp_status: Option<String>,
+    /// Session-specific state (varies per session/request)
+    session_state: Option<String>,
+    /// User-provided context injection (ad-hoc per request)
+    user_context: Option<String>,
 }
 
 impl SystemPromptBuilder {
@@ -98,6 +111,10 @@ impl SystemPromptBuilder {
             output_guidelines: OUTPUT_GUIDELINES.to_string(),
             skill_index_section: None,
             active_skill_section: None,
+            datetime: None,
+            mcp_status: None,
+            session_state: None,
+            user_context: None,
         }
     }
 
@@ -194,14 +211,74 @@ impl SystemPromptBuilder {
         self
     }
 
-    /// Build Zone A - System Prompt
+    // -- Dynamic content setters --
+
+    /// Set current date/time string (routed to `dynamic_context` in `build_separated`).
+    pub fn with_datetime(mut self, datetime: &str) -> Self {
+        if !datetime.is_empty() {
+            self.datetime = Some(datetime.to_string());
+        }
+        self
+    }
+
+    /// Set MCP server status listing (routed to `dynamic_context` in `build_separated`).
+    pub fn with_mcp_status(mut self, status: &str) -> Self {
+        if !status.is_empty() {
+            self.mcp_status = Some(status.to_string());
+        }
+        self
+    }
+
+    /// Set session-specific state (routed to `dynamic_context` in `build_separated`).
+    pub fn with_session_state(mut self, state: &str) -> Self {
+        if !state.is_empty() {
+            self.session_state = Some(state.to_string());
+        }
+        self
+    }
+
+    /// Set user-provided context injection (routed to `dynamic_context` in `build_separated`).
+    pub fn with_user_context(mut self, context: &str) -> Self {
+        if !context.is_empty() {
+            self.user_context = Some(context.to_string());
+        }
+        self
+    }
+
+    /// Collect all dynamic sections into a single string.
+    /// Returns `None` if no dynamic content has been set.
+    fn collect_dynamic_parts(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        if let Some(ref dt) = self.datetime {
+            parts.push(dt.clone());
+        }
+        if let Some(ref mcp) = self.mcp_status {
+            parts.push(mcp.clone());
+        }
+        if let Some(ref ss) = self.session_state {
+            parts.push(ss.clone());
+        }
+        if let Some(ref uc) = self.user_context {
+            parts.push(uc.clone());
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("\n\n"))
+        }
+    }
+
+    /// Build the static portion of the system prompt (Zone A).
+    ///
+    /// This contains only content that does NOT change between requests:
+    /// agent persona, bootstrap files, skills, core instructions, output guidelines.
     ///
     /// Priority order:
     /// 1. system_prompt (full override from AgentManifest)
     /// 2. role/goal/backstory (CrewAI pattern from AgentManifest)
     /// 3. Bootstrap files
     /// 4. Core instructions (lowest priority)
-    pub fn build(&self) -> String {
+    fn build_static(&self) -> String {
         let mut parts = Vec::new();
 
         // Priority 1: Full system prompt override (highest)
@@ -263,6 +340,18 @@ impl SystemPromptBuilder {
         output
     }
 
+    /// Build Zone A - System Prompt (static + dynamic merged).
+    ///
+    /// Returns the complete system prompt including any dynamic content.
+    /// For prompt-caching use cases, prefer [`build_separated`] instead.
+    pub fn build(&self) -> String {
+        let static_part = self.build_static();
+        match self.collect_dynamic_parts() {
+            Some(dynamic) => format!("{}\n\n{}", static_part, dynamic),
+            None => static_part,
+        }
+    }
+
     /// Build only the identity section (role/goal/backstory)
     /// Used when manifest is provided but no full system prompt override
     pub fn build_identity(&self) -> Option<String> {
@@ -296,11 +385,17 @@ impl SystemPromptBuilder {
     }
 
     /// Build the system prompt separated into cacheable (static) and dynamic parts.
+    ///
+    /// The `system_prompt` field contains only static content that stays identical
+    /// across requests, enabling Anthropic prompt caching.  The `dynamic_context`
+    /// field holds per-request content (date/time, MCP status, session state, user
+    /// context).  Calling `parts.merge()` produces the same result as `build()`.
     pub fn build_separated(&self) -> PromptParts {
-        let system_prompt = self.build();
+        let system_prompt = self.build_static();
+        let dynamic_context = self.collect_dynamic_parts().unwrap_or_default();
         PromptParts {
             system_prompt,
-            dynamic_context: String::new(),
+            dynamic_context,
         }
     }
 

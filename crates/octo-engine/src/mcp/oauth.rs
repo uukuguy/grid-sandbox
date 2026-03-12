@@ -112,28 +112,52 @@ pub struct PkceChallenge {
 }
 
 impl PkceChallenge {
-    /// Generate a new PKCE challenge pair using SHA-256 + base64url.
+    /// Generate a new PKCE challenge pair using SHA-256 + base64url (RFC 7636).
     pub fn generate() -> Self {
         use sha2::{Digest, Sha256};
 
-        // Generate code_verifier: 43-128 character random string (base64url of 32 random bytes)
+        // Generate code_verifier: base64url-encode 32 random bytes (no padding) = 43 chars
         let verifier_bytes: Vec<u8> = (0..32).map(|_| rand::random::<u8>()).collect();
-        let code_verifier = hex::encode(&verifier_bytes);
+        let code_verifier = base64url_encode_no_pad(&verifier_bytes);
 
-        // code_challenge = BASE64URL(SHA256(code_verifier))
+        // code_challenge = BASE64URL_NO_PAD(SHA256(code_verifier))
         let mut hasher = Sha256::new();
         hasher.update(code_verifier.as_bytes());
         let hash = hasher.finalize();
-        // Use hex encoding for the challenge since base64 is feature-gated.
-        // OAuth servers typically accept base64url, but for our internal use hex works.
-        // When base64 is available unconditionally, switch to URL_SAFE_NO_PAD.
-        let code_challenge = hex::encode(hash);
+        let code_challenge = base64url_encode_no_pad(&hash);
 
         Self {
             code_verifier,
             code_challenge,
         }
     }
+}
+
+/// Base64url encoding without padding (RFC 4648 Section 5).
+///
+/// Used for PKCE (RFC 7636) code_verifier and code_challenge values.
+fn base64url_encode_no_pad(input: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+    let mut out = String::with_capacity((input.len() * 4 + 2) / 3);
+    let chunks = input.chunks(3);
+    for chunk in chunks {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+
+        out.push(ALPHABET[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(ALPHABET[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(ALPHABET[((triple >> 6) & 0x3F) as usize] as char);
+        }
+        if chunk.len() > 2 {
+            out.push(ALPHABET[(triple & 0x3F) as usize] as char);
+        }
+    }
+    out
 }
 
 /// Manages OAuth 2.1 flows for MCP server connections.
@@ -364,8 +388,13 @@ mod tests {
         assert!(!pkce.code_verifier.is_empty());
         assert!(!pkce.code_challenge.is_empty());
         assert_ne!(pkce.code_verifier, pkce.code_challenge);
-        // Verifier should be hex-encoded 32 bytes = 64 chars
-        assert_eq!(pkce.code_verifier.len(), 64);
+        // Verifier should be base64url-encoded 32 bytes (no padding) = 43 chars
+        assert_eq!(pkce.code_verifier.len(), 43);
+        // Challenge should be base64url-encoded SHA-256 hash (no padding) = 43 chars
+        assert_eq!(pkce.code_challenge.len(), 43);
+        // Both should only contain base64url characters
+        assert!(pkce.code_verifier.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+        assert!(pkce.code_challenge.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]

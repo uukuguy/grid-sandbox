@@ -1,4 +1,49 @@
+use std::fmt;
 use std::time::Duration;
+
+/// Structured provider error carrying HTTP-level retry information.
+///
+/// When a provider receives an HTTP error response, it wraps the details into
+/// this type so that upstream decorators (RetryProvider, CircuitBreaker, etc.)
+/// can make informed retry/failover decisions without parsing error message strings.
+#[derive(Debug)]
+pub struct ProviderError {
+    /// Structured retry information extracted from the HTTP response.
+    pub retry_info: RetryInfo,
+    /// Human-readable error message (e.g. "Anthropic API error 429: {...}").
+    pub message: String,
+    /// The HTTP status code.
+    pub status: u16,
+    /// The response body (may contain JSON error details).
+    pub body: String,
+}
+
+impl fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ProviderError {}
+
+impl ProviderError {
+    /// Build a ProviderError from raw HTTP response components.
+    pub fn from_http_response(
+        provider_name: &str,
+        status: u16,
+        retry_after_header: Option<&str>,
+        body: String,
+    ) -> Self {
+        let retry_info = RetryInfo::from_response(status, retry_after_header, &body);
+        let message = format!("{provider_name} API error {status}: {body}");
+        Self {
+            retry_info,
+            message,
+            status,
+            body,
+        }
+    }
+}
 
 /// Error routing strategy (moltis ProviderErrorKind pattern)
 #[derive(Debug, Clone, PartialEq, Eq)]

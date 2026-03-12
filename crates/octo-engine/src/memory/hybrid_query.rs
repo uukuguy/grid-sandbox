@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::embedding::EmbeddingClient;
+use super::reranker::{LlmReranker, RerankStrategy};
 use super::vector_index::{VectorBackend, VectorIndex, VectorSearchResult};
 
 /// Query type classification
@@ -44,6 +45,8 @@ pub struct HybridQueryEngine {
     vector_backend: Option<Arc<VectorBackend>>,
     /// Optional embedding client for auto-embedding on Semantic queries.
     embedding_client: Option<Arc<EmbeddingClient>>,
+    /// Optional reranking strategy applied after initial retrieval.
+    rerank_strategy: RerankStrategy,
 }
 
 impl HybridQueryEngine {
@@ -56,6 +59,7 @@ impl HybridQueryEngine {
             vector_index: None,
             vector_backend: None,
             embedding_client: None,
+            rerank_strategy: RerankStrategy::None,
         }
     }
 
@@ -72,6 +76,7 @@ impl HybridQueryEngine {
             vector_index: None,
             vector_backend: Some(backend),
             embedding_client: None,
+            rerank_strategy: RerankStrategy::None,
         }
     }
 
@@ -88,6 +93,7 @@ impl HybridQueryEngine {
             vector_index: None,
             vector_backend: Some(backend),
             embedding_client: Some(client),
+            rerank_strategy: RerankStrategy::None,
         }
     }
 
@@ -104,7 +110,19 @@ impl HybridQueryEngine {
             vector_index,
             vector_backend: None,
             embedding_client: None,
+            rerank_strategy: RerankStrategy::None,
         }
+    }
+
+    /// Set the reranking strategy applied after initial retrieval.
+    pub fn set_rerank_strategy(&mut self, strategy: RerankStrategy) {
+        debug!(?strategy, "Setting rerank strategy");
+        self.rerank_strategy = strategy;
+    }
+
+    /// Get a reference to the current reranking strategy.
+    pub fn rerank_strategy(&self) -> &RerankStrategy {
+        &self.rerank_strategy
     }
 
     // ── Query routing ─────────────────────────────────────────────────────
@@ -149,14 +167,75 @@ impl HybridQueryEngine {
         let query_type = self.classify_query(query);
         debug!(?query_type, query = %query, "HybridQueryEngine routing query");
 
-        match query_type {
-            QueryType::Semantic => self.semantic_search(query, embedding, limit).await,
+        let results = match query_type {
+            QueryType::Semantic => self.semantic_search(query, embedding, limit).await?,
             QueryType::Structured | QueryType::Hybrid => {
                 // Structured search is handled by existing MemoryStore.
                 // Caller should merge with MemoryStore results.
-                Ok(vec![])
+                vec![]
             }
+        };
+
+        // Apply optional LLM reranking
+        self.maybe_rerank(query, results).await
+    }
+
+    /// Optionally rerank results using the configured strategy.
+    ///
+    /// When `RerankStrategy::Llm` is configured, converts results to
+    /// `MemoryEntry`, runs the LLM reranker, then converts back.
+    /// On failure, gracefully falls back to the original results.
+    async fn maybe_rerank(
+        &self,
+        query: &str,
+        results: Vec<HybridSearchResult>,
+    ) -> anyhow::Result<Vec<HybridSearchResult>> {
+        let RerankStrategy::Llm(ref config) = self.rerank_strategy else {
+            return Ok(results);
+        };
+
+        if results.is_empty() {
+            return Ok(results);
         }
+
+        debug!(
+            candidates = results.len(),
+            "Applying LLM reranking to search results"
+        );
+
+        // Convert HybridSearchResult -> MemoryEntry for the reranker
+        let entries: Vec<octo_types::memory::MemoryEntry> = results
+            .iter()
+            .map(|r| hybrid_result_to_memory_entry(r))
+            .collect();
+
+        let reranker = LlmReranker::new(config.clone());
+        let reranked = reranker.rerank(query, entries).await;
+
+        // Rebuild HybridSearchResult in reranked order, preserving original metadata
+        let result_map: HashMap<String, &HybridSearchResult> =
+            results.iter().map(|r| (r.id.clone(), r)).collect();
+
+        let reranked_results: Vec<HybridSearchResult> = reranked
+            .into_iter()
+            .filter_map(|entry| {
+                result_map.get(entry.id.as_str()).map(|orig| {
+                    HybridSearchResult {
+                        id: orig.id.clone(),
+                        content: orig.content.clone(),
+                        score: orig.score,
+                        source: orig.source.clone(),
+                        metadata: orig.metadata.clone(),
+                    }
+                })
+            })
+            .collect();
+
+        debug!(
+            reranked_count = reranked_results.len(),
+            "LLM reranking complete"
+        );
+        Ok(reranked_results)
     }
 
     async fn semantic_search(
@@ -215,6 +294,32 @@ impl HybridQueryEngine {
     /// Get a reference to the underlying legacy vector index, if available.
     pub fn vector_index(&self) -> Option<&Arc<VectorIndex>> {
         self.vector_index.as_ref()
+    }
+}
+
+/// Convert a `HybridSearchResult` into a minimal `MemoryEntry` for reranking.
+///
+/// Only `id` and `content` are meaningful for the reranker prompt;
+/// all other fields use safe defaults.
+fn hybrid_result_to_memory_entry(r: &HybridSearchResult) -> octo_types::memory::MemoryEntry {
+    octo_types::memory::MemoryEntry {
+        id: octo_types::memory::MemoryId::from_string(r.id.clone()),
+        user_id: String::new(),
+        sandbox_id: String::new(),
+        category: octo_types::memory::MemoryCategory::Profile,
+        content: r.content.clone(),
+        metadata: serde_json::json!({}),
+        embedding: None,
+        importance: 1.0,
+        access_count: 0,
+        source_type: octo_types::memory::MemorySource::Manual,
+        source_ref: String::new(),
+        ttl: None,
+        timestamps: octo_types::memory::MemoryTimestamps {
+            created_at: 0,
+            updated_at: 0,
+            accessed_at: 0,
+        },
     }
 }
 

@@ -9,6 +9,7 @@ use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use octo_types::{
@@ -17,6 +18,10 @@ use octo_types::{
 
 use crate::security::SafetyDecision;
 use crate::tools::approval::{ApprovalDecision, ApprovalGate, ApprovalManager};
+use crate::tools::rate_limiter::ToolRateLimiter;
+
+use super::estop::EStopReason;
+use super::self_repair::RepairResult;
 
 use crate::context::{
     ContextPruner, DegradationLevel, MemoryFlusher, NewSystemPromptBuilder as SystemPromptBuilder,
@@ -103,7 +108,7 @@ pub fn run_agent_loop(
 }
 
 async fn run_agent_loop_inner(
-    config: AgentLoopConfig,
+    mut config: AgentLoopConfig,
     mut messages: Vec<ChatMessage>,
     tx: mpsc::Sender<AgentEvent>,
 ) {
@@ -139,8 +144,11 @@ async fn run_agent_loop_inner(
         }
     };
 
+    // Per-tool rate limiter (sliding 60-second window).
+    let mut rate_limiter = ToolRateLimiter::new();
+
     // --- Zone A: Build system prompt ---
-    let system_prompt = {
+    let mut system_prompt = {
         let mut builder = SystemPromptBuilder::new();
         if let Some(ref manifest) = config.manifest {
             builder = builder.with_manifest(manifest.clone());
@@ -223,6 +231,17 @@ async fn run_agent_loop_inner(
 
     // === Main loop ===
     for round in 0..max_rounds {
+        // --- E-Stop check (W10) ---
+        if let Some(ref estop) = config.estop {
+            if estop.is_triggered() {
+                let reason = estop.reason().unwrap_or(EStopReason::SystemShutdown);
+                let _ = tx
+                    .send(AgentEvent::EmergencyStopped(Some(format!("{}", reason))))
+                    .await;
+                break;
+            }
+        }
+
         debug!(round, "Harness: round starting");
 
         // --- Emit IterationStart ---
@@ -421,6 +440,21 @@ async fn run_agent_loop_inner(
             }
         }
 
+        // --- Canary rotation (W10) ---
+        // Rotate the canary token before each LLM call so the safety pipeline
+        // checks for the fresh value on output.
+        if let Some(ref canary_guard) = config.canary_guard {
+            let new_canary = canary_guard.rotate();
+            // Replace the canary in the system prompt
+            if let Some(start) = system_prompt.rfind("<!-- CANARY: ") {
+                if let Some(end) = system_prompt[start..].find(" -->") {
+                    let replacement = format!("<!-- CANARY: {} -->", new_canary);
+                    system_prompt.replace_range(start..start + end + 4, &replacement);
+                }
+            }
+            debug!("Canary rotated for round {}", round);
+        }
+
         // --- Build CompletionRequest ---
         // P1-2: Apply observation masking to messages sent to LLM
         let masker = crate::context::ObservationMasker::with_defaults();
@@ -536,7 +570,7 @@ async fn run_agent_loop_inner(
         let StreamResult {
             mut full_text,
             mut full_thinking,
-            tool_uses,
+            mut tool_uses,
             stop_reason,
             ..
         } = stream_result;
@@ -555,6 +589,19 @@ async fn run_agent_loop_inner(
                     text: full_thinking,
                 })
                 .await;
+        }
+
+        // --- Text tool call recovery (W10) ---
+        // Some LLMs emit tool calls as plain text. Attempt to parse them.
+        if tool_uses.is_empty() && !full_text.is_empty() {
+            let recovered = parse_tool_calls_from_text(&full_text);
+            if !recovered.is_empty() {
+                debug!(
+                    count = recovered.len(),
+                    "Recovered tool calls from plain text"
+                );
+                tool_uses = recovered;
+            }
         }
 
         // --- If no tool uses: check for continuation or finalize ---
@@ -787,11 +834,6 @@ async fn run_agent_loop_inner(
             .unwrap_or_else(|| Arc::new(ApprovalManager::dev_mode()));
 
         let tool_outputs: Vec<_> = if config.agent_config.enable_parallel {
-            let tools_to_run: Vec<_> = parsed_tools
-                .iter()
-                .map(|(tu, input)| (tu.name.clone(), input.clone()))
-                .collect();
-
             // --- T3-4: Approval check for parallel tools (before batch execution) ---
             let mut approval_blocked = false;
             for (tu, _input) in &parsed_tools {
@@ -851,12 +893,41 @@ async fn run_agent_loop_inner(
                 return;
             }
 
+            // --- Rate limit check (parallel): split into allowed / blocked ---
+            let mut allowed_indices: Vec<usize> = Vec::new();
+            let mut rate_limited_results: HashMap<usize, ToolOutput> = HashMap::new();
+            for (i, (tu, _input)) in parsed_tools.iter().enumerate() {
+                if let Some(tool) = tools.get(&tu.name) {
+                    let limit = tool.rate_limit();
+                    if limit > 0 && !rate_limiter.check_and_record(&tu.name, limit) {
+                        warn!(tool = %tu.name, limit, "Tool rate limit exceeded (parallel)");
+                        rate_limited_results.insert(
+                            i,
+                            ToolOutput::error(format!(
+                                "Rate limit exceeded for tool '{}': max {} calls per 60s",
+                                tu.name, limit
+                            )),
+                        );
+                        continue;
+                    }
+                }
+                allowed_indices.push(i);
+            }
+
+            let tools_to_run: Vec<_> = allowed_indices
+                .iter()
+                .map(|&i| {
+                    let (tu, input) = &parsed_tools[i];
+                    (tu.name.clone(), input.clone())
+                })
+                .collect();
+
             let config_timeout = if config.tool_timeout_secs > 0 {
                 Some(config.tool_timeout_secs)
             } else {
                 None
             };
-            let results = execute_parallel(
+            let parallel_results = execute_parallel(
                 tools_to_run,
                 &tools,
                 config.agent_config.max_parallel_tools,
@@ -866,9 +937,22 @@ async fn run_agent_loop_inner(
             )
             .await;
 
+            // Merge parallel results back with rate-limited error results.
+            let mut parallel_iter = parallel_results.into_iter();
+            let mut merged: Vec<(String, ToolOutput)> = Vec::with_capacity(parsed_tools.len());
+            for i in 0..parsed_tools.len() {
+                if let Some(err_result) = rate_limited_results.remove(&i) {
+                    merged.push((parsed_tools[i].0.name.clone(), err_result));
+                } else {
+                    if let Some(r) = parallel_iter.next() {
+                        merged.push(r);
+                    }
+                }
+            }
+
             parsed_tools
                 .iter()
-                .zip(results)
+                .zip(merged)
                 .map(|((tu, input), (_, result))| {
                     // Post-process parallel results: duration is already recorded
                     // by the parallel executor, but we add truncation + metadata
@@ -953,6 +1037,20 @@ async fn run_agent_loop_inner(
                             .await;
                         let _ = tx.send(AgentEvent::Done).await;
                         return;
+                    }
+                }
+
+                // --- Rate limit check (sequential) ---
+                if let Some(tool) = tools.get(&tu.name) {
+                    let limit = tool.rate_limit();
+                    if limit > 0 && !rate_limiter.check_and_record(&tu.name, limit) {
+                        warn!(tool = %tu.name, limit, "Tool rate limit exceeded");
+                        let result = ToolOutput::error(format!(
+                            "Rate limit exceeded for tool '{}': max {} calls per 60s",
+                            tu.name, limit
+                        ));
+                        outputs.push((tu, input.clone(), result));
+                        continue;
                     }
                 }
 
@@ -1075,6 +1173,31 @@ async fn run_agent_loop_inner(
                 warn!("Loop Guard outcome: {}", outcome_warning);
             }
 
+            // --- Self-Repair check (W10) ---
+            if let Some(ref mut self_repair) = config.self_repair {
+                let repair = self_repair.check_and_repair(&tu.name, result.is_error);
+                match repair {
+                    RepairResult::Repaired(hint) => {
+                        debug!(tool = %tu.name, "Self-repair: injecting hint");
+                        // Add hint as a system message for next LLM call
+                        messages.push(ChatMessage {
+                            role: MessageRole::User,
+                            content: vec![ContentBlock::Text { text: hint }],
+                        });
+                    }
+                    RepairResult::Unrecoverable { reason } => {
+                        let _ = tx
+                            .send(AgentEvent::Error {
+                                message: format!("Tool {} stuck, unrecoverable: {}", tu.name, reason),
+                            })
+                            .await;
+                        let _ = tx.send(AgentEvent::Done).await;
+                        fire_session_end(&config, &tx).await;
+                        return;
+                    }
+                    _ => {}
+                }
+            }
 
             tool_results.push(ContentBlock::ToolResult {
                 tool_use_id: tu.id.clone(),
@@ -1363,7 +1486,6 @@ fn soft_trim_tool_result(result: &str, soft_limit: usize) -> String {
 // ---------------------------------------------------------------------------
 
 /// Deserialization helper for JSON-based text tool calls.
-#[allow(dead_code)]
 #[derive(Debug, serde::Deserialize)]
 struct TextToolCall {
     name: String,
@@ -1379,7 +1501,6 @@ struct TextToolCall {
 ///    content is valid JSON arguments.
 ///
 /// Returns an empty `Vec` when no tool calls can be recovered.
-#[allow(dead_code)]
 fn parse_tool_calls_from_text(text: &str) -> Vec<PendingToolUse> {
     use std::sync::OnceLock;
     use regex::Regex;

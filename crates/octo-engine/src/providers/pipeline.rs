@@ -24,7 +24,7 @@ use tracing::{debug, warn};
 use octo_types::{CompletionRequest, CompletionResponse};
 
 use super::response_cache::ResponseCacheProvider;
-use super::retry::{LlmErrorKind, RetryPolicy};
+use super::retry::{ErrorStrategy, ProviderError, RetryInfo, RetryPolicy};
 use super::smart_router::{QueryAnalyzer, QueryComplexity, SmartRouterProvider};
 use super::traits::{CompletionStream, Provider};
 use super::usage_recorder::{UsageRecorderProvider, UsageStats};
@@ -340,12 +340,65 @@ impl Provider for RetryProvider {
             match self.inner.complete(request.clone()).await {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
-                    let kind = LlmErrorKind::classify_from_str(&e.to_string().to_lowercase());
-                    if !kind.is_retryable() || attempt == self.policy.max_retries {
-                        return Err(e);
+                    // Extract structured RetryInfo if the provider emitted a ProviderError,
+                    // otherwise fall back to string-based classification from the error message.
+                    let retry_info = if let Some(pe) = e.downcast_ref::<ProviderError>() {
+                        pe.retry_info.clone()
+                    } else {
+                        // Legacy path: classify from error message text.
+                        let msg = e.to_string().to_lowercase();
+                        let kind = super::retry::LlmErrorKind::classify_from_str(&msg);
+                        RetryInfo {
+                            kind,
+                            retry_after: None,
+                            error_code: None,
+                        }
+                    };
+
+                    // Use routing_strategy() to decide the recovery action.
+                    let strategy = retry_info.kind.routing_strategy();
+                    match strategy {
+                        ErrorStrategy::Fail => {
+                            // Non-recoverable — return immediately (auth, billing).
+                            return Err(e);
+                        }
+                        ErrorStrategy::Failover => {
+                            // Failover errors (ServiceError, Timeout) should propagate
+                            // so the outer ProviderChain/CircuitBreaker can pick a
+                            // different backend. Retry only within max_retries.
+                            if attempt == self.policy.max_retries {
+                                return Err(e);
+                            }
+                        }
+                        ErrorStrategy::CompactAndRetry => {
+                            // Context overflow — cannot be solved by simple retry.
+                            // Propagate so higher layers can compact context.
+                            return Err(e);
+                        }
+                        ErrorStrategy::Retry => {
+                            // Retryable (RateLimit, Overloaded, Unknown).
+                            if attempt == self.policy.max_retries {
+                                return Err(e);
+                            }
+                        }
                     }
-                    let delay = self.policy.delay_for(attempt);
-                    debug!("Retry attempt {} after {:?}: {}", attempt + 1, delay, e);
+
+                    // Compute delay: prefer RetryInfo (honours Retry-After header),
+                    // fall back to exponential backoff.
+                    let delay = self
+                        .policy
+                        .should_retry_with_info(&retry_info, attempt)
+                        .unwrap_or_else(|| self.policy.delay_for(attempt));
+
+                    warn!(
+                        "Retry attempt {}/{} after {:?} (kind={:?}, strategy={:?}): {}",
+                        attempt + 1,
+                        self.policy.max_retries,
+                        delay,
+                        retry_info.kind,
+                        strategy,
+                        e,
+                    );
                     tokio::time::sleep(delay).await;
                     last_err = Some(e);
                 }

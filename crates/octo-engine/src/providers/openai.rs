@@ -15,6 +15,7 @@ use octo_types::{
     StopReason, StreamEvent, TokenUsage, ToolSpec,
 };
 
+use super::retry::ProviderError;
 use super::traits::{CompletionStream, Provider};
 
 pub struct OpenAIProvider {
@@ -430,9 +431,20 @@ impl Provider for OpenAIProvider {
             .await?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
+            let status_code = resp.status().as_u16();
+            let retry_after = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
             let body = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI API error {status}: {body}"));
+            return Err(ProviderError::from_http_response(
+                "OpenAI",
+                status_code,
+                retry_after.as_deref(),
+                body,
+            )
+            .into());
         }
 
         let api_resp: ApiResponse = resp.json().await?;
@@ -498,9 +510,20 @@ impl Provider for OpenAIProvider {
             .await?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
+            let status_code = resp.status().as_u16();
+            let retry_after = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
             let body = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI Embeddings API error {status}: {body}"));
+            return Err(ProviderError::from_http_response(
+                "OpenAI",
+                status_code,
+                retry_after.as_deref(),
+                body,
+            )
+            .into());
         }
 
         let json: Value = resp.json().await?;
@@ -553,9 +576,20 @@ impl Provider for OpenAIProvider {
             .await?;
 
         if !resp.status().is_success() {
-            let status = resp.status();
+            let status_code = resp.status().as_u16();
+            let retry_after = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
             let body = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI API error {status}: {body}"));
+            return Err(ProviderError::from_http_response(
+                "OpenAI",
+                status_code,
+                retry_after.as_deref(),
+                body,
+            )
+            .into());
         }
 
         let byte_stream = resp.bytes_stream();

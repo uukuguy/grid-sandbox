@@ -15,6 +15,7 @@ pub mod memory_recall;
 pub mod memory_search;
 pub mod memory_store;
 pub mod memory_update;
+pub mod rate_limiter;
 pub mod recorder;
 pub mod subagent;
 pub mod traits;
