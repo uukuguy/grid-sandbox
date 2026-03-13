@@ -1,77 +1,46 @@
 {
-  "plan_file": "docs/plans/2026-03-12-wave10-integration-wiring.md",
-  "original_plan_file": "docs/plans/2026-03-12-wave7-9-enhancement-plan.md",
-  "phase": "complete",
-  "created_at": "2026-03-12T10:45:00+08:00",
-  "updated_at": "2026-03-12T21:00:00+08:00",
-  "completed_tasks": ["W7-T1", "W7-T2", "W7-T3", "W7-T4", "W7-T5", "W8-T1", "W8-T2", "W8-T3", "W8-T4", "W8-T5", "W8-T6", "W8-T7", "W8-T8", "W8-T9", "W9-T1", "W9-T2", "W9-T3", "W9-T4a", "W9-T4b", "W9-T5", "W9-T6", "W9-T7", "W9-T8", "W9-T9", "W10-A1", "W10-A2", "W10-A3", "W10-A4", "W10-B1", "W10-B2", "W10-B3", "W10-C1", "W10-C2", "W10-C3", "W10-C4", "W10-C5"],
+  "plan_file": "docs/plans/2026-03-13-phase-a-evaluation-tests.md",
+  "phase": "design",
+  "created_at": "2026-03-13T14:35:00+08:00",
+  "updated_at": "2026-03-13T14:40:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 37,
+  "total_tasks": 8,
   "task_groups": {
-    "Wave7": {
-      "name": "运行时防护强化 (P0)",
-      "tasks": ["W7-T1", "W7-T2", "W7-T3", "W7-T4", "W7-T5"],
-      "status": "COMPLETE",
-      "description": "自修复系统 + compaction 三策略 + 文本工具恢复 + E-Stop + prompt cache",
-      "commit": "f9ab1ae"
+    "GroupA-P0": {
+      "name": "P0 核心评估测试",
+      "tasks": ["T1", "T4", "T6"],
+      "status": "PENDING",
+      "description": "Context 降级链 (7 tests) + 四层记忆一致性 (5 tests) + Text Tool Recovery (4 tests)",
+      "parallel": true
     },
-    "Wave8": {
-      "name": "集成与记忆增强 (P1)",
-      "tasks": ["W8-T1", "W8-T2", "W8-T3", "W8-T4", "W8-T5", "W8-T6", "W8-T7", "W8-T8"],
-      "status": "COMPLETE",
-      "description": "MCP OAuth 2.1 + LLM Reranking + Session Thread/Turn + Provider mapping + Retry enhancement + Tool trait + KG tools + dynamic budget",
-      "commit": "fa2ab42"
+    "GroupB-P1": {
+      "name": "P1 集成评估测试",
+      "tasks": ["T2", "T3", "T5"],
+      "status": "PENDING",
+      "description": "E-Stop 集成 (4 tests) + 安全对抗性 (10 tests) + Provider Failover (3 tests)",
+      "parallel": true
     },
-    "Wave9-Pre": {
-      "name": "Wave 9 前置任务",
-      "tasks": ["W8-T9"],
-      "status": "COMPLETE",
-      "description": "rmcp 0.16→1.2.0 升级，解锁 MCP Server 能力",
-      "commit": "1c3c950"
-    },
-    "Wave9": {
-      "name": "精细优化 (P2) — 修订版",
-      "tasks": ["W9-T1", "W9-T2", "W9-T3", "W9-T4a", "W9-T4b", "W9-T5", "W9-T7", "W9-T8", "W9-T9"],
-      "status": "COMPLETE",
-      "description": "RRF + Merkle(v10) + priority queue + metering storage(v11) + metering refactor + canary + image token + ToolProgress + schema token",
-      "commit": "1c3c950"
-    },
-    "Wave9-Ext": {
-      "name": "Wave 9 延伸任务",
-      "tasks": ["W9-T6"],
-      "status": "COMPLETE",
-      "description": "MCP Server 角色 — OctoMcpServer 实现 ServerHandler trait",
-      "commit": "376d8dc"
-    },
-    "Wave10": {
-      "name": "Integration Wiring — 接线工程",
-      "tasks": ["W10-A1", "W10-A2", "W10-A3", "W10-A4", "W10-B1", "W10-B2", "W10-B3", "W10-C1", "W10-C2", "W10-C3", "W10-C4", "W10-C5"],
-      "status": "COMPLETE",
-      "description": "将 Wave 7-9 已实现模块接入运行时: E-Stop/Canary/TextRecovery/SelfRepair in harness, Reranker in HybridQuery, PromptParts dynamic_context, RetryPolicy in pipeline, KG tools registration, RateLimiter, OAuth PKCE fix, pricing 9→34, providers 15→25",
-      "commit": "a7559df"
+    "GroupC-Serial": {
+      "name": "文档更新与全量验证",
+      "tasks": ["T7", "T8"],
+      "status": "PENDING",
+      "description": "更新设计文档/checkpoint + 全量测试验证 (target ~1807 tests)",
+      "parallel": false
     }
   },
-  "execution_order": ["Wave7", "Wave8", "Wave9-Pre", "Wave9", "Wave9-Ext", "Wave10"],
-  "execution_mode": "subagent-driven-development",
-  "phase_name": "wave10-wiring",
-  "tests_baseline": 1727,
+  "execution_order": ["GroupA-P0", "GroupB-P1", "GroupC-Serial"],
+  "execution_mode": null,
+  "phase_name": "Agent Evaluation — Phase A 特色评估测试",
+  "tests_baseline": 1774,
   "tests_current": 1774,
-  "tests_target": 1780,
+  "tests_target": 1807,
   "previous_plan": {
-    "file": "docs/plans/2026-03-11-wave6-production-hardening.md",
+    "file": "docs/plans/2026-03-12-wave10-integration-wiring.md",
     "status": "COMPLETE",
-    "tasks_completed": 15,
-    "final_commit": "763ab56"
+    "tasks_completed": 37,
+    "final_commit": "675155d"
   },
-  "analysis_source": {
-    "file": "docs/design/COMPETITIVE_CODE_ANALYSIS_V2.md",
-    "gaps_total": 23,
-    "gaps_p0": 5,
-    "gaps_p1": 9,
-    "gaps_p2": 9,
-    "current_score": 8.5,
-    "target_score": 8.9
-  },
-  "plan_status": "COMPLETE",
-  "notes": "Wave 10 COMPLETE (37/37 tasks). All 23 competitive gaps now operationally active via integration wiring. 1774 tests passing (+13 from W10). Key wiring: harness gets E-Stop/Canary/TextRecovery/SelfRepair, HybridQuery gets Reranker, pipeline gets structured RetryPolicy, runtime registers KG tools, OAuth PKCE fixed to base64url."
+  "design_doc": "docs/design/AGENT_EVALUATION_DESIGN.md",
+  "notes": "Phase A plan created. 6 new test files (~33 tests) covering context degradation, E-Stop integration, security adversarial, memory consistency, provider failover, and text tool recovery. Awaiting execution mode selection (subagent-driven recommended)."
 }
