@@ -48,4 +48,10 @@ pub trait EvalTask: Send + Sync {
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>>;
     fn score(&self, output: &AgentOutput) -> EvalScore;
     fn metadata(&self) -> TaskMetadata;
+
+    /// Optional tool name allowlist — when set, only these tools are available.
+    /// The runner uses these names to filter the ToolRegistry.
+    fn tool_allowlist(&self) -> Option<Vec<String>> {
+        None
+    }
 }

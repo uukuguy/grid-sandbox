@@ -1,16 +1,16 @@
 {
   "plan_file": "docs/plans/2026-03-14-phase-e-eval-enhancement.md",
-  "phase": "planning",
+  "phase": "execution",
   "created_at": "2026-03-14T02:30:00+08:00",
-  "updated_at": "2026-03-14T02:30:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-03-14T03:30:00+08:00",
+  "completed_tasks": ["E1-T1", "E1-T2", "E1-T3", "E1-T4", "E1-T5", "E1-T6"],
   "current_task": null,
   "total_tasks": 17,
   "task_groups": {
     "PhaseE1": {
       "name": "Runner 加固",
       "tasks": ["E1-T1", "E1-T2", "E1-T3", "E1-T4", "E1-T5", "E1-T6"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "parallel": false,
       "description": "Recorder集成 + Timeout + 并发 + Allowlist + 回归检测 + 验证"
     },
@@ -30,11 +30,11 @@
     }
   },
   "execution_order": ["PhaseE1", "PhaseE2", "PhaseE3"],
-  "execution_mode": null,
+  "execution_mode": "direct",
   "phase_name": "Agent Evaluation — Phase E Eval Enhancement",
   "tests_baseline": 1870,
-  "tests_current": 1870,
-  "status": "PLANNING",
+  "tests_current": 1891,
+  "status": "IN_PROGRESS",
   "previous_plan": {
     "file": "docs/plans/2026-03-13-phase-d-multi-model-evaluation.md",
     "status": "COMPLETE",
@@ -44,7 +44,8 @@
   "deliverables": {
     "phase_e1": {
       "scope": "Runner加固: Recorder集成, Timeout, 并发, Allowlist, 回归检测",
-      "estimated_changes": "~200 lines, 6 new tests"
+      "estimated_changes": "~200 lines, 6 new tests",
+      "actual_changes": "~350 lines changed across 6 files, 25 integration tests (was 18), 4 new reporter unit tests"
     },
     "phase_e2": {
       "scope": "新套件: LlmJudge + provider(10) + memory(12) + e2e(8) = +40 tasks",
@@ -56,5 +57,5 @@
     }
   },
   "commits": [],
-  "notes": "Phase E 设计方案已完成。三个子阶段可独立执行: E1(Runner加固, 2-3天) → E2(新套件, 3-5天) → E3(多轨道, 5-7天)。Phase D 模型扩展(更多模型跑分)暂缓，优先补全框架能力。"
+  "notes": "Phase E1 COMPLETE. All 6 tasks implemented: Recorder auto-integration (T1), Timeout enforcement via tokio::time::timeout wrapping collect_events (T2), Concurrent evaluation via buffer_unordered with stable result ordering (T3), Per-task tool allowlists via JsonlTask.tools field (T4), Regression detection with diff_report + regression_to_markdown (T5), Full verification 1891 tests passing (T6). Design gaps identified by reviewer agent were all addressed: ScoreDetails::Timeout variant, TaskResult/EvalReport Serialize/Deserialize derives, RegressionReport/TaskDiff/DiffStatus types, CLI --baseline parameter, tool_allowlist() trait method."
 }

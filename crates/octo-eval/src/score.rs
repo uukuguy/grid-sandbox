@@ -32,6 +32,9 @@ pub enum ScoreDetails {
     Custom {
         message: String,
     },
+    Timeout {
+        elapsed_secs: u64,
+    },
 }
 
 impl EvalScore {

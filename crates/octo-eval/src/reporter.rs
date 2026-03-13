@@ -61,6 +61,40 @@ pub struct TaskResultSummary {
     pub tokens: u64,
 }
 
+/// Status of a task compared to baseline
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DiffStatus {
+    Improved,
+    Regressed,
+    Unchanged,
+    New,
+    Removed,
+}
+
+/// Diff for a single task between current and baseline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskDiff {
+    pub task_id: String,
+    pub status: DiffStatus,
+    pub baseline_score: Option<f64>,
+    pub current_score: Option<f64>,
+    pub baseline_passed: Option<bool>,
+    pub current_passed: Option<bool>,
+}
+
+/// Regression report comparing current run to a baseline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegressionReport {
+    pub task_diffs: Vec<TaskDiff>,
+    pub improved: usize,
+    pub regressed: usize,
+    pub unchanged: usize,
+    pub new_tasks: usize,
+    pub removed_tasks: usize,
+    pub baseline_pass_rate: f64,
+    pub current_pass_rate: f64,
+}
+
 /// Reporter generates reports from evaluation results.
 pub struct Reporter;
 
@@ -125,6 +159,144 @@ impl Reporter {
     pub fn to_json(report: &DetailedReport) -> String {
         serde_json::to_string_pretty(report)
             .unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e))
+    }
+
+    /// Compare current report to a baseline and produce a regression report.
+    pub fn diff_report(
+        current: &DetailedReport,
+        baseline: &DetailedReport,
+    ) -> RegressionReport {
+        let baseline_map: HashMap<String, &TaskResultSummary> = baseline
+            .task_results
+            .iter()
+            .map(|r| (r.task_id.clone(), r))
+            .collect();
+        let current_map: HashMap<String, &TaskResultSummary> = current
+            .task_results
+            .iter()
+            .map(|r| (r.task_id.clone(), r))
+            .collect();
+
+        let mut task_diffs = Vec::new();
+        let mut improved = 0usize;
+        let mut regressed = 0usize;
+        let mut unchanged = 0usize;
+        let mut new_tasks = 0usize;
+
+        // Check all current tasks against baseline
+        for cr in &current.task_results {
+            if let Some(br) = baseline_map.get(&cr.task_id) {
+                let status = if cr.passed && !br.passed {
+                    improved += 1;
+                    DiffStatus::Improved
+                } else if !cr.passed && br.passed {
+                    regressed += 1;
+                    DiffStatus::Regressed
+                } else {
+                    unchanged += 1;
+                    DiffStatus::Unchanged
+                };
+                task_diffs.push(TaskDiff {
+                    task_id: cr.task_id.clone(),
+                    status,
+                    baseline_score: Some(br.score),
+                    current_score: Some(cr.score),
+                    baseline_passed: Some(br.passed),
+                    current_passed: Some(cr.passed),
+                });
+            } else {
+                new_tasks += 1;
+                task_diffs.push(TaskDiff {
+                    task_id: cr.task_id.clone(),
+                    status: DiffStatus::New,
+                    baseline_score: None,
+                    current_score: Some(cr.score),
+                    baseline_passed: None,
+                    current_passed: Some(cr.passed),
+                });
+            }
+        }
+
+        // Check for removed tasks (in baseline but not in current)
+        let mut removed_tasks = 0usize;
+        for br in &baseline.task_results {
+            if !current_map.contains_key(&br.task_id) {
+                removed_tasks += 1;
+                task_diffs.push(TaskDiff {
+                    task_id: br.task_id.clone(),
+                    status: DiffStatus::Removed,
+                    baseline_score: Some(br.score),
+                    current_score: None,
+                    baseline_passed: Some(br.passed),
+                    current_passed: None,
+                });
+            }
+        }
+
+        RegressionReport {
+            task_diffs,
+            improved,
+            regressed,
+            unchanged,
+            new_tasks,
+            removed_tasks,
+            baseline_pass_rate: baseline.summary.pass_rate,
+            current_pass_rate: current.summary.pass_rate,
+        }
+    }
+
+    /// Format a regression report as Markdown.
+    pub fn regression_to_markdown(report: &RegressionReport) -> String {
+        let mut md = String::new();
+        md.push_str("# Regression Report\n\n");
+
+        let delta = report.current_pass_rate - report.baseline_pass_rate;
+        let arrow = if delta > 0.0 { "▲" } else if delta < 0.0 { "▼" } else { "=" };
+        md.push_str(&format!(
+            "**Pass rate**: {:.1}% → {:.1}% ({}{:+.1}%)\n\n",
+            report.baseline_pass_rate * 100.0,
+            report.current_pass_rate * 100.0,
+            arrow,
+            delta * 100.0,
+        ));
+
+        md.push_str(&format!(
+            "| Improved | Regressed | Unchanged | New | Removed |\n"
+        ));
+        md.push_str("|----------|-----------|-----------|-----|--------|\n");
+        md.push_str(&format!(
+            "| {} | {} | {} | {} | {} |\n\n",
+            report.improved, report.regressed, report.unchanged, report.new_tasks, report.removed_tasks
+        ));
+
+        if !report.task_diffs.is_empty() {
+            md.push_str("## Per-Task Details\n\n");
+            md.push_str("| Task ID | Status | Baseline | Current |\n");
+            md.push_str("|---------|--------|----------|--------|\n");
+            for diff in &report.task_diffs {
+                let status = match diff.status {
+                    DiffStatus::Improved => "IMPROVED",
+                    DiffStatus::Regressed => "REGRESSED",
+                    DiffStatus::Unchanged => "UNCHANGED",
+                    DiffStatus::New => "NEW",
+                    DiffStatus::Removed => "REMOVED",
+                };
+                let baseline = diff
+                    .baseline_score
+                    .map(|s| format!("{:.2}", s))
+                    .unwrap_or_else(|| "—".into());
+                let current = diff
+                    .current_score
+                    .map(|s| format!("{:.2}", s))
+                    .unwrap_or_else(|| "—".into());
+                md.push_str(&format!(
+                    "| {} | {} | {} | {} |\n",
+                    diff.task_id, status, baseline, current
+                ));
+            }
+        }
+
+        md
     }
 
     /// Generate Markdown report string.
@@ -460,5 +632,86 @@ mod tests {
         let report = EvalReport::from_results(results);
         let detailed = Reporter::generate(&report, &HashMap::new(), &HashMap::new());
         assert_eq!(detailed.latency.p95_ms, 190);
+    }
+
+    // === E1-T5: Regression detection tests ===
+
+    fn make_detailed(tasks: Vec<(&str, bool, f64)>) -> DetailedReport {
+        let results: Vec<TaskResult> = tasks
+            .iter()
+            .map(|(id, passed, score)| make_result(id, *passed, *score, 100, 50))
+            .collect();
+        let report = EvalReport::from_results(results);
+        Reporter::generate(&report, &HashMap::new(), &HashMap::new())
+    }
+
+    #[test]
+    fn test_diff_report_regression_detected() {
+        let baseline = make_detailed(vec![
+            ("t1", true, 1.0),
+            ("t2", true, 1.0),
+            ("t3", false, 0.0),
+        ]);
+        let current = make_detailed(vec![
+            ("t1", true, 1.0),   // unchanged
+            ("t2", false, 0.0),  // regressed
+            ("t3", true, 1.0),   // improved
+        ]);
+
+        let regression = Reporter::diff_report(&current, &baseline);
+        assert_eq!(regression.improved, 1);
+        assert_eq!(regression.regressed, 1);
+        assert_eq!(regression.unchanged, 1);
+        assert_eq!(regression.new_tasks, 0);
+        assert_eq!(regression.removed_tasks, 0);
+
+        // Check specific task diffs
+        let t2_diff = regression.task_diffs.iter().find(|d| d.task_id == "t2").unwrap();
+        assert_eq!(t2_diff.status, DiffStatus::Regressed);
+
+        let t3_diff = regression.task_diffs.iter().find(|d| d.task_id == "t3").unwrap();
+        assert_eq!(t3_diff.status, DiffStatus::Improved);
+    }
+
+    #[test]
+    fn test_diff_report_no_regression() {
+        let baseline = make_detailed(vec![("t1", true, 1.0), ("t2", false, 0.0)]);
+        let current = make_detailed(vec![("t1", true, 1.0), ("t2", true, 1.0)]);
+
+        let regression = Reporter::diff_report(&current, &baseline);
+        assert_eq!(regression.improved, 1);
+        assert_eq!(regression.regressed, 0);
+        assert_eq!(regression.unchanged, 1);
+    }
+
+    #[test]
+    fn test_diff_report_new_and_removed_tasks() {
+        let baseline = make_detailed(vec![("t1", true, 1.0), ("t2", true, 1.0)]);
+        let current = make_detailed(vec![("t1", true, 1.0), ("t3", false, 0.0)]);
+
+        let regression = Reporter::diff_report(&current, &baseline);
+        assert_eq!(regression.unchanged, 1);       // t1
+        assert_eq!(regression.new_tasks, 1);        // t3
+        assert_eq!(regression.removed_tasks, 1);    // t2
+
+        let t3_diff = regression.task_diffs.iter().find(|d| d.task_id == "t3").unwrap();
+        assert_eq!(t3_diff.status, DiffStatus::New);
+
+        let t2_diff = regression.task_diffs.iter().find(|d| d.task_id == "t2").unwrap();
+        assert_eq!(t2_diff.status, DiffStatus::Removed);
+    }
+
+    #[test]
+    fn test_regression_to_markdown() {
+        let baseline = make_detailed(vec![("t1", true, 1.0), ("t2", false, 0.0)]);
+        let current = make_detailed(vec![("t1", true, 1.0), ("t2", true, 1.0)]);
+
+        let regression = Reporter::diff_report(&current, &baseline);
+        let md = Reporter::regression_to_markdown(&regression);
+
+        assert!(md.contains("# Regression Report"));
+        assert!(md.contains("▲")); // pass rate improved
+        assert!(md.contains("IMPROVED"));
+        assert!(md.contains("UNCHANGED"));
     }
 }

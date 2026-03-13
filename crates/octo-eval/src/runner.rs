@@ -1,24 +1,25 @@
 //! Evaluation runner — drives agent loop execution for eval tasks.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use futures_util::StreamExt;
+use futures_util::stream::StreamExt;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use octo_engine::agent::{run_agent_loop, AgentEvent, AgentLoopConfig};
 use octo_engine::providers::{create_provider, Provider};
-use octo_engine::tools::ToolRegistry;
 use octo_types::ChatMessage;
 
 use crate::config::{EvalConfig, EvalTarget};
 use crate::model::ModelInfo;
+use crate::recorder::{EvalRecorder, EvalTrace};
 use crate::score::{EvalScore, ScoreDetails};
 use crate::task::{AgentOutput, EvalTask, ToolCallRecord};
 
 /// Result of running a single evaluation task
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TaskResult {
     pub task_id: String,
     pub output: AgentOutput,
@@ -27,7 +28,7 @@ pub struct TaskResult {
 }
 
 /// Aggregated evaluation report
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct EvalReport {
     pub model: Option<ModelInfo>,
     pub results: Vec<TaskResult>,
@@ -94,17 +95,36 @@ impl EvalReport {
 pub struct EvalRunner {
     config: EvalConfig,
     provider: Arc<dyn Provider>,
+    recorder: Option<EvalRecorder>,
 }
 
 impl EvalRunner {
     pub fn new(config: EvalConfig) -> Result<Self> {
         let provider = Self::create_provider_from_config(&config)?;
-        Ok(Self { config, provider })
+        let recorder = if config.record_traces {
+            Some(EvalRecorder::new(config.output_dir.join("traces"))?)
+        } else {
+            None
+        };
+        Ok(Self {
+            config,
+            provider,
+            recorder,
+        })
     }
 
     /// Create with an explicit provider (useful for MockProvider in tests)
     pub fn with_provider(config: EvalConfig, provider: Arc<dyn Provider>) -> Self {
-        Self { config, provider }
+        let recorder = if config.record_traces {
+            EvalRecorder::new(config.output_dir.join("traces")).ok()
+        } else {
+            None
+        };
+        Self {
+            config,
+            provider,
+            recorder,
+        }
     }
 
     /// Returns a reference to the runner configuration.
@@ -126,10 +146,11 @@ impl EvalRunner {
         }
     }
 
-    /// Run a single evaluation task
+    /// Run a single evaluation task with timeout enforcement
     pub async fn run_task(&self, task: &dyn EvalTask) -> Result<TaskResult> {
         let start = Instant::now();
         let task_id = task.id().to_string();
+        let timeout_secs = self.config.timeout_secs;
 
         info!(task_id = %task_id, "Starting evaluation task");
 
@@ -137,8 +158,13 @@ impl EvalRunner {
             EvalTarget::Engine(c) => c,
         };
 
-        // Build tool registry with built-in tools (file_read, bash, grep, etc.)
-        let tool_registry = Arc::new(octo_engine::tools::default_tools());
+        // Build tool registry — apply per-task allowlist if specified
+        let base_registry = octo_engine::tools::default_tools();
+        let tool_registry = if let Some(ref tool_names) = task.tool_allowlist() {
+            Arc::new(base_registry.snapshot_filtered(tool_names))
+        } else {
+            Arc::new(base_registry)
+        };
 
         // Build AgentLoopConfig
         let loop_config = AgentLoopConfig::builder()
@@ -152,8 +178,31 @@ impl EvalRunner {
         // Create the initial user message from the task prompt
         let messages = vec![ChatMessage::user(task.prompt())];
 
-        // Run agent loop and collect events into AgentOutput
-        let output = Self::collect_events(loop_config, messages).await;
+        // Run agent loop with timeout wrapping collect_events
+        let timeout_duration = Duration::from_secs(timeout_secs);
+        let output = match tokio::time::timeout(
+            timeout_duration,
+            Self::collect_events(loop_config, messages),
+        )
+        .await
+        {
+            Ok(output) => output,
+            Err(_elapsed) => {
+                let duration_ms = start.elapsed().as_millis() as u64;
+                warn!(task_id = %task_id, timeout_secs, "Task timed out");
+                return Ok(TaskResult {
+                    task_id,
+                    output: AgentOutput::default(),
+                    score: EvalScore::fail(
+                        0.0,
+                        ScoreDetails::Timeout {
+                            elapsed_secs: timeout_secs,
+                        },
+                    ),
+                    duration_ms,
+                });
+            }
+        };
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -168,16 +217,74 @@ impl EvalRunner {
             "Task evaluation complete"
         );
 
-        Ok(TaskResult {
+        let result = TaskResult {
             task_id,
             output,
             score,
             duration_ms,
-        })
+        };
+
+        // Record trace if recorder is enabled
+        if let Some(ref recorder) = self.recorder {
+            let trace = EvalTrace {
+                task_id: result.task_id.clone(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                interactions: vec![], // populated only when using MockProvider
+                output: result.output.clone(),
+                score: result.score.clone(),
+            };
+            if let Err(e) = recorder.save_trace(&trace) {
+                warn!(error = %e, "Failed to save evaluation trace");
+            }
+        }
+
+        Ok(result)
     }
 
-    /// Run all tasks and generate an aggregated report
+    /// Run all tasks (sequentially or concurrently) and generate an aggregated report
     pub async fn run_suite(&self, tasks: &[Box<dyn EvalTask>]) -> Result<EvalReport> {
+        let total = tasks.len();
+        let concurrency = self.config.concurrency.max(1);
+
+        let results = if concurrency <= 1 {
+            // Sequential mode (default, preserves ordering)
+            self.run_suite_sequential(tasks).await?
+        } else {
+            // Concurrent mode
+            self.run_suite_concurrent(tasks, concurrency).await?
+        };
+
+        eprintln!(
+            "Suite complete: {}/{} passed",
+            results.iter().filter(|r| r.score.passed).count(),
+            total
+        );
+
+        // Save summary trace if recorder is enabled
+        if let Some(ref recorder) = self.recorder {
+            let traces: Vec<EvalTrace> = results
+                .iter()
+                .map(|r| EvalTrace {
+                    task_id: r.task_id.clone(),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    interactions: vec![],
+                    output: r.output.clone(),
+                    score: r.score.clone(),
+                })
+                .collect();
+            if let Err(e) = recorder.save_summary(&traces) {
+                warn!(error = %e, "Failed to save evaluation summary");
+            }
+        }
+
+        Ok(EvalReport::from_results(results))
+    }
+
+    /// Sequential task execution (concurrency = 1)
+    async fn run_suite_sequential(
+        &self,
+        tasks: &[Box<dyn EvalTask>],
+    ) -> Result<Vec<TaskResult>> {
         let total = tasks.len();
         let mut results = Vec::with_capacity(total);
 
@@ -196,7 +303,6 @@ impl EvalRunner {
                 }
                 Err(e) => {
                     eprintln!("[{}/{}] ERROR {}: {}", idx, total, task.id(), e);
-                    // Record as a failed result rather than aborting the suite
                     results.push(TaskResult {
                         task_id: task.id().to_string(),
                         output: AgentOutput::default(),
@@ -212,8 +318,76 @@ impl EvalRunner {
             }
         }
 
-        eprintln!("Suite complete: {}/{} passed", results.iter().filter(|r| r.score.passed).count(), total);
-        Ok(EvalReport::from_results(results))
+        Ok(results)
+    }
+
+    /// Concurrent task execution (concurrency > 1)
+    async fn run_suite_concurrent(
+        &self,
+        tasks: &[Box<dyn EvalTask>],
+        concurrency: usize,
+    ) -> Result<Vec<TaskResult>> {
+        let total = tasks.len();
+        let provider = self.provider.clone();
+        let config = self.config.clone();
+
+        // Create futures for each task — each clones the Arc<Provider> and config
+        let futures = tasks.iter().enumerate().map(|(i, task)| {
+            let provider = provider.clone();
+            let config = config.clone();
+            let task_id = task.id().to_string();
+            let idx = i + 1;
+
+            async move {
+                eprintln!("[{}/{}] Running task: {} ...", idx, total, task_id);
+
+                let runner = EvalRunner {
+                    config,
+                    provider,
+                    recorder: None, // traces saved at suite level
+                };
+
+                match runner.run_task(task.as_ref()).await {
+                    Ok(result) => {
+                        let status = if result.score.passed { "PASS" } else { "FAIL" };
+                        eprintln!(
+                            "[{}/{}] {} {} (score={:.2}, {}ms)",
+                            idx, total, status, result.task_id, result.score.score,
+                            result.duration_ms
+                        );
+                        (i, result)
+                    }
+                    Err(e) => {
+                        eprintln!("[{}/{}] ERROR {}: {}", idx, total, task_id, e);
+                        (
+                            i,
+                            TaskResult {
+                                task_id: task_id.clone(),
+                                output: AgentOutput::default(),
+                                score: EvalScore::fail(
+                                    0.0,
+                                    ScoreDetails::Custom {
+                                        message: format!("Execution error: {}", e),
+                                    },
+                                ),
+                                duration_ms: 0,
+                            },
+                        )
+                    }
+                }
+            }
+        });
+
+        // Run with bounded concurrency and collect results
+        let mut indexed_results: Vec<(usize, TaskResult)> =
+            futures_util::stream::iter(futures)
+                .buffer_unordered(concurrency)
+                .collect()
+                .await;
+
+        // Sort by original index to maintain stable ordering
+        indexed_results.sort_by_key(|(i, _)| *i);
+        Ok(indexed_results.into_iter().map(|(_, r)| r).collect())
     }
 
     /// Collect AgentEvents from the stream into an AgentOutput
@@ -271,11 +445,3 @@ impl EvalRunner {
         output
     }
 }
-
-// Suppress unused import warning — ToolRegistry will be used when tasks
-// specify tool subsets (Phase D).
-const _: () = {
-    fn _assert_tool_registry_imported() {
-        let _ = std::mem::size_of::<ToolRegistry>();
-    }
-};

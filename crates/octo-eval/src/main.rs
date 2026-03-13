@@ -56,6 +56,7 @@ fn cmd_help() -> Result<()> {
     println!("  --suite <NAME>           Suite name: tool_call, security, context");
     println!("  --output <DIR>           Output directory (default: eval_output)");
     println!("  --format <FMT>           Output format: json, markdown, both (default: both)");
+    println!("  --baseline <PATH>        Baseline report JSON for regression detection");
     Ok(())
 }
 
@@ -80,10 +81,18 @@ fn load_suite(name: &str) -> Result<Vec<Box<dyn EvalTask>>> {
     }
 }
 
-fn parse_args(args: &[String]) -> (String, PathBuf, String) {
+struct CliArgs {
+    suite: String,
+    output: PathBuf,
+    format: String,
+    baseline: Option<PathBuf>,
+}
+
+fn parse_args(args: &[String]) -> CliArgs {
     let mut suite = "tool_call".to_string();
     let mut output = PathBuf::from("eval_output");
     let mut format = "both".to_string();
+    let mut baseline = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -106,23 +115,34 @@ fn parse_args(args: &[String]) -> (String, PathBuf, String) {
                     i += 1;
                 }
             }
+            "--baseline" => {
+                if i + 1 < args.len() {
+                    baseline = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
     }
 
-    (suite, output, format)
+    CliArgs {
+        suite,
+        output,
+        format,
+        baseline,
+    }
 }
 
 fn cmd_run(args: &[String]) -> Result<()> {
-    let (suite_name, output_dir, format) = parse_args(args);
-    let tasks = load_suite(&suite_name)?;
+    let cli = parse_args(args);
+    let tasks = load_suite(&cli.suite)?;
 
-    println!("Running suite '{}' ({} tasks)...\n", suite_name, tasks.len());
+    println!("Running suite '{}' ({} tasks)...\n", cli.suite, tasks.len());
 
     let config = EvalConfig {
         target: EvalTarget::Engine(EngineConfig::default()),
-        output_dir: output_dir.clone(),
+        output_dir: cli.output.clone(),
         ..EvalConfig::default()
     };
 
@@ -137,28 +157,63 @@ fn cmd_run(args: &[String]) -> Result<()> {
     let (categories, difficulties) = build_metadata(&tasks);
     let detailed = Reporter::generate(&report, &categories, &difficulties);
 
-    std::fs::create_dir_all(&output_dir)?;
+    std::fs::create_dir_all(&cli.output)?;
 
-    if format == "json" || format == "both" {
+    if cli.format == "json" || cli.format == "both" {
         let json = Reporter::to_json(&detailed);
-        let path = output_dir.join("report.json");
+        let path = cli.output.join("report.json");
         std::fs::write(&path, &json)?;
         println!("JSON report: {}", path.display());
     }
 
-    if format == "markdown" || format == "both" {
+    if cli.format == "markdown" || cli.format == "both" {
         let md = Reporter::to_markdown(&detailed);
-        let path = output_dir.join("report.md");
+        let path = cli.output.join("report.md");
         std::fs::write(&path, &md)?;
         println!("Markdown report: {}", path.display());
+    }
+
+    // Regression detection against baseline
+    if let Some(baseline_path) = &cli.baseline {
+        let baseline_content = std::fs::read_to_string(baseline_path)?;
+        let baseline: octo_eval::reporter::DetailedReport =
+            serde_json::from_str(&baseline_content)?;
+        let regression = Reporter::diff_report(&detailed, &baseline);
+        let regression_md = Reporter::regression_to_markdown(&regression);
+
+        let regression_path = cli.output.join("regression.md");
+        std::fs::write(&regression_path, &regression_md)?;
+        println!("Regression report: {}", regression_path.display());
+
+        let regression_json_path = cli.output.join("regression.json");
+        let regression_json = serde_json::to_string_pretty(&regression)?;
+        std::fs::write(&regression_json_path, &regression_json)?;
+        println!("Regression JSON: {}", regression_json_path.display());
+
+        // Print summary
+        let delta = regression.current_pass_rate - regression.baseline_pass_rate;
+        let arrow = if delta > 0.0 { "▲" } else if delta < 0.0 { "▼" } else { "=" };
+        println!(
+            "\nRegression: {:.1}% → {:.1}% ({}{:+.1}%) | {} improved, {} regressed, {} unchanged",
+            regression.baseline_pass_rate * 100.0,
+            regression.current_pass_rate * 100.0,
+            arrow,
+            delta * 100.0,
+            regression.improved,
+            regression.regressed,
+            regression.unchanged,
+        );
     }
 
     Ok(())
 }
 
 fn cmd_compare(args: &[String]) -> Result<()> {
-    let (suite_name, output_dir, format) = parse_args(args);
-    let tasks = load_suite(&suite_name)?;
+    let cli = parse_args(args);
+    let suite_name = &cli.suite;
+    let output_dir = &cli.output;
+    let format = &cli.format;
+    let tasks = load_suite(suite_name)?;
 
     // Load model configurations: EVAL_MODEL_* env vars, or auto-detect from .env
     let mut models = load_models_from_env();

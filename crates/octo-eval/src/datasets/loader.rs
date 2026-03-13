@@ -42,6 +42,10 @@ pub struct JsonlTask {
     /// For SequenceMatch scoring
     #[serde(default)]
     pub expected_sequence: Option<Vec<String>>,
+
+    /// Optional tool allowlist — when set, only these tools are available
+    #[serde(default)]
+    pub tools: Option<Vec<String>>,
 }
 
 fn default_difficulty() -> Difficulty {
@@ -92,6 +96,10 @@ impl EvalTask for JsonlTask {
             expected_steps: self.expected_steps,
             tags: self.tags.clone(),
         }
+    }
+
+    fn tool_allowlist(&self) -> Option<Vec<String>> {
+        self.tools.clone()
     }
 }
 
@@ -585,6 +593,7 @@ mod tests {
             expected_behavior: None,
             expected_output: None,
             expected_sequence: None,
+            tools: None,
         }
     }
 }

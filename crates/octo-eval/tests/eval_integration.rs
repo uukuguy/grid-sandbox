@@ -912,3 +912,191 @@ fn test_eval_config_defaults() {
         }
     }
 }
+
+// ===================================================================
+// Phase E1 feature tests
+// ===================================================================
+
+/// E1-T1: Recorder is auto-created when config.record_traces = true
+#[tokio::test]
+async fn test_recorder_integration_auto_traces() {
+    let dir = tempfile::tempdir().unwrap();
+    let mock = MockProvider::with_text("traced response");
+    let config = EvalConfig {
+        record_traces: true,
+        output_dir: dir.path().to_path_buf(),
+        ..EvalConfig::default()
+    };
+    let runner = EvalRunner::with_provider(config, Arc::new(mock));
+
+    let task = SimpleTextTask {
+        id: "trace-001".into(),
+        prompt: "trace me".into(),
+        expected_contains: "traced".into(),
+    };
+
+    let _result = runner.run_task(&task).await.unwrap();
+
+    // Verify trace file was created
+    let traces_dir = dir.path().join("traces");
+    assert!(traces_dir.exists(), "traces directory should be created");
+    let trace_file = traces_dir.join("trace_trace-001.json");
+    assert!(
+        trace_file.exists(),
+        "individual trace file should be saved"
+    );
+
+    // Verify it's valid JSON that can be loaded
+    let loaded = EvalRecorder::load_trace(&trace_file).unwrap();
+    assert_eq!(loaded.task_id, "trace-001");
+}
+
+/// E1-T2: Timeout ScoreDetails variant serializes correctly
+#[test]
+fn test_timeout_score_details() {
+    use octo_eval::score::ScoreDetails;
+
+    let score = EvalScore::fail(0.0, ScoreDetails::Timeout { elapsed_secs: 30 });
+    assert!(!score.passed);
+
+    // Verify serialization roundtrip
+    let json = serde_json::to_string(&score).unwrap();
+    assert!(json.contains("Timeout"));
+    assert!(json.contains("30"));
+    let loaded: EvalScore = serde_json::from_str(&json).unwrap();
+    assert!(!loaded.passed);
+    match loaded.details {
+        ScoreDetails::Timeout { elapsed_secs } => assert_eq!(elapsed_secs, 30),
+        other => panic!("Expected Timeout, got {:?}", other),
+    }
+}
+
+/// E1-T2: Timeout enforcement — verify the config field is wired up
+#[tokio::test]
+async fn test_timeout_config_wired() {
+    // A very generous timeout should not trigger on a fast mock
+    let mock = MockProvider::with_text("fast response");
+    let config = EvalConfig {
+        timeout_secs: 300, // generous timeout
+        ..EvalConfig::default()
+    };
+    let runner = EvalRunner::with_provider(config, Arc::new(mock));
+
+    let task = SimpleTextTask {
+        id: "timeout-ok-001".into(),
+        prompt: "this should complete".into(),
+        expected_contains: "never-match".into(),
+    };
+
+    let result = runner.run_task(&task).await.unwrap();
+    // Should NOT be a timeout — it should run and score normally
+    match &result.score.details {
+        ScoreDetails::Timeout { .. } => panic!("Should not have timed out"),
+        _ => {} // any other score detail is fine
+    }
+}
+
+/// E1-T4: Tool allowlist filtering via JsonlTask
+#[test]
+fn test_tool_allowlist_in_jsonl_task() {
+    use octo_eval::datasets::loader::JsonlTask;
+    use octo_eval::task::EvalTask;
+
+    // Task with tools field set
+    let json = r#"{"id":"allow-01","prompt":"test","category":"test","tools":["bash","file_read"]}"#;
+    let task: JsonlTask = serde_json::from_str(json).unwrap();
+    assert_eq!(task.tool_allowlist(), Some(vec!["bash".into(), "file_read".into()]));
+
+    // Task without tools field
+    let json_no_tools = r#"{"id":"allow-02","prompt":"test","category":"test"}"#;
+    let task2: JsonlTask = serde_json::from_str(json_no_tools).unwrap();
+    assert_eq!(task2.tool_allowlist(), None);
+}
+
+/// E1-T3: Concurrent suite execution with concurrency > 1
+#[tokio::test]
+async fn test_concurrent_suite_execution() {
+    let mock = MockProvider::with_text("concurrent result");
+    let config = EvalConfig {
+        concurrency: 2, // concurrency > 1
+        ..EvalConfig::default()
+    };
+    let runner = EvalRunner::with_provider(config, Arc::new(mock));
+
+    let tasks: Vec<Box<dyn EvalTask>> = (1..=4)
+        .map(|i| {
+            Box::new(SimpleTextTask {
+                id: format!("conc-{:02}", i),
+                prompt: format!("Task {}", i),
+                expected_contains: "never-match".into(),
+            }) as Box<dyn EvalTask>
+        })
+        .collect();
+
+    let report = runner.run_suite(&tasks).await.unwrap();
+
+    // All 4 tasks should have run
+    assert_eq!(report.total, 4);
+    assert_eq!(report.results.len(), 4);
+
+    // Results should be in original order (sorted after concurrent execution)
+    assert_eq!(report.results[0].task_id, "conc-01");
+    assert_eq!(report.results[1].task_id, "conc-02");
+    assert_eq!(report.results[2].task_id, "conc-03");
+    assert_eq!(report.results[3].task_id, "conc-04");
+}
+
+/// E1-T5: Regression detection in reporter
+#[test]
+fn test_regression_detection_integration() {
+    use octo_eval::reporter::{Reporter, RegressionReport};
+
+    // Build baseline
+    let baseline_results = vec![
+        TaskResult {
+            task_id: "reg-1".into(),
+            output: AgentOutput::default(),
+            score: EvalScore::pass(1.0, ScoreDetails::Custom { message: "ok".into() }),
+            duration_ms: 50,
+        },
+        TaskResult {
+            task_id: "reg-2".into(),
+            output: AgentOutput::default(),
+            score: EvalScore::fail(0.0, ScoreDetails::Custom { message: "fail".into() }),
+            duration_ms: 60,
+        },
+    ];
+    let baseline_report = EvalReport::from_results(baseline_results);
+    let baseline_detailed = Reporter::generate(&baseline_report, &HashMap::new(), &HashMap::new());
+
+    // Build current (reg-2 now passes)
+    let current_results = vec![
+        TaskResult {
+            task_id: "reg-1".into(),
+            output: AgentOutput::default(),
+            score: EvalScore::pass(1.0, ScoreDetails::Custom { message: "ok".into() }),
+            duration_ms: 55,
+        },
+        TaskResult {
+            task_id: "reg-2".into(),
+            output: AgentOutput::default(),
+            score: EvalScore::pass(0.8, ScoreDetails::Custom { message: "better".into() }),
+            duration_ms: 65,
+        },
+    ];
+    let current_report = EvalReport::from_results(current_results);
+    let current_detailed = Reporter::generate(&current_report, &HashMap::new(), &HashMap::new());
+
+    let regression = Reporter::diff_report(&current_detailed, &baseline_detailed);
+
+    assert_eq!(regression.improved, 1);   // reg-2 improved
+    assert_eq!(regression.regressed, 0);
+    assert_eq!(regression.unchanged, 1);  // reg-1 unchanged
+    assert!(regression.current_pass_rate > regression.baseline_pass_rate);
+
+    // Serialization roundtrip
+    let json = serde_json::to_string(&regression).unwrap();
+    let loaded: RegressionReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(loaded.improved, 1);
+    assert_eq!(loaded.regressed, 0);
+}
