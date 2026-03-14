@@ -280,6 +280,11 @@ fn cmd_run(args: &[String]) -> Result<()> {
     // Layer 1: Apply TOML defaults (overrides code defaults)
     if let Some(ref tc) = toml_config {
         tc.apply_to_eval_config(&mut config);
+        // If TOML defines models, use the first model's engine config for single-model run
+        let model_entries = tc.to_model_entries();
+        if let Some(first) = model_entries.first() {
+            config.target = octo_eval::config::EvalTarget::Engine(first.engine.clone());
+        }
     }
     // Layer 2: CLI overrides (highest priority)
     if cli.output_explicit {

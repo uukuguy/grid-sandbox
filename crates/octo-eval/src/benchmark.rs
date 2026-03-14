@@ -428,6 +428,7 @@ impl BenchmarkAggregator {
                 avg_score: entry.summary.avg_score,
                 total_tokens: entry.token_usage.total,
                 total_duration_ms: entry.latency.total_ms,
+                cached_estimated_cost: Some(entry.estimated_cost_usd),
             };
             reports.push(report);
         }
@@ -477,6 +478,7 @@ mod tests {
             },
             total_tokens: tokens,
             total_duration_ms: 1000,
+            cached_estimated_cost: None,
         }
     }
 

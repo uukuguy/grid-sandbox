@@ -58,6 +58,8 @@ pub struct EvalReport {
     pub avg_score: f64,
     pub total_tokens: u64,
     pub total_duration_ms: u64,
+    /// Pre-computed cost (used when loading from JSON where results are unavailable)
+    pub cached_estimated_cost: Option<f64>,
 }
 
 impl EvalReport {
@@ -89,6 +91,7 @@ impl EvalReport {
             avg_score,
             total_tokens,
             total_duration_ms,
+            cached_estimated_cost: None,
         }
     }
 
@@ -100,6 +103,9 @@ impl EvalReport {
 
     /// Estimated cost in USD based on model pricing and token usage.
     pub fn estimated_cost(&self) -> f64 {
+        if let Some(cached) = self.cached_estimated_cost {
+            return cached;
+        }
         match &self.model {
             Some(info) => {
                 let total_input: u64 = self.results.iter().map(|r| r.output.input_tokens).sum();

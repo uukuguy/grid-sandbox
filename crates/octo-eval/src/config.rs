@@ -149,8 +149,10 @@ impl Default for EngineConfig {
     fn default() -> Self {
         Self {
             provider_name: "openai".into(),
-            api_key: None,
-            base_url: None,
+            api_key: std::env::var("OPENAI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok()),
+            base_url: std::env::var("OPENAI_BASE_URL").ok(),
             model: "mock".into(),
             max_tokens: 4096,
             max_iterations: 10,
@@ -243,11 +245,17 @@ impl EvalTomlConfig {
                     .ok()
                     .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok());
 
+                // Resolve base_url: TOML field > OPENAI_BASE_URL env var
+                let base_url = m
+                    .base_url
+                    .clone()
+                    .or_else(|| std::env::var("OPENAI_BASE_URL").ok());
+
                 ModelEntry {
                     engine: EngineConfig {
                         provider_name: m.provider.clone(),
                         api_key,
-                        base_url: m.base_url.clone(),
+                        base_url,
                         model: m.model.clone(),
                         ..EngineConfig::default()
                     },
