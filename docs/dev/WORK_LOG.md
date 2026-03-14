@@ -1,5 +1,72 @@
 # octo-sandbox 工作日志
 
+## Phase J — 沙箱安全体系建设 (2026-03-14)
+
+### 完成内容
+
+**J1: SandboxPolicy 策略引擎** (@ 4570365)
+- 新增 `SandboxPolicy` 枚举 (Strict/Preferred/Development) 到 `traits.rs`
+- Strict 为默认值：仅允许 Docker/WASM 执行，拒绝 Subprocess
+- 新增 `PolicyDenied` 错误变体到 `SandboxError`
+- `SandboxRouter` 集成策略执行：`with_policy()`, `resolve_fallback()`
+- 更新 BashTool 使用 Development 策略
+- 10 个新策略测试 + 更新现有测试适配策略
+
+**J2: Docker 预置镜像与语言检测** (@ 5553c27)
+- 创建 `docker/sandbox-images/Dockerfile.python` (python:3.12-slim-bookworm)
+- 创建 `docker/sandbox-images/Dockerfile.rust` (rust:1.82-bookworm)
+- 新增 `ImageRegistry` 结构体（8 种语言映射）
+- DockerAdapter `execute()` 使用 language 参数自动选择镜像
+
+**J3: DockerAdapter 测试加固** (@ 5553c27)
+- `ContainerGuard` RAII 结构体确保测试清理
+- `require_docker()` 辅助函数提供清晰 skip 消息
+- Docker 环境诊断测试
+
+**J4: WASM/WASI CLI 执行器** (@ 5553c27)
+- 新增 `execute_wasi_cli()` 使用 wasmtime_wasi preview1
+- WASI 上下文：args, stdin MemoryInputPipe, stdout/stderr 捕获
+- 通过 `language="wasi-cli"` 或 `code` 前缀 `wasi://` 触发
+- I32Exit 退出码处理
+- 3 个新 WASI 测试
+
+**J5: 沙箱审计日志** (@ 5553c27)
+- 新增 `SandboxAuditEvent` (7 种 SandboxAction，SHA-256 代码哈希)
+- 工厂方法：`execution()`, `policy_deny()`, `degradation()`
+- `to_audit_event()` 转换到通用 AuditEvent 用于 hash-chain 存储
+- `AuditStorage` 新增 `query_sandbox_events()` 和 `query_policy_denials()`
+- 7 个审计测试
+
+**J6/J7: Docker 测试修复与 CI 集成** (@ 45a7342)
+- eval-ci.yml 新增 `docker-sandbox-tests` job
+- 运行策略、审计、WASM、Docker 四组沙箱测试
+- 容器泄漏检测步骤
+- 新增 `octo-sandbox` 路径触发 CI
+
+### 测试结果
+
+- **2014 tests pass**（基线 1992，+22 新增）
+- 0 failures, 3 ignored
+- 新增测试分布：10 策略 + 7 审计 + 3 WASI + 2 Docker 辅助
+
+### 文件变更矩阵
+
+| 文件 | 操作 |
+|------|------|
+| `crates/octo-engine/src/sandbox/traits.rs` | 修改 (+SandboxPolicy, +PolicyDenied) |
+| `crates/octo-engine/src/sandbox/router.rs` | 修改 (+policy 集成, +fallback) |
+| `crates/octo-engine/src/sandbox/docker.rs` | 修改 (+ImageRegistry, language 路由) |
+| `crates/octo-engine/src/sandbox/wasm.rs` | 修改 (+WASI CLI executor) |
+| `crates/octo-engine/src/sandbox/audit.rs` | **新建** (SandboxAuditEvent) |
+| `crates/octo-engine/src/sandbox/mod.rs` | 修改 (+re-exports) |
+| `crates/octo-engine/src/audit/storage.rs` | 修改 (+sandbox queries) |
+| `crates/octo-engine/src/tools/bash.rs` | 修改 (Development policy) |
+| `docker/sandbox-images/Dockerfile.python` | **新建** |
+| `docker/sandbox-images/Dockerfile.rust` | **新建** |
+| `.github/workflows/eval-ci.yml` | 修改 (+docker-sandbox-tests job) |
+
+---
+
 ## Phase I — External Benchmark Adapters (2026-03-14)
 
 ### 完成内容
