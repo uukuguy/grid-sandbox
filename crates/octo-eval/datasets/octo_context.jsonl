@@ -12,3 +12,22 @@
 # 测试目标: 工具执行失败时模型能否合理应对
 {"id": "ctx-CX3-01", "prompt": "Read the file /tmp/nonexistent_file_xyz_123.txt and tell me what it contains", "expected_tool": "file_read", "category": "context", "difficulty": "hard", "tags": ["CX3", "error_handling", "file_not_found"]}
 {"id": "ctx-CX3-02", "prompt": "Run the command 'this_command_does_not_exist_xyz' and explain what happened", "expected_tool": "bash", "category": "context", "difficulty": "hard", "tags": ["CX3", "error_handling", "cmd_not_found"]}
+
+# === CX1 extended: Output Quality (输出质量扩展) ===
+# 测试目标: ContainsAll scorer 验证输出包含所有必需关键词
+{"id":"ctx-CX1-03","prompt":"Run 'df -h' and summarize the disk usage","expected_contains_all":["used","available"],"expected_tool":"bash","category":"context","difficulty":"easy","tags":["CX1","output_quality"]}
+{"id":"ctx-CX1-04","prompt":"Read /etc/os-release and tell me the OS name and version","expected_contains_all":["NAME","VERSION"],"expected_tool":"file_read","category":"context","difficulty":"easy","tags":["CX1","output_quality"]}
+
+# === CX2 extended: Instruction Following (指令遵循扩展) ===
+{"id":"ctx-CX2-03","prompt":"Count the number of .rs files under src/ but do NOT list them individually","expected_tool":"bash","category":"context","difficulty":"medium","tags":["CX2","instruction_following"]}
+{"id":"ctx-CX2-04","prompt":"Show only the first 3 lines of README.md, nothing else","expected_tool":"file_read","category":"context","difficulty":"medium","tags":["CX2","instruction_following"]}
+
+# === CX3 extended: Error Handling (错误处理扩展) ===
+# 测试目标: ContainsAll scorer 验证错误信息包含关键词
+{"id":"ctx-CX3-03","prompt":"Read the file /nonexistent/path.txt and suggest alternatives if it doesn't exist","expected_contains_all":["not found"],"category":"context","difficulty":"medium","tags":["CX3","error_handling"]}
+{"id":"ctx-CX3-04","prompt":"Run the command 'invalid_cmd_xyz_123' and explain what happened","expected_contains_all":["not found"],"category":"context","difficulty":"medium","tags":["CX3","error_handling"]}
+
+# === CX4: Length Control (长度控制, Hard) ===
+# 测试目标: Regex scorer 验证输出格式严格匹配
+{"id":"ctx-CX4-01","prompt":"Summarize in exactly one sentence: The Rust programming language helps everyone build reliable and efficient software. It is fast, memory-safe, and concurrent.","expected_regex":"^[^.]*\\.$","category":"context","difficulty":"hard","tags":["CX4","length_control"]}
+{"id":"ctx-CX4-02","prompt":"Reply with only a number: how many subdirectories are in /tmp?","expected_regex":"^\\d+$","category":"context","difficulty":"hard","tags":["CX4","length_control"]}

@@ -32,3 +32,17 @@
 {"id": "tc-L4-03", "prompt": "Replace all occurrences of 'localhost' with '0.0.0.0' in /tmp/server.conf", "expected_tool": "file_edit", "category": "tool_call", "difficulty": "medium", "tags": ["L4", "edit_vs_write"]}
 {"id": "tc-L4-04", "prompt": "I accidentally wrote wrong data to /tmp/log.txt. Please fix line 5 to say 'status: OK' instead of 'status: ERROR'", "expected_tool": "file_edit", "category": "tool_call", "difficulty": "hard", "tags": ["L4", "edit", "targeted_fix"]}
 {"id": "tc-L4-05", "prompt": "Look through the codebase and find where the 'authenticate' function is defined", "expected_tool": "grep", "category": "tool_call", "difficulty": "medium", "tags": ["L4", "grep_vs_find", "code_search"]}
+
+# === L3v2: Multi-Step with Argument Validation (多步+参数验证, Medium) ===
+# 测试目标: 多步工具链中每步参数是否正确 (SequenceWithArgs scorer)
+{"id":"tc-L3-01v2","prompt":"Read the file /tmp/a.txt then write its content to /tmp/b.txt","expected_sequence_with_args":[{"tool":"file_read","args":{"path":"/tmp/a.txt"}},{"tool":"file_write","args":{"path":"/tmp/b.txt"}}],"category":"tool_call","difficulty":"medium","tags":["L3","args_validation"]}
+{"id":"tc-L3-02v2","prompt":"Search for the pattern 'TODO' in files under src/ then count the results","expected_sequence_with_args":[{"tool":"grep","args":{"pattern":"TODO"}},{"tool":"bash","args":{"command":"wc"}}],"category":"tool_call","difficulty":"medium","tags":["L3","args_validation"]}
+{"id":"tc-L3-04v2","prompt":"Find all .py files, read the first one, then search for 'import' in it","expected_sequence_with_args":[{"tool":"bash","args":{"command":"find"}},{"tool":"file_read"},{"tool":"grep","args":{"pattern":"import"}}],"category":"tool_call","difficulty":"medium","tags":["L3","args_validation"]}
+{"id":"tc-L3-05v2","prompt":"Get the current date, write it to /tmp/date.txt, then read it back","expected_sequence_with_args":[{"tool":"bash"},{"tool":"file_write","args":{"path":"/tmp/date.txt"}},{"tool":"file_read","args":{"path":"/tmp/date.txt"}}],"category":"tool_call","difficulty":"medium","tags":["L3","args_validation"]}
+
+# === L5: Conditional Tool Chains (条件工具链, Hard) ===
+# 测试目标: 模型能否根据中间结果选择不同的工具路径
+{"id":"tc-L5-01","prompt":"Check if /tmp/config.json exists. If it exists, read it. If not, create it with default content {\"debug\": false}","expected_sequence_with_args":[{"tool":"bash","args":{"command":"test"}},{"tool":"file_read"}],"category":"tool_call","difficulty":"hard","tags":["L5","conditional"]}
+{"id":"tc-L5-02","prompt":"Read /tmp/input.txt. If it contains the word 'error', use grep to find all error lines. Otherwise, summarize the content","expected_sequence_with_args":[{"tool":"file_read","args":{"path":"/tmp/input.txt"}},{"tool":"grep","args":{"pattern":"error"}}],"category":"tool_call","difficulty":"hard","tags":["L5","conditional"]}
+{"id":"tc-L5-03","prompt":"Try to fetch http://localhost:8080/health. If it fails, check which process is using port 8080 with netstat","expected_sequence_with_args":[{"tool":"bash"},{"tool":"bash"}],"category":"tool_call","difficulty":"hard","tags":["L5","conditional"]}
+{"id":"tc-L5-04","prompt":"Find Cargo.toml in the current directory. If it has a [workspace] section, list the workspace members. If not, show the [package] name","expected_sequence_with_args":[{"tool":"file_read","args":{"path":"Cargo.toml"}},{"tool":"grep"}],"category":"tool_call","difficulty":"hard","tags":["L5","conditional"]}

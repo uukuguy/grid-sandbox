@@ -19,8 +19,11 @@ use octo_eval::runner::EvalRunner;
 use octo_eval::suites::context::ContextSuite;
 use octo_eval::suites::e2e::E2eSuite;
 use octo_eval::suites::memory::MemorySuite;
+use octo_eval::suites::output_format::OutputFormatSuite;
 use octo_eval::suites::provider::ProviderSuite;
+use octo_eval::suites::reasoning::ReasoningSuite;
 use octo_eval::suites::security::SecuritySuite;
+use octo_eval::suites::tool_boundary::ToolBoundarySuite;
 use octo_eval::suites::tool_call::ToolCallSuite;
 use octo_eval::task::EvalTask;
 
@@ -56,7 +59,7 @@ fn cmd_help() -> Result<()> {
     println!("  compare --suite <NAME>   Run multi-model comparison");
     println!("  help                     Show this help\n");
     println!("OPTIONS:");
-    println!("  --suite <NAME>           Suite name: tool_call, security, context, provider, memory, e2e");
+    println!("  --suite <NAME>           Suite name: tool_call, security, context, output_format, tool_boundary, reasoning, provider, memory, e2e");
     println!("  --output <DIR>           Output directory (default: eval_output)");
     println!("  --format <FMT>           Output format: json, markdown, both (default: both)");
     println!("  --baseline <PATH>        Baseline report JSON for regression detection");
@@ -73,6 +76,9 @@ fn cmd_list_suites() -> Result<()> {
     println!("    tool_call   — Tool calling accuracy (23 tasks, L1-L4)");
     println!("    security    — Security policy enforcement (14 tasks, S1-S4)");
     println!("    context     — Output quality & error handling (6 tasks, CX1-CX3)");
+    println!("    output_format — Structured output format verification (JSON, YAML, CSV, Markdown)");
+    println!("    tool_boundary — Tool boundary awareness and creative tool use");
+    println!("    reasoning     — Reasoning, planning, and task decomposition (LlmJudge)");
     println!();
     println!("  Direct API Suites (mock-based, no LLM required):");
     println!("    provider    — Provider fault tolerance & failover (10 tests)");
@@ -89,6 +95,9 @@ fn load_suite(name: &str) -> Result<Vec<Box<dyn EvalTask>>> {
         "tool_call" => ToolCallSuite::load(),
         "security" => SecuritySuite::load(),
         "context" => ContextSuite::load(),
+        "output_format" => OutputFormatSuite::load(),
+        "tool_boundary" => ToolBoundarySuite::load(),
+        "reasoning" => ReasoningSuite::load(),
         "bfcl" => {
             let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             let path = manifest_dir.join("datasets/bfcl_simple.jsonl");

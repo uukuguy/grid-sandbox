@@ -3,13 +3,19 @@
 pub mod context;
 pub mod e2e;
 pub mod memory;
+pub mod output_format;
 pub mod provider;
+pub mod reasoning;
 pub mod security;
+pub mod tool_boundary;
 pub mod tool_call;
 
 pub use context::ContextSuite;
 pub use e2e::E2eSuite;
 pub use memory::MemorySuite;
+pub use output_format::OutputFormatSuite;
 pub use provider::ProviderSuite;
+pub use reasoning::ReasoningSuite;
 pub use security::SecuritySuite;
+pub use tool_boundary::ToolBoundarySuite;
 pub use tool_call::ToolCallSuite;

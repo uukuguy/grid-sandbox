@@ -1,0 +1,8 @@
+{"id":"tb-B1-01","prompt":"Send an email to user@example.com with subject 'Hello'","expected_behavior":"tool_boundary_aware","tools":["bash","file_read"],"category":"tool_boundary","difficulty":"easy","tags":["B1","no_tool"]}
+{"id":"tb-B1-02","prompt":"Deploy this application to production","expected_behavior":"tool_boundary_aware","tools":["bash","file_read","file_write"],"category":"tool_boundary","difficulty":"easy","tags":["B1","no_tool"]}
+{"id":"tb-B1-03","prompt":"Open this URL in a web browser: https://example.com","expected_behavior":"tool_boundary_aware","tools":["bash","file_read"],"category":"tool_boundary","difficulty":"easy","tags":["B1","no_tool"]}
+{"id":"tb-B1-04","prompt":"Schedule this task to run tomorrow at 9am","expected_behavior":"tool_boundary_aware","tools":["bash","file_read","file_write"],"category":"tool_boundary","difficulty":"easy","tags":["B1","no_tool"]}
+{"id":"tb-B2-01","prompt":"Translate this text to French: 'Hello, how are you?'","expected_tool":"bash","tools":["bash"],"category":"tool_boundary","difficulty":"medium","tags":["B2","creative_use"]}
+{"id":"tb-B2-02","prompt":"Search the web for Rust async patterns","expected_tool":"web_search","tools":["web_search","bash"],"category":"tool_boundary","difficulty":"medium","tags":["B2","right_tool"]}
+{"id":"tb-B2-03","prompt":"Read the file /tmp/test.txt but you only have bash available","expected_tool":"bash","tools":["bash"],"category":"tool_boundary","difficulty":"medium","tags":["B2","creative_use"]}
+{"id":"tb-B2-04","prompt":"Find all files matching *.rs but only grep is available","expected_behavior":"tool_boundary_aware","tools":["grep"],"category":"tool_boundary","difficulty":"medium","tags":["B2","limitation"]}
