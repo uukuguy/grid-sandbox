@@ -512,12 +512,36 @@ CI 回归:  T0  Qwen3 Coder (free)
 - 产出首份模型对比报告
 - 分析各维度对模型能力的敏感度
 
-### Phase E — SWE-bench 适配（预计 5-7 天）
+### Phase E-H — 评估增强、任务集、Deferred 补齐、评估收官
 
-- 适配 SWE-bench Verified 的 Python 子集（50 tasks）
-- 构建沙箱化评估环境（Docker）
-- 端到端 Issue→Patch→Tests 验证
-- 横向对比数据
+- Phase E: 评估增强（Runner 加固、新 Suite、多轨道、BFCL 适配）
+- Phase F: 评估任务集（4 新 Scorer、3 新 Suite、+77 JSONL 任务）
+- Phase G: Deferred 补齐（Rust E2E fixtures、Server HTTP eval）
+- Phase H: 评估收官（Resilience Suite、AstMatch Scorer、Context 扩充）
+
+### Phase I — 外部 Benchmark 适配层
+
+> 详细计划: `docs/plans/2026-03-14-phase-i-swebench.md`（已修订）
+
+从"只做 SWE-bench"扩展为**可插拔的外部 Benchmark 适配架构**：
+
+- `ExternalBenchmark` trait + `BenchmarkRegistry` 注册机制
+- **GAIA** 适配 (Level 3: 多步推理+多工具编排, 50 tasks)
+- **SWE-bench** 适配 (Level 4: 端到端代码修复, 50 tasks, Docker 沙箱)
+- **τ-bench** 适配 (Level 3: 多轮工具一致性, 30 tasks, pass^k 指标)
+
+### Phase J-K — Docker 修复 + 模型报告
+
+- Phase J: Docker 测试修复 → SWE-bench 从 mock 升级为真实验证
+- Phase K: 跨 GAIA/SWE-bench/τ-bench 的多模型对比报告
+
+### Phase L（未来）— 更多外部 Benchmark
+
+- LiveCodeBench (无污染代码生成)
+- AgentBench (多环境综合)
+- OSWorld (电脑操作/GUI 自动化)
+- CUB (企业工作流)
+- Terminal-Bench (终端操作)
 
 ---
 
