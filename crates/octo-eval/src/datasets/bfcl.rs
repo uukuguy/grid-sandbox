@@ -164,7 +164,7 @@ mod tests {
         let path = manifest_dir.join("datasets/bfcl_simple.jsonl");
         if path.exists() {
             let tasks = load_bfcl(&path).unwrap();
-            assert_eq!(tasks.len(), 10);
+            assert_eq!(tasks.len(), 50);
             for task in &tasks {
                 assert!(!task.functions.is_empty());
                 assert!(!task.ground_truth.is_empty());
@@ -179,7 +179,7 @@ mod tests {
         let path = manifest_dir.join("datasets/bfcl_simple.jsonl");
         if path.exists() {
             let tasks = load_bfcl_as_tasks(&path).unwrap();
-            assert_eq!(tasks.len(), 10);
+            assert_eq!(tasks.len(), 50);
             for task in &tasks {
                 let meta = task.metadata();
                 assert_eq!(meta.category, "bfcl");

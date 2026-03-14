@@ -1101,3 +1101,234 @@ fn test_regression_detection_integration() {
     assert_eq!(loaded.improved, 1);
     assert_eq!(loaded.regressed, 0);
 }
+
+// ===================================================================
+// F4-T3: JSONL format validation tests
+// ===================================================================
+
+/// Collect all .jsonl files from the datasets/ directory.
+fn collect_jsonl_files() -> Vec<std::path::PathBuf> {
+    let datasets_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("datasets");
+    assert!(
+        datasets_dir.exists(),
+        "datasets/ directory not found at {:?}",
+        datasets_dir
+    );
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&datasets_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "jsonl") {
+            files.push(path);
+        }
+    }
+    files.sort();
+    assert!(
+        !files.is_empty(),
+        "No .jsonl files found in {:?}",
+        datasets_dir
+    );
+    files
+}
+
+/// Returns true if the filename indicates a BFCL dataset.
+fn is_bfcl_file(path: &std::path::Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .map_or(false, |name| name.starts_with("bfcl"))
+}
+
+/// F4-T3: Validate the structure of every task in every JSONL dataset file.
+#[test]
+fn test_validate_all_jsonl_datasets() {
+    let valid_difficulties = ["easy", "medium", "hard"];
+    let scoring_fields = [
+        "expected_tool",
+        "expected_output",
+        "expected_behavior",
+        "expected_sequence",
+        "expected_call",
+        "expected_regex",
+        "expected_contains_all",
+        "expected_not_contains",
+        "expected_sequence_with_args",
+        "scorer",
+        "ground_truth",
+    ];
+
+    let files = collect_jsonl_files();
+
+    for file in &files {
+        let bfcl = is_bfcl_file(file);
+        let filename = file.file_name().unwrap().to_string_lossy();
+        let content = std::fs::read_to_string(file)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", filename, e));
+
+        for (line_idx, line) in content.lines().enumerate() {
+            let line_num = line_idx + 1;
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+                continue;
+            }
+
+            let val: serde_json::Value = serde_json::from_str(trimmed).unwrap_or_else(|e| {
+                panic!("[{}:{}] Invalid JSON: {}", filename, line_num, e)
+            });
+
+            let obj = val.as_object().unwrap_or_else(|| {
+                panic!("[{}:{}] Task must be a JSON object", filename, line_num)
+            });
+
+            // id: must be non-empty string
+            let id = obj
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| {
+                    panic!("[{}:{}] Missing or non-string 'id' field", filename, line_num)
+                });
+            assert!(
+                !id.is_empty(),
+                "[{}:{}] 'id' must be non-empty",
+                filename,
+                line_num
+            );
+
+            // prompt OR question: at least one must be present
+            // Note: BFCL `question` is an array of arrays, not a string
+            let has_prompt = obj
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .map_or(false, |s| !s.is_empty());
+            let has_question = obj.get("question").map_or(false, |v| {
+                // Accept either a non-empty string or a non-empty array
+                v.as_str().map_or(false, |s| !s.is_empty())
+                    || v.as_array().map_or(false, |a| !a.is_empty())
+            });
+            assert!(
+                has_prompt || has_question,
+                "[{}:{}] Task '{}' must have a non-empty 'prompt' or 'question' field",
+                filename,
+                line_num,
+                id
+            );
+
+            // category: required for octo datasets only (not BFCL)
+            if !bfcl {
+                let category = obj
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "[{}:{}] Task '{}' missing or non-string 'category' field",
+                            filename, line_num, id
+                        )
+                    });
+                assert!(
+                    !category.is_empty(),
+                    "[{}:{}] Task '{}' 'category' must be non-empty",
+                    filename,
+                    line_num,
+                    id
+                );
+            }
+
+            // difficulty: if present, must be one of the valid values
+            if let Some(diff_val) = obj.get("difficulty") {
+                let diff = diff_val.as_str().unwrap_or_else(|| {
+                    panic!(
+                        "[{}:{}] Task '{}' 'difficulty' must be a string",
+                        filename, line_num, id
+                    )
+                });
+                assert!(
+                    valid_difficulties.contains(&diff),
+                    "[{}:{}] Task '{}' has invalid difficulty '{}', expected one of {:?}",
+                    filename,
+                    line_num,
+                    id,
+                    diff,
+                    valid_difficulties
+                );
+            }
+
+            // At least one scoring field must be present
+            let has_scoring = scoring_fields.iter().any(|f| obj.contains_key(*f));
+            assert!(
+                has_scoring,
+                "[{}:{}] Task '{}' has no scoring field. Expected at least one of: {:?}",
+                filename, line_num, id, scoring_fields
+            );
+        }
+    }
+}
+
+/// F4-T3: Validate that all task IDs are globally unique across all JSONL files.
+#[test]
+fn test_validate_unique_task_ids() {
+    let files = collect_jsonl_files();
+    let mut seen: HashMap<String, String> = HashMap::new(); // id -> filename
+
+    for file in &files {
+        let filename = file.file_name().unwrap().to_string_lossy().to_string();
+        let content = std::fs::read_to_string(file).unwrap();
+
+        for (line_idx, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+                continue;
+            }
+            let val: serde_json::Value = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(_) => continue, // skip unparseable lines (caught by other test)
+            };
+            if let Some(id) = val.get("id").and_then(|v| v.as_str()) {
+                if let Some(prev_file) = seen.get(id) {
+                    panic!(
+                        "Duplicate task ID '{}' found in '{}' (line {}) — previously seen in '{}'",
+                        id,
+                        filename,
+                        line_idx + 1,
+                        prev_file,
+                    );
+                }
+                seen.insert(id.to_string(), filename.clone());
+            }
+        }
+    }
+    println!(
+        "[test_validate_unique_task_ids] Verified {} unique task IDs across {} files",
+        seen.len(),
+        files.len()
+    );
+}
+
+/// F4-T3: Validate that the total task count meets the minimum baseline.
+#[test]
+fn test_validate_jsonl_task_count() {
+    let files = collect_jsonl_files();
+    let mut total = 0usize;
+
+    for file in &files {
+        let content = std::fs::read_to_string(file).unwrap();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
+                continue;
+            }
+            if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+                total += 1;
+            }
+        }
+    }
+
+    println!(
+        "[test_validate_jsonl_task_count] Total tasks across {} JSONL files: {}",
+        files.len(),
+        total
+    );
+    assert!(
+        total >= 90,
+        "Expected at least 90 tasks across all JSONL files, found {}",
+        total
+    );
+}

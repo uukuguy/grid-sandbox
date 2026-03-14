@@ -95,6 +95,17 @@ pub struct RegressionReport {
     pub current_pass_rate: f64,
 }
 
+/// Per-tier pass rate with threshold enforcement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierPassRate {
+    pub tier: String,
+    pub total: usize,
+    pub passed: usize,
+    pub pass_rate: f64,
+    pub threshold: f64,
+    pub meets_threshold: bool,
+}
+
 /// Reporter generates reports from evaluation results.
 pub struct Reporter;
 
@@ -296,6 +307,60 @@ impl Reporter {
             }
         }
 
+        md
+    }
+
+    /// Compute pass rates by difficulty tier with minimum thresholds.
+    ///
+    /// Thresholds:
+    /// - Easy: 90% minimum
+    /// - Medium: 70% minimum
+    /// - Hard: 50% minimum
+    pub fn tier_pass_rates(report: &DetailedReport) -> Vec<TierPassRate> {
+        let thresholds = [("Easy", 0.9), ("Medium", 0.7), ("Hard", 0.5)];
+
+        thresholds
+            .iter()
+            .map(|(tier, threshold)| {
+                let stats = report.by_difficulty.get(*tier);
+                let (total, passed, pass_rate) = match stats {
+                    Some(s) => (s.total, s.passed, s.pass_rate),
+                    None => (0, 0, 1.0), // no tasks = vacuously true
+                };
+                TierPassRate {
+                    tier: tier.to_string(),
+                    total,
+                    passed,
+                    pass_rate,
+                    threshold: *threshold,
+                    meets_threshold: pass_rate >= *threshold,
+                }
+            })
+            .collect()
+    }
+
+    /// Format tier pass rates as a Markdown table.
+    pub fn tier_pass_rates_markdown(rates: &[TierPassRate]) -> String {
+        let mut md = String::new();
+        md.push_str("## Tier Pass Rates\n\n");
+        md.push_str("| Tier | Total | Passed | Rate | Threshold | Status |\n");
+        md.push_str("|------|-------|--------|------|-----------|--------|\n");
+        for rate in rates {
+            let status = if rate.meets_threshold {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            };
+            md.push_str(&format!(
+                "| {} | {} | {} | {:.1}% | {:.0}% | {} |\n",
+                rate.tier,
+                rate.total,
+                rate.passed,
+                rate.pass_rate * 100.0,
+                rate.threshold * 100.0,
+                status
+            ));
+        }
         md
     }
 
@@ -713,5 +778,96 @@ mod tests {
         assert!(md.contains("▲")); // pass rate improved
         assert!(md.contains("IMPROVED"));
         assert!(md.contains("UNCHANGED"));
+    }
+
+    // === F4-T4: Tier pass rate tests ===
+
+    #[test]
+    fn test_tier_pass_rates_easy_threshold() {
+        // 10 easy tasks, 9 pass = 90% = meets threshold
+        let results: Vec<TaskResult> = (0..10)
+            .map(|i| {
+                make_result(
+                    &format!("tier-e{}", i),
+                    i < 9,
+                    if i < 9 { 1.0 } else { 0.0 },
+                    100,
+                    50,
+                )
+            })
+            .collect();
+        let report = EvalReport::from_results(results);
+        let difficulties: HashMap<String, Difficulty> = (0..10)
+            .map(|i| (format!("tier-e{}", i), Difficulty::Easy))
+            .collect();
+        let detailed = Reporter::generate(&report, &HashMap::new(), &difficulties);
+        let rates = Reporter::tier_pass_rates(&detailed);
+
+        let easy = rates.iter().find(|r| r.tier == "Easy").unwrap();
+        assert_eq!(easy.total, 10);
+        assert_eq!(easy.passed, 9);
+        assert!((easy.pass_rate - 0.9).abs() < 0.01);
+        assert!(easy.meets_threshold); // 90% meets 90% threshold
+    }
+
+    #[test]
+    fn test_tier_pass_rates_below_threshold() {
+        // 10 medium tasks, 5 pass = 50% < 70% threshold
+        let results: Vec<TaskResult> = (0..10)
+            .map(|i| {
+                make_result(
+                    &format!("tier-m{}", i),
+                    i < 5,
+                    if i < 5 { 1.0 } else { 0.0 },
+                    100,
+                    50,
+                )
+            })
+            .collect();
+        let report = EvalReport::from_results(results);
+        let difficulties: HashMap<String, Difficulty> = (0..10)
+            .map(|i| (format!("tier-m{}", i), Difficulty::Medium))
+            .collect();
+        let detailed = Reporter::generate(&report, &HashMap::new(), &difficulties);
+        let rates = Reporter::tier_pass_rates(&detailed);
+
+        let medium = rates.iter().find(|r| r.tier == "Medium").unwrap();
+        assert!(!medium.meets_threshold); // 50% doesn't meet 70% threshold
+    }
+
+    #[test]
+    fn test_tier_pass_rates_markdown_output() {
+        let rates = vec![
+            TierPassRate {
+                tier: "Easy".into(),
+                total: 10,
+                passed: 9,
+                pass_rate: 0.9,
+                threshold: 0.9,
+                meets_threshold: true,
+            },
+            TierPassRate {
+                tier: "Medium".into(),
+                total: 5,
+                passed: 4,
+                pass_rate: 0.8,
+                threshold: 0.7,
+                meets_threshold: true,
+            },
+            TierPassRate {
+                tier: "Hard".into(),
+                total: 3,
+                passed: 1,
+                pass_rate: 0.333,
+                threshold: 0.5,
+                meets_threshold: false,
+            },
+        ];
+        let md = Reporter::tier_pass_rates_markdown(&rates);
+        assert!(md.contains("## Tier Pass Rates"));
+        assert!(md.contains("PASS"));
+        assert!(md.contains("FAIL"));
+        assert!(md.contains("Easy"));
+        assert!(md.contains("Hard"));
     }
 }
