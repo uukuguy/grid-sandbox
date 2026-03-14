@@ -1,10 +1,10 @@
 {
   "plan_file": "docs/plans/2026-03-14-phase-i-swebench.md",
-  "phase": "in_progress",
+  "phase": "complete",
   "created_at": "2026-03-14T18:55:00+08:00",
-  "updated_at": "2026-03-14T20:15:00+08:00",
-  "completed_tasks": ["I1-T1", "I1-T2", "I2-T1", "I2-T2", "I3-T1", "I3-T2", "I3-T3", "I4-T1", "I4-T2"],
-  "current_task": "I5-T1",
+  "updated_at": "2026-03-14T20:20:00+08:00",
+  "completed_tasks": ["I1-T1", "I1-T2", "I2-T1", "I2-T2", "I3-T1", "I3-T2", "I3-T3", "I4-T1", "I4-T2", "I5-T1", "I5-T2", "I5-T3", "I5-T4"],
+  "current_task": null,
   "total_tasks": 13,
   "task_groups": {
     "I1": {
@@ -42,28 +42,22 @@
     "I5": {
       "name": "Verification & Integration",
       "tasks": ["I5-T1", "I5-T2", "I5-T3", "I5-T4"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "parallel": false,
-      "description": "ScoreDetails variants + CLI update + CI + full test run"
+      "description": "ScoreDetails variants + CLI update + CI + full test run",
+      "commit": "57ca310"
     }
   },
   "execution_order": ["I1", "I2|I3|I4", "I5"],
-  "execution_mode": "I2/I3/I4 parallelizable after I1 completes",
   "phase_name": "Phase I — External Benchmark Adapters",
   "tests_baseline": 1979,
   "tests_current": 1992,
-  "status": "IN_PROGRESS",
+  "status": "COMPLETE",
+  "final_commit": "57ca310",
   "previous_plan": {
     "file": "docs/plans/2026-03-14-phase-h-eval-capstone.md",
     "status": "COMPLETE",
     "tasks_completed": 10,
     "final_commit": "37680ec"
-  },
-  "design_changes": {
-    "reason": "Expanded from SWE-bench-only to multi-benchmark adaptation layer",
-    "scope": "Added GAIA (Level 3 multi-step reasoning) + τ-bench (Level 3 tool consistency) + ExternalBenchmark abstraction",
-    "original_tasks": 12,
-    "revised_tasks": 13,
-    "estimated_lines": 1100
   }
 }
