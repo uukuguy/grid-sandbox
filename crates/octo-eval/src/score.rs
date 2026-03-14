@@ -50,6 +50,24 @@ pub enum ScoreDetails {
         actual_tool: Option<String>,
         arg_match_rate: f64,
     },
+    RegexMatch {
+        pattern: String,
+        matched: bool,
+    },
+    NotContains {
+        forbidden: Vec<String>,
+        found: Vec<String>,
+    },
+    SequenceWithArgsMatch {
+        expected_len: usize,
+        matched: usize,
+        arg_match_rates: Vec<f64>,
+    },
+    ContainsAll {
+        expected: Vec<String>,
+        matched: usize,
+        total: usize,
+    },
 }
 
 impl EvalScore {
