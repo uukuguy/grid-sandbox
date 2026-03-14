@@ -180,4 +180,33 @@ mod tests {
         assert_eq!(interactions.len(), 1);
         assert_eq!(interactions[0].request_summary, "user: hello");
     }
+
+    #[test]
+    fn test_replay_round_trip() {
+        use crate::mock_provider::ReplayProvider;
+
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = EvalRecorder::new(dir.path().to_path_buf()).unwrap();
+
+        let traces = vec![sample_trace()];
+        let summary_path = recorder.save_summary(&traces).unwrap();
+
+        // Load back from summary
+        let loaded = EvalRecorder::load_summary(&summary_path).unwrap();
+        assert_eq!(loaded.len(), 1);
+
+        // Extract interactions for replay
+        let interactions = EvalRecorder::extract_interactions(&loaded[0]);
+        assert_eq!(interactions.len(), 1);
+
+        // Verify interaction data is preserved
+        assert_eq!(interactions[0].response.content.len(), 1);
+        assert_eq!(interactions[0].request_summary, "user: hello");
+        assert_eq!(interactions[0].latency_ms, 150);
+
+        // Verify ReplayProvider can be constructed from extracted interactions
+        let provider = ReplayProvider::new(interactions);
+        assert_eq!(provider.len(), 1);
+        assert!(!provider.is_empty());
+    }
 }

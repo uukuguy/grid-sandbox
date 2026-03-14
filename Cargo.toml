@@ -55,6 +55,7 @@ notify = "7"
 notify-debouncer-mini = "0.5"
 # MCP Protocol SDK
 rmcp = { version = "1", features = ["client", "server", "transport-child-process", "transport-streamable-http-client-reqwest"] }
+toml = "0.8"
 hnsw_rs = "0.3"
 # TUI framework
 ratatui = "0.29"

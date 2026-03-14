@@ -182,10 +182,142 @@ impl Scorer for SequenceScorer {
     }
 }
 
+// === Function Call Match Scorer ===
+
+/// Matches agent tool calls against BFCL ground_truth format: `func_name(key1='val1', key2=val2)`
+pub struct FunctionCallMatchScorer {
+    pub expected_call: String,
+}
+
+impl FunctionCallMatchScorer {
+    pub fn new(expected_call: impl Into<String>) -> Self {
+        Self {
+            expected_call: expected_call.into(),
+        }
+    }
+
+    /// Parse BFCL format: `func_name(arg1='val1', arg2=val2)` into (name, HashMap<key, value>)
+    pub(crate) fn parse_function_call(
+        call: &str,
+    ) -> Option<(String, std::collections::HashMap<String, String>)> {
+        let paren_pos = call.find('(')?;
+        let name = call[..paren_pos].trim().to_string();
+        let args_str = call[paren_pos + 1..].trim_end_matches(')').trim();
+
+        let mut args = std::collections::HashMap::new();
+        if !args_str.is_empty() {
+            for pair in Self::split_args(args_str) {
+                if let Some(eq_pos) = pair.find('=') {
+                    let key = pair[..eq_pos].trim().to_string();
+                    let value = pair[eq_pos + 1..]
+                        .trim()
+                        .trim_matches('\'')
+                        .trim_matches('"')
+                        .to_string();
+                    args.insert(key, value);
+                }
+            }
+        }
+        Some((name, args))
+    }
+
+    /// Split args string respecting quotes
+    fn split_args(s: &str) -> Vec<String> {
+        let mut results = Vec::new();
+        let mut current = String::new();
+        let mut in_quote = false;
+        let mut quote_char = ' ';
+
+        for ch in s.chars() {
+            if !in_quote && (ch == '\'' || ch == '"') {
+                in_quote = true;
+                quote_char = ch;
+                current.push(ch);
+            } else if in_quote && ch == quote_char {
+                in_quote = false;
+                current.push(ch);
+            } else if !in_quote && ch == ',' {
+                results.push(current.trim().to_string());
+                current = String::new();
+            } else {
+                current.push(ch);
+            }
+        }
+        if !current.trim().is_empty() {
+            results.push(current.trim().to_string());
+        }
+        results
+    }
+}
+
+impl Scorer for FunctionCallMatchScorer {
+    fn score(&self, output: &AgentOutput) -> EvalScore {
+        let parsed = Self::parse_function_call(&self.expected_call);
+        let (expected_name, expected_args) = match parsed {
+            Some((n, a)) => (n, a),
+            None => {
+                return EvalScore::fail(
+                    0.0,
+                    ScoreDetails::FunctionCallMatch {
+                        expected_call: self.expected_call.clone(),
+                        actual_tool: None,
+                        arg_match_rate: 0.0,
+                    },
+                )
+            }
+        };
+
+        let actual_tool = output.tool_calls.first().map(|tc| tc.name.as_str());
+        let name_match = actual_tool == Some(expected_name.as_str());
+
+        let arg_match_rate = if name_match && !expected_args.is_empty() {
+            if let Some(actual_call) = output.tool_calls.first() {
+                let matched = expected_args
+                    .iter()
+                    .filter(|(k, v)| {
+                        actual_call
+                            .input
+                            .get(k.as_str())
+                            .and_then(|av| av.as_str())
+                            .map_or(false, |av| av == v.as_str())
+                    })
+                    .count();
+                matched as f64 / expected_args.len() as f64
+            } else {
+                0.0
+            }
+        } else if name_match {
+            1.0
+        } else {
+            0.0
+        };
+
+        let score = if name_match {
+            0.5 + 0.5 * arg_match_rate
+        } else {
+            0.0
+        };
+        let passed = name_match && arg_match_rate >= 0.5;
+
+        EvalScore {
+            passed,
+            score,
+            details: ScoreDetails::FunctionCallMatch {
+                expected_call: self.expected_call.clone(),
+                actual_tool: actual_tool.map(|s| s.to_string()),
+                arg_match_rate,
+            },
+        }
+    }
+}
+
 // === Auto Scorer Selection ===
 
 /// Select the appropriate scorer based on a task definition JSON
 pub fn auto_scorer(task_def: &serde_json::Value) -> Box<dyn Scorer> {
+    if let Some(expected_call) = task_def.get("expected_call").and_then(|v| v.as_str()) {
+        return Box::new(FunctionCallMatchScorer::new(expected_call));
+    }
     if let Some(tool) = task_def.get("expected_tool").and_then(|v| v.as_str()) {
         let mut scorer = ToolCallScorer::new(tool);
         if let Some(args) = task_def.get("expected_args") {
@@ -614,5 +746,134 @@ mod tests {
         // Edge: 0.0 and 1.0 are valid
         assert_eq!(extract_score_from_text("got 0.0 result"), Some(0.0));
         assert_eq!(extract_score_from_text("perfect 1.0"), Some(1.0));
+    }
+
+    // === FunctionCallMatchScorer tests ===
+
+    #[test]
+    fn test_function_call_match_scorer_exact() {
+        let scorer =
+            FunctionCallMatchScorer::new("search_flights(origin='NYC', destination='LA')");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "search_flights".into(),
+                input: serde_json::json!({"origin": "NYC", "destination": "LA"}),
+                output: "found flights".into(),
+                is_error: false,
+                duration_ms: 100,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_function_call_match_wrong_function() {
+        let scorer = FunctionCallMatchScorer::new("get_weather(city='NYC')");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "search_flights".into(),
+                input: serde_json::json!({"city": "NYC"}),
+                output: "".into(),
+                is_error: false,
+                duration_ms: 50,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(!result.passed);
+        assert!(result.score < 0.01);
+    }
+
+    #[test]
+    fn test_function_call_match_partial_args() {
+        let scorer =
+            FunctionCallMatchScorer::new("search_flights(origin='NYC', destination='LA')");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "search_flights".into(),
+                input: serde_json::json!({"origin": "NYC", "destination": "SF"}),
+                output: "".into(),
+                is_error: false,
+                duration_ms: 50,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed); // 50% arg match >= 0.5 threshold
+        assert!((result.score - 0.75).abs() < 0.01); // 0.5 + 0.5 * 0.5
+    }
+
+    #[test]
+    fn test_function_call_match_no_args() {
+        let scorer = FunctionCallMatchScorer::new("get_news()");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "get_news".into(),
+                input: serde_json::json!({}),
+                output: "news".into(),
+                is_error: false,
+                duration_ms: 50,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_function_call_parse() {
+        let parsed =
+            FunctionCallMatchScorer::parse_function_call("func(a='hello', b='world')");
+        assert!(parsed.is_some());
+        let (name, args) = parsed.unwrap();
+        assert_eq!(name, "func");
+        assert_eq!(args.get("a").unwrap(), "hello");
+        assert_eq!(args.get("b").unwrap(), "world");
+    }
+
+    #[test]
+    fn test_function_call_parse_no_args() {
+        let parsed = FunctionCallMatchScorer::parse_function_call("func()");
+        assert!(parsed.is_some());
+        let (name, args) = parsed.unwrap();
+        assert_eq!(name, "func");
+        assert!(args.is_empty());
+    }
+
+    #[test]
+    fn test_function_call_parse_no_parens() {
+        let parsed = FunctionCallMatchScorer::parse_function_call("func");
+        assert!(parsed.is_none());
+    }
+
+    #[test]
+    fn test_function_call_match_no_tool_calls() {
+        let scorer = FunctionCallMatchScorer::new("get_weather(city='NYC')");
+        let output = AgentOutput::default();
+        let result = scorer.score(&output);
+        assert!(!result.passed);
+        assert!(result.score < 0.01);
+    }
+
+    #[test]
+    fn test_auto_scorer_expected_call() {
+        let def = serde_json::json!({"expected_call": "get_weather(city='NYC')"});
+        let scorer = auto_scorer(&def);
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "get_weather".into(),
+                input: serde_json::json!({"city": "NYC"}),
+                output: "sunny".into(),
+                is_error: false,
+                duration_ms: 50,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
     }
 }

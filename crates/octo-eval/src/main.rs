@@ -12,7 +12,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use octo_eval::comparison::{ComparisonReport, ComparisonRunner};
-use octo_eval::config::{EvalConfig, EvalTarget, EngineConfig, MultiModelConfig, ModelEntry};
+use octo_eval::config::{EvalConfig, EvalTomlConfig, EngineConfig, MultiModelConfig, ModelEntry};
 use octo_eval::model::{ModelInfo, ModelTier};
 use octo_eval::reporter::Reporter;
 use octo_eval::runner::EvalRunner;
@@ -60,6 +60,10 @@ fn cmd_help() -> Result<()> {
     println!("  --output <DIR>           Output directory (default: eval_output)");
     println!("  --format <FMT>           Output format: json, markdown, both (default: both)");
     println!("  --baseline <PATH>        Baseline report JSON for regression detection");
+    println!("  --config <PATH>          Config file path (default: eval.toml)");
+    println!("  --replay <DIR>           Replay mode: use saved traces (zero LLM cost)");
+    println!("  --target <MODE>          Target mode: engine (default) or cli");
+    println!("  --binary <PATH>          CLI binary path (default: target/debug/octo-cli)");
     Ok(())
 }
 
@@ -74,6 +78,9 @@ fn cmd_list_suites() -> Result<()> {
     println!("    provider    — Provider fault tolerance & failover (10 tests)");
     println!("    memory      — Memory system consistency across 4 layers (12 tests)");
     println!("    e2e         — End-to-end bug-fix verification (8 fixtures)");
+    println!();
+    println!("  External Dataset Suites:");
+    println!("    bfcl        — Berkeley Function Calling Leaderboard simple subset (10 tasks)");
     Ok(())
 }
 
@@ -82,6 +89,11 @@ fn load_suite(name: &str) -> Result<Vec<Box<dyn EvalTask>>> {
         "tool_call" => ToolCallSuite::load(),
         "security" => SecuritySuite::load(),
         "context" => ContextSuite::load(),
+        "bfcl" => {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let path = manifest_dir.join("datasets/bfcl_simple.jsonl");
+            octo_eval::datasets::bfcl::load_bfcl_as_tasks(&path)
+        }
         _ => anyhow::bail!("Unknown suite: {name}. Use 'list-suites' to see available suites."),
     }
 }
@@ -89,15 +101,25 @@ fn load_suite(name: &str) -> Result<Vec<Box<dyn EvalTask>>> {
 struct CliArgs {
     suite: String,
     output: PathBuf,
+    output_explicit: bool,
     format: String,
     baseline: Option<PathBuf>,
+    config_path: Option<PathBuf>,
+    replay: Option<PathBuf>,
+    target: String,
+    binary: Option<PathBuf>,
 }
 
 fn parse_args(args: &[String]) -> CliArgs {
     let mut suite = "tool_call".to_string();
     let mut output = PathBuf::from("eval_output");
+    let mut output_explicit = false;
     let mut format = "both".to_string();
     let mut baseline = None;
+    let mut config_path = None;
+    let mut replay = None;
+    let mut target = "engine".to_string();
+    let mut binary = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -111,6 +133,7 @@ fn parse_args(args: &[String]) -> CliArgs {
             "--output" => {
                 if i + 1 < args.len() {
                     output = PathBuf::from(&args[i + 1]);
+                    output_explicit = true;
                     i += 1;
                 }
             }
@@ -126,6 +149,30 @@ fn parse_args(args: &[String]) -> CliArgs {
                     i += 1;
                 }
             }
+            "--config" => {
+                if i + 1 < args.len() {
+                    config_path = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--replay" => {
+                if i + 1 < args.len() {
+                    replay = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--target" => {
+                if i + 1 < args.len() {
+                    target = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--binary" => {
+                if i + 1 < args.len() {
+                    binary = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
@@ -134,8 +181,13 @@ fn parse_args(args: &[String]) -> CliArgs {
     CliArgs {
         suite,
         output,
+        output_explicit,
         format,
         baseline,
+        config_path,
+        replay,
+        target,
+        binary,
     }
 }
 
@@ -152,16 +204,40 @@ fn cmd_run(args: &[String]) -> Result<()> {
 
     println!("Running suite '{}' ({} tasks)...\n", cli.suite, tasks.len());
 
-    let config = EvalConfig {
-        target: EvalTarget::Engine(EngineConfig::default()),
-        output_dir: cli.output.clone(),
-        ..EvalConfig::default()
-    };
+    // Layer config: code defaults < eval.toml < CLI args
+    let toml_path = cli.config_path.clone().unwrap_or_else(|| PathBuf::from("eval.toml"));
+    let toml_config = EvalTomlConfig::load(&toml_path)?;
+
+    let mut config = EvalConfig::default();
+    // Layer 1: Apply TOML defaults (overrides code defaults)
+    if let Some(ref tc) = toml_config {
+        tc.apply_to_eval_config(&mut config);
+    }
+    // Layer 2: CLI overrides (highest priority)
+    if cli.output_explicit {
+        config.output_dir = cli.output.clone();
+    }
+
+    // Apply target mode
+    if cli.target == "cli" {
+        let binary_path = cli
+            .binary
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("target/debug/octo-cli"));
+        config.target = octo_eval::config::EvalTarget::Cli(octo_eval::config::CliConfig {
+            binary_path,
+            ..Default::default()
+        });
+    }
 
     let rt = tokio::runtime::Runtime::new()?;
     let report = rt.block_on(async {
-        let runner = EvalRunner::new(config)?;
-        runner.run_suite(&tasks).await
+        if let Some(ref replay_dir) = cli.replay {
+            run_with_replay(&config, &tasks, replay_dir).await
+        } else {
+            let runner = EvalRunner::new(config)?;
+            runner.run_suite(&tasks).await
+        }
     })?;
 
     println!("Results: {}/{} passed ({:.1}%)\n", report.passed, report.total, report.pass_rate * 100.0);
@@ -254,6 +330,61 @@ fn output_report(cli: &CliArgs, detailed: &octo_eval::reporter::DetailedReport) 
     Ok(())
 }
 
+/// Run evaluation in replay mode using saved traces (zero LLM cost).
+async fn run_with_replay(
+    config: &EvalConfig,
+    tasks: &[Box<dyn EvalTask>],
+    replay_dir: &std::path::Path,
+) -> Result<octo_eval::runner::EvalReport> {
+    use octo_eval::mock_provider::ReplayProvider;
+    use octo_eval::recorder::EvalRecorder;
+
+    // Try to load summary JSONL first, then try individual trace files
+    let summary_path = replay_dir.join("eval_traces.jsonl");
+    let traces = if summary_path.exists() {
+        EvalRecorder::load_summary(&summary_path)?
+    } else {
+        // Load individual trace files from the directory
+        let mut traces = Vec::new();
+        for entry in std::fs::read_dir(replay_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "json") {
+                if let Ok(trace) = EvalRecorder::load_trace(&path) {
+                    traces.push(trace);
+                }
+            }
+        }
+        traces
+    };
+
+    if traces.is_empty() {
+        eprintln!(
+            "WARNING: No traces found in {}. Falling back to normal provider.",
+            replay_dir.display()
+        );
+        let runner = EvalRunner::new(config.clone())?;
+        return runner.run_suite(tasks).await;
+    }
+
+    eprintln!(
+        "Replay mode: loaded {} traces from {}",
+        traces.len(),
+        replay_dir.display()
+    );
+
+    // Extract all interactions from traces for the ReplayProvider
+    let mut all_interactions = Vec::new();
+    for trace in &traces {
+        let interactions = EvalRecorder::extract_interactions(trace);
+        all_interactions.extend(interactions);
+    }
+
+    let replay_provider = Arc::new(ReplayProvider::new(all_interactions));
+    let runner = EvalRunner::with_provider(config.clone(), replay_provider);
+    runner.run_suite(tasks).await
+}
+
 fn cmd_compare(args: &[String]) -> Result<()> {
     let cli = parse_args(args);
     let suite_name = &cli.suite;
@@ -261,8 +392,17 @@ fn cmd_compare(args: &[String]) -> Result<()> {
     let format = &cli.format;
     let tasks = load_suite(suite_name)?;
 
-    // Load model configurations: EVAL_MODEL_* env vars, or auto-detect from .env
+    // Load TOML config for model definitions
+    let toml_path = cli.config_path.clone().unwrap_or_else(|| PathBuf::from("eval.toml"));
+    let toml_config = EvalTomlConfig::load(&toml_path)?;
+
+    // Load model configurations: EVAL_MODEL_* env vars > TOML models > auto-detect
     let mut models = load_models_from_env();
+    if models.is_empty() {
+        if let Some(ref tc) = toml_config {
+            models = tc.to_model_entries();
+        }
+    }
     if models.is_empty() {
         models = auto_detect_models();
     }

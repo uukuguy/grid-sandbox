@@ -910,6 +910,7 @@ fn test_eval_config_defaults() {
             assert_eq!(engine.max_tokens, 4096);
             assert_eq!(engine.max_iterations, 10);
         }
+        _ => panic!("Expected Engine target"),
     }
 }
 

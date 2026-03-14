@@ -45,6 +45,11 @@ pub enum ScoreDetails {
         test_output: String,
         exit_code: i32,
     },
+    FunctionCallMatch {
+        expected_call: String,
+        actual_tool: Option<String>,
+        arg_match_rate: f64,
+    },
 }
 
 impl EvalScore {

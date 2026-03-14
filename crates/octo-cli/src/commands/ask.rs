@@ -1,11 +1,35 @@
 //! Headless ask command — send a single message and print the response
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use octo_engine::agent::{AgentEvent, AgentMessage};
 use octo_engine::AgentId;
 use octo_types::{SessionId, UserId};
 
 use crate::commands::AppState;
+use crate::output::OutputFormat;
+
+/// Aggregated JSON output for `octo ask --output json`
+#[derive(serde::Serialize)]
+struct AskJsonOutput {
+    text: String,
+    tool_calls: Vec<AskToolCall>,
+    rounds: u32,
+    input_tokens: u64,
+    output_tokens: u64,
+    duration_ms: u64,
+    stop_reason: String,
+}
+
+/// A single tool invocation record within the JSON output
+#[derive(serde::Serialize)]
+struct AskToolCall {
+    name: String,
+    args: serde_json::Value,
+    result: String,
+    success: bool,
+}
 
 /// Options for the ask command
 pub struct AskOptions {
@@ -64,7 +88,20 @@ pub async fn execute_ask(opts: AskOptions, state: &AppState) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
 
     // Stream events until Done/Completed
-    let quiet = state.output_config.quiet;
+    let started = std::time::Instant::now();
+
+    if matches!(state.output_config.format, OutputFormat::Json) {
+        collect_json_output(&mut rx, started).await
+    } else {
+        stream_text_output(&mut rx, state.output_config.quiet).await
+    }
+}
+
+/// Text output mode — stream events to stdout/stderr as they arrive (existing behaviour).
+async fn stream_text_output(
+    rx: &mut tokio::sync::broadcast::Receiver<AgentEvent>,
+    quiet: bool,
+) -> Result<()> {
     loop {
         match rx.recv().await {
             Ok(AgentEvent::TextDelta { text }) => {
@@ -114,6 +151,94 @@ pub async fn execute_ask(opts: AskOptions, state: &AppState) -> Result<()> {
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
     }
+    Ok(())
+}
 
+/// JSON output mode — collect all events and emit a single JSON blob at the end.
+async fn collect_json_output(
+    rx: &mut tokio::sync::broadcast::Receiver<AgentEvent>,
+    started: std::time::Instant,
+) -> Result<()> {
+    let mut text_parts: Vec<String> = Vec::new();
+    let mut tool_calls: Vec<AskToolCall> = Vec::new();
+    // Map tool_id → (name, args) for pending tool starts
+    let mut pending_tools: HashMap<String, (String, serde_json::Value)> = HashMap::new();
+    let mut rounds: u32 = 0;
+    let mut input_tokens: u64 = 0;
+    let mut output_tokens: u64 = 0;
+    let mut stop_reason = String::from("unknown");
+    let mut error_message: Option<String> = None;
+
+    loop {
+        match rx.recv().await {
+            Ok(AgentEvent::TextDelta { text }) => {
+                text_parts.push(text);
+            }
+            Ok(AgentEvent::ToolStart {
+                tool_id,
+                tool_name,
+                input,
+            }) => {
+                pending_tools.insert(tool_id, (tool_name, input));
+            }
+            Ok(AgentEvent::ToolResult {
+                tool_id,
+                output,
+                success,
+            }) => {
+                let (name, args) = pending_tools
+                    .remove(&tool_id)
+                    .unwrap_or_else(|| (String::from("unknown"), serde_json::Value::Null));
+                tool_calls.push(AskToolCall {
+                    name,
+                    args,
+                    result: output,
+                    success,
+                });
+            }
+            Ok(AgentEvent::Completed(result)) => {
+                rounds = result.rounds;
+                input_tokens = result.input_tokens;
+                output_tokens = result.output_tokens;
+                stop_reason = format!("{:?}", result.stop_reason);
+                break;
+            }
+            Ok(AgentEvent::Error { message }) => {
+                error_message = Some(message);
+                stop_reason = String::from("Error");
+                break;
+            }
+            Ok(AgentEvent::Done) => {
+                stop_reason = String::from("Done");
+                break;
+            }
+            Ok(_) => {} // ignore other event variants
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("Skipped {} events", n);
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
+
+    let duration_ms = started.elapsed().as_millis() as u64;
+
+    let mut text = text_parts.join("");
+    if let Some(err) = error_message {
+        if text.is_empty() {
+            text = format!("Error: {}", err);
+        }
+    }
+
+    let output = AskJsonOutput {
+        text,
+        tool_calls,
+        rounds,
+        input_tokens,
+        output_tokens,
+        duration_ms,
+        stop_reason,
+    };
+
+    crate::output::json::print_json(&output);
     Ok(())
 }

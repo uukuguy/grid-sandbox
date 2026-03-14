@@ -7,6 +7,12 @@
 
 ## [Active Work]
 
+- 13:35 | Phase E checkpoint saved — all 18 tasks COMPLETE, ready for commit
+- 13:30 | Phase E COMPLETE (18/18 tasks) — 评估框架生产级, 1936 tests
+  - E3: CLI subprocess target, BFCL adapter (10 tasks), eval.toml config, replay CLI, CI workflow
+  - E2: LlmJudge, provider fault tolerance, memory consistency, E2E programming suites
+  - E1: Runner hardening (recorder, timeout, concurrency, allowlists, regression)
+  - Design review found 28 gaps, all resolved. Server mode deferred to E4.
 - 10:45 | Wave 7-9 增强实施方案完成 — 23 tasks, ~6930 LOC, 3 Waves (P0/P1/P2)
   - 方案: docs/plans/2026-03-12-wave7-9-enhancement-plan.md
   - Wave 7 (P0, ~1680 LOC): self_repair, compaction 三策略, text tool recovery, E-Stop, prompt cache

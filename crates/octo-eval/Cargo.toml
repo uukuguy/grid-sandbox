@@ -23,5 +23,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 tempfile = "3"
+toml = { workspace = true }
 
 [dev-dependencies]

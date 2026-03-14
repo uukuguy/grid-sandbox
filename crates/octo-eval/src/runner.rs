@@ -12,11 +12,31 @@ use octo_engine::agent::{run_agent_loop, AgentEvent, AgentLoopConfig};
 use octo_engine::providers::{create_provider, Provider};
 use octo_types::ChatMessage;
 
-use crate::config::{EvalConfig, EvalTarget};
+use crate::config::{CliConfig, EvalConfig, EvalTarget};
 use crate::model::ModelInfo;
 use crate::recorder::{EvalRecorder, EvalTrace};
 use crate::score::{EvalScore, ScoreDetails};
 use crate::task::{AgentOutput, EvalTask, ToolCallRecord};
+
+/// JSON output format produced by `octo ask --output json`
+#[derive(Debug, Deserialize)]
+struct CliJsonOutput {
+    text: String,
+    tool_calls: Vec<CliToolCall>,
+    rounds: u32,
+    input_tokens: u64,
+    output_tokens: u64,
+    duration_ms: u64,
+    stop_reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CliToolCall {
+    name: String,
+    args: serde_json::Value,
+    result: String,
+    success: bool,
+}
 
 /// Result of running a single evaluation task
 #[derive(Debug, Serialize, Deserialize)]
@@ -143,11 +163,21 @@ impl EvalRunner {
                 );
                 Ok(Arc::from(provider))
             }
+            EvalTarget::Cli(_) => {
+                // CLI mode doesn't use a provider — use a dummy mock
+                Ok(Arc::from(create_provider("openai", String::new(), None)))
+            }
         }
     }
 
     /// Run a single evaluation task with timeout enforcement
     pub async fn run_task(&self, task: &dyn EvalTask) -> Result<TaskResult> {
+        // Dispatch based on target mode
+        match &self.config.target {
+            EvalTarget::Cli(cli_config) => return self.run_task_cli(task, cli_config).await,
+            EvalTarget::Engine(_) => {} // fall through to engine path below
+        }
+
         let start = Instant::now();
         let task_id = task.id().to_string();
         let timeout_secs = self.config.timeout_secs;
@@ -156,6 +186,7 @@ impl EvalRunner {
 
         let engine_config = match &self.config.target {
             EvalTarget::Engine(c) => c,
+            _ => unreachable!(),
         };
 
         // Build tool registry — apply per-task allowlist if specified
@@ -215,6 +246,7 @@ impl EvalRunner {
             );
             let engine_config = match &self.config.target {
                 EvalTarget::Engine(c) => c,
+                _ => unreachable!(), // CLI dispatches early
             };
             judge
                 .score_async(
@@ -258,6 +290,126 @@ impl EvalRunner {
         }
 
         Ok(result)
+    }
+
+    /// Run a single evaluation task via CLI subprocess (`octo ask --output json`)
+    async fn run_task_cli(
+        &self,
+        task: &dyn EvalTask,
+        cli_config: &CliConfig,
+    ) -> Result<TaskResult> {
+        let start = Instant::now();
+        let task_id = task.id().to_string();
+        let timeout_secs = cli_config.timeout_secs;
+
+        info!(task_id = %task_id, "Starting CLI evaluation task");
+
+        let mut cmd = tokio::process::Command::new(&cli_config.binary_path);
+        cmd.arg("ask").arg("--output").arg("json");
+
+        // Append extra CLI arguments
+        for arg in &cli_config.extra_args {
+            cmd.arg(arg);
+        }
+
+        // The prompt is the final positional argument
+        cmd.arg(&task.prompt());
+
+        // Inject environment variables
+        for (k, v) in &cli_config.env {
+            cmd.env(k, v);
+        }
+
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
+        // Spawn with timeout
+        let timeout_duration = Duration::from_secs(timeout_secs);
+        let child_result = match tokio::time::timeout(timeout_duration, async {
+            let child = cmd.spawn()?;
+            child.wait_with_output().await
+        })
+        .await
+        {
+            Ok(result) => result?,
+            Err(_elapsed) => {
+                let duration_ms = start.elapsed().as_millis() as u64;
+                warn!(task_id = %task_id, timeout_secs, "CLI task timed out");
+                return Ok(TaskResult {
+                    task_id,
+                    output: AgentOutput::default(),
+                    score: EvalScore::fail(
+                        0.0,
+                        ScoreDetails::Timeout {
+                            elapsed_secs: timeout_secs,
+                        },
+                    ),
+                    duration_ms,
+                });
+            }
+        };
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        if !child_result.status.success() {
+            let stderr = String::from_utf8_lossy(&child_result.stderr);
+            warn!(task_id = %task_id, stderr = %stderr, "CLI subprocess failed");
+            return Ok(TaskResult {
+                task_id,
+                output: AgentOutput::default(),
+                score: EvalScore::fail(
+                    0.0,
+                    ScoreDetails::Custom {
+                        message: format!("CLI exited with {}: {}", child_result.status, stderr),
+                    },
+                ),
+                duration_ms,
+            });
+        }
+
+        // Parse JSON output from stdout
+        let stdout = String::from_utf8_lossy(&child_result.stdout);
+        let cli_output: CliJsonOutput = serde_json::from_str(&stdout).map_err(|e| {
+            anyhow::anyhow!("Failed to parse CLI JSON output: {} — raw: {}", e, stdout)
+        })?;
+
+        // Convert to AgentOutput
+        let output = AgentOutput {
+            rounds: cli_output.rounds,
+            input_tokens: cli_output.input_tokens,
+            output_tokens: cli_output.output_tokens,
+            stop_reason: cli_output.stop_reason,
+            tool_calls: cli_output
+                .tool_calls
+                .into_iter()
+                .map(|tc| ToolCallRecord {
+                    name: tc.name,
+                    input: tc.args,
+                    output: tc.result,
+                    is_error: !tc.success,
+                    duration_ms: 0,
+                })
+                .collect(),
+            messages: vec![octo_types::ChatMessage::assistant(&cli_output.text)],
+            duration_ms: cli_output.duration_ms,
+        };
+
+        let score = task.score(&output);
+
+        info!(
+            task_id = %task_id,
+            passed = score.passed,
+            score = score.score,
+            duration_ms = duration_ms,
+            "CLI task evaluation complete"
+        );
+
+        Ok(TaskResult {
+            task_id,
+            output,
+            score,
+            duration_ms,
+        })
     }
 
     /// Run all tasks (sequentially or concurrently) and generate an aggregated report
