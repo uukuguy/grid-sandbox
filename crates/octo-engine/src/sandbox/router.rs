@@ -3,7 +3,9 @@
 //! This module provides a router that maps tool categories to sandbox types
 //! and routes execution requests to the appropriate adapter.
 
-use super::{ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxType};
+use super::{
+    ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxPolicy, SandboxType,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -91,6 +93,8 @@ pub struct SandboxRouter {
     default_sandbox: SandboxType,
     /// Tool category to sandbox type mapping
     tool_mapping: HashMap<ToolCategory, SandboxType>,
+    /// Sandbox execution policy
+    policy: SandboxPolicy,
 }
 
 impl SandboxRouter {
@@ -102,6 +106,11 @@ impl SandboxRouter {
     /// - FileSystem -> Docker
     /// - Network -> Wasm
     pub fn new() -> Self {
+        Self::with_policy(SandboxPolicy::default())
+    }
+
+    /// Create a new SandboxRouter with a specific policy
+    pub fn with_policy(policy: SandboxPolicy) -> Self {
         let mut tool_mapping = HashMap::new();
         tool_mapping.insert(ToolCategory::Shell, SandboxType::Docker);
         tool_mapping.insert(ToolCategory::Compute, SandboxType::Wasm);
@@ -112,7 +121,18 @@ impl SandboxRouter {
             adapters: HashMap::new(),
             default_sandbox: SandboxType::Subprocess,
             tool_mapping,
+            policy,
         }
+    }
+
+    /// Get the current policy
+    pub fn policy(&self) -> SandboxPolicy {
+        self.policy
+    }
+
+    /// Set the sandbox policy
+    pub fn set_policy(&mut self, policy: SandboxPolicy) {
+        self.policy = policy;
     }
 
     /// Register an adapter for a specific sandbox type
@@ -149,17 +169,62 @@ impl SandboxRouter {
         code: &str,
         language: &str,
     ) -> Result<ExecResult, SandboxError> {
-        let sandbox_type = self.get_sandbox_type(category);
-        let adapter = self.adapters.get(&sandbox_type).ok_or_else(|| {
-            SandboxError::UnsupportedType(format!("{:?} adapter not registered", sandbox_type))
-        })?;
+        let target_type = self.get_sandbox_type(category);
 
-        let config = SandboxConfig::new(sandbox_type);
+        // Try to get the target adapter
+        let (actual_type, adapter) = if let Some(adapter) = self.adapters.get(&target_type) {
+            (target_type, adapter)
+        } else {
+            // Target adapter not available — try fallback
+            self.resolve_fallback(target_type)?
+        };
+
+        // Policy enforcement
+        if !self.policy.allows(actual_type) {
+            return Err(SandboxError::PolicyDenied {
+                policy: self.policy,
+                sandbox_type: actual_type,
+            });
+        }
+
+        // Log degradation if needed
+        if self.policy.requires_degradation_audit(target_type, actual_type) {
+            tracing::warn!(
+                "Sandbox degradation: {} -> {} (policy: {})",
+                target_type,
+                actual_type,
+                self.policy
+            );
+        }
+
+        let config = SandboxConfig::new(actual_type);
         let id = adapter.create(&config).await?;
         let result = adapter.execute(&id, code, language).await;
         let _ = adapter.destroy(&id).await;
 
         result
+    }
+
+    /// Try to find a fallback adapter when the target is not available
+    fn resolve_fallback(
+        &self,
+        target_type: SandboxType,
+    ) -> Result<(SandboxType, &Arc<AdapterEnum>), SandboxError> {
+        // Fallback order: Docker -> Wasm -> Subprocess
+        let fallback_order = [SandboxType::Docker, SandboxType::Wasm, SandboxType::Subprocess];
+
+        for fallback in &fallback_order {
+            if *fallback != target_type {
+                if let Some(adapter) = self.adapters.get(fallback) {
+                    return Ok((*fallback, adapter));
+                }
+            }
+        }
+
+        Err(SandboxError::UnsupportedType(format!(
+            "{} adapter not registered and no fallback available",
+            target_type
+        )))
     }
 
     /// Override the sandbox type for a specific tool category
@@ -247,7 +312,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_router_execute() {
-        let mut router = SandboxRouter::new();
+        // Use Development policy to allow Subprocess
+        let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
         // Register adapters
         router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
@@ -281,7 +347,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_router_shell_category() {
-        let mut router = SandboxRouter::new();
+        let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
         // Register subprocess adapter
         router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
@@ -300,7 +366,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_router_filesystem_category() {
-        let mut router = SandboxRouter::new();
+        let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
         // Register subprocess adapter
         router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
@@ -314,5 +380,100 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().success);
+    }
+
+    // ── SandboxPolicy tests ──
+
+    #[test]
+    fn test_policy_default_is_strict() {
+        assert_eq!(SandboxPolicy::default(), SandboxPolicy::Strict);
+    }
+
+    #[test]
+    fn test_strict_allows_docker_and_wasm() {
+        let policy = SandboxPolicy::Strict;
+        assert!(policy.allows(SandboxType::Docker));
+        assert!(policy.allows(SandboxType::Wasm));
+        assert!(!policy.allows(SandboxType::Subprocess));
+    }
+
+    #[test]
+    fn test_preferred_allows_all() {
+        let policy = SandboxPolicy::Preferred;
+        assert!(policy.allows(SandboxType::Docker));
+        assert!(policy.allows(SandboxType::Wasm));
+        assert!(policy.allows(SandboxType::Subprocess));
+    }
+
+    #[test]
+    fn test_development_allows_all() {
+        let policy = SandboxPolicy::Development;
+        assert!(policy.allows(SandboxType::Docker));
+        assert!(policy.allows(SandboxType::Wasm));
+        assert!(policy.allows(SandboxType::Subprocess));
+    }
+
+    #[test]
+    fn test_preferred_degradation_audit() {
+        let policy = SandboxPolicy::Preferred;
+        assert!(policy.requires_degradation_audit(SandboxType::Docker, SandboxType::Subprocess));
+        assert!(!policy.requires_degradation_audit(SandboxType::Docker, SandboxType::Docker));
+    }
+
+    #[test]
+    fn test_strict_no_degradation_audit() {
+        let policy = SandboxPolicy::Strict;
+        assert!(!policy.requires_degradation_audit(SandboxType::Docker, SandboxType::Subprocess));
+    }
+
+    #[tokio::test]
+    async fn test_strict_policy_denies_subprocess() {
+        let mut router = SandboxRouter::with_policy(SandboxPolicy::Strict);
+        router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
+        router.set_mapping(ToolCategory::Compute, SandboxType::Subprocess);
+
+        let result = router
+            .execute(ToolCategory::Compute, "echo test", "bash")
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, SandboxError::PolicyDenied { policy: SandboxPolicy::Strict, sandbox_type: SandboxType::Subprocess }),
+            "Expected PolicyDenied, got: {:?}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_development_policy_allows_subprocess() {
+        let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
+        router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
+        router.set_mapping(ToolCategory::Compute, SandboxType::Subprocess);
+
+        let result = router
+            .execute(ToolCategory::Compute, "echo 'dev mode'", "bash")
+            .await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().stdout.contains("dev mode"));
+    }
+
+    #[test]
+    fn test_router_with_policy() {
+        let router = SandboxRouter::with_policy(SandboxPolicy::Development);
+        assert_eq!(router.policy(), SandboxPolicy::Development);
+
+        let router = SandboxRouter::new();
+        assert_eq!(router.policy(), SandboxPolicy::Strict);
+    }
+
+    #[test]
+    fn test_router_set_policy() {
+        let mut router = SandboxRouter::new();
+        assert_eq!(router.policy(), SandboxPolicy::Strict);
+
+        router.set_policy(SandboxPolicy::Development);
+        assert_eq!(router.policy(), SandboxPolicy::Development);
     }
 }

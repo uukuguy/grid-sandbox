@@ -105,7 +105,7 @@ pub struct BashTool {
 impl BashTool {
     pub fn new() -> Self {
         #[cfg(feature = "sandbox-wasm")]
-        let router = Some(SandboxRouter::new());
+        let router = Some(SandboxRouter::with_policy(crate::sandbox::SandboxPolicy::Development));
         Self {
             exec_policy: Some(ExecPolicy::default()),
             #[cfg(feature = "sandbox-wasm")]
@@ -116,7 +116,7 @@ impl BashTool {
     /// 创建带安全策略的 BashTool
     pub fn with_policy(policy: ExecPolicy) -> Self {
         #[cfg(feature = "sandbox-wasm")]
-        let router = Some(SandboxRouter::new());
+        let router = Some(SandboxRouter::with_policy(crate::sandbox::SandboxPolicy::Development));
         Self {
             exec_policy: Some(policy),
             #[cfg(feature = "sandbox-wasm")]

@@ -1,5 +1,6 @@
 // Sandbox runtime traits and types
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Unique identifier for a sandbox instance
@@ -101,6 +102,54 @@ pub struct ExecResult {
     pub success: bool,
 }
 
+/// Sandbox execution policy
+///
+/// Controls which sandbox backends are permitted for execution.
+/// Production environments should use `Strict` (the default).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SandboxPolicy {
+    /// Production: only Docker/WASM allowed, Subprocess rejected
+    Strict,
+    /// Staging: prefer Docker/WASM, degrade to Subprocess with audit warning
+    Preferred,
+    /// Development/test: all backends allowed
+    Development,
+}
+
+impl Default for SandboxPolicy {
+    fn default() -> Self {
+        SandboxPolicy::Strict
+    }
+}
+
+impl SandboxPolicy {
+    /// Check whether a given sandbox type is allowed under this policy
+    pub fn allows(&self, sandbox_type: SandboxType) -> bool {
+        match self {
+            SandboxPolicy::Strict => {
+                matches!(sandbox_type, SandboxType::Docker | SandboxType::Wasm)
+            }
+            SandboxPolicy::Preferred | SandboxPolicy::Development => true,
+        }
+    }
+
+    /// Whether degradation from `target` to `actual` requires an audit record
+    pub fn requires_degradation_audit(&self, target: SandboxType, actual: SandboxType) -> bool {
+        target != actual && matches!(self, SandboxPolicy::Preferred)
+    }
+}
+
+impl fmt::Display for SandboxPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SandboxPolicy::Strict => write!(f, "strict"),
+            SandboxPolicy::Preferred => write!(f, "preferred"),
+            SandboxPolicy::Development => write!(f, "development"),
+        }
+    }
+}
+
 /// Errors that can occur during sandbox operations
 #[derive(Debug)]
 pub enum SandboxError {
@@ -118,6 +167,11 @@ pub enum SandboxError {
     SerdeError(serde_json::Error),
     /// Unsupported sandbox type
     UnsupportedType(String),
+    /// Execution denied by sandbox policy
+    PolicyDenied {
+        policy: SandboxPolicy,
+        sandbox_type: SandboxType,
+    },
 }
 
 impl fmt::Display for SandboxError {
@@ -130,6 +184,14 @@ impl fmt::Display for SandboxError {
             SandboxError::IoError(e) => write!(f, "IO error: {}", e),
             SandboxError::SerdeError(e) => write!(f, "Serialization error: {}", e),
             SandboxError::UnsupportedType(msg) => write!(f, "Unsupported sandbox type: {}", msg),
+            SandboxError::PolicyDenied {
+                policy,
+                sandbox_type,
+            } => write!(
+                f,
+                "Sandbox policy '{}' denied execution on '{}' backend",
+                policy, sandbox_type
+            ),
         }
     }
 }
@@ -139,7 +201,12 @@ impl std::error::Error for SandboxError {
         match self {
             SandboxError::IoError(e) => Some(e),
             SandboxError::SerdeError(e) => Some(e),
-            _ => None,
+            SandboxError::NotFound(_)
+            | SandboxError::AlreadyExists(_)
+            | SandboxError::ExecutionFailed(_)
+            | SandboxError::ConfigError(_)
+            | SandboxError::UnsupportedType(_)
+            | SandboxError::PolicyDenied { .. } => None,
         }
     }
 }

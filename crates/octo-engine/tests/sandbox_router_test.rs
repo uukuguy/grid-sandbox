@@ -1,7 +1,7 @@
 // SandboxRouter integration tests
 
 use octo_engine::sandbox::{
-    AdapterEnum, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory,
+    AdapterEnum, SandboxPolicy, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory,
 };
 
 #[test]
@@ -70,7 +70,7 @@ async fn test_router_register_adapter() {
 
 #[tokio::test]
 async fn test_router_execute_with_subprocess() {
-    let mut router = SandboxRouter::new();
+    let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
     // Register subprocess adapter for Subprocess type
     router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
@@ -104,7 +104,7 @@ async fn test_router_execute_unregistered() {
 
 #[tokio::test]
 async fn test_router_shell_category() {
-    let mut router = SandboxRouter::new();
+    let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
     // Register subprocess adapter
     router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
@@ -123,7 +123,7 @@ async fn test_router_shell_category() {
 
 #[tokio::test]
 async fn test_router_filesystem_category() {
-    let mut router = SandboxRouter::new();
+    let mut router = SandboxRouter::with_policy(SandboxPolicy::Development);
 
     // Register subprocess adapter
     router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
