@@ -233,6 +233,66 @@ impl AuditStorage {
         rows.collect()
     }
 
+    /// Query sandbox-specific audit events with optional filters
+    pub fn query_sandbox_events(
+        &self,
+        sandbox_id: Option<&str>,
+        action: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> rusqlite::Result<Vec<AuditRecord>> {
+        let mut sql = String::from(
+            "SELECT id, timestamp, event_type, user_id, session_id, resource_id, action, result, metadata, ip_address, prev_hash, hash FROM audit_logs WHERE event_type = 'sandbox'"
+        );
+
+        if sandbox_id.is_some() {
+            sql.push_str(" AND resource_id = ?");
+        }
+        if action.is_some() {
+            sql.push_str(" AND action = ?");
+        }
+
+        sql.push_str(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        if let Some(sid) = sandbox_id {
+            params.push(Box::new(sid.to_string()));
+        }
+        if let Some(a) = action {
+            params.push(Box::new(a.to_string()));
+        }
+        params.push(Box::new(limit as i64));
+        params.push(Box::new(offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(AuditRecord {
+                id: row.get(0)?,
+                timestamp: row.get(1)?,
+                event_type: row.get(2)?,
+                user_id: row.get(3)?,
+                session_id: row.get(4)?,
+                resource_id: row.get(5)?,
+                action: row.get(6)?,
+                result: row.get(7)?,
+                metadata: row.get(8)?,
+                ip_address: row.get(9)?,
+                prev_hash: row.get(10)?,
+                hash: row.get(11)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    /// Query policy denial events
+    pub fn query_policy_denials(&self, limit: u32) -> rusqlite::Result<Vec<AuditRecord>> {
+        self.query_sandbox_events(None, Some("PolicyDeny"), limit, 0)
+    }
+
     pub fn count(&self, event_type: Option<&str>, user_id: Option<&str>) -> rusqlite::Result<i64> {
         let mut sql = String::from("SELECT COUNT(*) FROM audit_logs WHERE 1=1");
 
@@ -373,6 +433,56 @@ mod tests {
         let result = storage.verify_chain(1, 3).expect("verify");
         assert!(!result.valid);
         assert_eq!(result.broken_at, Some(2));
+    }
+
+    #[test]
+    fn test_query_sandbox_events() {
+        let storage = setup_storage();
+
+        // Insert sandbox events
+        storage
+            .log(AuditEvent {
+                event_type: "sandbox".to_string(),
+                user_id: None,
+                session_id: None,
+                resource_id: Some("sandbox-1".to_string()),
+                action: "Execute".to_string(),
+                result: "success".to_string(),
+                metadata: None,
+                ip_address: None,
+            })
+            .expect("log sandbox event");
+
+        storage
+            .log(AuditEvent {
+                event_type: "sandbox".to_string(),
+                user_id: None,
+                session_id: None,
+                resource_id: Some("sandbox-2".to_string()),
+                action: "PolicyDeny".to_string(),
+                result: "failure".to_string(),
+                metadata: None,
+                ip_address: None,
+            })
+            .expect("log policy deny");
+
+        storage
+            .log(make_event("auth", "login", "success"))
+            .expect("log auth event");
+
+        // Query all sandbox events
+        let events = storage.query_sandbox_events(None, None, 10, 0).expect("query");
+        assert_eq!(events.len(), 2);
+
+        // Query by sandbox_id
+        let events = storage.query_sandbox_events(Some("sandbox-1"), None, 10, 0).expect("query");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].resource_id, Some("sandbox-1".to_string()));
+
+        // Query policy denials
+        let denials = storage.query_policy_denials(10).expect("query denials");
+        assert_eq!(denials.len(), 1);
+        assert_eq!(denials[0].action, "PolicyDeny");
     }
 
     #[test]

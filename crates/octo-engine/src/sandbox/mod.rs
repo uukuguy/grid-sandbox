@@ -6,15 +6,17 @@
 //! - Docker: Container-based sandbox (isolation)
 //! - Subprocess: Local subprocess execution (simple)
 
+pub mod audit;
 pub mod docker;
 pub mod router;
 pub mod subprocess;
 pub mod traits;
 pub mod wasm;
 
-pub use docker::DockerAdapter;
+pub use docker::{DockerAdapter, ImageRegistry};
 pub use router::{AdapterEnum, SandboxRouter, ToolCategory};
 pub use subprocess::SubprocessAdapter;
+pub use audit::{ResourceUsage, SandboxAction, SandboxAuditEvent};
 pub use traits::{
     ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxPolicy, SandboxType,
 };

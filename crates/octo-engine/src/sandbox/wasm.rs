@@ -183,6 +183,131 @@ impl WasmAdapter {
         ))
     }
 
+    /// Execute a WASM module as a WASI CLI program with stdout/stderr capture
+    ///
+    /// This mode treats the WASM module as a command-line tool,
+    /// providing WASI context with args, stdin, and stdio capture.
+    #[cfg(feature = "sandbox-wasm")]
+    pub async fn execute_wasi_cli(
+        &self,
+        id: &SandboxId,
+        wasm_bytes: &[u8],
+        args: &[String],
+        stdin_data: Option<&str>,
+    ) -> Result<ExecResult, SandboxError> {
+        use wasmtime_wasi::pipe::{MemoryInputPipe, MemoryOutputPipe};
+
+        // Validate sandbox exists
+        let instances = self.instances.read().await;
+        if !instances.contains_key(id) {
+            return Err(SandboxError::NotFound(id.clone()));
+        }
+        drop(instances);
+
+        let engine = self
+            .engine
+            .as_ref()
+            .ok_or_else(|| SandboxError::ExecutionFailed("WASM engine not initialized".into()))?;
+
+        let start = std::time::Instant::now();
+
+        // Build WASI context with stdio capture
+        let stdout_pipe = MemoryOutputPipe::new(65536);
+        let stderr_pipe = MemoryOutputPipe::new(65536);
+
+        let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
+
+        // Set args (first arg is conventionally the program name)
+        let mut full_args: Vec<String> = vec!["wasi-program".to_string()];
+        full_args.extend_from_slice(args);
+        wasi_builder.args(&full_args);
+
+        // Configure stdio capture
+        wasi_builder.stdout(stdout_pipe.clone());
+        wasi_builder.stderr(stderr_pipe.clone());
+
+        if let Some(input) = stdin_data {
+            wasi_builder.stdin(MemoryInputPipe::new(input.as_bytes().to_vec()));
+        }
+
+        let wasi_ctx = wasi_builder.build_p1();
+        let mut store = wasmtime::Store::new(engine, wasi_ctx);
+
+        // Link WASI functions
+        let mut linker = wasmtime::Linker::new(engine);
+        wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |ctx| ctx).map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to link WASI: {}", e))
+        })?;
+
+        let module = wasmtime::Module::from_binary(engine, wasm_bytes).map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to load WASM module: {}", e))
+        })?;
+
+        let instance = linker.instantiate(&mut store, &module).map_err(|e| {
+            SandboxError::ExecutionFailed(format!("Failed to instantiate WASI module: {}", e))
+        })?;
+
+        // Call _start entry point
+        let exit_code =
+            if let Ok(func) = instance.get_typed_func::<(), ()>(&mut store, "_start") {
+                match func.call(&mut store, ()) {
+                    Ok(()) => 0,
+                    Err(e) => {
+                        // Check for WASI exit code
+                        if let Some(exit) = e.downcast_ref::<wasmtime_wasi::I32Exit>() {
+                            exit.0
+                        } else {
+                            tracing::warn!("WASI execution error: {}", e);
+                            1
+                        }
+                    }
+                }
+            } else {
+                // No _start function found
+                tracing::warn!("WASI module has no _start function");
+                1
+            };
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        // Read captured output
+        let stdout_bytes = stdout_pipe.try_into_inner().unwrap_or_default();
+        let stderr_bytes = stderr_pipe.try_into_inner().unwrap_or_default();
+        let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
+        let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
+
+        tracing::debug!(
+            "WASI CLI execution in sandbox {}: exit_code={}, duration_ms={}, stdout={}B, stderr={}B",
+            id,
+            exit_code,
+            duration_ms,
+            stdout.len(),
+            stderr.len()
+        );
+
+        Ok(ExecResult {
+            stdout,
+            stderr,
+            exit_code,
+            execution_time_ms: duration_ms,
+            success: exit_code == 0,
+        })
+    }
+
+    /// Execute WASI CLI (stub without feature)
+    #[cfg(not(feature = "sandbox-wasm"))]
+    pub async fn execute_wasi_cli(
+        &self,
+        _id: &SandboxId,
+        _wasm_bytes: &[u8],
+        _args: &[String],
+        _stdin_data: Option<&str>,
+    ) -> Result<ExecResult, SandboxError> {
+        Err(SandboxError::UnsupportedType(
+            "WASM support not enabled. Enable sandbox-wasm feature".to_string(),
+        ))
+    }
+
     /// Check if WASM support is available
     pub fn is_available(&self) -> bool {
         #[cfg(feature = "sandbox-wasm")]
@@ -253,15 +378,18 @@ impl RuntimeAdapter for WasmAdapter {
     }
 
     /// Execute code in the WASM sandbox
+    ///
+    /// If `language` is `"wasi-cli"` or `code` starts with `wasi://`,
+    /// the WASI CLI executor is used for full stdio capture.
     async fn execute(
         &self,
         id: &SandboxId,
         code: &str,
-        _language: &str,
+        language: &str,
     ) -> Result<ExecResult, SandboxError> {
         #[cfg(not(feature = "sandbox-wasm"))]
         {
-            let _ = (id, code);
+            let _ = (id, code, language);
             return Err(SandboxError::UnsupportedType(
                 "WASM support not enabled. Enable sandbox-wasm feature".to_string(),
             ));
@@ -277,6 +405,18 @@ impl RuntimeAdapter for WasmAdapter {
             }
 
             drop(instances);
+
+            // WASI CLI mode: load from file path
+            if language == "wasi-cli" || code.starts_with("wasi://") {
+                let wasm_path = code.strip_prefix("wasi://").unwrap_or(code);
+                let wasm_bytes = tokio::fs::read(wasm_path).await.map_err(|e| {
+                    SandboxError::ExecutionFailed(format!(
+                        "Failed to read WASI module '{}': {}",
+                        wasm_path, e
+                    ))
+                })?;
+                return self.execute_wasi_cli(id, &wasm_bytes, &[], None).await;
+            }
 
             let start = std::time::Instant::now();
 

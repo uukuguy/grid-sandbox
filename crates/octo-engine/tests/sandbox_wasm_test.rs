@@ -68,3 +68,43 @@ async fn test_wasm_adapter_execute_no_sandbox() {
     let result = adapter.execute(&fake_id, "test", "wasm").await;
     assert!(result.is_err());
 }
+
+/// Test WASI CLI mode triggers on wasi-cli language
+#[tokio::test]
+async fn test_wasm_adapter_wasi_cli_language() {
+    let adapter = WasmAdapter::new();
+    let config = SandboxConfig::new(SandboxType::Wasm);
+    let id = adapter.create(&config).await.unwrap();
+
+    // wasi-cli language with non-existent file should fail gracefully
+    let result = adapter.execute(&id, "/nonexistent.wasm", "wasi-cli").await;
+    assert!(result.is_err());
+
+    adapter.destroy(&id).await.unwrap();
+}
+
+/// Test WASI CLI mode triggers on wasi:// prefix
+#[tokio::test]
+async fn test_wasm_adapter_wasi_protocol_prefix() {
+    let adapter = WasmAdapter::new();
+    let config = SandboxConfig::new(SandboxType::Wasm);
+    let id = adapter.create(&config).await.unwrap();
+
+    // wasi:// prefix with non-existent file should fail gracefully
+    let result = adapter.execute(&id, "wasi:///nonexistent.wasm", "wasm").await;
+    assert!(result.is_err());
+
+    adapter.destroy(&id).await.unwrap();
+}
+
+/// Test execute_wasi_cli with sandbox not found
+#[tokio::test]
+async fn test_wasm_adapter_wasi_cli_not_found() {
+    let adapter = WasmAdapter::new();
+    let fake_id = SandboxId::new("non-existent-id");
+
+    let result = adapter
+        .execute_wasi_cli(&fake_id, &[], &[], None)
+        .await;
+    assert!(result.is_err());
+}

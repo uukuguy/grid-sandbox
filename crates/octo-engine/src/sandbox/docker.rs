@@ -11,6 +11,34 @@ use std::sync::Arc;
 #[cfg(feature = "sandbox-docker")]
 use tokio::sync::RwLock;
 
+/// Preset image registry for language-based Docker image selection
+pub struct ImageRegistry {
+    images: HashMap<String, String>,
+}
+
+impl ImageRegistry {
+    pub fn default_registry() -> Self {
+        let mut images = HashMap::new();
+        images.insert("python".into(), "python:3.12-slim-bookworm".into());
+        images.insert("rust".into(), "rust:1.82-bookworm".into());
+        images.insert("node".into(), "node:22-bookworm-slim".into());
+        images.insert("javascript".into(), "node:22-bookworm-slim".into());
+        images.insert("typescript".into(), "node:22-bookworm-slim".into());
+        images.insert("bash".into(), "alpine:latest".into());
+        images.insert("sh".into(), "alpine:latest".into());
+        images.insert("cli".into(), "alpine:latest".into());
+        Self { images }
+    }
+
+    /// Resolve a language to a Docker image name
+    pub fn resolve(&self, language: &str) -> &str {
+        self.images
+            .get(language)
+            .map(|s| s.as_str())
+            .unwrap_or("alpine:latest")
+    }
+}
+
 /// Docker container sandbox adapter
 ///
 /// This adapter executes code inside Docker containers for isolation.
@@ -26,6 +54,9 @@ pub struct DockerAdapter {
 
     /// Default Docker image to use
     image: String,
+
+    /// Preset image registry for language-based image selection
+    image_registry: ImageRegistry,
 
     /// Docker client (only available with sandbox-docker feature)
     #[cfg(feature = "sandbox-docker")]
@@ -54,6 +85,7 @@ impl DockerAdapter {
             #[cfg(not(feature = "sandbox-docker"))]
             _instances: PhantomData,
             image: image.into(),
+            image_registry: ImageRegistry::default_registry(),
             #[cfg(feature = "sandbox-docker")]
             client,
         }
@@ -87,6 +119,11 @@ impl DockerAdapter {
     /// Get the default image
     pub fn image(&self) -> &str {
         &self.image
+    }
+
+    /// Get the image registry
+    pub fn image_registry(&self) -> &ImageRegistry {
+        &self.image_registry
     }
 
     /// Pull an image from Docker Hub (helper method)
@@ -199,11 +236,11 @@ impl RuntimeAdapter for DockerAdapter {
         &self,
         id: &SandboxId,
         code: &str,
-        _language: &str,
+        language: &str,
     ) -> Result<ExecResult, SandboxError> {
         #[cfg(not(feature = "sandbox-docker"))]
         {
-            let _ = (id, code);
+            let _ = (id, code, language);
             return Err(SandboxError::UnsupportedType(
                 "Docker support not enabled. Enable sandbox-docker feature".to_string(),
             ));
@@ -211,6 +248,13 @@ impl RuntimeAdapter for DockerAdapter {
 
         #[cfg(feature = "sandbox-docker")]
         {
+            let resolved_image = self.image_registry.resolve(language);
+            tracing::debug!(
+                "Resolved language '{}' to Docker image '{}'",
+                language,
+                resolved_image
+            );
+
             let instances = self.instances.read().await;
 
             // Check if sandbox exists
