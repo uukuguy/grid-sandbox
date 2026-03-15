@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 use crate::benchmarks::{ExternalBenchmark, MetricDefinition};
@@ -83,6 +85,7 @@ impl EvalTask for GaiaTask {
                 actual,
                 level: self.record.level,
             },
+            dimensions: HashMap::new(),
         }
     }
 

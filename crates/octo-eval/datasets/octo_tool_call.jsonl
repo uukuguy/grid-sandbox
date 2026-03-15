@@ -1,13 +1,13 @@
 # === L1: Basic Tool Selection (单工具选择, Easy) ===
 # 测试目标: 模型能否根据自然语言意图选择正确的工具
-{"id": "tc-L1-01", "prompt": "Read the contents of /tmp/test.txt", "expected_tool": "file_read", "expected_args": {"path": "/tmp/test.txt"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_read"]}
-{"id": "tc-L1-02", "prompt": "Run the command 'echo hello world'", "expected_tool": "bash", "expected_args": {"command": "echo hello world"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "bash"]}
-{"id": "tc-L1-03", "prompt": "Write 'Hello World' to /tmp/output.txt", "expected_tool": "file_write", "expected_args": {"path": "/tmp/output.txt"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_write"]}
-{"id": "tc-L1-04", "prompt": "Search for the word 'TODO' in all .rs files", "expected_tool": "grep", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "grep"]}
-{"id": "tc-L1-05", "prompt": "Find all Python files in the current directory", "expected_tool": "glob", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "glob"]}
-{"id": "tc-L1-06", "prompt": "List all files named 'Cargo.toml' in the project tree", "expected_tool": "find", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "find"]}
-{"id": "tc-L1-07", "prompt": "Show me the system uptime by running 'uptime'", "expected_tool": "bash", "expected_args": {"command": "uptime"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "bash"]}
-{"id": "tc-L1-08", "prompt": "Read the file at /etc/hostname", "expected_tool": "file_read", "expected_args": {"path": "/etc/hostname"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_read"]}
+{"id": "tc-L1-01", "prompt": "Read the contents of /tmp/test.txt", "expected_tool": "file_read", "expected_args": {"path": "/tmp/test.txt"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_read"], "tier": "smoke_test"}
+{"id": "tc-L1-02", "prompt": "Run the command 'echo hello world'", "expected_tool": "bash", "expected_args": {"command": "echo hello world"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "bash"], "tier": "smoke_test"}
+{"id": "tc-L1-03", "prompt": "Write 'Hello World' to /tmp/output.txt", "expected_tool": "file_write", "expected_args": {"path": "/tmp/output.txt"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_write"], "tier": "smoke_test"}
+{"id": "tc-L1-04", "prompt": "Search for the word 'TODO' in all .rs files", "expected_tool": "grep", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "grep"], "tier": "smoke_test"}
+{"id": "tc-L1-05", "prompt": "Find all Python files in the current directory", "expected_tool": "glob", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "glob"], "tier": "smoke_test"}
+{"id": "tc-L1-06", "prompt": "List all files named 'Cargo.toml' in the project tree", "expected_tool": "find", "category": "tool_call", "difficulty": "easy", "tags": ["L1", "find"], "tier": "smoke_test"}
+{"id": "tc-L1-07", "prompt": "Show me the system uptime by running 'uptime'", "expected_tool": "bash", "expected_args": {"command": "uptime"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "bash"], "tier": "smoke_test"}
+{"id": "tc-L1-08", "prompt": "Read the file at /etc/hostname", "expected_tool": "file_read", "expected_args": {"path": "/etc/hostname"}, "category": "tool_call", "difficulty": "easy", "tags": ["L1", "file_read"], "tier": "smoke_test"}
 
 # === L2: Argument Precision (参数精确度, Medium) ===
 # 测试目标: 模型能否从复杂描述中提取精确参数

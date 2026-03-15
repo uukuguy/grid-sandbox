@@ -557,7 +557,7 @@ impl LoopGuard {
         hasher.update(params_str.as_bytes());
         hasher.update(b"|");
         let truncated = if result.len() > 1000 {
-            &result[..1000]
+            &result[..result.floor_char_boundary(1000)]
         } else {
             result
         };
@@ -872,5 +872,15 @@ mod tests {
 
         let stats_after = guard.stats();
         assert_eq!(stats_after.total_calls, 0);
+    }
+
+    #[test]
+    fn test_outcome_hash_unicode_boundary() {
+        // Create a string with Chinese characters that would cause a panic
+        // if we slice at arbitrary byte boundaries (each '中' = 3 bytes UTF-8)
+        let chinese = "中".repeat(500); // 500 * 3 = 1500 bytes
+        // Should not panic
+        let hash = LoopGuard::compute_outcome_hash("test_tool", &serde_json::json!({}), &chinese);
+        assert!(!hash.is_empty());
     }
 }

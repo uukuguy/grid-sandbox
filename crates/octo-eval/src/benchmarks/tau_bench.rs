@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 use crate::benchmarks::{ExternalBenchmark, MetricDefinition};
@@ -105,6 +107,7 @@ impl EvalTask for TauBenchTask {
                 pass_at_1: if passed { 1.0 } else { 0.0 },
                 pass_at_k: if passed { 1.0 } else { 0.0 },
             },
+            dimensions: HashMap::new(),
         }
     }
 

@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 use crate::benchmarks::{ExternalBenchmark, MetricDefinition};
@@ -102,6 +104,7 @@ impl EvalTask for SweBenchTask {
                 pass_to_pass_count: 0,
                 execution_time_ms: 0,
             },
+            dimensions: HashMap::new(),
         }
     }
 

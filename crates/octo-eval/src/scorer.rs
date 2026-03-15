@@ -1,5 +1,7 @@
 //! Reusable scoring strategies for evaluation tasks.
 
+use std::collections::HashMap;
+
 use crate::score::{EvalScore, ScoreDetails};
 use crate::task::AgentOutput;
 
@@ -38,6 +40,7 @@ impl Scorer for ExactMatchScorer {
                 expected: self.expected.clone(),
                 actual,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -96,6 +99,7 @@ impl Scorer for ToolCallScorer {
                 actual_tool: actual_tool.map(|s| s.to_string()),
                 arg_match_rate,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -180,6 +184,7 @@ impl Scorer for BehaviorScorer {
                 expected_behavior: self.expected_behavior.clone(),
                 observed,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -223,6 +228,7 @@ impl Scorer for SequenceScorer {
                 expected_len: self.expected_sequence.len(),
                 matched,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -352,6 +358,7 @@ impl Scorer for FunctionCallMatchScorer {
                 actual_tool: actual_tool.map(|s| s.to_string()),
                 arg_match_rate,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -515,6 +522,7 @@ impl Scorer for AstMatchScorer {
                 arg_match_rate,
                 mismatched_fields,
             },
+            dimensions: HashMap::new(),
         }
     }
 }
@@ -666,6 +674,7 @@ impl LlmJudgeScorer {
                         reasoning: resp.reasoning,
                         rubric: self.rubric.clone(),
                     },
+                    dimensions: HashMap::new(),
                 }
             }
             Err(_) => {
@@ -683,6 +692,7 @@ impl LlmJudgeScorer {
                         ),
                         rubric: self.rubric.clone(),
                     },
+                    dimensions: HashMap::new(),
                 }
             }
         }

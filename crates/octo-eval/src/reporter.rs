@@ -578,6 +578,7 @@ mod tests {
                 details: ScoreDetails::Custom {
                     message: "test".into(),
                 },
+                dimensions: HashMap::new(),
             },
             duration_ms: duration,
         }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// Evaluation score for a single task
@@ -6,6 +8,8 @@ pub struct EvalScore {
     pub passed: bool,
     pub score: f64, // 0.0 - 1.0
     pub details: ScoreDetails,
+    #[serde(default)]
+    pub dimensions: HashMap<String, f64>,
 }
 
 /// Detailed scoring information
@@ -104,6 +108,7 @@ impl EvalScore {
             passed: true,
             score,
             details,
+            dimensions: HashMap::new(),
         }
     }
 
@@ -112,6 +117,7 @@ impl EvalScore {
             passed: false,
             score,
             details,
+            dimensions: HashMap::new(),
         }
     }
 }

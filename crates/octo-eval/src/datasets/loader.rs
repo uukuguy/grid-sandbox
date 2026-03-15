@@ -6,6 +6,8 @@
 
 use std::path::Path;
 
+use std::collections::HashMap;
+
 use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -159,6 +161,7 @@ impl EvalTask for JsonlTask {
                     message: "No scoring criteria defined; checked for non-error completion"
                         .into(),
                 },
+                dimensions: HashMap::new(),
             }
         }
     }
@@ -223,6 +226,7 @@ fn score_tool_call(
             actual_tool: actual_tool.map(|s| s.to_string()),
             arg_match_rate,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -291,6 +295,7 @@ fn score_behavior(expected_behavior: &str, output: &AgentOutput) -> EvalScore {
             expected_behavior: expected_behavior.to_string(),
             observed,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -308,6 +313,7 @@ fn score_exact_match(expected: &str, output: &AgentOutput) -> EvalScore {
             expected: expected.to_string(),
             actual,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -333,6 +339,7 @@ fn score_sequence(expected_sequence: &[String], output: &AgentOutput) -> EvalSco
             expected_len: expected_sequence.len(),
             matched,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -386,6 +393,7 @@ fn score_sequence_with_args(expected: &[SequenceStep], output: &AgentOutput) -> 
             matched,
             arg_match_rates: arg_rates,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -420,6 +428,7 @@ fn score_not_contains(forbidden: &[String], output: &AgentOutput) -> EvalScore {
             forbidden: forbidden.to_vec(),
             found,
         },
+        dimensions: HashMap::new(),
     }
 }
 
@@ -440,6 +449,7 @@ fn score_regex(pattern: &str, output: &AgentOutput) -> EvalScore {
                     pattern: pattern.to_string(),
                     matched,
                 },
+                dimensions: HashMap::new(),
             }
         }
         Err(e) => EvalScore::fail(
@@ -490,6 +500,7 @@ fn score_contains_all(expected: &[String], output: &AgentOutput) -> EvalScore {
             matched,
             total,
         },
+        dimensions: HashMap::new(),
     }
 }
 

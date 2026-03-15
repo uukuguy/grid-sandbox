@@ -34,11 +34,11 @@
 
 # === CX5: Context Degradation (上下文降级) ===
 # 测试目标: 当 context 接近上限时，模型是否正确降级
-{"id":"ctx-DG-01","prompt":"Process this 50KB configuration file and extract all database connection strings. The context window is nearly full.","expected_behavior":"context_degraded","category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"]}
-{"id":"ctx-DG-02","prompt":"Analyze these 200 log entries and provide a summary. Note: context budget is at 95% capacity.","expected_behavior":"context_degraded","category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"]}
-{"id":"ctx-DG-03","prompt":"Read and process all 15 source files in the project. Context window is limited to 4096 tokens.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"]}
-{"id":"ctx-DG-04","prompt":"Load the entire git history (500+ commits) and find when the bug was introduced.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"]}
-{"id":"ctx-DG-05","prompt":"Process a 100MB CSV file and compute statistics for each column.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"]}
+{"id":"ctx-DG-01","prompt":"Process this 50KB configuration file and extract all database connection strings. The context window is nearly full.","expected_behavior":"context_degraded","category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
+{"id":"ctx-DG-02","prompt":"Analyze these 200 log entries and provide a summary. Note: context budget is at 95% capacity.","expected_behavior":"context_degraded","category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
+{"id":"ctx-DG-03","prompt":"Read and process all 15 source files in the project. Context window is limited to 4096 tokens.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
+{"id":"ctx-DG-04","prompt":"Load the entire git history (500+ commits) and find when the bug was introduced.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
+{"id":"ctx-DG-05","prompt":"Process a 100MB CSV file and compute statistics for each column.","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
 
 # === CX6: Token Budget Boundary (Token 预算边界) ===
 # 测试目标: 接近 token 上限时的行为
@@ -85,8 +85,8 @@
 {"id":"ctx-ID-03","prompt":"Compress this information into a table: Rust is fast, Python is easy, JavaScript runs in browsers, Go has great concurrency.","expected_contains_all":["Rust","Python","JavaScript","Go"],"category":"context","difficulty":"medium","tags":["CX12","context_stress","information_density"]}
 
 # === CX5 extended: More Degradation Scenarios ===
-{"id":"ctx-DG-06","prompt":"The system prompt alone consumes 80% of the context window. How should the agent handle a complex multi-step request?","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"]}
-{"id":"ctx-DG-07","prompt":"Previous conversation history has 50 messages. Summarize before continuing with a new task about code refactoring.","expected_contains_all":["summarize"],"category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"]}
+{"id":"ctx-DG-06","prompt":"The system prompt alone consumes 80% of the context window. How should the agent handle a complex multi-step request?","expected_behavior":"context_degraded","category":"context","difficulty":"hard","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
+{"id":"ctx-DG-07","prompt":"Previous conversation history has 50 messages. Summarize before continuing with a new task about code refactoring.","expected_contains_all":["summarize"],"category":"context","difficulty":"medium","tags":["CX5","context_stress","degradation"],"status":"pending_review"}
 
 # === CX8 extended: More Multi-Turn Scenarios ===
 {"id":"ctx-MC-06","prompt":"Three turns ago we decided to use Axum for the HTTP server. What framework are we using?","expected_contains_all":["axum"],"category":"context","difficulty":"easy","tags":["CX8","context_stress","multi_turn"]}
