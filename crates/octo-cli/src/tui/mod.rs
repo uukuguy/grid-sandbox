@@ -247,8 +247,8 @@ impl App {
                 // Forward to active screen (Dev mode sends to dev sub-screens)
                 if self.view_mode == ViewMode::Dev {
                     match self.dev_task {
+                        DevTask::Agent => self.screens.dev_agent.handle_event(&event),
                         DevTask::Eval => self.screens.dev_eval.handle_event(&event),
-                        _ => {}
                     }
                 } else {
                     self.screens.handle_event(&self.active_tab, &event);
@@ -345,12 +345,9 @@ impl App {
     fn render_dev_view(&mut self, frame: &mut Frame, area: Rect) {
         match self.dev_task {
             DevTask::Agent => {
-                let block = self.theme.styled_block(" Agent Debug ");
-                let placeholder = ratatui::widgets::Paragraph::new(
-                    "Agent debug panel - coming in Phase N",
-                )
-                .block(block);
-                frame.render_widget(placeholder, area);
+                let theme = self.theme.clone();
+                let state = self.state.clone();
+                self.screens.dev_agent.render(frame, area, &theme, &state);
             }
             DevTask::Eval => {
                 let theme = self.theme.clone();
