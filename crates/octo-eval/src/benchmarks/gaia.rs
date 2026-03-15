@@ -63,7 +63,27 @@ impl EvalTask for GaiaTask {
     }
 
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> {
-        None
+        // GAIA tasks require multi-tool access: web search, file reading, bash execution.
+        // Return specs to document available capabilities; tools are provided via default_tools().
+        // Level 1: basic reasoning (no tools needed but available)
+        // Level 2+: multi-tool required
+        Some(vec![
+            octo_types::tool::ToolSpec {
+                name: "bash".to_string(),
+                description: "Execute shell commands for computation, data processing, and system operations".to_string(),
+                input_schema: serde_json::json!({"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}),
+            },
+            octo_types::tool::ToolSpec {
+                name: "web_search".to_string(),
+                description: "Search the web for current information, facts, and references".to_string(),
+                input_schema: serde_json::json!({"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
+            },
+            octo_types::tool::ToolSpec {
+                name: "file_read".to_string(),
+                description: "Read file contents from the local filesystem".to_string(),
+                input_schema: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}),
+            },
+        ])
     }
 
     fn score(&self, output: &AgentOutput) -> EvalScore {

@@ -13,6 +13,7 @@ use octo_engine::providers::{create_provider, Provider};
 use octo_types::ChatMessage;
 
 use crate::config::{CliConfig, EvalConfig, EvalTarget, ServerConfig};
+use crate::mock_tool::EvalMockTool;
 use crate::model::ModelInfo;
 use crate::recorder::{EvalRecorder, EvalTrace};
 use crate::score::{EvalScore, ScoreDetails};
@@ -199,8 +200,22 @@ impl EvalRunner {
             _ => unreachable!(),
         };
 
-        // Build tool registry — apply per-task allowlist if specified
-        let base_registry = octo_engine::tools::default_tools();
+        // Build tool registry:
+        // 1. Start with default tools (bash, file_read, web_search, etc.)
+        // 2. Inject task-declared tools from available_tools() as EvalMockTools
+        // 3. If tool_allowlist() is set, filter to only those names
+        let mut base_registry = octo_engine::tools::default_tools();
+
+        // Inject task-declared tools (e.g. τ-bench business tools) as mock implementations
+        if let Some(task_tool_specs) = task.available_tools() {
+            for spec in task_tool_specs {
+                // Only inject if not already present in default tools
+                if base_registry.get(&spec.name).is_none() {
+                    base_registry.register(EvalMockTool::new(spec));
+                }
+            }
+        }
+
         let tool_registry = if let Some(ref tool_names) = task.tool_allowlist() {
             Arc::new(base_registry.snapshot_filtered(tool_names))
         } else {

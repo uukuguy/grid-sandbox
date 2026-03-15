@@ -63,7 +63,28 @@ impl EvalTask for TauBenchTask {
     }
 
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> {
-        None
+        if self.record.available_tools.is_empty() {
+            return None;
+        }
+        // Build ToolSpec for each business tool declared in the task record.
+        // These are injected as EvalMockTools by the runner so the agent can actually call them.
+        let specs = self.record.available_tools.iter().map(|tool_name| {
+            let (description, schema) = tau_tool_spec(tool_name);
+            octo_types::tool::ToolSpec {
+                name: tool_name.clone(),
+                description: description.to_string(),
+                input_schema: schema,
+            }
+        }).collect();
+        Some(specs)
+    }
+
+    fn tool_allowlist(&self) -> Option<Vec<String>> {
+        if self.record.available_tools.is_empty() {
+            None
+        } else {
+            Some(self.record.available_tools.clone())
+        }
     }
 
     fn score(&self, output: &AgentOutput) -> EvalScore {
@@ -125,6 +146,78 @@ impl EvalTask for TauBenchTask {
             expected_steps: Some(self.record.expected_actions.len() as u32),
             tags: vec!["external".into(), "tau_bench".into()],
         }
+    }
+}
+
+/// Return (description, input_schema) for known τ-bench retail business tools.
+fn tau_tool_spec(tool_name: &str) -> (&'static str, serde_json::Value) {
+    match tool_name {
+        "lookup_order" => (
+            "Look up order details by order ID. Returns order status, items, purchase date, and payment info.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "The order ID to look up"}
+                },
+                "required": ["order_id"]
+            }),
+        ),
+        "check_return_eligibility" => (
+            "Check if an order is eligible for return based on policy rules. Returns eligibility status and reason.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "The order ID to check"},
+                    "reason": {"type": "string", "description": "Reason for return (e.g. incorrect_fit, defective, not_as_expected)"},
+                    "has_receipt": {"type": "boolean", "description": "Whether the customer has a receipt"},
+                    "defect_description": {"type": "string", "description": "Description of defect if applicable"}
+                },
+                "required": ["order_id", "reason"]
+            }),
+        ),
+        "process_return" => (
+            "Process a return or refund for an order. Returns confirmation and refund details.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "The order ID to process return for"},
+                    "refund_type": {"type": "string", "enum": ["full", "store_credit", "replacement"], "description": "Type of refund"},
+                    "refund_method": {"type": "string", "description": "Refund method (original_payment, store_credit)"},
+                    "items": {"type": "array", "items": {"type": "string"}, "description": "Specific items to return for partial returns"},
+                    "restocking_fee_percent": {"type": "number", "description": "Restocking fee percentage if applicable"},
+                    "free_return_shipping": {"type": "boolean", "description": "Whether return shipping is free"}
+                },
+                "required": ["order_id", "refund_type"]
+            }),
+        ),
+        "send_confirmation" => (
+            "Send a confirmation notification to the customer about their return or refund.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "order_id": {"type": "string", "description": "The order ID"},
+                    "type": {"type": "string", "description": "Type of confirmation (return_initiated, partial_return_initiated, refund_processed)"},
+                    "channel": {"type": "string", "enum": ["email", "sms", "push"], "description": "Notification channel"}
+                },
+                "required": ["order_id", "type"]
+            }),
+        ),
+        "update_inventory" => (
+            "Update inventory records after a return or replacement is processed.",
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["restock", "reserve_replacement", "mark_defective"], "description": "Inventory action to perform"},
+                    "order_id": {"type": "string", "description": "The related order ID"},
+                    "item_sku": {"type": "string", "description": "SKU of the item to update"}
+                },
+                "required": ["action"]
+            }),
+        ),
+        _ => (
+            "Business tool for retail customer service operations.",
+            serde_json::json!({"type": "object", "properties": {}}),
+        ),
     }
 }
 
