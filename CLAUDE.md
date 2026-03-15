@@ -35,8 +35,10 @@ octo-sandbox        (1) — Sandbox runtime adapters (subprocess, WASM, Docker)
     ↓                      depends on: octo-types
 octo-engine         (1) — Core engine: agent, memory, MCP, providers, tools
     ↓                      depends on: octo-types
+octo-eval           (1) — Evaluation harness: suites, scorers, benchmarks
+    ↓                      depends on: octo-types, octo-engine
 octo-cli            (2) — Local CLI for agent interaction (binary)
-                           depends on: octo-types, octo-engine, octo-sandbox
+                           depends on: octo-types, octo-engine, octo-sandbox, octo-eval
 octo-server         (2) — Workbench HTTP/WS server (Axum)
                            depends on: octo-types, octo-engine, octo-sandbox
 octo-platform-server(2) — Platform multi-tenant server (Axum + JWT auth)
@@ -127,6 +129,17 @@ Command-line interface for local agent interaction. See [ADR-045](docs/adr/ADR-0
 | `octo session create` | Create new session |
 | `octo config show` | Display current configuration |
 | `octo config validate` | Validate configuration |
+| `octo eval list` | List available evaluation suites |
+| `octo eval config` | Show/validate eval.toml configuration |
+| `octo eval run --suite <NAME>` | Run single-model evaluation |
+| `octo eval compare --suite <NAME>` | Run multi-model comparison |
+| `octo eval benchmark` | Run multi-suite benchmark |
+| `octo eval history` | List past evaluation runs |
+| `octo eval report <RUN_ID>` | View run report (text/json/markdown) |
+| `octo eval trace <RUN_ID> <TASK_ID>` | View task trace timeline |
+| `octo eval diagnose <RUN_ID>` | Failure classification analysis |
+| `octo eval diff <RUN_A> <RUN_B>` | Compare two runs (regression) |
+| `octo eval watch --suite <NAME>` | Periodic evaluation re-run |
 
 ### `octo-platform-server` — Platform Server (binary, WIP)
 

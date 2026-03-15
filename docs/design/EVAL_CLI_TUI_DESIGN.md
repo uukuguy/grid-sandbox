@@ -1,7 +1,7 @@
 # 评估管理 CLI + 开发调试 TUI 设计
 
 > Phase M-a / M-b / N 整体规划
-> 状态：设计方案
+> 状态：Phase M-a 已实施（CLI 命令 + RunStore），M-b/N 待实施
 > 日期：2026-03-15
 
 ---
