@@ -57,7 +57,26 @@ impl EvalTask for TerminalBenchTask {
     }
 
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> {
-        None
+        // Terminal-Bench tasks require bash execution capability.
+        // The agent must be able to run shell commands to complete these tasks.
+        Some(vec![
+            octo_types::tool::ToolSpec {
+                name: "bash".to_string(),
+                description: "Execute shell commands. Use this to run terminal operations, file manipulation, system queries, and multi-step shell workflows.".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "The shell command to execute"}
+                    },
+                    "required": ["command"]
+                }),
+            },
+        ])
+    }
+
+    fn tool_allowlist(&self) -> Option<Vec<String>> {
+        // Only allow bash — terminal tasks should be solved via shell, not other tools
+        Some(vec!["bash".to_string()])
     }
 
     fn score(&self, output: &AgentOutput) -> EvalScore {
