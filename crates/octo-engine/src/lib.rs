@@ -75,7 +75,8 @@ pub use sync::{
     SyncPushResponse, SyncReport, SyncServer, SyncStatus,
 };
 pub use session::{
-    InMemorySessionStore, SessionData, SessionStore, SessionSummary, SqliteSessionStore,
+    InMemorySessionStore, SessionData, SessionEvent, SessionEventBus, SessionStore,
+    SessionSummary, SqliteSessionStore,
 };
 pub use skill_runtime::{RuntimeType, SkillContext, SkillRuntime, ToolInfo};
 pub use skills::{SkillLoader, SkillRegistry, SkillTool};

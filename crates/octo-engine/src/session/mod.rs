@@ -1,3 +1,4 @@
+pub mod events;
 pub mod memory;
 pub mod sqlite;
 pub mod thread_store;
@@ -103,6 +104,7 @@ pub trait ThreadStore: Send + Sync {
     async fn get_thread_messages(&self, thread_id: &str) -> anyhow::Result<Vec<ChatMessage>>;
 }
 
+pub use events::{SessionEvent, SessionEventBus};
 pub use memory::InMemorySessionStore;
 pub use sqlite::SqliteSessionStore;
 pub use thread_store::SqliteThreadStore;

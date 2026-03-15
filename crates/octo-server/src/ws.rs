@@ -108,6 +108,14 @@ enum ServerMessage {
 
     #[serde(rename = "security_blocked")]
     SecurityBlocked { session_id: String, reason: String },
+
+    /// Session lifecycle update (created, message_added, context_updated, closed).
+    /// The actual WebSocket subscription wiring is deferred to a later phase.
+    #[serde(rename = "session_update")]
+    SessionUpdate {
+        event_type: String,
+        session_id: String,
+    },
 }
 
 pub async fn ws_handler(

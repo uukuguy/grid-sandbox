@@ -210,6 +210,9 @@ pub struct DevAgentScreen {
     memory_search: TextInput,
     /// Whether memory search is active
     memory_search_active: bool,
+    /// Pending session event count (updated on Tick).
+    /// In a future phase the TUI will drain a SessionEventBus receiver here.
+    pending_session_events: usize,
 }
 
 impl DevAgentScreen {
@@ -233,6 +236,7 @@ impl DevAgentScreen {
             status_msg: None,
             memory_search: TextInput::new("Search memory..."),
             memory_search_active: false,
+            pending_session_events: 0,
         }
     }
 
@@ -754,6 +758,14 @@ impl Screen for DevAgentScreen {
     }
 
     fn handle_event(&mut self, event: &AppEvent) {
+        // On Tick, drain pending session events (placeholder for future EventBus integration)
+        if matches!(event, AppEvent::Tick) {
+            // In a future phase this will drain a SessionEventBus receiver and
+            // refresh the session list / conversation when events arrive.
+            self.pending_session_events = 0;
+            return;
+        }
+
         // Clear status on any key press
         if matches!(event, AppEvent::Key(_)) {
             self.status_msg = None;
@@ -1347,5 +1359,28 @@ mod tests {
         screen.handle_event(&key(KeyCode::Char('t')));
         screen.handle_event(&key(KeyCode::Char('e')));
         assert_eq!(screen.memory_search.value(), "te");
+    }
+
+    #[test]
+    fn pending_session_events_initialized_zero() {
+        let screen = DevAgentScreen::new();
+        assert_eq!(screen.pending_session_events, 0);
+    }
+
+    #[test]
+    fn tick_resets_pending_session_events() {
+        let mut screen = DevAgentScreen::new();
+        screen.pending_session_events = 5;
+        screen.handle_event(&AppEvent::Tick);
+        assert_eq!(screen.pending_session_events, 0);
+    }
+
+    #[test]
+    fn tick_does_not_clear_status() {
+        let mut screen = DevAgentScreen::new();
+        screen.status_msg = Some("some status".to_string());
+        screen.handle_event(&AppEvent::Tick);
+        // Tick returns early — status_msg is not cleared
+        assert!(screen.status_msg.is_some());
     }
 }
