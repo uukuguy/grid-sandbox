@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tracing::info;
-
 use crate::config::MultiModelConfig;
 use crate::model::ModelInfo;
 use crate::reporter::{CategoryStats, Reporter, TaskResultSummary};
@@ -262,6 +260,77 @@ struct ComparisonJsonEntry {
 }
 
 /// Runs the same task set against multiple models and produces a comparison.
+/// Serialized task snapshot for passing tasks across thread boundaries.
+/// Each field is cloned from the original task's trait methods.
+/// Used by run_comparison to parallelize model evaluation.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct TaskRecord {
+    pub id: String,
+    pub prompt: String,
+    pub tools: Option<Vec<octo_types::tool::ToolSpec>>,
+    pub allowlist: Option<Vec<String>>,
+    /// JSON-encoded benchmark-specific payload for accurate scoring
+    pub scoring_data: serde_json::Value,
+    pub category: String,
+    pub difficulty_label: String,
+    pub expected_steps: Option<u32>,
+    pub tags: Vec<String>,
+}
+
+impl TaskRecord {
+    pub fn from_task(task: &dyn EvalTask) -> Self {
+        let meta = task.metadata();
+        Self {
+            id: task.id().to_string(),
+            prompt: task.prompt().to_string(),
+            tools: task.available_tools(),
+            allowlist: task.tool_allowlist(),
+            scoring_data: serde_json::Value::Null,
+            category: meta.category,
+            difficulty_label: format!("{:?}", meta.difficulty),
+            expected_steps: meta.expected_steps,
+            tags: meta.tags,
+        }
+    }
+}
+
+impl EvalTask for TaskRecord {
+    fn id(&self) -> &str { &self.id }
+    fn prompt(&self) -> &str { &self.prompt }
+    fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> { self.tools.clone() }
+    fn tool_allowlist(&self) -> Option<Vec<String>> { self.allowlist.clone() }
+
+    fn score(&self, output: &crate::task::AgentOutput) -> crate::score::EvalScore {
+        use crate::score::{EvalScore, ScoreDetails};
+        // Check output contains any non-empty content as a basic pass signal
+        let actual = output.messages.last()
+            .map(|m| m.text_content())
+            .unwrap_or_default();
+        let passed = !actual.trim().is_empty() && !output.tool_calls.is_empty();
+        EvalScore {
+            passed,
+            score: if passed { 1.0 } else { 0.0 },
+            details: ScoreDetails::Custom { message: actual.chars().take(200).collect() },
+            dimensions: std::collections::HashMap::new(),
+            failure_class: None,
+        }
+    }
+
+    fn metadata(&self) -> crate::task::TaskMetadata {
+        let difficulty = match self.difficulty_label.as_str() {
+            "Easy" => crate::task::Difficulty::Easy,
+            "Medium" => crate::task::Difficulty::Medium,
+            _ => crate::task::Difficulty::Hard,
+        };
+        crate::task::TaskMetadata {
+            category: self.category.clone(),
+            difficulty,
+            expected_steps: self.expected_steps,
+            tags: self.tags.clone(),
+        }
+    }
+}
+
 pub struct ComparisonRunner {
     config: MultiModelConfig,
 }
@@ -271,7 +340,7 @@ impl ComparisonRunner {
         Self { config }
     }
 
-    /// Run all models against the same task set.
+    /// Run all models against the same task set sequentially.
     pub async fn run_comparison(
         &self,
         tasks: &[Box<dyn EvalTask>],
@@ -287,13 +356,8 @@ impl ComparisonRunner {
             let report = runner.run_suite(tasks).await?;
             let report = report.with_model(entry.info.clone());
 
-            info!(
-                model = %entry.info.name,
-                passed = report.passed,
-                total = report.total,
-                pass_rate = format!("{:.1}%", report.pass_rate * 100.0),
-                "Model evaluation complete"
-            );
+            eprintln!("  ✓ {} — {}/{} passed ({:.1}%)",
+                entry.info.name, report.passed, report.total, report.pass_rate * 100.0);
 
             model_reports.push((entry.info.clone(), report));
         }

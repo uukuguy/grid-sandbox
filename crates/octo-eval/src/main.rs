@@ -160,6 +160,8 @@ struct CliArgs {
     binary: Option<PathBuf>,
     server_url: Option<String>,
     tag: Option<String>,
+    /// Maximum tasks per suite (0 = unlimited)
+    max_tasks: usize,
 }
 
 fn parse_args(args: &[String]) -> CliArgs {
@@ -176,6 +178,7 @@ fn parse_args(args: &[String]) -> CliArgs {
     let mut binary = None;
     let mut server_url = None;
     let mut tag = None;
+    let mut max_tasks: usize = 0;
 
     let mut i = 0;
     while i < args.len() {
@@ -253,6 +256,12 @@ fn parse_args(args: &[String]) -> CliArgs {
                     i += 1;
                 }
             }
+            "--max-tasks" => {
+                if i + 1 < args.len() {
+                    max_tasks = args[i + 1].parse().unwrap_or(0);
+                    i += 1;
+                }
+            }
             _ => {}
         }
         i += 1;
@@ -272,6 +281,7 @@ fn parse_args(args: &[String]) -> CliArgs {
         binary,
         server_url,
         tag,
+        max_tasks,
     }
 }
 
@@ -792,41 +802,86 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         suite_names.len()
     );
 
-    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
+    let timeout_secs = toml_config
+        .as_ref()
+        .and_then(|tc| tc.default.timeout_secs)
+        .unwrap_or(120);
+    let max_tasks = cli.max_tasks;
+    let output_root = cli.output.clone();
+    let report_format = cli.format.clone();
+
+    // Run all suites in parallel — each suite spawns its own thread with its own Tokio runtime.
+    // Within each suite, models run sequentially (correct scoring preserved).
+    // Progress: each completed task prints immediately to stderr.
+    let mut suite_handles: Vec<std::thread::JoinHandle<(String, anyhow::Result<ComparisonReport>)>> =
+        Vec::with_capacity(suite_names.len());
 
     for suite_name in &suite_names {
-        let tasks = match load_suite(suite_name) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("WARNING: Skipping suite '{}': {}", suite_name, e);
-                continue;
-            }
-        };
+        let suite_name_owned = suite_name.to_string();
+        let models_clone = models.clone();
+        let suite_output = output_root.join(suite_name);
+        let fmt = report_format.clone();
 
-        println!(
-            "=== Suite: {} ({} tasks) ===\n",
-            suite_name,
-            tasks.len()
-        );
+        let handle = std::thread::spawn(move || -> (String, anyhow::Result<ComparisonReport>) {
+            let result = (|| -> anyhow::Result<ComparisonReport> {
+                let mut tasks = load_suite(&suite_name_owned)?;
+                if max_tasks > 0 && tasks.len() > max_tasks {
+                    tasks.truncate(max_tasks);
+                }
+                eprintln!("\n[suite:{}] {} tasks, {} models — starting",
+                    suite_name_owned, tasks.len(), models_clone.len());
 
-        let suite_output = cli.output.join(suite_name);
-        let config = MultiModelConfig {
-            models: models.clone(),
-            output_dir: suite_output.clone(),
-            ..MultiModelConfig::default()
-        };
+                let config = MultiModelConfig {
+                    models: models_clone,
+                    output_dir: suite_output.clone(),
+                    timeout_secs,
+                    ..MultiModelConfig::default()
+                };
 
-        let rt = tokio::runtime::Runtime::new()?;
-        let report = rt.block_on(async {
-            let runner = ComparisonRunner::new(config);
-            runner.run_comparison(&tasks).await
-        })?;
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+                let report = rt.block_on(async {
+                    let runner = ComparisonRunner::new(config);
+                    runner.run_comparison(&tasks).await
+                })?;
 
-        // Save per-suite comparison
-        output_comparison(&report, &tasks, &suite_output, &cli.format)?;
+                output_comparison(&report, &tasks, &suite_output, &fmt)?;
+                eprintln!("[suite:{}] DONE", suite_name_owned);
+                Ok(report)
+            })();
+            (suite_name_owned, result)
+        });
 
-        suite_comparisons.push((suite_name.to_string(), report));
+        suite_handles.push(handle);
     }
+
+    // Progress reporting: print status every 60s while waiting for threads
+    let start_time = std::time::Instant::now();
+    let handles_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let done_flag = handles_done.clone();
+    let progress_thread = std::thread::spawn(move || {
+        while !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            if !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                let elapsed = start_time.elapsed().as_secs();
+                eprintln!("[progress] {}m{}s elapsed — benchmark still running",
+                    elapsed / 60, elapsed % 60);
+            }
+        }
+    });
+
+    // Collect results preserving suite order
+    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
+    for handle in suite_handles {
+        match handle.join() {
+            Ok((name, Ok(report))) => suite_comparisons.push((name, report)),
+            Ok((name, Err(e))) => eprintln!("WARNING: Suite '{}' failed: {}", name, e),
+            Err(_) => eprintln!("WARNING: A suite thread panicked"),
+        }
+    }
+    handles_done.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = progress_thread.join();
 
     // Aggregate all suite reports
     let suite_refs: Vec<(&str, &ComparisonReport)> = suite_comparisons

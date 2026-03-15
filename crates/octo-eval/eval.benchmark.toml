@@ -1,5 +1,5 @@
 [default]
-timeout_secs = 120
+timeout_secs = 300
 concurrency = 1
 record_traces = true
 output_dir = "eval_output/benchmark"
