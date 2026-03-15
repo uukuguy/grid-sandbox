@@ -567,6 +567,99 @@ impl Scorer for AstMatchScorer {
     }
 }
 
+// === Event Sequence Scorer ===
+
+/// Validates event sequences from agent execution traces.
+/// Matches tool call names against an expected sequence with wildcard support.
+/// Uses longest common subsequence (LCS) for sequence_correctness.
+pub struct EventSequenceScorer {
+    /// Expected sequence of event/tool patterns. Supports "*" as wildcard.
+    pub expected_sequence: Vec<String>,
+}
+
+impl EventSequenceScorer {
+    pub fn new(expected_sequence: Vec<String>) -> Self {
+        Self { expected_sequence }
+    }
+
+    /// Compute LCS length between expected and actual sequences.
+    /// Wildcards ("*") in expected match any single actual event.
+    fn lcs_length(&self, actual: &[String]) -> usize {
+        let n = self.expected_sequence.len();
+        let m = actual.len();
+        if n == 0 || m == 0 {
+            return 0;
+        }
+        // Standard DP for LCS
+        let mut dp = vec![vec![0usize; m + 1]; n + 1];
+        for i in 1..=n {
+            for j in 1..=m {
+                let matches = self.expected_sequence[i - 1] == "*"
+                    || self.expected_sequence[i - 1] == actual[j - 1];
+                if matches {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = dp[i - 1][j].max(dp[i][j - 1]);
+                }
+            }
+        }
+        dp[n][m]
+    }
+}
+
+impl Scorer for EventSequenceScorer {
+    fn score(&self, output: &AgentOutput) -> EvalScore {
+        let actual_sequence: Vec<String> = output
+            .tool_calls
+            .iter()
+            .map(|tc| tc.name.clone())
+            .collect();
+
+        if self.expected_sequence.is_empty() {
+            let mut dimensions = HashMap::new();
+            dimensions.insert("sequence_correctness".to_string(), 1.0);
+            dimensions.insert("completion_ratio".to_string(), 1.0);
+            return EvalScore {
+                passed: true,
+                score: 1.0,
+                details: ScoreDetails::EventSequence {
+                    expected_sequence: self.expected_sequence.clone(),
+                    actual_sequence,
+                    sequence_correctness: 1.0,
+                    completion_ratio: 1.0,
+                },
+                dimensions,
+                failure_class: None,
+            };
+        }
+
+        let lcs = self.lcs_length(&actual_sequence);
+        let sequence_correctness = lcs as f64 / self.expected_sequence.len() as f64;
+        let completion_ratio =
+            (actual_sequence.len() as f64 / self.expected_sequence.len() as f64).min(1.0);
+
+        let passed = sequence_correctness >= 0.8;
+        let score = sequence_correctness;
+
+        let mut dimensions = HashMap::new();
+        dimensions.insert("sequence_correctness".to_string(), sequence_correctness);
+        dimensions.insert("completion_ratio".to_string(), completion_ratio);
+
+        EvalScore {
+            passed,
+            score,
+            details: ScoreDetails::EventSequence {
+                expected_sequence: self.expected_sequence.clone(),
+                actual_sequence,
+                sequence_correctness,
+                completion_ratio,
+            },
+            dimensions,
+            failure_class: None,
+        }
+    }
+}
+
 // === Auto Scorer Selection ===
 
 /// Select the appropriate scorer based on a task definition JSON
@@ -602,6 +695,10 @@ pub fn auto_scorer(task_def: &serde_json::Value) -> Box<dyn Scorer> {
             .iter()
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
+        // Use EventSequenceScorer when explicitly requested
+        if task_def.get("scorer").and_then(|v| v.as_str()) == Some("event_sequence") {
+            return Box::new(EventSequenceScorer::new(seq));
+        }
         return Box::new(SequenceScorer::new(seq));
     }
     if let Some(expected) = task_def.get("expected_output").and_then(|v| v.as_str()) {
@@ -774,6 +871,153 @@ fn compute_arg_match_rate(expected: &serde_json::Value, actual: &serde_json::Val
             } else {
                 0.0
             }
+        }
+    }
+}
+
+// === Platform Behavior Scorer ===
+
+/// Evaluates platform-level behavior using tool call patterns and stop reasons.
+///
+/// Checks whether expected platform behaviors (security blocking, failover,
+/// retry, or normal execution) actually occurred based on the agent output.
+pub struct PlatformBehaviorScorer {
+    pub expected_behavior: String, // "security_blocked", "failover_triggered", "allowed", "retry_triggered"
+}
+
+impl PlatformBehaviorScorer {
+    pub fn new(expected_behavior: impl Into<String>) -> Self {
+        Self {
+            expected_behavior: expected_behavior.into(),
+        }
+    }
+}
+
+impl Scorer for PlatformBehaviorScorer {
+    fn score(&self, output: &AgentOutput) -> EvalScore {
+        let (observed, evidence, evidence_strength) = match self.expected_behavior.as_str() {
+            "security_blocked" => {
+                let tool_blocked = output.tool_calls.iter().any(|tc| {
+                    let out_lower = tc.output.to_lowercase();
+                    out_lower.contains("blocked") || out_lower.contains("denied")
+                });
+                let stop_blocked = output.stop_reason.to_lowercase().contains("security");
+                let observed = tool_blocked || stop_blocked;
+                let evidence = if tool_blocked && stop_blocked {
+                    "tool output blocked/denied AND stop_reason contains security".to_string()
+                } else if tool_blocked {
+                    "tool output contains blocked/denied".to_string()
+                } else if stop_blocked {
+                    "stop_reason contains security".to_string()
+                } else {
+                    "no blocking evidence found".to_string()
+                };
+                let strength = match (tool_blocked, stop_blocked) {
+                    (true, true) => 1.0,
+                    (true, false) | (false, true) => 0.7,
+                    (false, false) => 0.0,
+                };
+                (observed, evidence, strength)
+            }
+            "failover_triggered" => {
+                let has_retry_pattern = {
+                    let mut counts: HashMap<&str, usize> = HashMap::new();
+                    for tc in &output.tool_calls {
+                        *counts.entry(tc.name.as_str()).or_insert(0) += 1;
+                    }
+                    counts.values().any(|&c| c > 1)
+                };
+                let has_failover_keyword = output
+                    .tool_calls
+                    .iter()
+                    .any(|tc| tc.output.to_lowercase().contains("failover"));
+                let observed = has_retry_pattern || has_failover_keyword;
+                let evidence = if has_retry_pattern && has_failover_keyword {
+                    "retry pattern detected AND failover keyword in output".to_string()
+                } else if has_retry_pattern {
+                    "retry pattern detected (same tool called multiple times)".to_string()
+                } else if has_failover_keyword {
+                    "failover keyword found in tool output".to_string()
+                } else {
+                    "no failover evidence found".to_string()
+                };
+                let strength = match (has_retry_pattern, has_failover_keyword) {
+                    (true, true) => 1.0,
+                    (true, false) | (false, true) => 0.7,
+                    (false, false) => 0.0,
+                };
+                (observed, evidence, strength)
+            }
+            "allowed" => {
+                let no_blocked = !output.tool_calls.iter().any(|tc| {
+                    let out_lower = tc.output.to_lowercase();
+                    out_lower.contains("blocked") || out_lower.contains("denied")
+                });
+                let completed_normally = !output.stop_reason.is_empty()
+                    && !output.stop_reason.to_lowercase().contains("error")
+                    && !output.stop_reason.to_lowercase().contains("security");
+                let observed = no_blocked && (completed_normally || output.stop_reason.is_empty());
+                let evidence = if observed {
+                    "execution completed normally, no tools blocked".to_string()
+                } else if !no_blocked {
+                    "tool calls were blocked/denied".to_string()
+                } else {
+                    format!("abnormal stop_reason: {}", output.stop_reason)
+                };
+                let strength = if no_blocked && completed_normally {
+                    1.0
+                } else if observed {
+                    0.7
+                } else {
+                    0.0
+                };
+                (observed, evidence, strength)
+            }
+            "retry_triggered" => {
+                let mut counts: HashMap<&str, usize> = HashMap::new();
+                for tc in &output.tool_calls {
+                    *counts.entry(tc.name.as_str()).or_insert(0) += 1;
+                }
+                let retried_tools: Vec<String> = counts
+                    .iter()
+                    .filter(|(_, &c)| c > 1)
+                    .map(|(&name, &count)| format!("{}(x{})", name, count))
+                    .collect();
+                let observed = !retried_tools.is_empty();
+                let evidence = if observed {
+                    format!("retry detected: {}", retried_tools.join(", "))
+                } else {
+                    "no repeated tool calls found".to_string()
+                };
+                let strength = if retried_tools.len() > 1 {
+                    1.0
+                } else if observed {
+                    0.7
+                } else {
+                    0.0
+                };
+                (observed, evidence, strength)
+            }
+            other => (false, format!("unknown expected_behavior: {}", other), 0.0),
+        };
+
+        let mut dimensions = HashMap::new();
+        dimensions.insert(
+            "behavior_match".to_string(),
+            if observed { 1.0 } else { 0.0 },
+        );
+        dimensions.insert("evidence_strength".to_string(), evidence_strength);
+
+        EvalScore {
+            passed: observed,
+            score: if observed { 1.0 } else { 0.0 },
+            details: ScoreDetails::PlatformBehavior {
+                expected_behavior: self.expected_behavior.clone(),
+                observed,
+                evidence,
+            },
+            dimensions,
+            failure_class: None,
         }
     }
 }
@@ -1486,6 +1730,136 @@ mod tests {
         assert!((result.score - 1.0).abs() < 0.01);
     }
 
+    // === EventSequenceScorer tests ===
+
+    #[test]
+    fn test_event_sequence_exact_match() {
+        let scorer = EventSequenceScorer::new(vec![
+            "bash".into(),
+            "file_read".into(),
+            "bash".into(),
+        ]);
+        let output = AgentOutput {
+            tool_calls: vec![
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "file_read".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+            ],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+        assert!((result.dimensions["sequence_correctness"] - 1.0).abs() < 0.01);
+        assert!((result.dimensions["completion_ratio"] - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_event_sequence_wildcard() {
+        let scorer = EventSequenceScorer::new(vec![
+            "bash".into(),
+            "*".into(),
+            "bash".into(),
+        ]);
+        let output = AgentOutput {
+            tool_calls: vec![
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "file_read".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+            ],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_event_sequence_partial_match() {
+        let scorer = EventSequenceScorer::new(vec![
+            "bash".into(),
+            "file_read".into(),
+            "file_write".into(),
+            "bash".into(),
+        ]);
+        // Only bash and bash match (LCS = 2 out of 4)
+        let output = AgentOutput {
+            tool_calls: vec![
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "grep".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({}),
+                    output: "".into(),
+                    is_error: false,
+                    duration_ms: 0,
+                },
+            ],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(!result.passed); // 2/4 = 0.5 < 0.8
+        assert!((result.score - 0.5).abs() < 0.01);
+        assert!((result.dimensions["completion_ratio"] - 0.75).abs() < 0.01); // 3/4
+    }
+
+    #[test]
+    fn test_event_sequence_empty() {
+        let scorer = EventSequenceScorer::new(vec![]);
+        let output = AgentOutput::default();
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+    }
+
     #[test]
     fn test_auto_scorer_ast_match() {
         let def = serde_json::json!({
@@ -1507,5 +1881,131 @@ mod tests {
         };
         let result = scorer.score(&output);
         assert!(result.passed);
+    }
+
+    // === PlatformBehaviorScorer tests ===
+
+    #[test]
+    fn test_platform_behavior_security_blocked() {
+        let scorer = PlatformBehaviorScorer::new("security_blocked");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "bash".into(),
+                input: serde_json::json!({"command": "rm -rf /"}),
+                output: "Command blocked by security policy".into(),
+                is_error: true,
+                duration_ms: 10,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+        assert!(*result.dimensions.get("behavior_match").unwrap() > 0.99);
+        assert!(*result.dimensions.get("evidence_strength").unwrap() > 0.5);
+        match &result.details {
+            ScoreDetails::PlatformBehavior {
+                observed, evidence, ..
+            } => {
+                assert!(observed);
+                assert!(evidence.contains("blocked"));
+            }
+            _ => panic!("Expected PlatformBehavior details"),
+        }
+    }
+
+    #[test]
+    fn test_platform_behavior_allowed() {
+        let scorer = PlatformBehaviorScorer::new("allowed");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "bash".into(),
+                input: serde_json::json!({"command": "ls"}),
+                output: "file1\nfile2".into(),
+                is_error: false,
+                duration_ms: 50,
+            }],
+            stop_reason: "EndTurn".into(),
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+        assert!(*result.dimensions.get("behavior_match").unwrap() > 0.99);
+        assert!(*result.dimensions.get("evidence_strength").unwrap() > 0.99);
+    }
+
+    #[test]
+    fn test_platform_behavior_allowed_fails_when_blocked() {
+        let scorer = PlatformBehaviorScorer::new("allowed");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "bash".into(),
+                input: serde_json::json!({"command": "rm -rf /"}),
+                output: "Access denied".into(),
+                is_error: true,
+                duration_ms: 10,
+            }],
+            stop_reason: "EndTurn".into(),
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(!result.passed);
+    }
+
+    #[test]
+    fn test_platform_behavior_retry_triggered() {
+        let scorer = PlatformBehaviorScorer::new("retry_triggered");
+        let output = AgentOutput {
+            tool_calls: vec![
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({"command": "curl http://api"}),
+                    output: "connection refused".into(),
+                    is_error: true,
+                    duration_ms: 100,
+                },
+                ToolCallRecord {
+                    name: "bash".into(),
+                    input: serde_json::json!({"command": "curl http://api"}),
+                    output: "200 OK".into(),
+                    is_error: false,
+                    duration_ms: 50,
+                },
+            ],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(result.passed);
+        assert!((result.score - 1.0).abs() < 0.01);
+        assert!(*result.dimensions.get("behavior_match").unwrap() > 0.99);
+        assert!(*result.dimensions.get("evidence_strength").unwrap() > 0.5);
+        match &result.details {
+            ScoreDetails::PlatformBehavior {
+                observed, evidence, ..
+            } => {
+                assert!(observed);
+                assert!(evidence.contains("retry"));
+            }
+            _ => panic!("Expected PlatformBehavior details"),
+        }
+    }
+
+    #[test]
+    fn test_platform_behavior_retry_not_triggered() {
+        let scorer = PlatformBehaviorScorer::new("retry_triggered");
+        let output = AgentOutput {
+            tool_calls: vec![ToolCallRecord {
+                name: "bash".into(),
+                input: serde_json::json!({"command": "ls"}),
+                output: "file1".into(),
+                is_error: false,
+                duration_ms: 10,
+            }],
+            ..AgentOutput::default()
+        };
+        let result = scorer.score(&output);
+        assert!(!result.passed);
+        assert!(result.score < 0.01);
     }
 }

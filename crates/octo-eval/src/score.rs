@@ -102,6 +102,19 @@ pub enum ScoreDetails {
         actual: String,
         level: u32,
     },
+    /// Event sequence validation from agent execution traces
+    EventSequence {
+        expected_sequence: Vec<String>,
+        actual_sequence: Vec<String>,
+        sequence_correctness: f64,
+        completion_ratio: f64,
+    },
+    /// Platform-level behavior verification
+    PlatformBehavior {
+        expected_behavior: String,
+        observed: bool,
+        evidence: String,
+    },
 }
 
 impl EvalScore {

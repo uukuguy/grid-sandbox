@@ -1,44 +1,49 @@
 {
   "plan_file": "docs/plans/2026-03-15-phase-l-eval-whitebox.md",
-  "phase": "design",
+  "phase": "execution",
   "created_at": "2026-03-15T05:50:00+08:00",
-  "updated_at": "2026-03-15T05:50:00+08:00",
-  "completed_tasks": [],
-  "current_task": null,
+  "updated_at": "2026-03-15T12:05:00+08:00",
+  "completed_tasks": [
+    "L1-T1", "L1-T2", "L1-T3", "L1-T4",
+    "L2-T1", "L2-T2", "L2-T3", "L2-T4",
+    "L3-T1", "L3-T2", "L3-T3",
+    "L5-T1"
+  ],
+  "current_task": "L4-T1",
   "total_tasks": 18,
   "task_groups": {
     "L1": {
       "name": "Harness 白盒化基础",
       "tasks": ["L1-T1", "L1-T2", "L1-T3", "L1-T4"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "parallel": false,
       "description": "TraceEvent 定义 + collect_events 全量捕获 + EvalTrace 升级 + UTF-8 fix"
     },
     "L2": {
       "name": "失败自动归因",
       "tasks": ["L2-T1", "L2-T2", "L2-T3", "L2-T4"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "parallel": false,
       "description": "FailureClass 枚举 + FailureClassifier + EvalScore 集成 + 报告失败摘要"
     },
     "L3": {
       "name": "多维评分",
       "tasks": ["L3-T1", "L3-T2", "L3-T3"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "parallel": false,
       "description": "EvalScore.dimensions + ToolCallScorer 多维化 + BehaviorScorer 多维化"
     },
     "L4": {
       "name": "新 Scorer + 平台评估数据集",
       "tasks": ["L4-T1", "L4-T2", "L4-T3", "L4-T4", "L4-T5"],
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "parallel": false,
       "description": "PlatformBehaviorScorer + EventSequenceScorer + security/provider 数据集 + Suite 注册"
     },
     "L5": {
       "name": "数据集清理 + 文档更新",
       "tasks": ["L5-T1", "L5-T2", "L5-T3"],
-      "status": "PENDING",
+      "status": "PARTIAL",
       "parallel": false,
       "description": "现有数据集清理/降级 + 设计文档最终化 + 基线报告更新"
     }
@@ -47,14 +52,11 @@
   "phase_name": "Phase L — 评估系统白盒化 + 企业级数据集",
   "tests_baseline": 2021,
   "tests_current": 2021,
-  "status": "DESIGN_COMPLETE",
-  "notes": "Phase K near-complete (11/12). Phase L design doc and plan committed. Ready for execution. Design: EVAL_WHITEBOX_DESIGN.md. Core theme: black-box to white-box eval + enterprise capability focus.",
-  "previous_plan": {
-    "file": "docs/plans/2026-03-14-phase-k-model-benchmark.md",
-    "status": "NEAR_COMPLETE",
-    "tasks_completed": 11,
-    "total_tasks": 12,
-    "final_commit": "07f7ae9",
-    "remaining": "K2-T3 (SWE-bench, optional)"
+  "status": "IN_PROGRESS",
+  "notes": "Groups 1-3 complete (12/18 tasks). Group 1: TraceEvent+FailureClass+dimensions+UTF-8+dataset-cleanup @ 8ac8a18. Group 2: collect_events timeline+EvalTrace upgrade @ 887880d. Group 3: FailureClassifier+failure_class+FailureSummary+multi-dim scoring @ c93e5b3. Next: Group 4 (L4-T1/T2 PlatformBehaviorScorer+EventSequenceScorer).",
+  "commits": {
+    "group1": "8ac8a18",
+    "group2": "887880d",
+    "group3": "c93e5b3"
   }
 }
