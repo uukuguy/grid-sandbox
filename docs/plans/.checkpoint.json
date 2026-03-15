@@ -2,9 +2,9 @@
   "plan_file": "docs/plans/2026-03-15-phase-p-baseline-eval-r2.md",
   "phase": "in_progress",
   "created_at": "2026-03-15T19:30:00+08:00",
-  "updated_at": "2026-03-15T19:45:00+08:00",
-  "completed_tasks": ["P1", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P3-T1", "P3-T2", "P3-T3", "P4-T1", "P4-T2"],
-  "current_task": "P5-T1",
+  "updated_at": "2026-03-16T01:15:00+08:00",
+  "completed_tasks": ["P1", "P2-T1", "P2-T2", "P2-T3", "P2-T4", "P3-T1", "P3-T2", "P3-T3", "P4-T1", "P4-T2", "P5-T1", "P5-T2", "P5-T3"],
+  "current_task": "P6-T1",
   "total_tasks": 16,
   "task_groups": {
     "P1": {
@@ -34,8 +34,8 @@
     "P5": {
       "name": "Execute Evaluation",
       "tasks": ["P5-T1", "P5-T2", "P5-T3"],
-      "status": "PENDING",
-      "description": "8 suites x 6 models full benchmark evaluation"
+      "status": "COMPLETE",
+      "description": "8 suites x 6 models x 10 tasks/suite — run saved to eval_output/runs/2026-03-16-001. FaultyProvider validated, SWE-bench 4-component scorer validated."
     },
     "P6": {
       "name": "Report & Archive",
@@ -47,7 +47,7 @@
   "execution_order": ["P1", "P2", "P3", "P4", "P5", "P6"],
   "phase_name": "Phase P — Baseline Evaluation Round 2",
   "status": "IN_PROGRESS",
-  "notes": "P1-P4 complete. Terminal-Bench adapter implemented (30 tasks, L1/L2/L3). Default suites changed to agentic benchmarks. Tests: 2178→2183 (+5). Ready for P5 evaluation execution.",
+  "notes": "P1-P5 complete. P5 benchmark run saved as eval_output/runs/2026-03-16-001. Best model: Claude-Sonnet-4.6 (56.2%). Best cost-effectiveness: Mistral-Small-3.2 (33.2x). swe_bench 0% across all models — needs improved scoring analysis. resilience low (0-20%) — FaultyProvider confirmed working in b671a52. Run P6 report and archive.",
   "related_plans": {
     "design": "docs/design/AGENT_EVALUATION_DESIGN.md",
     "phase_p": "docs/plans/2026-03-15-phase-p-baseline-eval-r2.md",
