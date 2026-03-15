@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -63,12 +63,39 @@ impl Default for HealthCheckConfig {
     }
 }
 
+/// Result of a single failover attempt
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AttemptResult {
+    Success,
+    Failed(String),
+    NoInstance(String),
+}
+
+/// A single attempt to call an LLM instance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverAttempt {
+    pub instance_id: String,
+    pub duration_ms: u64,
+    pub result: AttemptResult,
+}
+
+/// Trace of a complete failover sequence for one request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverTrace {
+    pub request_id: u64,
+    pub started_at: DateTime<Utc>,
+    pub attempts: Vec<FailoverAttempt>,
+    pub total_duration_ms: u64,
+}
+
 /// ProviderChain 管理多个 LLM 实例
 pub struct ProviderChain {
     instances: Arc<RwLock<Vec<LlmInstance>>>,
     health: Arc<RwLock<HashMap<String, InstanceHealth>>>,
     policy: FailoverPolicy,
     manual_instance_id: Arc<RwLock<Option<String>>>,
+    recent_traces: Arc<RwLock<VecDeque<FailoverTrace>>>,
+    trace_counter: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ProviderChain {
@@ -79,6 +106,8 @@ impl ProviderChain {
             health: Arc::new(RwLock::new(HashMap::new())),
             policy,
             manual_instance_id: Arc::new(RwLock::new(None)),
+            recent_traces: Arc::new(RwLock::new(VecDeque::with_capacity(100))),
+            trace_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -223,6 +252,27 @@ impl ProviderChain {
         Ok(())
     }
 
+    /// Get recent failover traces (last N, max 100)
+    pub async fn recent_traces(&self, limit: usize) -> Vec<FailoverTrace> {
+        let traces = self.recent_traces.read().await;
+        traces.iter().rev().take(limit).cloned().collect()
+    }
+
+    /// Record a failover trace (internal)
+    pub(crate) async fn record_trace(&self, trace: FailoverTrace) {
+        let mut traces = self.recent_traces.write().await;
+        if traces.len() >= 100 {
+            traces.pop_front();
+        }
+        traces.push_back(trace);
+    }
+
+    /// Get next request ID (internal)
+    pub(crate) fn next_request_id(&self) -> u64 {
+        self.trace_counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// 启动健康检查任务
     pub async fn start_health_checker(&self, config: HealthCheckConfig) {
         let instances = Arc::clone(&self.instances);
@@ -310,12 +360,23 @@ impl crate::providers::Provider for ChainProvider {
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let request_id = self.chain.next_request_id();
+        let trace_start = std::time::Instant::now();
+        let started_at = Utc::now();
+        let mut attempts = Vec::new();
         let mut last_error = None;
 
         for _ in 0..self.max_retries {
+            let attempt_start = std::time::Instant::now();
+
             let instance = match self.chain.get_available().await {
                 Ok(i) => i,
                 Err(e) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: "none".to_string(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::NoInstance(e.to_string()),
+                    });
                     last_error = Some(e);
                     continue;
                 }
@@ -328,8 +389,27 @@ impl crate::providers::Provider for ChainProvider {
             );
 
             match provider.complete(request.clone()).await {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: instance.id.clone(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::Success,
+                    });
+                    let trace = FailoverTrace {
+                        request_id,
+                        started_at,
+                        attempts,
+                        total_duration_ms: trace_start.elapsed().as_millis() as u64,
+                    };
+                    self.chain.record_trace(trace).await;
+                    return Ok(response);
+                }
                 Err(e) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: instance.id.clone(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::Failed(e.to_string()),
+                    });
                     self.chain
                         .mark_unhealthy(&instance.id, &e.to_string())
                         .await;
@@ -338,6 +418,15 @@ impl crate::providers::Provider for ChainProvider {
             }
         }
 
+        // Record trace even on total failure
+        let trace = FailoverTrace {
+            request_id,
+            started_at,
+            attempts,
+            total_duration_ms: trace_start.elapsed().as_millis() as u64,
+        };
+        self.chain.record_trace(trace).await;
+
         Err(last_error.unwrap_or_else(|| anyhow!("All instances failed")))
     }
 
@@ -345,12 +434,23 @@ impl crate::providers::Provider for ChainProvider {
         &self,
         request: CompletionRequest,
     ) -> Result<crate::providers::CompletionStream> {
+        let request_id = self.chain.next_request_id();
+        let trace_start = std::time::Instant::now();
+        let started_at = Utc::now();
+        let mut attempts = Vec::new();
         let mut last_error = None;
 
         for _ in 0..self.max_retries {
+            let attempt_start = std::time::Instant::now();
+
             let instance = match self.chain.get_available().await {
                 Ok(i) => i,
                 Err(e) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: "none".to_string(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::NoInstance(e.to_string()),
+                    });
                     last_error = Some(e);
                     continue;
                 }
@@ -363,8 +463,27 @@ impl crate::providers::Provider for ChainProvider {
             );
 
             match provider.stream(request.clone()).await {
-                Ok(stream) => return Ok(stream),
+                Ok(stream) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: instance.id.clone(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::Success,
+                    });
+                    let trace = FailoverTrace {
+                        request_id,
+                        started_at,
+                        attempts,
+                        total_duration_ms: trace_start.elapsed().as_millis() as u64,
+                    };
+                    self.chain.record_trace(trace).await;
+                    return Ok(stream);
+                }
                 Err(e) => {
+                    attempts.push(FailoverAttempt {
+                        instance_id: instance.id.clone(),
+                        duration_ms: attempt_start.elapsed().as_millis() as u64,
+                        result: AttemptResult::Failed(e.to_string()),
+                    });
                     self.chain
                         .mark_unhealthy(&instance.id, &e.to_string())
                         .await;
@@ -372,6 +491,15 @@ impl crate::providers::Provider for ChainProvider {
                 }
             }
         }
+
+        // Record trace even on total failure
+        let trace = FailoverTrace {
+            request_id,
+            started_at,
+            attempts,
+            total_duration_ms: trace_start.elapsed().as_millis() as u64,
+        };
+        self.chain.record_trace(trace).await;
 
         Err(last_error.unwrap_or_else(|| anyhow!("All instances failed to stream")))
     }
@@ -509,5 +637,68 @@ mod tests {
 
         let instances = chain.list_instances().await;
         assert!(instances.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_recent_traces_empty() {
+        let chain = ProviderChain::new(FailoverPolicy::Automatic);
+        let traces = chain.recent_traces(10).await;
+        assert!(traces.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_record_and_retrieve_trace() {
+        let chain = ProviderChain::new(FailoverPolicy::Automatic);
+        let trace = FailoverTrace {
+            request_id: 0,
+            started_at: Utc::now(),
+            attempts: vec![FailoverAttempt {
+                instance_id: "test-1".to_string(),
+                duration_ms: 100,
+                result: AttemptResult::Success,
+            }],
+            total_duration_ms: 100,
+        };
+        chain.record_trace(trace).await;
+        let traces = chain.recent_traces(10).await;
+        assert_eq!(traces.len(), 1);
+        assert_eq!(traces[0].request_id, 0);
+    }
+
+    #[tokio::test]
+    async fn test_trace_buffer_capacity() {
+        let chain = ProviderChain::new(FailoverPolicy::Automatic);
+        for i in 0..110 {
+            let trace = FailoverTrace {
+                request_id: i,
+                started_at: Utc::now(),
+                attempts: vec![],
+                total_duration_ms: 0,
+            };
+            chain.record_trace(trace).await;
+        }
+        let all = chain.recent_traces(200).await;
+        assert_eq!(all.len(), 100); // capped at 100
+        // Most recent should be first (iter().rev())
+        assert_eq!(all[0].request_id, 109);
+    }
+
+    #[tokio::test]
+    async fn test_attempt_result_variants() {
+        let s = AttemptResult::Success;
+        let f = AttemptResult::Failed("timeout".to_string());
+        let n = AttemptResult::NoInstance("no healthy".to_string());
+        // Verify they can be created and debug-printed
+        assert!(format!("{:?}", s).contains("Success"));
+        assert!(format!("{:?}", f).contains("timeout"));
+        assert!(format!("{:?}", n).contains("no healthy"));
+    }
+
+    #[tokio::test]
+    async fn test_next_request_id_increments() {
+        let chain = ProviderChain::new(FailoverPolicy::Automatic);
+        let id1 = chain.next_request_id();
+        let id2 = chain.next_request_id();
+        assert_eq!(id2, id1 + 1);
     }
 }

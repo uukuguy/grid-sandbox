@@ -4,6 +4,7 @@ pub mod backend;
 pub mod event;
 pub mod screens;
 pub mod theme;
+pub mod widgets;
 
 use std::io;
 use std::sync::Arc;
