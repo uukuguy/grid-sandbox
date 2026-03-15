@@ -7,6 +7,12 @@
 
 ## [Active Work]
 
+- 17:50 | Phase O COMPLETE (15/15 tasks) — Deferred 暂缓项全解锁 @ 4307e0d
+  - G1: TextInput widget + ChatScreen refactor + Eval dialogs/filter/search + Watch progress
+  - G2: FailoverTrace data + ChainProvider instrumentation + Provider Inspector viz
+  - G3: SessionEvent enum + EventBus + WS SessionUpdate + DevAgent event refresh
+  - G4: Workbench mode audit + all 10 deferred items → ✅ 已补
+  - Tests: 2126→2178 (+52), zero remaining deferred items
 - 15:45 | Phase N COMPLETE (7/7 tasks) — Agent Debug Panel @ 3ba3351
   - T1: DevAgentScreen three-column skeleton (20% Sessions, 45% Conversation, 35% Inspector)
   - T2-T3: Session list + context gauge bar + conversation timeline (ToolCallStatus OK/ERR/BLOCKED)
