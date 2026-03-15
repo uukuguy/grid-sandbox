@@ -221,3 +221,14 @@ else:
 5. **CI 集成**: 将基线分数写入 CI 回归检测阈值
 6. **扩展模型矩阵**: 加入 GPT-4o、Gemini 2.5 Pro 等模型对比
 7. **重跑 DeepSeek context**: 网络错误导致结果失真，需在稳定网络环境下重试
+
+### Phase L 完成记录 (2026-03-15)
+
+Phase L「评估系统白盒化 + 企业级数据集」已完成，主要改进：
+
+1. **白盒化**: 从捕获 3 种事件升级为 10 种 TraceEvent 全量捕获
+2. **失败归因**: 14 种 FailureClass 自动分类（infrastructure/harness/capability）
+3. **多维评分**: EvalScore.dimensions 替代纯 pass/fail
+4. **平台能力覆盖**: +27 评估任务（platform_security 15 + provider_resilience 12）
+5. **新 Scorer**: PlatformBehaviorScorer + EventSequenceScorer
+6. **数据集清理**: 标记 deprecated/smoke_test/pending_review 任务

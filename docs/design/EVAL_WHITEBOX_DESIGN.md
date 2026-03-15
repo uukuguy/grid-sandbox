@@ -1,7 +1,7 @@
 # Octo 评估系统白盒化设计方案
 
 **日期**: 2026-03-15
-**状态**: 设计方案
+**状态**: 已实施
 **前置**: Phase K NEAR_COMPLETE（695 次多模型评估已完成）
 **作者**: Claude + 用户协作
 
@@ -500,3 +500,39 @@ Agent → AgentEvent(18种) → collect_events(全量捕获) → AgentOutput + T
 | 每任务评分维度 | 1 | 3-5 |
 | 有效区分度 | 54.7% | >70% |
 | timeline 对调试的帮助 | 无 | 能回答"为什么失败" |
+
+---
+
+## 七、实施记录
+
+**实施日期**: 2026-03-15
+**总提交数**: 6 (8ac8a18, 887880d, c93e5b3, e74146b, 8786626, fde83fd)
+
+### 已完成功能
+
+| 模块 | 文件 | 状态 |
+|------|------|------|
+| TraceEvent 时间线 | `trace.rs` (10 variants) | ✅ |
+| collect_events 全量捕获 | `runner.rs` | ✅ |
+| EvalTrace timeline 字段 | `recorder.rs` | ✅ |
+| UTF-8 安全截断 | `loop_guard.rs` | ✅ |
+| FailureClass 枚举 | `failure.rs` (14 variants, 3 categories) | ✅ |
+| FailureClassifier | `failure.rs` (14 classification rules) | ✅ |
+| EvalScore.failure_class | `score.rs` | ✅ |
+| FailureSummary 报告 | `benchmark.rs` | ✅ |
+| EvalScore.dimensions | `score.rs` (HashMap<String, f64>) | ✅ |
+| ToolCallScorer 多维 | `scorer.rs` (tool_selection, arg_accuracy, efficiency) | ✅ |
+| BehaviorCheckScorer 多维 | `scorer.rs` (behavior_match, stop_reason_correct) | ✅ |
+| PlatformBehaviorScorer | `scorer.rs` (behavior_match, evidence_strength) | ✅ |
+| EventSequenceScorer | `scorer.rs` (sequence_correctness, completion_ratio) | ✅ |
+| platform_security 数据集 | `datasets/octo_platform_security.jsonl` (15 tasks) | ✅ |
+| provider_resilience 数据集 | `datasets/octo_provider_resilience.jsonl` (12 tasks) | ✅ |
+| Suite 注册 | `main.rs` (CLI integration) | ✅ |
+| 现有数据集标注 | 5 JSONL files (deprecated/smoke_test/pending_review) | ✅ |
+
+### 测试指标
+
+- 单元测试: 179 → 192 (+13 新增)
+- 集成测试: 28 (无回归)
+- 评估任务总数: ~194 (167 + 15 + 12)
+- 评估维度: 8 scorer types, 5+ dimension keys
