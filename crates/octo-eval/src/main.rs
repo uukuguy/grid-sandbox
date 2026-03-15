@@ -807,7 +807,37 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         .and_then(|tc| tc.default.timeout_secs)
         .unwrap_or(120);
     let max_tasks = cli.max_tasks;
-    let output_root = cli.output.clone();
+
+    // Auto-generate timestamped run directory under eval_output/runs/ when --output not given.
+    // When --output is explicit, use it as-is (enables named runs like benchmark-p5).
+    let output_root = if cli.output_explicit {
+        cli.output.clone()
+    } else {
+        let ts = {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            // Format as YYYYMMDD-HHMMSS using UTC offset arithmetic
+            let s = secs % (24 * 3600);
+            let days = secs / (24 * 3600);
+            let hh = s / 3600;
+            let mm = (s % 3600) / 60;
+            let ss = s % 60;
+            // Approximate date from epoch days (good enough for unique IDs)
+            let approx_year = 1970 + days / 365;
+            let approx_day_of_year = days % 365;
+            let approx_month = approx_day_of_year / 30 + 1;
+            let approx_day = approx_day_of_year % 30 + 1;
+            format!("{}{:02}{:02}-{:02}{:02}{:02}",
+                approx_year, approx_month.min(12), approx_day.min(31),
+                hh, mm, ss)
+        };
+        PathBuf::from("eval_output").join("runs").join(&ts)
+    };
+    println!("Run directory: {}", output_root.display());
+
     let report_format = cli.format.clone();
 
     // Run all suites in parallel — each suite spawns its own thread with its own Tokio runtime.
@@ -890,7 +920,7 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         .collect();
 
     let benchmark = BenchmarkAggregator::aggregate(suite_refs);
-    output_benchmark(&benchmark, &cli)?;
+    output_benchmark(&benchmark, &output_root, &cli.format)?;
 
     // Save to RunStore — use aggregated data
     let model_names: Vec<String> = benchmark.models.iter().map(|m| m.info.name.clone()).collect();
@@ -986,26 +1016,26 @@ fn cmd_benchmark_from_files(input_dir: &PathBuf, cli: &CliArgs) -> Result<()> {
         .collect();
 
     let benchmark = BenchmarkAggregator::aggregate(suite_refs);
-    output_benchmark(&benchmark, cli)?;
+    output_benchmark(&benchmark, &cli.output, &cli.format)?;
 
     Ok(())
 }
 
 fn output_benchmark(
     benchmark: &octo_eval::benchmark::BenchmarkReport,
-    cli: &CliArgs,
+    output_dir: &PathBuf,
+    format: &str,
 ) -> Result<()> {
-    let output_dir = &cli.output;
     std::fs::create_dir_all(output_dir)?;
 
-    if cli.format == "json" || cli.format == "both" {
+    if format == "json" || format == "both" {
         let json = BenchmarkAggregator::to_json(benchmark);
         let path = output_dir.join("benchmark.json");
         std::fs::write(&path, &json)?;
         println!("\nBenchmark JSON: {}", path.display());
     }
 
-    if cli.format == "markdown" || cli.format == "both" {
+    if format == "markdown" || format == "both" {
         let md = BenchmarkAggregator::to_markdown(benchmark);
         let path = output_dir.join("benchmark.md");
         std::fs::write(&path, &md)?;
