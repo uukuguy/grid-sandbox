@@ -22,6 +22,9 @@ pub struct GaiaRecord {
     pub level: u32,
     #[serde(default)]
     pub annotator_metadata: Option<GaiaAnnotation>,
+    /// Attached file name (e.g. "abc123.xlsx") — present in 38/165 validation tasks
+    #[serde(default)]
+    pub file_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -37,11 +40,27 @@ pub struct GaiaAnnotation {
 /// EvalTask implementation for a single GAIA task
 pub struct GaiaTask {
     record: GaiaRecord,
+    /// Full prompt including file path hint (built once at construction)
+    prompt: String,
 }
 
 impl GaiaTask {
     pub fn new(record: GaiaRecord) -> Self {
-        Self { record }
+        // Build prompt: append file path to question when an attachment is present
+        let prompt = if let Some(ref fname) = record.file_name {
+            if !fname.is_empty() {
+                let file_path = Self::local_file_path(fname);
+                format!(
+                    "{}\n\nNote: An attached file is available at `{}`. Use the file_read or bash tool to read its contents.",
+                    record.question, file_path
+                )
+            } else {
+                record.question.clone()
+            }
+        } else {
+            record.question.clone()
+        };
+        Self { record, prompt }
     }
 
     fn classify_difficulty(level: u32) -> Difficulty {
@@ -51,6 +70,11 @@ impl GaiaTask {
             _ => Difficulty::Hard,
         }
     }
+
+    fn local_file_path(file_name: &str) -> String {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("datasets/gaia_files");
+        base.join(file_name).to_string_lossy().to_string()
+    }
 }
 
 impl EvalTask for GaiaTask {
@@ -59,7 +83,7 @@ impl EvalTask for GaiaTask {
     }
 
     fn prompt(&self) -> &str {
-        &self.record.question
+        &self.prompt
     }
 
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> {
@@ -237,6 +261,7 @@ mod tests {
             final_answer: "4".into(),
             level: 1,
             annotator_metadata: None,
+            file_name: None,
         };
         let task = GaiaTask::new(record);
 
