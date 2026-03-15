@@ -17,6 +17,7 @@ use crate::model::ModelInfo;
 use crate::recorder::{EvalRecorder, EvalTrace};
 use crate::score::{EvalScore, ScoreDetails};
 use crate::task::{AgentOutput, EvalTask, ToolCallRecord};
+use crate::trace::{truncate_str, TraceEvent};
 
 /// JSON output format produced by `octo ask --output json`
 #[derive(Debug, Deserialize)]
@@ -220,13 +221,13 @@ impl EvalRunner {
 
         // Run agent loop with timeout wrapping collect_events
         let timeout_duration = Duration::from_secs(timeout_secs);
-        let output = match tokio::time::timeout(
+        let (output, timeline) = match tokio::time::timeout(
             timeout_duration,
             Self::collect_events(loop_config, messages),
         )
         .await
         {
-            Ok(output) => output,
+            Ok(result) => result,
             Err(_elapsed) => {
                 let duration_ms = start.elapsed().as_millis() as u64;
                 warn!(task_id = %task_id, timeout_secs, "Task timed out");
@@ -290,6 +291,7 @@ impl EvalRunner {
                 task_id: result.task_id.clone(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
                 interactions: vec![], // populated only when using MockProvider
+                timeline,
                 output: result.output.clone(),
                 score: result.score.clone(),
             };
@@ -661,6 +663,7 @@ impl EvalRunner {
                     task_id: r.task_id.clone(),
                     timestamp: chrono::Utc::now().to_rfc3339(),
                     interactions: vec![],
+                    timeline: vec![], // timeline not available at suite level
                     output: r.output.clone(),
                     score: r.score.clone(),
                 })
@@ -783,15 +786,18 @@ impl EvalRunner {
         Ok(indexed_results.into_iter().map(|(_, r)| r).collect())
     }
 
-    /// Collect AgentEvents from the stream into an AgentOutput
+    /// Collect AgentEvents from the stream into an AgentOutput and a TraceEvent timeline.
     async fn collect_events(
         config: AgentLoopConfig,
         messages: Vec<ChatMessage>,
-    ) -> AgentOutput {
+    ) -> (AgentOutput, Vec<TraceEvent>) {
         let stream = run_agent_loop(config, messages);
         futures_util::pin_mut!(stream);
 
         let mut output = AgentOutput::default();
+        let mut timeline: Vec<TraceEvent> = Vec::new();
+        let mut current_round: u32 = 0;
+        let loop_start = Instant::now();
         let mut pending_tools: std::collections::HashMap<
             String,
             (String, serde_json::Value, Instant),
@@ -799,6 +805,13 @@ impl EvalRunner {
 
         while let Some(event) = stream.next().await {
             match event {
+                AgentEvent::IterationStart { round } => {
+                    current_round = round;
+                    timeline.push(TraceEvent::RoundStart {
+                        round,
+                        timestamp_ms: loop_start.elapsed().as_millis() as u64,
+                    });
+                }
                 AgentEvent::ToolStart {
                     tool_id,
                     tool_name,
@@ -812,29 +825,87 @@ impl EvalRunner {
                     success,
                 } => {
                     if let Some((name, input, tool_start)) = pending_tools.remove(&tool_id) {
+                        let duration_ms = tool_start.elapsed().as_millis() as u64;
+                        timeline.push(TraceEvent::ToolCall {
+                            round: current_round,
+                            tool_name: name.clone(),
+                            input: input.clone(),
+                            output: truncate_str(&tool_output, 4000),
+                            success,
+                            duration_ms,
+                        });
                         output.tool_calls.push(ToolCallRecord {
                             name,
                             input,
                             output: tool_output,
                             is_error: !success,
-                            duration_ms: tool_start.elapsed().as_millis() as u64,
+                            duration_ms,
                         });
                     }
                 }
+                AgentEvent::ThinkingComplete { text } => {
+                    timeline.push(TraceEvent::Thinking {
+                        round: current_round,
+                        content: truncate_str(&text, 2000),
+                    });
+                }
+                AgentEvent::Error { message } => {
+                    warn!(error = %message, "Agent loop error during evaluation");
+                    timeline.push(TraceEvent::Error {
+                        round: current_round,
+                        source: "agent".into(),
+                        message: truncate_str(&message, 1000),
+                    });
+                }
+                AgentEvent::SecurityBlocked { reason } => {
+                    timeline.push(TraceEvent::SecurityBlocked {
+                        round: current_round,
+                        tool: String::new(),
+                        risk_level: String::new(),
+                        reason,
+                    });
+                }
+                AgentEvent::ContextDegraded { level, usage_pct } => {
+                    timeline.push(TraceEvent::ContextDegraded {
+                        round: current_round,
+                        stage: level,
+                        usage_pct,
+                    });
+                }
+                AgentEvent::TokenBudgetUpdate { budget } => {
+                    timeline.push(TraceEvent::BudgetSnapshot {
+                        round: current_round,
+                        input_used: budget.history as u64,
+                        output_used: budget.dynamic_context as u64,
+                        limit: budget.total as u64,
+                    });
+                }
                 AgentEvent::Completed(result) => {
+                    let total_duration_ms = loop_start.elapsed().as_millis() as u64;
+                    timeline.push(TraceEvent::Completed {
+                        rounds: result.rounds,
+                        stop_reason: format!("{:?}", result.stop_reason),
+                        total_duration_ms,
+                    });
                     output.rounds = result.rounds;
                     output.input_tokens = result.input_tokens;
                     output.output_tokens = result.output_tokens;
                     output.stop_reason = format!("{:?}", result.stop_reason);
                     output.messages = result.final_messages;
                 }
-                AgentEvent::Error { message } => {
-                    warn!(error = %message, "Agent loop error during evaluation");
+                AgentEvent::EmergencyStopped(reason) => {
+                    timeline.push(TraceEvent::Error {
+                        round: current_round,
+                        source: "emergency_stop".into(),
+                        message: reason.unwrap_or_else(|| "E-Stop triggered".into()),
+                    });
                 }
+                // UI-only events (TextDelta, TextComplete, ThinkingDelta, Typing, Done,
+                // IterationEnd, ToolExecution, ToolProgress, MemoryFlushed, ApprovalRequired)
                 _ => {}
             }
         }
 
-        output
+        (output, timeline)
     }
 }

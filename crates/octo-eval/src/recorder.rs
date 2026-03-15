@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::mock_provider::{RecordedInteraction, SerializableContent, SerializableResponse};
 use crate::score::EvalScore;
 use crate::task::AgentOutput;
+use crate::trace::TraceEvent;
 
 /// Complete trace of a single evaluation task execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +17,10 @@ pub struct EvalTrace {
     pub task_id: String,
     pub timestamp: String,
     pub interactions: Vec<RecordedInteraction>,
+    /// Execution timeline — full event flow for white-box debugging.
+    /// Empty for CLI/Server mode or when replaying from older traces.
+    #[serde(default)]
+    pub timeline: Vec<TraceEvent>,
     pub output: AgentOutput,
     pub score: EvalScore,
 }
@@ -125,6 +130,10 @@ mod tests {
                 5,
                 150,
             )],
+            timeline: vec![
+                TraceEvent::RoundStart { round: 1, timestamp_ms: 0 },
+                TraceEvent::Completed { rounds: 1, stop_reason: "EndTurn".into(), total_duration_ms: 150 },
+            ],
             output: AgentOutput {
                 rounds: 1,
                 input_tokens: 10,

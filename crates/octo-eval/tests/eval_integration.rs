@@ -52,6 +52,7 @@ impl EvalTask for SimpleTextTask {
                 expected: self.expected_contains.clone(),
                 actual: text,
             },
+            dimensions: std::collections::HashMap::new(),
         }
     }
     fn metadata(&self) -> TaskMetadata {
@@ -92,6 +93,7 @@ impl EvalTask for SimpleToolTask {
                 actual_tool: actual.map(String::from),
                 arg_match_rate: if passed { 1.0 } else { 0.0 },
             },
+            dimensions: std::collections::HashMap::new(),
         }
     }
     fn metadata(&self) -> TaskMetadata {
@@ -468,6 +470,7 @@ fn test_recorder_trace_roundtrip() {
         task_id: "integ-001".into(),
         timestamp: "2026-03-13T20:00:00Z".into(),
         interactions: vec![],
+        timeline: vec![],
         output: AgentOutput {
             rounds: 1,
             input_tokens: 10,
@@ -505,6 +508,7 @@ fn test_recorder_summary_roundtrip() {
             task_id: "sum-001".into(),
             timestamp: "2026-03-13T20:00:00Z".into(),
             interactions: vec![],
+            timeline: vec![],
             output: AgentOutput::default(),
             score: EvalScore::pass(
                 1.0,
@@ -517,6 +521,7 @@ fn test_recorder_summary_roundtrip() {
             task_id: "sum-002".into(),
             timestamp: "2026-03-13T20:01:00Z".into(),
             interactions: vec![],
+            timeline: vec![],
             output: AgentOutput {
                 rounds: 3,
                 ..AgentOutput::default()
@@ -559,6 +564,7 @@ fn test_recorder_extract_interactions() {
         task_id: "extract-001".into(),
         timestamp: "2026-03-13T20:00:00Z".into(),
         interactions: vec![interaction],
+        timeline: vec![],
         output: AgentOutput::default(),
         score: EvalScore::pass(
             1.0,
@@ -765,6 +771,7 @@ fn test_full_pipeline_score_report_record() {
         task_id: "pipe-1".into(),
         timestamp: "2026-03-13T20:00:00Z".into(),
         interactions: vec![],
+        timeline: vec![],
         output: output_pass,
         score: EvalScore::pass(
             1.0,
@@ -778,6 +785,7 @@ fn test_full_pipeline_score_report_record() {
         task_id: "pipe-2".into(),
         timestamp: "2026-03-13T20:00:01Z".into(),
         interactions: vec![],
+        timeline: vec![],
         output: output_fail,
         score: EvalScore::fail(
             0.0,
