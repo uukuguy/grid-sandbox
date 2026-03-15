@@ -7,6 +7,12 @@
 
 ## [Active Work]
 
+- 14:30 | Phase M/N PLANNED — design doc + 3 implementation plans committed
+  - Design: docs/design/EVAL_CLI_TUI_DESIGN.md (9 decisions, TUI dual-view, RunStore)
+  - M-a: 12 tasks (RunStore + octo eval commands) @ 0723114
+  - M-b: 8 tasks (TUI Ops/Dev dual-view + Eval panel) @ 14d9053
+  - N: 7 tasks (Agent debug + Inspector S/M/P/R sub-panels) @ 14d9053
+  - Checkpoint: 8323a96, ready for M-a execution
 - 12:30 | Phase L COMPLETE (18/18 tasks) — eval whitebox + enterprise dataset @ f28ad6c
   - L1: TraceEvent (10 variants) + collect_events full capture + EvalTrace.timeline + UTF-8 fix
   - L2: FailureClass (14 variants) + FailureClassifier + failure_class + FailureSummary
