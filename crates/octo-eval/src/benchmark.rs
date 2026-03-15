@@ -17,6 +17,15 @@ pub struct BenchmarkReport {
     pub recommendations: Vec<Recommendation>,
 }
 
+/// Summary of failure classifications across evaluated tasks.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FailureSummary {
+    pub by_class: HashMap<String, usize>,
+    pub by_category: HashMap<String, usize>,
+    pub total_classified: usize,
+    pub total_unclassified: usize,
+}
+
 /// Per-model benchmark summary.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelBenchmark {
@@ -26,6 +35,8 @@ pub struct ModelBenchmark {
     pub total_tokens: u64,
     pub estimated_cost: f64,
     pub per_suite: HashMap<String, SuiteResult>,
+    #[serde(default)]
+    pub failure_summary: FailureSummary,
 }
 
 /// Result for a single suite evaluation.
@@ -129,6 +140,9 @@ impl BenchmarkAggregator {
             let total_tokens: u64 = suites.values().map(|s| s.tokens).sum();
             let estimated_cost: f64 = suites.values().map(|s| s.estimated_cost).sum();
 
+            // Build failure summary from task results in the suite reports
+            let failure_summary = Self::build_failure_summary(name, &suite_reports);
+
             models.push(ModelBenchmark {
                 info,
                 overall_pass_rate,
@@ -136,6 +150,7 @@ impl BenchmarkAggregator {
                 total_tokens,
                 estimated_cost,
                 per_suite: suites,
+                failure_summary,
             });
         }
 
@@ -150,6 +165,43 @@ impl BenchmarkAggregator {
             dimension_matrix,
             cost_analysis,
             recommendations,
+        }
+    }
+
+    fn build_failure_summary(
+        model_name: &str,
+        suite_reports: &[(&str, &ComparisonReport)],
+    ) -> FailureSummary {
+        let mut by_class: HashMap<String, usize> = HashMap::new();
+        let mut by_category: HashMap<String, usize> = HashMap::new();
+        let mut total_classified = 0usize;
+        let mut total_unclassified = 0usize;
+
+        for (_, report) in suite_reports {
+            for (info, eval_report) in &report.model_reports {
+                if info.name != model_name {
+                    continue;
+                }
+                for result in &eval_report.results {
+                    if result.score.passed {
+                        continue;
+                    }
+                    if let Some(ref fc) = result.score.failure_class {
+                        *by_class.entry(fc.label().to_string()).or_default() += 1;
+                        *by_category.entry(fc.category().to_string()).or_default() += 1;
+                        total_classified += 1;
+                    } else {
+                        total_unclassified += 1;
+                    }
+                }
+            }
+        }
+
+        FailureSummary {
+            by_class,
+            by_category,
+            total_classified,
+            total_unclassified,
         }
     }
 
@@ -396,6 +448,50 @@ impl BenchmarkAggregator {
                 "| {} | {} | {} |\n",
                 rec.scenario, rec.recommended_model, rec.reasoning,
             ));
+        }
+        md.push('\n');
+
+        // Failure summary (if any model has classified failures)
+        let has_failures = report
+            .models
+            .iter()
+            .any(|m| m.failure_summary.total_classified > 0);
+        if has_failures {
+            md.push_str("## Failure Analysis\n\n");
+
+            for m in &report.models {
+                let fs = &m.failure_summary;
+                if fs.total_classified == 0 && fs.total_unclassified == 0 {
+                    continue;
+                }
+
+                md.push_str(&format!(
+                    "### {} — {} classified, {} unclassified\n\n",
+                    m.info.name, fs.total_classified, fs.total_unclassified,
+                ));
+
+                if !fs.by_category.is_empty() {
+                    md.push_str("| Category | Count |\n");
+                    md.push_str("|----------|-------|\n");
+                    let mut sorted: Vec<_> = fs.by_category.iter().collect();
+                    sorted.sort_by(|a, b| b.1.cmp(a.1));
+                    for (cat, count) in sorted {
+                        md.push_str(&format!("| {} | {} |\n", cat, count));
+                    }
+                    md.push('\n');
+                }
+
+                if !fs.by_class.is_empty() {
+                    md.push_str("| Failure Class | Count |\n");
+                    md.push_str("|---------------|-------|\n");
+                    let mut sorted: Vec<_> = fs.by_class.iter().collect();
+                    sorted.sort_by(|a, b| b.1.cmp(a.1));
+                    for (class, count) in sorted {
+                        md.push_str(&format!("| {} | {} |\n", class, count));
+                    }
+                    md.push('\n');
+                }
+            }
         }
 
         md

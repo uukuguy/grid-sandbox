@@ -108,6 +108,7 @@ impl EvalTask for TauBenchTask {
                 pass_at_k: if passed { 1.0 } else { 0.0 },
             },
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 

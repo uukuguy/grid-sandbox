@@ -579,6 +579,7 @@ mod tests {
                     message: "test".into(),
                 },
                 dimensions: HashMap::new(),
+                failure_class: None,
             },
             duration_ms: duration,
         }

@@ -105,6 +105,7 @@ impl EvalTask for SweBenchTask {
                 execution_time_ms: 0,
             },
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 

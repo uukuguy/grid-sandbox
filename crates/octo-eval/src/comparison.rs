@@ -167,6 +167,56 @@ impl ComparisonReport {
                 info.name, cost_per_task, score_str, info.tier,
             ));
         }
+        md.push('\n');
+
+        // Failure analysis
+        let has_failures = self.model_reports.iter().any(|(_, r)| {
+            r.results.iter().any(|tr| tr.score.failure_class.is_some())
+        });
+        if has_failures {
+            md.push_str("## Failure Analysis\n\n");
+
+            for (info, report) in &self.model_reports {
+                let failures: Vec<_> = report
+                    .results
+                    .iter()
+                    .filter(|r| r.score.failure_class.is_some())
+                    .collect();
+                if failures.is_empty() {
+                    continue;
+                }
+
+                md.push_str(&format!("### {} — {} failures classified\n\n", info.name, failures.len()));
+
+                // Aggregate by class
+                let mut by_class: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+                let mut by_category: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+                for f in &failures {
+                    if let Some(ref fc) = f.score.failure_class {
+                        *by_class.entry(fc.label()).or_default() += 1;
+                        *by_category.entry(fc.category()).or_default() += 1;
+                    }
+                }
+
+                md.push_str("| Failure Class | Count |\n");
+                md.push_str("|---------------|-------|\n");
+                let mut sorted: Vec<_> = by_class.iter().collect();
+                sorted.sort_by(|a, b| b.1.cmp(a.1));
+                for (class, count) in sorted {
+                    md.push_str(&format!("| {} | {} |\n", class, count));
+                }
+                md.push('\n');
+
+                md.push_str("| Category | Count |\n");
+                md.push_str("|----------|-------|\n");
+                let mut cat_sorted: Vec<_> = by_category.iter().collect();
+                cat_sorted.sort_by(|a, b| b.1.cmp(a.1));
+                for (cat, count) in cat_sorted {
+                    md.push_str(&format!("| {} | {} |\n", cat, count));
+                }
+                md.push('\n');
+            }
+        }
 
         md
     }

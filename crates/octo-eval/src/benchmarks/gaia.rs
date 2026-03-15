@@ -86,6 +86,7 @@ impl EvalTask for GaiaTask {
                 level: self.record.level,
             },
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 

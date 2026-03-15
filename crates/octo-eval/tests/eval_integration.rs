@@ -53,6 +53,7 @@ impl EvalTask for SimpleTextTask {
                 actual: text,
             },
             dimensions: std::collections::HashMap::new(),
+            failure_class: None,
         }
     }
     fn metadata(&self) -> TaskMetadata {
@@ -94,6 +95,7 @@ impl EvalTask for SimpleToolTask {
                 arg_match_rate: if passed { 1.0 } else { 0.0 },
             },
             dimensions: std::collections::HashMap::new(),
+            failure_class: None,
         }
     }
     fn metadata(&self) -> TaskMetadata {

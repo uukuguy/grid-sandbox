@@ -41,6 +41,7 @@ impl Scorer for ExactMatchScorer {
                 actual,
             },
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 }
@@ -91,6 +92,15 @@ impl Scorer for ToolCallScorer {
         };
         let passed = tool_match && arg_match_rate >= 0.5;
 
+        let mut dimensions = HashMap::new();
+        // tool_selection: 1.0 if correct tool was called, 0.0 otherwise
+        dimensions.insert("tool_selection".to_string(), if tool_match { 1.0 } else { 0.0 });
+        // arg_accuracy: the computed arg match rate (0.0 - 1.0)
+        dimensions.insert("arg_accuracy".to_string(), arg_match_rate);
+        // efficiency: based on number of rounds (fewer = better)
+        let efficiency = 1.0 / (1.0 + (output.rounds as f64 - 1.0) * 0.5);
+        dimensions.insert("efficiency".to_string(), efficiency);
+
         EvalScore {
             passed,
             score,
@@ -99,7 +109,8 @@ impl Scorer for ToolCallScorer {
                 actual_tool: actual_tool.map(|s| s.to_string()),
                 arg_match_rate,
             },
-            dimensions: HashMap::new(),
+            dimensions,
+            failure_class: None,
         }
     }
 }
@@ -177,6 +188,13 @@ impl Scorer for BehaviorScorer {
             _ => false,
         };
 
+        let mut dimensions = HashMap::new();
+        // behavior_match: 1.0 if expected behavior observed, 0.0 otherwise
+        dimensions.insert("behavior_match".to_string(), if observed { 1.0 } else { 0.0 });
+        // stop_reason_correct: check if stop_reason is reasonable
+        let stop_ok = !output.stop_reason.is_empty() && output.stop_reason != "Error";
+        dimensions.insert("stop_reason_correct".to_string(), if stop_ok { 1.0 } else { 0.0 });
+
         EvalScore {
             passed: observed,
             score: if observed { 1.0 } else { 0.0 },
@@ -184,7 +202,8 @@ impl Scorer for BehaviorScorer {
                 expected_behavior: self.expected_behavior.clone(),
                 observed,
             },
-            dimensions: HashMap::new(),
+            dimensions,
+            failure_class: None,
         }
     }
 }
@@ -229,6 +248,7 @@ impl Scorer for SequenceScorer {
                 matched,
             },
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 }
@@ -350,6 +370,15 @@ impl Scorer for FunctionCallMatchScorer {
         };
         let passed = name_match && arg_match_rate >= 0.5;
 
+        let mut dimensions = HashMap::new();
+        // tool_selection: 1.0 if correct function was called, 0.0 otherwise
+        dimensions.insert("tool_selection".to_string(), if name_match { 1.0 } else { 0.0 });
+        // arg_accuracy: the computed arg match rate (0.0 - 1.0)
+        dimensions.insert("arg_accuracy".to_string(), arg_match_rate);
+        // efficiency: based on number of rounds (fewer = better)
+        let efficiency = 1.0 / (1.0 + (output.rounds as f64 - 1.0) * 0.5);
+        dimensions.insert("efficiency".to_string(), efficiency);
+
         EvalScore {
             passed,
             score,
@@ -358,7 +387,8 @@ impl Scorer for FunctionCallMatchScorer {
                 actual_tool: actual_tool.map(|s| s.to_string()),
                 arg_match_rate,
             },
-            dimensions: HashMap::new(),
+            dimensions,
+            failure_class: None,
         }
     }
 }
@@ -513,6 +543,15 @@ impl Scorer for AstMatchScorer {
         let score = 0.5 + 0.5 * arg_match_rate;
         let passed = arg_match_rate >= 0.5;
 
+        let mut dimensions = HashMap::new();
+        // tool_selection: 1.0 (tool was found by name match)
+        dimensions.insert("tool_selection".to_string(), 1.0);
+        // arg_accuracy: the computed structural arg match rate (0.0 - 1.0)
+        dimensions.insert("arg_accuracy".to_string(), arg_match_rate);
+        // efficiency: based on number of rounds (fewer = better)
+        let efficiency = 1.0 / (1.0 + (output.rounds as f64 - 1.0) * 0.5);
+        dimensions.insert("efficiency".to_string(), efficiency);
+
         EvalScore {
             passed,
             score,
@@ -522,7 +561,8 @@ impl Scorer for AstMatchScorer {
                 arg_match_rate,
                 mismatched_fields,
             },
-            dimensions: HashMap::new(),
+            dimensions,
+            failure_class: None,
         }
     }
 }
@@ -675,6 +715,7 @@ impl LlmJudgeScorer {
                         rubric: self.rubric.clone(),
                     },
                     dimensions: HashMap::new(),
+                    failure_class: None,
                 }
             }
             Err(_) => {
@@ -693,6 +734,7 @@ impl LlmJudgeScorer {
                         rubric: self.rubric.clone(),
                     },
                     dimensions: HashMap::new(),
+                    failure_class: None,
                 }
             }
         }

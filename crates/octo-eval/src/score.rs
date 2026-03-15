@@ -10,6 +10,8 @@ pub struct EvalScore {
     pub details: ScoreDetails,
     #[serde(default)]
     pub dimensions: HashMap<String, f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_class: Option<crate::failure::FailureClass>,
 }
 
 /// Detailed scoring information
@@ -109,6 +111,7 @@ impl EvalScore {
             score,
             details,
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 
@@ -118,6 +121,7 @@ impl EvalScore {
             score,
             details,
             dimensions: HashMap::new(),
+            failure_class: None,
         }
     }
 }

@@ -162,6 +162,7 @@ impl EvalTask for JsonlTask {
                         .into(),
                 },
                 dimensions: HashMap::new(),
+                failure_class: None,
             }
         }
     }
@@ -227,6 +228,7 @@ fn score_tool_call(
             arg_match_rate,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -296,6 +298,7 @@ fn score_behavior(expected_behavior: &str, output: &AgentOutput) -> EvalScore {
             observed,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -314,6 +317,7 @@ fn score_exact_match(expected: &str, output: &AgentOutput) -> EvalScore {
             actual,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -340,6 +344,7 @@ fn score_sequence(expected_sequence: &[String], output: &AgentOutput) -> EvalSco
             matched,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -394,6 +399,7 @@ fn score_sequence_with_args(expected: &[SequenceStep], output: &AgentOutput) -> 
             arg_match_rates: arg_rates,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -429,6 +435,7 @@ fn score_not_contains(forbidden: &[String], output: &AgentOutput) -> EvalScore {
             found,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
@@ -450,6 +457,7 @@ fn score_regex(pattern: &str, output: &AgentOutput) -> EvalScore {
                     matched,
                 },
                 dimensions: HashMap::new(),
+                failure_class: None,
             }
         }
         Err(e) => EvalScore::fail(
@@ -501,6 +509,7 @@ fn score_contains_all(expected: &[String], output: &AgentOutput) -> EvalScore {
             total,
         },
         dimensions: HashMap::new(),
+        failure_class: None,
     }
 }
 
