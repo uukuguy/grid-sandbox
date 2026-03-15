@@ -7,12 +7,24 @@
 
 ## [Active Work]
 
-- 14:30 | Phase M/N PLANNED — design doc + 3 implementation plans committed
-  - Design: docs/design/EVAL_CLI_TUI_DESIGN.md (9 decisions, TUI dual-view, RunStore)
-  - M-a: 12 tasks (RunStore + octo eval commands) @ 0723114
-  - M-b: 8 tasks (TUI Ops/Dev dual-view + Eval panel) @ 14d9053
-  - N: 7 tasks (Agent debug + Inspector S/M/P/R sub-panels) @ 14d9053
-  - Checkpoint: 8323a96, ready for M-a execution
+- 15:45 | Phase N COMPLETE (7/7 tasks) — Agent Debug Panel @ 3ba3351
+  - T1: DevAgentScreen three-column skeleton (20% Sessions, 45% Conversation, 35% Inspector)
+  - T2-T3: Session list + context gauge bar + conversation timeline (ToolCallStatus OK/ERR/BLOCKED)
+  - T4-T6: Inspector sub-panels (Skill, MCP, Provider+RecentCalls, Memory+search hint)
+  - T7: Linked interaction (Enter drill-down, Esc back, S/M/P/R switching) + 30 unit tests
+  - Tests: 2096→2126 (+30), key file: tui/screens/dev_agent.rs
+  - Deferred: D1 (Session WS), D2 (Memory search input), D3 (Provider chain viz), D4 (Workbench mode)
+- 15:30 | Phase M-b COMPLETE (8/8 tasks) — TUI Dual-View + Eval Panel @ 76bc12e
+  - ViewMode (Ops/Dev), OpsTab (6 tabs), DevTask (Agent/Eval), DevEvalScreen three-column
+  - Tests: 2058→2096 (+38)
+- 15:00 | Phase M-a COMPLETE (12/12 tasks) — Eval Management CLI Unification @ f2064e2
+  - G1: RunStore versioned storage (run_store.rs) — YYYY-MM-DD-NNN, manifest, latest symlink, tag
+  - G2: EvalCommands clap (11 subcommands) + handle_eval routing in octo-cli
+  - G3: list/config + run/compare/benchmark commands
+  - G4: history/report/trace/diagnose/diff/watch commands (full RunStore integration)
+  - G5: Tests 2050→2058 (+8), CLAUDE.md + design doc updated
+  - Deferred: D1 (TUI dual-view → M-b), D2 (Agent debug → N), D3 (watch TUI → M-b)
+  - Next: Phase M-b (TUI Ops/Dev dual-view + Eval panel) → Phase N (Agent debug)
 - 12:30 | Phase L COMPLETE (18/18 tasks) — eval whitebox + enterprise dataset @ f28ad6c
   - L1: TraceEvent (10 variants) + collect_events full capture + EvalTrace.timeline + UTF-8 fix
   - L2: FailureClass (14 variants) + FailureClassifier + failure_class + FailureSummary
