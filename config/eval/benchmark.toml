@@ -1,22 +1,41 @@
 # Unified benchmark configuration for GAIA and SWE-bench evaluations
-# Used by: octo eval benchmark --config config/eval/benchmark.toml
+# Used by: cargo run -p octo-eval -- benchmark --config config/eval/benchmark.toml
 
-[general]
-output_dir = "eval_output/runs"
-max_rounds = 20
-timeout_seconds = 300
+[default]
+timeout_secs = 300
 record_traces = true
 
-# === Model Sets ===
-[models]
-quick = ["claude-sonnet-4-6"]
-standard = ["claude-sonnet-4-6", "qwen3-30b-a3b", "mistral-small-3.2"]
-full = [
-    "claude-sonnet-4-6", "claude-opus-4-6",
-    "qwen3-30b-a3b", "mistral-small-3.2",
-    "minimax-m2.1"
-]
-default = "standard"
+# === Standard Model Set (5 models, all via OpenRouter) ===
+
+[[models]]
+name = "Qwen3.5-27B"
+provider = "openai"
+model = "qwen/qwen3.5-27b"
+tier = "standard"
+
+[[models]]
+name = "MiniMax-M2.1"
+provider = "openai"
+model = "minimax/minimax-m2.1"
+tier = "standard"
+
+[[models]]
+name = "Qwen3.5-9B"
+provider = "openai"
+model = "qwen/qwen3.5-9b"
+tier = "economy"
+
+[[models]]
+name = "Qwen3-Coder-Next"
+provider = "openai"
+model = "qwen/qwen3-coder-next"
+tier = "high"
+
+[[models]]
+name = "GLM-4.7-Flash"
+provider = "openai"
+model = "z-ai/glm-4.7-flash"
+tier = "economy"
 
 # === GAIA ===
 [gaia]
