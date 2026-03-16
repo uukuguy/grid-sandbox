@@ -764,10 +764,15 @@ impl EvalRunner {
             async move {
                 eprintln!("[{}/{}] Running task: {} ...", idx, total, task_id);
 
+                let recorder = if config.record_traces {
+                    EvalRecorder::new(config.output_dir.join("traces")).ok()
+                } else {
+                    None
+                };
                 let runner = EvalRunner {
                     config,
                     provider,
-                    recorder: None, // traces saved at suite level
+                    recorder,
                 };
 
                 match runner.run_task(task.as_ref()).await {

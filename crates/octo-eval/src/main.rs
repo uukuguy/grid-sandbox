@@ -12,11 +12,11 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use octo_eval::benchmark::BenchmarkAggregator;
-use octo_eval::comparison::{ComparisonReport, ComparisonRunner};
-use octo_eval::config::{EvalConfig, EvalTomlConfig, EngineConfig, MultiModelConfig, ModelEntry};
+use octo_eval::comparison::{ComparisonReport, ComparisonRunner, TaskRecord};
+use octo_eval::config::{EvalConfig, EvalTarget, EvalTomlConfig, EngineConfig, MultiModelConfig, ModelEntry};
 use octo_eval::model::{ModelInfo, ModelTier};
 use octo_eval::reporter::Reporter;
-use octo_eval::runner::EvalRunner;
+use octo_eval::runner::{EvalReport, EvalRunner};
 use octo_eval::suites::context::ContextSuite;
 use octo_eval::suites::e2e::E2eSuite;
 use octo_eval::suites::memory::MemorySuite;
@@ -806,6 +806,10 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         .as_ref()
         .and_then(|tc| tc.default.timeout_secs)
         .unwrap_or(120);
+    let record_traces = toml_config
+        .as_ref()
+        .and_then(|tc| tc.default.record_traces)
+        .unwrap_or(false);
     let max_tasks = cli.max_tasks;
 
     // Auto-generate timestamped run directory under eval_output/runs/ when --output not given.
@@ -820,78 +824,180 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
 
     let report_format = cli.format.clone();
 
-    // Run all suites in parallel — each suite spawns its own thread with its own Tokio runtime.
-    // Within each suite, models run sequentially (correct scoring preserved).
-    // Progress: each completed task prints immediately to stderr.
-    let mut suite_handles: Vec<std::thread::JoinHandle<(String, anyhow::Result<ComparisonReport>)>> =
-        Vec::with_capacity(suite_names.len());
-
+    // ── Phase 1: Load all task lists up-front (once per suite, before spawning threads).
+    // This guarantees every model sees the exact same task IDs in the same order.
+    let mut suite_task_records: HashMap<String, Vec<TaskRecord>> = HashMap::new();
     for suite_name in &suite_names {
-        let suite_name_owned = suite_name.to_string();
-        let models_clone = models.clone();
-        let suite_output = output_root.join(suite_name);
-        let fmt = report_format.clone();
-
-        let handle = std::thread::spawn(move || -> (String, anyhow::Result<ComparisonReport>) {
-            let result = (|| -> anyhow::Result<ComparisonReport> {
-                let mut tasks = load_suite(&suite_name_owned)?;
-                if max_tasks > 0 && tasks.len() > max_tasks {
-                    tasks.truncate(max_tasks);
-                }
-                eprintln!("\n[suite:{}] {} tasks, {} models — starting",
-                    suite_name_owned, tasks.len(), models_clone.len());
-
-                let config = MultiModelConfig {
-                    models: models_clone,
-                    output_dir: suite_output.clone(),
-                    timeout_secs,
-                    ..MultiModelConfig::default()
-                };
-
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?;
-                let report = rt.block_on(async {
-                    let runner = ComparisonRunner::new(config);
-                    runner.run_comparison(&tasks).await
-                })?;
-
-                output_comparison(&report, &tasks, &suite_output, &fmt)?;
-                eprintln!("[suite:{}] DONE", suite_name_owned);
-                Ok(report)
-            })();
-            (suite_name_owned, result)
-        });
-
-        suite_handles.push(handle);
+        let mut tasks = load_suite(suite_name)?;
+        if max_tasks > 0 && tasks.len() > max_tasks {
+            tasks.truncate(max_tasks);
+        }
+        // Freeze tasks into TaskRecord (Clone + Send) so each model thread can share them.
+        let records: Vec<TaskRecord> =
+            tasks.iter().map(|t| TaskRecord::from_task(t.as_ref())).collect();
+        eprintln!("[suite:{}] {} tasks loaded (shared across {} models)",
+            suite_name, records.len(), models.len());
+        suite_task_records.insert(suite_name.to_string(), records);
     }
 
-    // Progress reporting: print status every 60s while waiting for threads
+    // ── Phase 2: Spawn one thread per (suite, model) — full matrix, all parallel.
+    // Thread key: (suite_name, model_index)
+    // Thread returns: (suite_name, model_index, Result<(ModelInfo, EvalReport)>)
+    let mut cell_handles: Vec<std::thread::JoinHandle<(String, usize, anyhow::Result<(ModelInfo, EvalReport)>)>> =
+        Vec::with_capacity(suite_names.len() * models.len());
+
+    for suite_name in &suite_names {
+        let records = suite_task_records.remove(suite_name.as_ref() as &str).unwrap_or_default();
+        let records = std::sync::Arc::new(records);
+
+        for (mi, entry) in models.iter().enumerate() {
+            let suite_owned = suite_name.to_string();
+            let records_clone = records.clone();
+            let entry_clone = entry.clone();
+            let output_root_clone = output_root.clone();
+            let handle = std::thread::spawn(move || -> (String, usize, anyhow::Result<(ModelInfo, EvalReport)>) {
+                let result = (|| -> anyhow::Result<(ModelInfo, EvalReport)> {
+                    let model_slug = entry_clone.info.name.to_lowercase().replace([' ', '/', '.'], "_");
+                    let cell_output = output_root_clone.join(&suite_owned).join(&model_slug);
+                    std::fs::create_dir_all(&cell_output)?;
+
+                    let eval_config = EvalConfig {
+                        target: EvalTarget::Engine(entry_clone.engine.clone()),
+                        concurrency: 1,
+                        timeout_secs,
+                        record_traces,
+                        output_dir: cell_output.clone(),
+                    };
+
+                    eprintln!("[{}/model:{}] starting {} tasks",
+                        suite_owned, entry_clone.info.name, records_clone.len());
+
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()?;
+                    // Box each TaskRecord into Box<dyn EvalTask> for run_suite
+                    let boxed_tasks: Vec<Box<dyn EvalTask>> = records_clone
+                        .iter()
+                        .map(|r| Box::new(r.clone()) as Box<dyn EvalTask>)
+                        .collect();
+
+                    let report = rt.block_on(async {
+                        let runner = EvalRunner::new(eval_config)?;
+                        runner.run_suite(&boxed_tasks).await
+                    })?;
+                    let report = report.with_model(entry_clone.info.clone());
+
+                    // ── Immediately flush per-model result to disk
+                    let result_path = cell_output.join("model_result.json");
+                    let cell_json = serde_json::json!({
+                        "suite": suite_owned,
+                        "model": entry_clone.info.name,
+                        "total": report.total,
+                        "passed": report.passed,
+                        "pass_rate": report.pass_rate,
+                        "avg_score": report.avg_score,
+                        "tokens": report.total_tokens,
+                        "duration_ms": report.total_duration_ms,
+                        "task_results": report.results.iter().map(|r| serde_json::json!({
+                            "task_id": r.task_id,
+                            "passed": r.score.passed,
+                            "score": r.score.score,
+                            "duration_ms": r.duration_ms,
+                            "tokens": r.output.input_tokens + r.output.output_tokens,
+                        })).collect::<Vec<serde_json::Value>>(),
+                    });
+                    std::fs::write(&result_path, serde_json::to_string_pretty(&cell_json)?)?;
+
+                    eprintln!("[{}/model:{}] DONE — {}/{} passed ({:.1}%), flushed {}",
+                        suite_owned, entry_clone.info.name,
+                        report.passed, report.total, report.pass_rate * 100.0,
+                        result_path.display());
+
+                    // Also write suite-level comparison.json after EACH model completes
+                    // (partial — overwritten by each model, complete after last model)
+                    let suite_output = output_root_clone.join(&suite_owned);
+                    if let Ok(entries) = std::fs::read_dir(&suite_output) {
+                        let mut partial: Vec<serde_json::Value> = entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.path().is_dir())
+                            .filter_map(|e| {
+                                let p = e.path().join("model_result.json");
+                                std::fs::read_to_string(&p).ok()
+                                    .and_then(|s| serde_json::from_str(&s).ok())
+                            })
+                            .collect();
+                        partial.sort_by_key(|v| v["model"].as_str().unwrap_or("").to_string());
+                        let _ = std::fs::write(
+                            suite_output.join("progress.json"),
+                            serde_json::to_string_pretty(&partial).unwrap_or_default(),
+                        );
+                    }
+
+                    Ok((entry_clone.info.clone(), report))
+                })();
+                (suite_owned, mi, result)
+            });
+
+            cell_handles.push(handle);
+        }
+    }
+
+    // ── Phase 3: Progress reporting thread
     let start_time = std::time::Instant::now();
+    let total_cells = suite_names.len() * models.len();
     let handles_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let done_flag = handles_done.clone();
     let progress_thread = std::thread::spawn(move || {
         while !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
-            std::thread::sleep(std::time::Duration::from_secs(60));
+            std::thread::sleep(std::time::Duration::from_secs(30));
             if !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 let elapsed = start_time.elapsed().as_secs();
-                eprintln!("[progress] {}m{}s elapsed — benchmark still running",
+                eprintln!("[progress] {}m{}s elapsed — {total_cells} cells running",
                     elapsed / 60, elapsed % 60);
             }
         }
     });
 
-    // Collect results preserving suite order
-    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
-    for handle in suite_handles {
+    // ── Phase 4: Collect results — rebuild ComparisonReport per suite
+    // Collect all cell results indexed by suite
+    let mut cell_results: HashMap<String, Vec<(usize, ModelInfo, EvalReport)>> = HashMap::new();
+    for handle in cell_handles {
         match handle.join() {
-            Ok((name, Ok(report))) => suite_comparisons.push((name, report)),
-            Ok((name, Err(e))) => eprintln!("WARNING: Suite '{}' failed: {}", name, e),
-            Err(_) => eprintln!("WARNING: A suite thread panicked"),
+            Ok((suite, mi, Ok((info, report)))) => {
+                cell_results.entry(suite).or_default().push((mi, info, report));
+            }
+            Ok((suite, mi, Err(e))) => {
+                eprintln!("WARNING: [{}/model#{}] failed: {}", suite, mi, e);
+            }
+            Err(_) => eprintln!("WARNING: A cell thread panicked"),
         }
     }
     handles_done.store(true, std::sync::atomic::Ordering::Relaxed);
     let _ = progress_thread.join();
+
+    // Reconstruct ComparisonReports in suite order, preserving model order
+    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
+    for suite_name in &suite_names {
+        if let Some(mut cells) = cell_results.remove(suite_name.as_ref() as &str) {
+            // Sort by original model index to preserve config order
+            cells.sort_by_key(|(mi, _, _)| *mi);
+            let model_reports: Vec<(ModelInfo, EvalReport)> = cells.into_iter().map(|(_, info, report)| (info, report)).collect();
+            let comparison = ComparisonReport { model_reports };
+
+            // Write final comparison.json/.md for this suite
+            let suite_output = output_root.join(suite_name);
+            // Rebuild tasks from saved records for metadata
+            let records = {
+                let mut tmp = load_suite(suite_name).unwrap_or_default();
+                if max_tasks > 0 && tmp.len() > max_tasks { tmp.truncate(max_tasks); }
+                tmp
+            };
+            output_comparison(&comparison, &records, &suite_output, &report_format)?;
+            eprintln!("[suite:{}] all models complete — reports written", suite_name);
+
+            suite_comparisons.push((suite_name.to_string(), comparison));
+        }
+    }
 
     // Aggregate all suite reports
     let suite_refs: Vec<(&str, &ComparisonReport)> = suite_comparisons

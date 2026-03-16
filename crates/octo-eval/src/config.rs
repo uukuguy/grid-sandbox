@@ -64,12 +64,14 @@ impl Default for MultiModelConfig {
 impl MultiModelConfig {
     /// Convert a single model entry into an EvalConfig for the runner.
     pub fn to_eval_config(&self, entry: &ModelEntry) -> EvalConfig {
+        // Each model gets its own sub-directory so traces don't overwrite each other.
+        let model_slug = entry.info.name.to_lowercase().replace([' ', '/', '.'], "_");
         EvalConfig {
             target: EvalTarget::Engine(entry.engine.clone()),
             concurrency: self.concurrency,
             timeout_secs: self.timeout_secs,
             record_traces: self.record_traces,
-            output_dir: self.output_dir.clone(),
+            output_dir: self.output_dir.join(&model_slug),
         }
     }
 }

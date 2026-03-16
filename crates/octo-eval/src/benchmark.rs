@@ -7,6 +7,21 @@ use serde::{Deserialize, Serialize};
 use crate::comparison::ComparisonReport;
 use crate::model::ModelInfo;
 
+/// Macro/micro average statistics across all models.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OverallStats {
+    /// Macro-average: mean of per-model pass rates (treats each model equally)
+    pub macro_avg_pass_rate: f64,
+    /// Micro-average: total_passed / total_tasks across all models (weighted by task count)
+    pub micro_avg_pass_rate: f64,
+    /// Macro-average: mean of per-suite pass rates (treats each suite equally)
+    pub macro_avg_by_suite: HashMap<String, f64>,
+    /// Total tasks run across all models
+    pub total_tasks_all_models: usize,
+    /// Total passed across all models
+    pub total_passed_all_models: usize,
+}
+
 /// Aggregated benchmark report across multiple evaluation suites.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BenchmarkReport {
@@ -15,6 +30,9 @@ pub struct BenchmarkReport {
     pub dimension_matrix: HashMap<String, HashMap<String, f64>>,
     pub cost_analysis: CostAnalysis,
     pub recommendations: Vec<Recommendation>,
+    /// Macro and micro averages across all models
+    #[serde(default)]
+    pub overall_stats: OverallStats,
 }
 
 /// Summary of failure classifications across evaluated tasks.
@@ -160,11 +178,61 @@ impl BenchmarkAggregator {
         // Recommendations
         let recommendations = Self::build_recommendations(&models);
 
+        // Macro/micro averages
+        let overall_stats = Self::build_overall_stats(&models);
+
         BenchmarkReport {
             models,
             dimension_matrix,
             cost_analysis,
             recommendations,
+            overall_stats,
+        }
+    }
+
+    fn build_overall_stats(models: &[ModelBenchmark]) -> OverallStats {
+        if models.is_empty() {
+            return OverallStats::default();
+        }
+
+        // Macro-average pass rate: mean of per-model overall_pass_rate
+        let macro_avg_pass_rate =
+            models.iter().map(|m| m.overall_pass_rate).sum::<f64>() / models.len() as f64;
+
+        // Micro-average pass rate: sum(passed) / sum(total) across all models
+        let total_passed_all_models: usize =
+            models.iter().flat_map(|m| m.per_suite.values()).map(|s| s.passed).sum();
+        let total_tasks_all_models: usize =
+            models.iter().flat_map(|m| m.per_suite.values()).map(|s| s.total).sum();
+        let micro_avg_pass_rate = if total_tasks_all_models > 0 {
+            total_passed_all_models as f64 / total_tasks_all_models as f64
+        } else {
+            0.0
+        };
+
+        // Macro-average by suite: mean pass rate across all models per suite
+        let mut suite_rate_sum: HashMap<String, f64> = HashMap::new();
+        let mut suite_model_count: HashMap<String, usize> = HashMap::new();
+        for m in models {
+            for (suite, result) in &m.per_suite {
+                *suite_rate_sum.entry(suite.clone()).or_default() += result.pass_rate;
+                *suite_model_count.entry(suite.clone()).or_default() += 1;
+            }
+        }
+        let macro_avg_by_suite: HashMap<String, f64> = suite_rate_sum
+            .into_iter()
+            .map(|(suite, sum)| {
+                let count = suite_model_count[&suite];
+                (suite, sum / count as f64)
+            })
+            .collect();
+
+        OverallStats {
+            macro_avg_pass_rate,
+            micro_avg_pass_rate,
+            macro_avg_by_suite,
+            total_tasks_all_models,
+            total_passed_all_models,
         }
     }
 
@@ -360,6 +428,31 @@ impl BenchmarkAggregator {
                 m.overall_pass_rate * 100.0,
                 m.estimated_cost,
                 effectiveness,
+            ));
+        }
+
+        // Macro/micro average row
+        if !report.models.is_empty() {
+            let os = &report.overall_stats;
+            md.push_str("| **Macro-Avg** | — |");
+            for suite in &suite_names {
+                let rate = os.macro_avg_by_suite
+                    .get(suite)
+                    .map(|r| format!("{:.1}%", r * 100.0))
+                    .unwrap_or_else(|| "N/A".into());
+                md.push_str(&format!(" {} |", rate));
+            }
+            md.push_str(&format!(" **{:.1}%** | — | — |\n", os.macro_avg_pass_rate * 100.0));
+
+            md.push_str("| **Micro-Avg** | — |");
+            for _ in &suite_names {
+                md.push_str(" — |");
+            }
+            md.push_str(&format!(
+                " **{:.1}%** ({}/{}) | — | — |\n",
+                os.micro_avg_pass_rate * 100.0,
+                os.total_passed_all_models,
+                os.total_tasks_all_models,
             ));
         }
         md.push('\n');
