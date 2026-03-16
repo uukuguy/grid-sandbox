@@ -742,6 +742,9 @@ mod tests {
             hints_text: String::new(),
             fail_to_pass: "[]".into(),
             pass_to_pass: "[]".into(),
+            version: String::new(),
+            environment_setup_commit: String::new(),
+            created_at: String::new(),
         };
         let task = SweBenchTask::new(record);
         let tr = TaskRecord::from_task(&task);

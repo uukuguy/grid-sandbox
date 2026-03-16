@@ -19,14 +19,15 @@ pub struct ImageRegistry {
 impl ImageRegistry {
     pub fn default_registry() -> Self {
         let mut images = HashMap::new();
-        images.insert("python".into(), "python:3.12-slim-bookworm".into());
-        images.insert("rust".into(), "rust:1.82-bookworm".into());
-        images.insert("node".into(), "node:22-bookworm-slim".into());
-        images.insert("javascript".into(), "node:22-bookworm-slim".into());
-        images.insert("typescript".into(), "node:22-bookworm-slim".into());
-        images.insert("bash".into(), "alpine:latest".into());
-        images.insert("sh".into(), "alpine:latest".into());
-        images.insert("cli".into(), "alpine:latest".into());
+        images.insert("python".into(), "octo-sandbox/python:1.0".into());
+        images.insert("rust".into(), "octo-sandbox/rust:1.0".into());
+        images.insert("node".into(), "octo-sandbox/nodejs:1.0".into());
+        images.insert("javascript".into(), "octo-sandbox/nodejs:1.0".into());
+        images.insert("typescript".into(), "octo-sandbox/nodejs:1.0".into());
+        images.insert("bash".into(), "octo-sandbox/bash:1.0".into());
+        images.insert("sh".into(), "octo-sandbox/bash:1.0".into());
+        images.insert("general".into(), "octo-sandbox/general:1.0".into());
+        images.insert("swebench".into(), "octo-sandbox/swebench:1.0".into());
         Self { images }
     }
 
@@ -35,7 +36,7 @@ impl ImageRegistry {
         self.images
             .get(language)
             .map(|s| s.as_str())
-            .unwrap_or("alpine:latest")
+            .unwrap_or("octo-sandbox/general:1.0")
     }
 }
 
@@ -91,9 +92,9 @@ impl DockerAdapter {
         }
     }
 
-    /// Create a new DockerAdapter with default image "alpine:latest"
+    /// Create a new DockerAdapter with default image "octo-sandbox/general:1.0"
     pub fn with_default_image() -> Self {
-        Self::new("alpine:latest")
+        Self::new("octo-sandbox/general:1.0")
     }
 
     /// Create Docker client

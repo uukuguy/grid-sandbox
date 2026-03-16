@@ -77,6 +77,16 @@ impl GaiaTask {
     }
 }
 
+/// Normalize answer for exact-match comparison.
+/// GAIA standard: trim, lowercase, strip trailing punctuation.
+fn normalize_answer(s: &str) -> String {
+    s.trim()
+        .to_lowercase()
+        .trim_end_matches(|c: char| c == '.' || c == ',' || c == ';')
+        .trim()
+        .to_string()
+}
+
 impl EvalTask for GaiaTask {
     fn id(&self) -> &str {
         &self.record.task_id
@@ -117,10 +127,10 @@ impl EvalTask for GaiaTask {
             .map(|m| m.text_content())
             .unwrap_or_default();
 
-        let normalized_expected = self.record.final_answer.trim().to_lowercase();
-        let normalized_actual = actual.trim().to_lowercase();
+        let normalized_expected = normalize_answer(&self.record.final_answer);
+        let normalized_actual = normalize_answer(&actual);
 
-        let passed = normalized_actual.contains(&normalized_expected);
+        let passed = normalized_actual == normalized_expected;
         EvalScore {
             passed,
             score: if passed { 1.0 } else { 0.0 },
@@ -273,16 +283,34 @@ mod tests {
         };
         let task = GaiaTask::new(record);
 
-        // Pass case
+        // Exact match pass case
         let output = AgentOutput {
-            messages: vec![octo_types::ChatMessage::assistant("The answer is 4.")],
+            messages: vec![octo_types::ChatMessage::assistant("4")],
             ..Default::default()
         };
         let score = task.score(&output);
         assert!(score.passed);
         assert_eq!(score.score, 1.0);
 
-        // Fail case
+        // Exact match with normalization (trailing punctuation stripped)
+        let output_norm = AgentOutput {
+            messages: vec![octo_types::ChatMessage::assistant("  4.  ")],
+            ..Default::default()
+        };
+        let score_norm = task.score(&output_norm);
+        assert!(score_norm.passed);
+        assert_eq!(score_norm.score, 1.0);
+
+        // Contains but not exact match — should FAIL
+        let output_contains = AgentOutput {
+            messages: vec![octo_types::ChatMessage::assistant("The answer is 4.")],
+            ..Default::default()
+        };
+        let score_contains = task.score(&output_contains);
+        assert!(!score_contains.passed, "contains-only match must fail with exact match scorer");
+        assert_eq!(score_contains.score, 0.0);
+
+        // Complete mismatch
         let output_fail = AgentOutput {
             messages: vec![octo_types::ChatMessage::assistant("I don't know.")],
             ..Default::default()
@@ -290,6 +318,15 @@ mod tests {
         let score_fail = task.score(&output_fail);
         assert!(!score_fail.passed);
         assert_eq!(score_fail.score, 0.0);
+    }
+
+    #[test]
+    fn test_normalize_answer() {
+        assert_eq!(normalize_answer("  Hello.  "), "hello");
+        assert_eq!(normalize_answer("Answer,"), "answer");
+        assert_eq!(normalize_answer("YES;"), "yes");
+        assert_eq!(normalize_answer("  42  "), "42");
+        assert_eq!(normalize_answer("New York City"), "new york city");
     }
 
     #[test]

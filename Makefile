@@ -1,7 +1,9 @@
 .PHONY: dev build check test clean fmt lint server web all install setup \
         verify verify-runtime verify-api verify-api-mcp \
         eval-list eval-run eval-compare eval-benchmark eval-benchmark-mini \
-        eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress
+        eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress \
+        docker-build docker-build-python docker-build-rust docker-build-nodejs \
+        docker-build-bash docker-build-general docker-build-swebench docker-list docker-clean
 
 # ============================================================
 # 主要命令
@@ -344,6 +346,37 @@ verify-api-mcp:
 	curl -sf "http://localhost:3001/api/mcp/servers/$(ID)/logs" && echo " ✅ GET /api/mcp/servers/$(ID)/logs" || echo " ❌ GET /api/mcp/servers/$(ID)/logs"
 
 # ============================================================
+# Docker sandbox images
+# ============================================================
+
+docker-build:
+	docker/sandbox-images/build.sh all
+
+docker-build-python:
+	docker/sandbox-images/build.sh python
+
+docker-build-rust:
+	docker/sandbox-images/build.sh rust
+
+docker-build-nodejs:
+	docker/sandbox-images/build.sh nodejs
+
+docker-build-bash:
+	docker/sandbox-images/build.sh bash
+
+docker-build-general:
+	docker/sandbox-images/build.sh general
+
+docker-build-swebench:
+	docker/sandbox-images/build.sh swebench
+
+docker-list:
+	@docker images 'octo-sandbox/*' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}'
+
+docker-clean:
+	@docker images 'octo-sandbox/*' -q | xargs -r docker rmi -f
+
+# ============================================================
 # 帮助
 # ============================================================
 
@@ -391,6 +424,17 @@ help:
 	@echo "  make eval-diff EVAL_RUN_A=<a> EVAL_RUN_B=<b>  两次运行对比"
 	@echo "  make eval-progress                   即时查看正在运行的 benchmark 进度"
 	@echo "  make eval-progress EVAL_RUN_ID=<id>  查看指定运行的进度"
+	@echo ""
+	@echo "Docker sandbox images:"
+	@echo "  make docker-build              构建全部 sandbox Docker 镜像"
+	@echo "  make docker-build-python       构建 Python sandbox 镜像"
+	@echo "  make docker-build-rust         构建 Rust sandbox 镜像"
+	@echo "  make docker-build-nodejs       构建 Node.js sandbox 镜像"
+	@echo "  make docker-build-bash         构建 Bash sandbox 镜像"
+	@echo "  make docker-build-general      构建 General sandbox 镜像"
+	@echo "  make docker-build-swebench     构建 SWE-bench sandbox 镜像"
+	@echo "  make docker-list               列出已构建的 sandbox 镜像"
+	@echo "  make docker-clean              删除全部 sandbox 镜像"
 	@echo ""
 	@echo "首次使用:"
 	@echo "  make setup            安装前端依赖"

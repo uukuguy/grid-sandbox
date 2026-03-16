@@ -1,9 +1,8 @@
 FROM python:3.12-slim-bookworm
 COPY install-base.sh /tmp/
 RUN chmod +x /tmp/install-base.sh && /tmp/install-base.sh && rm /tmp/install-base.sh
-RUN pip install --no-cache-dir pip setuptools wheel \
-    requests pandas openpyxl PyPDF2 beautifulsoup4 sympy scipy numpy Pillow
+RUN pip install --no-cache-dir pip setuptools wheel pytest tox pre-commit
 RUN useradd -m -s /bin/bash sandbox
 USER sandbox
 WORKDIR /workspace
-LABEL org.octo-sandbox.type="python" org.octo-sandbox.version="1.0"
+LABEL org.octo-sandbox.type="swebench" org.octo-sandbox.version="1.0"

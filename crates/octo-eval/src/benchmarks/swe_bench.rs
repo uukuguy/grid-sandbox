@@ -31,6 +31,12 @@ pub struct SweBenchRecord {
     pub fail_to_pass: String,
     #[serde(default)]
     pub pass_to_pass: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub environment_setup_commit: String,
+    #[serde(default)]
+    pub created_at: String,
 }
 
 /// EvalTask implementation for a single SWE-bench task
@@ -325,6 +331,9 @@ mod tests {
             hints_text: String::new(),
             fail_to_pass: "[\"test_one\"]".into(),
             pass_to_pass: "[]".into(),
+            version: String::new(),
+            environment_setup_commit: String::new(),
+            created_at: String::new(),
         };
         assert_eq!(SweBenchTask::classify_difficulty(&easy), Difficulty::Easy);
     }
@@ -336,5 +345,28 @@ mod tests {
         assert!(bm.requires_sandbox());
         assert!(bm.custom_verifier().is_none());
         assert_eq!(bm.custom_metrics().len(), 2);
+    }
+
+    #[test]
+    fn test_swe_bench_load_full_dataset() {
+        let path = SweBenchmark::default_dataset_path();
+        if !path.exists() {
+            eprintln!("Skipping: dataset not found at {}", path.display());
+            return;
+        }
+        let tasks = SweBenchmark::load_from_jsonl(&path).unwrap();
+        assert_eq!(tasks.len(), 300, "SWE-bench Lite should have 300 instances");
+        // Verify first and last task have valid IDs
+        assert!(!tasks[0].id().is_empty());
+        assert!(!tasks[299].id().is_empty());
+    }
+
+    #[test]
+    fn test_swe_bench_record_deserialize_with_new_fields() {
+        let json = r#"{"instance_id":"django__django-16527","repo":"django/django","problem_statement":"Fix issue","version":"4.2","environment_setup_commit":"abc123","created_at":"2023-10-01T00:00:00Z"}"#;
+        let record: SweBenchRecord = serde_json::from_str(json).unwrap();
+        assert_eq!(record.version, "4.2");
+        assert_eq!(record.environment_setup_commit, "abc123");
+        assert_eq!(record.created_at, "2023-10-01T00:00:00Z");
     }
 }

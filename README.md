@@ -1,165 +1,121 @@
-# 🦑 Octo Sandbox
+# Fix for Django QuerySet.exists() Ignoring using() Database Router
 
-**Enterprise-grade autonomous agent platform with sandboxed execution.**
+## Overview
 
-Octo Sandbox delivers the full power of autonomous AI agents — long-horizon reasoning, parallel tool execution, structured multi-layer memory, MCP-native tooling, and cron-based scheduling — inside a security boundary designed for enterprise deployment: Docker/WASM sandboxed execution, security policies, action auditing, multi-tenant isolation, and secret management.
+This repository contains fixes and workarounds for a Django bug where `QuerySet.exists()` ignores the database specified by `.using()`, causing queries to be executed on the default database instead.
 
-Built on a high-performance Rust core with a React workbench UI.
+## The Problem
 
----
-
-## Why Octo Sandbox
-
-Most autonomous agent frameworks are built for developer experience. Octo Sandbox is built for enterprise production readiness — where control, auditability, and isolation matter as much as capability.
-
-| Capability | Details |
-|---|---|
-| **Sandboxed execution** | Docker containers, WASM runtime, and subprocess adapters — untrusted code never runs on the host |
-| **Security policies** | Per-agent autonomy levels, command risk classification, path allowlists |
-| **Audit trail** | Every tool call, agent action, and session event is recorded |
-| **MCP-native** | Full Model Context Protocol support — stdio and SSE transports, hot-reload without restart |
-| **Multi-layer memory** | Working memory (in-session), session memory, persistent memory with full-text and semantic search, knowledge graph |
-| **Scheduled agents** | Cron-based task scheduling with execution history |
-| **Multi-provider LLM** | Anthropic, OpenAI, and OpenAI-compatible endpoints (DeepSeek, proxy, etc.) |
-| **Parallel tool execution** | Semaphore-controlled concurrent tool calls with configurable limits |
-| **Skills system** | Filesystem-loaded skill modules, hot-reloaded, per-agent tool filtering |
-
----
-
-## Architecture
-
-```
-octo-sandbox (mono-repo)
-├── octo-types          Shared type definitions
-├── octo-engine         Core agent runtime (shared library)
-│   ├── agent/          AgentRuntime → AgentExecutor → AgentLoop
-│   ├── sandbox/        Docker · WASM · subprocess adapters
-│   ├── security/       Policy engine · action tracker
-│   ├── audit/          Audit event storage
-│   ├── memory/         Working · session · persistent · knowledge graph
-│   ├── mcp/            MCP client manager (stdio + SSE)
-│   ├── providers/      Anthropic · OpenAI · retry · provider chain
-│   ├── scheduler/      Cron scheduler · execution history
-│   ├── skills/         Skill loader · registry
-│   ├── tools/          Built-in tools (bash, file, search…)
-│   ├── auth/           Authentication middleware
-│   └── secret/         Secret manager
-│
-├── octo-server         Workbench API server (Axum, port 3001)
-└── web/                Workbench frontend (React + TypeScript + Vite, port 5180)
+```python
+# This should query 'other_db', but may query 'default' instead
+MyModel.objects.using('other_db').filter(name='test').exists()
 ```
 
-**Two products, one engine:**
+## Files Included
 
-- **octo-workbench** (`octo-server` + `web/`) — single-user agent workbench, production-ready for individual or team use
-- **octo-platform** (planned) — multi-tenant enterprise platform with per-tenant isolation, user management, quota control, and orchestration
+1. **BUG_EXPLANATION.md** - Detailed explanation of the bug and its root cause
+2. **django_exists_using_fix.patch** - Patch file for Django source code
+3. **monkey_patch_exists_fix.py** - Monkey patch solution for immediate use
+4. **apps.py** - Example Django AppConfig with integrated fix
+5. **test_exists_using.py** - Test cases to verify the bug and fix
 
----
+## Quick Fix Options
 
-## Quick Start
+### Option 1: Monkey Patch (Recommended for Immediate Fix)
 
-**Prerequisites:** Rust 1.75+, Node.js 18+, an Anthropic or OpenAI API key.
+Add this to your app's `apps.py` in the `ready()` method:
+
+```python
+from django.apps import AppConfig
+from django.db.models.query import QuerySet
+
+class YourAppConfig(AppConfig):
+    name = 'your_app'
+    
+    def ready(self):
+        original_exists = QuerySet.exists
+        
+        def fixed_exists(self):
+            if self.query.combinator:
+                raise NotImplementedError()
+            db = self._db if self._db is not None else self.db
+            if self._result_cache is None:
+                return self.query.has_results(using=db)
+            return bool(self._result_cache)
+        
+        QuerySet.exists = fixed_exists
+```
+
+### Option 2: Use count() Instead (Temporary Workaround)
+
+```python
+# Instead of:
+MyModel.objects.using('other_db').filter(name='test').exists()
+
+# Use:
+MyModel.objects.using('other_db').filter(name='test').count() > 0
+```
+
+### Option 3: Apply Django Patch
+
+Apply the patch from `django_exists_using_fix.patch` to your Django installation:
 
 ```bash
-# Clone
-git clone https://github.com/uukuguy/octo-sandbox.git
-cd octo-sandbox
-
-# Configure
-cp .env.example .env
-# Edit .env: set ANTHROPIC_API_KEY or OPENAI_API_KEY
-
-# Install frontend dependencies
-make setup
-
-# Start (backend on :3001, frontend on :5180)
-make dev
+patch -p1 < django_exists_using_fix.patch
 ```
 
-Open [http://localhost:5180](http://localhost:5180).
+## Testing
 
----
-
-## Configuration
-
-Priority order (lowest → highest): `config.yaml` → CLI args → environment variables.
-
-Key environment variables:
+Run the test cases to verify the fix:
 
 ```bash
-# Provider
-LLM_PROVIDER=anthropic          # anthropic | openai
-ANTHROPIC_API_KEY=sk-ant-...    # required for Anthropic
-OPENAI_API_KEY=sk-...           # required for OpenAI
-OPENAI_BASE_URL=...             # optional: proxy or compatible endpoint
-OPENAI_MODEL_NAME=deepseek-chat # optional: model override
-
-# Server
-OCTO_HOST=127.0.0.1
-OCTO_PORT=3001
-OCTO_DB_PATH=./data/octo.db
-
-# Logging
-RUST_LOG=octo_server=info,octo_engine=info
-OCTO_LOG_FORMAT=json            # optional: structured JSON logs
+python manage.py test test_exists_using
 ```
 
-Generate a fully-commented config file:
+Or create a test in your test suite:
 
-```bash
-make config-gen   # writes config.yaml
+```python
+from django.test import TestCase
+
+class ExistsUsingTest(TestCase):
+    databases = {'default', 'other_db'}
+    
+    def test_exists_respects_using(self):
+        # Create object in default database
+        MyModel.objects.create(name='test')
+        
+        # Check in other_db where object doesn't exist
+        result = MyModel.objects.using('other_db').filter(name='test').exists()
+        
+        # Should be False since object is only in default
+        self.assertFalse(result)
 ```
 
----
+## How It Works
 
-## Development
+The issue occurs because `QuerySet.exists()` uses `self.db` property, which may not properly respect the `_db` attribute set by the `using()` method.
 
-```bash
-make dev          # start backend + frontend (hot reload)
-make server       # backend only
-make web          # frontend only
+The fix ensures that:
+1. We check `self._db` first (set by `using()`)
+2. Fall back to `self.db` if `_db` is not set
+3. Pass the correct database to `query.has_results()`
 
-make build        # compile Rust
-make check        # fast compile check (no binary)
-make test         # run all tests
-make fmt          # format code
-make lint         # Clippy lint
-make verify       # static: cargo check + tsc + vite build
-```
+## Affected Django Versions
 
----
+This issue affects multiple Django versions. Check your specific version's implementation of `QuerySet.exists()` in `django/db/models/query.py`.
 
-## REST API
+## Related Django Documentation
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/health` | System health and component status |
-| `GET` | `/api/metrics` | Runtime metrics (turns, tool calls, latency) |
-| `GET/POST` | `/api/sessions` | Session management |
-| `GET/POST/DELETE` | `/api/memories` | Persistent memory CRUD and search |
-| `GET/POST/DELETE` | `/api/mcp/servers` | MCP server lifecycle |
-| `GET` | `/api/tools` | Available tools |
-| `GET/POST/DELETE` | `/api/scheduler/tasks` | Cron task management |
-| `POST` | `/api/scheduler/tasks/:id/run` | Manual task trigger |
-| `GET/POST/DELETE` | `/api/agents` | Agent catalog |
-| `WS` | `/ws` | Real-time agent stream (chat, tool events, token budget) |
+- [Multi-Database Support](https://docs.djangoproject.com/en/stable/topics/db/multi-db/)
+- [QuerySet API Reference](https://docs.djangoproject.com/en/stable/ref/models/querysets/)
 
----
+## Contributing
 
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Agent runtime | Rust, Tokio |
-| API server | Axum, Tower |
-| Database | SQLite (rusqlite, WAL mode), FTS5 |
-| MCP | rmcp SDK (stdio + SSE) |
-| Sandbox | Docker API, WASM, subprocess |
-| Frontend | React 18, TypeScript, Vite, Jotai, TailwindCSS |
-| LLM | Anthropic Claude, OpenAI (and compatible) |
-
----
+If you find additional issues or have improvements, please:
+1. Fork the repository
+2. Create a test case demonstrating the issue
+3. Submit a pull request
 
 ## License
 
-MIT
+This fix is provided as-is to help resolve the Django bug. Django itself is licensed under the BSD license.
