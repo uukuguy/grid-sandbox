@@ -118,8 +118,8 @@ clean-all: clean clean-web
 # 注意: 所有命令从 workspace 根目录运行，输出写入 eval_output/
 # ============================================================
 
-EVAL_CONFIG     ?= crates/octo-eval/eval.benchmark.toml
-EVAL_MINI_CONFIG ?= crates/octo-eval/eval.benchmark.mini.toml
+EVAL_CONFIG     ?= config/eval/eval.benchmark.toml
+EVAL_MINI_CONFIG ?= config/eval/eval.benchmark.mini.toml
 EVAL_SUITE      ?= tool_call
 EVAL_MAX_TASKS  ?= 0
 EVAL_FORMAT     ?= both
