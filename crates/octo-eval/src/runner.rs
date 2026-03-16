@@ -186,7 +186,12 @@ impl EvalRunner {
             EvalTarget::Server(server_config) => {
                 return self.run_task_server(task, server_config).await
             }
-            EvalTarget::Engine(_) => {} // fall through to engine path below
+            EvalTarget::Engine(_) => {
+                // For SWE-bench tasks, prefer Docker execution mode
+                if Self::is_swe_bench_task(task) {
+                    return self.run_task_docker(task).await;
+                }
+            }
         }
 
         let start = Instant::now();
@@ -667,6 +672,226 @@ impl EvalRunner {
             duration_ms = duration_ms,
             "Server task evaluation complete"
         );
+
+        Ok(TaskResult {
+            task_id,
+            output,
+            score,
+            duration_ms,
+        })
+    }
+
+    /// Check if a task is a SWE-bench task that should use Docker mode.
+    fn is_swe_bench_task(task: &dyn EvalTask) -> bool {
+        task.metadata().tags.contains(&"swe_bench".to_string())
+    }
+
+    /// Run a SWE-bench task in Docker mode.
+    ///
+    /// Flow:
+    /// 1. Check Docker daemon availability
+    /// 2. Create container from swebench image with repo cloned at /testbed
+    /// 3. Agent executes tools inside the container
+    /// 4. Extract git diff patch from container
+    /// 5. Score using official swebench harness (or patch-presence heuristic)
+    /// 6. Cleanup container
+    ///
+    /// Falls back to engine mode if Docker is unavailable.
+    async fn run_task_docker(
+        &self,
+        task: &dyn EvalTask,
+    ) -> Result<TaskResult> {
+        use octo_engine::sandbox::{DockerAdapter, RuntimeAdapter};
+
+        let start = Instant::now();
+        let task_id = task.id().to_string();
+
+        // Check Docker availability
+        let adapter = DockerAdapter::new("octo-sandbox/swebench:1.0");
+        if !adapter.is_available() {
+            warn!(task_id = %task_id, "Docker not available, falling back to engine mode for SWE-bench task");
+            // Fall through to engine mode — the task will still produce a patch
+            // via normal tool execution, just not in an isolated container.
+            return self.run_task_engine_fallback(task).await;
+        }
+
+        info!(task_id = %task_id, "Starting SWE-bench Docker evaluation task");
+
+        // Create sandbox container
+        let mut sandbox_config = octo_engine::sandbox::SandboxConfig::new(
+            octo_engine::sandbox::SandboxType::Docker,
+        );
+        sandbox_config.env.insert(
+            "TASK_ID".to_string(),
+            task_id.clone(),
+        );
+
+        let sandbox_id = match adapter.create(&sandbox_config).await {
+            Ok(id) => id,
+            Err(e) => {
+                warn!(task_id = %task_id, error = %e, "Docker container creation failed, falling back");
+                return self.run_task_engine_fallback(task).await;
+            }
+        };
+
+        // Run agent prompt inside the container
+        let result = adapter
+            .execute(&sandbox_id, task.prompt(), "bash")
+            .await;
+
+        let output = match result {
+            Ok(exec_result) => {
+                // After agent execution, extract the git diff
+                let diff_result = adapter
+                    .execute(&sandbox_id, "cd /testbed && git diff", "bash")
+                    .await;
+
+                let patch = diff_result
+                    .map(|r| r.stdout)
+                    .unwrap_or_default();
+
+                let mut messages_text = exec_result.stdout.clone();
+                if !patch.is_empty() {
+                    messages_text.push_str("\n\n```diff\n");
+                    messages_text.push_str(&patch);
+                    messages_text.push_str("\n```\n");
+                }
+
+                AgentOutput {
+                    rounds: 1,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    stop_reason: if exec_result.success {
+                        "end_turn".to_string()
+                    } else {
+                        "error".to_string()
+                    },
+                    tool_calls: vec![],
+                    messages: vec![octo_types::ChatMessage::assistant(&messages_text)],
+                    duration_ms: start.elapsed().as_millis() as u64,
+                }
+            }
+            Err(e) => {
+                warn!(task_id = %task_id, error = %e, "Docker execution failed");
+                AgentOutput {
+                    messages: vec![octo_types::ChatMessage::assistant(&format!(
+                        "Docker execution error: {}",
+                        e
+                    ))],
+                    ..AgentOutput::default()
+                }
+            }
+        };
+
+        // Cleanup container
+        let _ = adapter.destroy(&sandbox_id).await;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let score = task.score(&output);
+
+        info!(
+            task_id = %task_id,
+            passed = score.passed,
+            score = score.score,
+            duration_ms,
+            "SWE-bench Docker task evaluation complete"
+        );
+
+        Ok(TaskResult {
+            task_id,
+            output,
+            score,
+            duration_ms,
+        })
+    }
+
+    /// Engine-mode fallback for SWE-bench tasks when Docker is unavailable.
+    /// Reuses the standard engine execution path via collect_events.
+    async fn run_task_engine_fallback(
+        &self,
+        task: &dyn EvalTask,
+    ) -> Result<TaskResult> {
+        let start = Instant::now();
+        let task_id = task.id().to_string();
+
+        let engine_config = match &self.config.target {
+            EvalTarget::Engine(c) => c,
+            _ => {
+                return Ok(TaskResult {
+                    task_id,
+                    output: AgentOutput::default(),
+                    score: EvalScore::fail(
+                        0.0,
+                        ScoreDetails::Custom {
+                            message: "SWE-bench Docker fallback requires Engine target".into(),
+                        },
+                    ),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                });
+            }
+        };
+
+        let mut base_registry = octo_engine::tools::default_tools();
+        if let Some(task_tool_specs) = task.available_tools() {
+            for spec in task_tool_specs {
+                if base_registry.get(&spec.name).is_none() {
+                    base_registry.register(EvalMockTool::new(spec));
+                }
+            }
+        }
+        let tool_registry = if let Some(ref tool_names) = task.tool_allowlist() {
+            Arc::new(base_registry.snapshot_filtered(tool_names))
+        } else {
+            Arc::new(base_registry)
+        };
+
+        let task_workdir = std::env::temp_dir()
+            .join("octo-eval")
+            .join(&task_id);
+        let _ = std::fs::create_dir_all(&task_workdir);
+        let tool_ctx = octo_types::ToolContext {
+            sandbox_id: octo_types::SandboxId::default(),
+            working_dir: task_workdir,
+            path_validator: None,
+        };
+
+        let loop_config = AgentLoopConfig::builder()
+            .provider(self.provider.clone())
+            .model(engine_config.model.clone())
+            .max_tokens(engine_config.max_tokens)
+            .max_iterations(engine_config.max_iterations)
+            .tools(tool_registry)
+            .tool_ctx(tool_ctx)
+            .build();
+
+        let messages = vec![ChatMessage::user(task.prompt())];
+        let timeout = Duration::from_secs(self.config.timeout_secs);
+
+        let (output, _timeline) = match tokio::time::timeout(
+            timeout,
+            Self::collect_events(loop_config, messages),
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(_elapsed) => {
+                warn!(task_id = %task_id, "SWE-bench engine fallback timed out");
+                return Ok(TaskResult {
+                    task_id,
+                    output: AgentOutput::default(),
+                    score: EvalScore::fail(
+                        0.0,
+                        ScoreDetails::Timeout {
+                            elapsed_secs: self.config.timeout_secs,
+                        },
+                    ),
+                    duration_ms: start.elapsed().as_millis() as u64,
+                });
+            }
+        };
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let score = task.score(&output);
 
         Ok(TaskResult {
             task_id,
