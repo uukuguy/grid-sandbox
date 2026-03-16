@@ -42,11 +42,36 @@ pub struct SweBenchRecord {
 /// EvalTask implementation for a single SWE-bench task
 pub struct SweBenchTask {
     record: SweBenchRecord,
+    /// Full prompt with SWE-bench instructions (built once at construction)
+    prompt: String,
 }
 
 impl SweBenchTask {
     pub fn new(record: SweBenchRecord) -> Self {
-        Self { record }
+        let mut prompt = String::from(
+            "You are a software engineer tasked with fixing a bug in a Python project.\n\n",
+        );
+        prompt.push_str("## Problem Statement\n\n");
+        prompt.push_str(&record.problem_statement);
+        prompt.push_str("\n\n");
+
+        if !record.hints_text.is_empty() {
+            prompt.push_str("## Hints\n\n");
+            prompt.push_str(&record.hints_text);
+            prompt.push_str("\n\n");
+        }
+
+        prompt.push_str("## Instructions\n\n");
+        prompt.push_str("1. Explore the repository structure to understand the codebase.\n");
+        prompt.push_str("2. Read relevant source files to understand the bug.\n");
+        prompt.push_str("3. Implement a fix for the described issue.\n");
+        prompt.push_str("4. After fixing, run `git diff` to show your changes.\n\n");
+        prompt.push_str("Important:\n");
+        prompt.push_str("- Do NOT modify test files.\n");
+        prompt.push_str("- Make minimal, focused changes to fix the issue.\n");
+        prompt.push_str("- Your final output should include the git diff of your changes.\n");
+
+        Self { record, prompt }
     }
 
     /// Extract a unified diff patch from agent output text.
@@ -156,7 +181,7 @@ impl EvalTask for SweBenchTask {
     }
 
     fn prompt(&self) -> &str {
-        &self.record.problem_statement
+        &self.prompt
     }
 
     fn available_tools(&self) -> Option<Vec<octo_types::tool::ToolSpec>> {
