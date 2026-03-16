@@ -332,51 +332,44 @@ impl EvalTask for TaskRecord {
             Some("swe_bench") => {
                 let instance_id = self.scoring_data.get("instance_id")
                     .and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let repo = self.scoring_data.get("repo")
-                    .and_then(|v| v.as_str()).unwrap_or("");
-                let problem_statement = self.scoring_data.get("problem_statement")
-                    .and_then(|v| v.as_str()).unwrap_or("");
-                let text = output.messages.last()
-                    .map(|m| m.text_content()).unwrap_or_default();
-                let all_text: String = {
-                    let mut s = text;
-                    for tc in &output.tool_calls {
-                        s.push('\n');
-                        s.push_str(&tc.output);
-                    }
-                    s
+
+                // Extract all text from agent output (messages + tool calls)
+                let mut all_text = String::new();
+                for msg in &output.messages {
+                    all_text.push_str(&msg.text_content());
+                    all_text.push('\n');
+                }
+                for tc in &output.tool_calls {
+                    all_text.push_str(&tc.output);
+                    all_text.push('\n');
+                }
+
+                // Use the same patch extraction logic as SweBenchTask
+                let model_patch = crate::benchmarks::swe_bench::SweBenchTask::extract_patch(&all_text);
+
+                let (passed, score) = if model_patch.is_some() {
+                    // Patch produced but not harness-verified
+                    (false, 0.5)
+                } else {
+                    (false, 0.0)
                 };
-                let has_diff_header = all_text.contains("diff --git")
-                    || (all_text.contains("--- a/") && all_text.contains("+++ b/"));
-                let repo_basename = repo.split('/').next_back().unwrap_or("");
-                let references_repo = all_text.to_lowercase().contains(&repo.to_lowercase())
-                    || (!repo_basename.is_empty() && all_text.to_lowercase().contains(&repo_basename.to_lowercase()));
-                let explored_code = output.tool_calls.iter().any(|tc| {
-                    tc.name == "file_read" || tc.name == "bash" || tc.name == "file_write"
-                });
-                let problem_keywords: Vec<&str> = problem_statement
-                    .split_whitespace().filter(|w| w.len() > 5).take(5).collect();
-                let addresses_problem = problem_keywords.iter().any(|kw| {
-                    all_text.to_lowercase().contains(&kw.to_lowercase())
-                });
-                let mut score = 0.0f64;
-                if has_diff_header { score += 0.4; }
-                if explored_code { score += 0.2; }
-                if references_repo { score += 0.2; }
-                if addresses_problem { score += 0.2; }
-                let passed = score >= 0.6;
+
                 EvalScore {
                     passed,
                     score,
                     details: ScoreDetails::SweVerify {
                         instance_id,
-                        fail_to_pass_passed: passed,
+                        fail_to_pass_passed: false,
                         pass_to_pass_passed: false,
-                        fail_to_pass_count: if passed { 1 } else { 0 },
+                        fail_to_pass_count: 0,
                         pass_to_pass_count: 0,
                         execution_time_ms: 0,
                     },
-                    dimensions: HashMap::new(),
+                    dimensions: {
+                        let mut d = HashMap::new();
+                        d.insert("has_patch".into(), if model_patch.is_some() { 1.0 } else { 0.0 });
+                        d
+                    },
                     failure_class: None,
                 }
             }
@@ -750,7 +743,7 @@ mod tests {
         let tr = TaskRecord::from_task(&task);
         assert_eq!(tr.scoring_data.get("benchmark").unwrap(), "swe_bench");
 
-        // Pass case: has diff + explored code + references repo + addresses problem
+        // Case with patch: score 0.5 (patch produced, not harness-verified)
         let output_pass = AgentOutput {
             messages: vec![octo_types::ChatMessage::assistant(
                 "Here is the fix:\ndiff --git a/django/db/models/query.py b/django/db/models/query.py\n--- a/django/db/models/query.py\n+++ b/django/db/models/query.py\n@@ -1,3 +1,4 @@\n+# Fix filtering\n"
@@ -765,16 +758,18 @@ mod tests {
             ..Default::default()
         };
         let score_pass = tr.score(&output_pass);
-        assert!(score_pass.passed, "TaskRecord should pass SWE-bench with diff + signals");
+        assert_eq!(score_pass.score, 0.5, "TaskRecord should score 0.5 for SWE-bench with patch");
+        assert!(!score_pass.passed, "TaskRecord should not pass without harness verification");
         assert!(matches!(score_pass.details, crate::score::ScoreDetails::SweVerify { .. }));
 
-        // Fail case: no diff
+        // Case without patch: score 0.0
         let output_fail = AgentOutput {
             messages: vec![octo_types::ChatMessage::assistant("I can't fix this")],
             ..Default::default()
         };
         let score_fail = tr.score(&output_fail);
         assert!(!score_fail.passed, "TaskRecord should fail SWE-bench without diff");
+        assert_eq!(score_fail.score, 0.0, "TaskRecord should score 0.0 without patch");
     }
 
     #[test]

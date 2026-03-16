@@ -49,6 +49,90 @@ impl SweBenchTask {
         Self { record }
     }
 
+    /// Extract a unified diff patch from agent output text.
+    /// Looks for `diff --git` blocks or `--- a/` / `+++ b/` pairs.
+    pub fn extract_patch(text: &str) -> Option<String> {
+        // Strategy 1: Find diff --git blocks
+        if let Some(start) = text.find("diff --git") {
+            // Extract from the first `diff --git` to the end of the diff content
+            let diff_text = &text[start..];
+            // Find where the diff ends (next non-diff content or end of text)
+            let patch = diff_text
+                .lines()
+                .take_while(|line| {
+                    line.starts_with("diff --git")
+                        || line.starts_with("---")
+                        || line.starts_with("+++")
+                        || line.starts_with("@@")
+                        || line.starts_with('+')
+                        || line.starts_with('-')
+                        || line.starts_with(' ')
+                        || line.starts_with("index ")
+                        || line.starts_with("new file")
+                        || line.starts_with("deleted file")
+                        || line.starts_with("old mode")
+                        || line.starts_with("new mode")
+                        || line.is_empty()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !patch.is_empty() {
+                return Some(patch);
+            }
+        }
+
+        // Strategy 2: Look for --- a/ and +++ b/ patterns
+        if text.contains("--- a/") && text.contains("+++ b/") {
+            let lines: Vec<&str> = text.lines().collect();
+            let mut in_diff = false;
+            let mut patch_lines = Vec::new();
+            for line in &lines {
+                if line.starts_with("--- a/") {
+                    in_diff = true;
+                }
+                if in_diff {
+                    patch_lines.push(*line);
+                    // End of hunk detection: non-diff line after we started
+                    if !line.starts_with("---")
+                        && !line.starts_with("+++")
+                        && !line.starts_with("@@")
+                        && !line.starts_with('+')
+                        && !line.starts_with('-')
+                        && !line.starts_with(' ')
+                        && !line.is_empty()
+                    {
+                        patch_lines.pop(); // remove the non-diff line
+                        break;
+                    }
+                }
+            }
+            if !patch_lines.is_empty() {
+                return Some(patch_lines.join("\n"));
+            }
+        }
+
+        None
+    }
+
+    /// Generate a predictions.jsonl entry for the swebench harness.
+    pub fn to_prediction(&self, model_patch: &str, model_name: &str) -> serde_json::Value {
+        serde_json::json!({
+            "instance_id": self.record.instance_id,
+            "model_name_or_path": model_name,
+            "model_patch": model_patch,
+        })
+    }
+
+    /// Get the instance_id for this task
+    pub fn instance_id(&self) -> &str {
+        &self.record.instance_id
+    }
+
+    /// Get the record for this task
+    pub fn record(&self) -> &SweBenchRecord {
+        &self.record
+    }
+
     /// Classify difficulty based on patch size and test complexity
     pub fn classify_difficulty(record: &SweBenchRecord) -> Difficulty {
         let patch_lines = record.patch.lines().count();
@@ -124,72 +208,46 @@ impl EvalTask for SweBenchTask {
     }
 
     fn score(&self, output: &AgentOutput) -> EvalScore {
-        // Static patch quality scoring (no Docker required).
-        // Scores patch completeness and relevance without running tests.
-        let text = output
-            .messages
-            .last()
-            .map(|m| m.text_content())
-            .unwrap_or_default();
+        // Extract all text from agent output (messages + tool calls)
+        let mut all_text = String::new();
+        for msg in &output.messages {
+            all_text.push_str(&msg.text_content());
+            all_text.push('\n');
+        }
+        for tc in &output.tool_calls {
+            all_text.push_str(&tc.output);
+            all_text.push('\n');
+        }
 
-        let all_text: String = {
-            let mut s = text.clone();
-            for tc in &output.tool_calls {
-                s.push('\n');
-                s.push_str(&tc.output);
-            }
-            s
+        // Try to extract a unified diff from the output
+        let model_patch = Self::extract_patch(&all_text);
+
+        let (passed, score) = if model_patch.is_some() {
+            // Agent produced a patch — this is a meaningful attempt
+            // Full verification requires running swebench harness (external step)
+            // Score 0.5 for producing a patch; 1.0 only after harness verification
+            (false, 0.5)
+        } else {
+            // No patch produced
+            (false, 0.0)
         };
-
-        // Check 1: Produced a properly formatted unified diff
-        let has_diff_header = all_text.contains("diff --git")
-            || (all_text.contains("--- a/") && all_text.contains("+++ b/"));
-
-        // Check 2: Diff references the correct repository files
-        let repo_basename = self.record.repo.split('/').next_back().unwrap_or("");
-        let references_repo = all_text.to_lowercase().contains(&self.record.repo.to_lowercase())
-            || (!repo_basename.is_empty() && all_text.to_lowercase().contains(&repo_basename.to_lowercase()));
-
-        // Check 3: Agent explored relevant files (used file_read or bash tool)
-        let explored_code = output.tool_calls.iter().any(|tc| {
-            tc.name == "file_read" || tc.name == "bash" || tc.name == "file_write"
-        });
-
-        // Check 4: Problem statement keywords appear in reasoning
-        let problem_keywords: Vec<&str> = self.record.problem_statement
-            .split_whitespace()
-            .filter(|w| w.len() > 5)
-            .take(5)
-            .collect();
-        let addresses_problem = problem_keywords.iter().any(|kw| {
-            all_text.to_lowercase().contains(&kw.to_lowercase())
-        });
-
-        // Weighted score:
-        // - has_diff_header: 0.4 (core deliverable)
-        // - explored_code: 0.2 (shows agent attempted to understand codebase)
-        // - references_repo: 0.2 (diff is relevant to the right repo)
-        // - addresses_problem: 0.2 (solution is relevant to the issue)
-        let mut score = 0.0f64;
-        if has_diff_header { score += 0.4; }
-        if explored_code { score += 0.2; }
-        if references_repo { score += 0.2; }
-        if addresses_problem { score += 0.2; }
-
-        let passed = score >= 0.6; // Must have diff + at least one other signal
 
         EvalScore {
             passed,
             score,
             details: ScoreDetails::SweVerify {
                 instance_id: self.record.instance_id.clone(),
-                fail_to_pass_passed: passed,
+                fail_to_pass_passed: false,
                 pass_to_pass_passed: false,
-                fail_to_pass_count: if passed { 1 } else { 0 },
+                fail_to_pass_count: 0,
                 pass_to_pass_count: 0,
                 execution_time_ms: 0,
             },
-            dimensions: HashMap::new(),
+            dimensions: {
+                let mut d = HashMap::new();
+                d.insert("has_patch".into(), if model_patch.is_some() { 1.0 } else { 0.0 });
+                d
+            },
             failure_class: None,
         }
     }
@@ -307,6 +365,70 @@ impl ExternalBenchmark for SweBenchmark {
     }
 }
 
+/// SWE-bench harness integration for official verification.
+/// This runs the official swebench Python package to verify patches.
+pub struct SweBenchHarness;
+
+impl SweBenchHarness {
+    /// Write predictions to a JSONL file for the swebench harness.
+    pub fn write_predictions(
+        predictions: &[(String, String)], // (instance_id, model_patch)
+        model_name: &str,
+        output_path: &std::path::Path,
+    ) -> anyhow::Result<()> {
+        let mut file = std::fs::File::create(output_path)?;
+        use std::io::Write;
+        for (instance_id, patch) in predictions {
+            let entry = serde_json::json!({
+                "instance_id": instance_id,
+                "model_name_or_path": model_name,
+                "model_patch": patch,
+            });
+            writeln!(file, "{}", serde_json::to_string(&entry)?)?;
+        }
+        Ok(())
+    }
+
+    /// Run the official swebench harness verification.
+    /// Requires: pip install swebench
+    /// Returns: Map of instance_id -> resolved (true/false)
+    pub fn run_evaluation(
+        predictions_path: &std::path::Path,
+        dataset_name: &str,
+        max_workers: usize,
+    ) -> anyhow::Result<HashMap<String, bool>> {
+        use std::process::Command;
+
+        let output = Command::new("python3")
+            .args([
+                "-m",
+                "swebench.harness.run_evaluation",
+                "--dataset_name",
+                dataset_name,
+                "--predictions_path",
+                &predictions_path.to_string_lossy(),
+                "--max_workers",
+                &max_workers.to_string(),
+                "--run_id",
+                "octo-eval",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("swebench harness failed: {}", stderr);
+        }
+
+        // Parse harness output — the harness writes results to a JSON file
+        // For now, return empty map; actual parsing depends on harness output format
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        tracing::info!("Harness output: {}", stdout);
+
+        // TODO: Parse actual harness results from output directory
+        Ok(HashMap::new())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,5 +490,82 @@ mod tests {
         assert_eq!(record.version, "4.2");
         assert_eq!(record.environment_setup_commit, "abc123");
         assert_eq!(record.created_at, "2023-10-01T00:00:00Z");
+    }
+
+    #[test]
+    fn test_swe_bench_extract_patch_diff_git() {
+        let text = "Here is my fix:\n\ndiff --git a/django/db/models/query.py b/django/db/models/query.py\nindex abc123..def456 100644\n--- a/django/db/models/query.py\n+++ b/django/db/models/query.py\n@@ -100,3 +100,4 @@\n     def filter(self):\n-        return old\n+        return new\n\nDone!";
+        let patch = SweBenchTask::extract_patch(text);
+        assert!(patch.is_some());
+        let p = patch.unwrap();
+        assert!(p.starts_with("diff --git"));
+        assert!(p.contains("+        return new"));
+    }
+
+    #[test]
+    fn test_swe_bench_extract_patch_none() {
+        let text = "I looked at the code but couldn't figure out the fix.";
+        let patch = SweBenchTask::extract_patch(text);
+        assert!(patch.is_none());
+    }
+
+    #[test]
+    fn test_swe_bench_scoring_with_patch() {
+        let record = SweBenchRecord {
+            instance_id: "test__test-001".into(),
+            repo: "test/test".into(),
+            base_commit: String::new(),
+            patch: String::new(),
+            test_patch: String::new(),
+            problem_statement: "Fix the bug".into(),
+            hints_text: String::new(),
+            fail_to_pass: "[]".into(),
+            pass_to_pass: "[]".into(),
+            version: String::new(),
+            environment_setup_commit: String::new(),
+            created_at: String::new(),
+        };
+        let task = SweBenchTask::new(record);
+
+        // Agent produced a valid patch
+        let output = AgentOutput {
+            messages: vec![octo_types::ChatMessage::assistant(
+                "diff --git a/test.py b/test.py\n--- a/test.py\n+++ b/test.py\n@@ -1 +1 @@\n-old\n+new\n",
+            )],
+            ..Default::default()
+        };
+        let score = task.score(&output);
+        assert_eq!(score.score, 0.5); // Patch produced but not verified
+        assert!(!score.passed); // Not verified by harness
+
+        // Agent produced no patch
+        let output_no_patch = AgentOutput {
+            messages: vec![octo_types::ChatMessage::assistant("I couldn't fix this.")],
+            ..Default::default()
+        };
+        let score_no = task.score(&output_no_patch);
+        assert_eq!(score_no.score, 0.0);
+    }
+
+    #[test]
+    fn test_swe_bench_to_prediction() {
+        let record = SweBenchRecord {
+            instance_id: "django__django-16527".into(),
+            repo: "django/django".into(),
+            base_commit: String::new(),
+            patch: String::new(),
+            test_patch: String::new(),
+            problem_statement: "Fix issue".into(),
+            hints_text: String::new(),
+            fail_to_pass: "[]".into(),
+            pass_to_pass: "[]".into(),
+            version: String::new(),
+            environment_setup_commit: String::new(),
+            created_at: String::new(),
+        };
+        let task = SweBenchTask::new(record);
+        let pred = task.to_prediction("diff --git ...", "octo-agent/test");
+        assert_eq!(pred["instance_id"], "django__django-16527");
+        assert_eq!(pred["model_name_or_path"], "octo-agent/test");
     }
 }

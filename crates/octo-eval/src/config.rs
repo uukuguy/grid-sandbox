@@ -275,6 +275,149 @@ impl EvalTomlConfig {
     }
 }
 
+// ─── Benchmark sampling configuration ─────────────────────────────────────
+
+/// Sampling preset for benchmark runs
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamplingPreset {
+    Quick,
+    Standard,
+    Full,
+}
+
+impl SamplingPreset {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "quick" => Some(Self::Quick),
+            "standard" => Some(Self::Standard),
+            "full" => Some(Self::Full),
+            _ => None,
+        }
+    }
+}
+
+/// Benchmark-specific sampling configuration
+#[derive(Debug, Clone)]
+pub struct BenchmarkSamplingConfig {
+    pub preset: SamplingPreset,
+    pub count: usize,
+    /// Stratified ratio for GAIA levels [L1, L2, L3]
+    pub stratified_ratio: Option<[f64; 3]>,
+}
+
+impl BenchmarkSamplingConfig {
+    /// Create GAIA sampling config
+    pub fn gaia(preset: SamplingPreset) -> Self {
+        let count = match preset {
+            SamplingPreset::Quick => 10,
+            SamplingPreset::Standard => 30,
+            SamplingPreset::Full => 165,
+        };
+        Self {
+            preset,
+            count,
+            stratified_ratio: Some([0.3, 0.5, 0.2]),
+        }
+    }
+
+    /// Create SWE-bench sampling config
+    pub fn swe_bench(preset: SamplingPreset) -> Self {
+        let count = match preset {
+            SamplingPreset::Quick => 10,
+            SamplingPreset::Standard => 30,
+            SamplingPreset::Full => 300,
+        };
+        Self {
+            preset,
+            count,
+            stratified_ratio: None,
+        }
+    }
+
+    /// Perform stratified sampling on GAIA tasks.
+    /// Tasks are grouped by level (extracted from metadata category "gaia-L{n}"),
+    /// then sampled according to stratified_ratio.
+    pub fn sample_tasks(
+        &self,
+        tasks: Vec<Box<dyn crate::task::EvalTask>>,
+    ) -> Vec<Box<dyn crate::task::EvalTask>> {
+        use rand::seq::SliceRandom;
+
+        let total = tasks.len();
+        if self.count >= total {
+            return tasks;
+        }
+
+        let mut rng = rand::rng();
+
+        if let Some(ratio) = self.stratified_ratio {
+            // Group tasks by level
+            let mut by_level: [Vec<usize>; 3] = [vec![], vec![], vec![]];
+            for (i, task) in tasks.iter().enumerate() {
+                let cat = task.metadata().category;
+                if cat.contains("L1") || cat.contains("l1") {
+                    by_level[0].push(i);
+                } else if cat.contains("L2") || cat.contains("l2") {
+                    by_level[1].push(i);
+                } else {
+                    by_level[2].push(i);
+                }
+            }
+
+            let mut selected_indices: Vec<usize> = Vec::new();
+
+            for (level_idx, level_tasks) in by_level.iter_mut().enumerate() {
+                level_tasks.shuffle(&mut rng);
+                let target = (self.count as f64 * ratio[level_idx]).round() as usize;
+                let take = target.min(level_tasks.len());
+                selected_indices.extend(&level_tasks[..take]);
+            }
+
+            // If we didn't get enough due to rounding or scarcity, fill from remaining
+            if selected_indices.len() < self.count {
+                let remaining: Vec<usize> = (0..total)
+                    .filter(|i| !selected_indices.contains(i))
+                    .collect();
+                let need = self.count - selected_indices.len();
+                let mut remaining_shuffled = remaining;
+                remaining_shuffled.shuffle(&mut rng);
+                selected_indices
+                    .extend(&remaining_shuffled[..need.min(remaining_shuffled.len())]);
+            }
+
+            selected_indices.sort();
+            selected_indices.truncate(self.count);
+
+            // Convert indices to tasks
+            let mut result: Vec<Box<dyn crate::task::EvalTask>> = Vec::new();
+            let mut tasks_vec: Vec<Option<Box<dyn crate::task::EvalTask>>> =
+                tasks.into_iter().map(Some).collect();
+            for idx in selected_indices {
+                if let Some(task) = tasks_vec[idx].take() {
+                    result.push(task);
+                }
+            }
+            result
+        } else {
+            // Simple random sampling
+            let mut indices: Vec<usize> = (0..total).collect();
+            indices.shuffle(&mut rng);
+            indices.truncate(self.count);
+            indices.sort();
+
+            let mut result: Vec<Box<dyn crate::task::EvalTask>> = Vec::new();
+            let mut tasks_vec: Vec<Option<Box<dyn crate::task::EvalTask>>> =
+                tasks.into_iter().map(Some).collect();
+            for idx in indices {
+                if let Some(task) = tasks_vec[idx].take() {
+                    result.push(task);
+                }
+            }
+            result
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +509,46 @@ model = "claude-3"
         let config: EvalTomlConfig = toml::from_str(toml_str).unwrap();
         assert!(config.default.timeout_secs.is_none());
         assert!(config.models.is_empty());
+    }
+
+    #[test]
+    fn test_sampling_preset_parsing() {
+        assert_eq!(
+            SamplingPreset::from_str("quick"),
+            Some(SamplingPreset::Quick)
+        );
+        assert_eq!(
+            SamplingPreset::from_str("Standard"),
+            Some(SamplingPreset::Standard)
+        );
+        assert_eq!(
+            SamplingPreset::from_str("FULL"),
+            Some(SamplingPreset::Full)
+        );
+        assert_eq!(SamplingPreset::from_str("invalid"), None);
+    }
+
+    #[test]
+    fn test_gaia_sampling_config() {
+        let config = BenchmarkSamplingConfig::gaia(SamplingPreset::Quick);
+        assert_eq!(config.count, 10);
+        assert!(config.stratified_ratio.is_some());
+
+        let config = BenchmarkSamplingConfig::gaia(SamplingPreset::Standard);
+        assert_eq!(config.count, 30);
+
+        let config = BenchmarkSamplingConfig::gaia(SamplingPreset::Full);
+        assert_eq!(config.count, 165);
+    }
+
+    #[test]
+    fn test_swe_bench_sampling_config() {
+        let config = BenchmarkSamplingConfig::swe_bench(SamplingPreset::Quick);
+        assert_eq!(config.count, 10);
+        assert!(config.stratified_ratio.is_none());
+
+        let config = BenchmarkSamplingConfig::swe_bench(SamplingPreset::Full);
+        assert_eq!(config.count, 300);
     }
 
     #[test]
