@@ -724,6 +724,9 @@ impl EvalRunner {
         let total = tasks.len();
         let mut results = Vec::with_capacity(total);
 
+        // Incremental progress file: written after every task so callers can monitor in real-time.
+        let progress_path = self.config.output_dir.join("tasks_progress.json");
+
         for (i, task) in tasks.iter().enumerate() {
             let idx = i + 1;
             eprintln!("[{}/{}] Running task: {} ...", idx, total, task.id());
@@ -751,6 +754,24 @@ impl EvalRunner {
                         duration_ms: 0,
                     });
                 }
+            }
+
+            // Flush incremental progress after each task
+            let passed_so_far = results.iter().filter(|r| r.score.passed).count();
+            let progress_json = serde_json::json!({
+                "completed": results.len(),
+                "total": total,
+                "passed": passed_so_far,
+                "pass_rate": if results.is_empty() { 0.0 } else { passed_so_far as f64 / results.len() as f64 },
+                "tasks": results.iter().map(|r| serde_json::json!({
+                    "task_id": r.task_id,
+                    "passed": r.score.passed,
+                    "score": r.score.score,
+                    "duration_ms": r.duration_ms,
+                })).collect::<Vec<_>>(),
+            });
+            if let Ok(json_str) = serde_json::to_string_pretty(&progress_json) {
+                let _ = std::fs::write(&progress_path, json_str);
             }
         }
 

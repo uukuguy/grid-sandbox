@@ -1,7 +1,7 @@
 .PHONY: dev build check test clean fmt lint server web all install setup \
         verify verify-runtime verify-api verify-api-mcp \
         eval-list eval-run eval-compare eval-benchmark eval-benchmark-mini \
-        eval-history eval-report eval-trace eval-diagnose eval-diff
+        eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress
 
 # ============================================================
 # 主要命令
@@ -191,6 +191,42 @@ eval-diff:
 	  echo "Usage: make eval-diff EVAL_RUN_A=<run_a> EVAL_RUN_B=<run_b>"; exit 1; fi
 	cargo run -p octo-eval -- diff $(EVAL_RUN_A) $(EVAL_RUN_B)
 
+# 即时进度：查看正在运行的 benchmark 每个 suite/model 的完成情况
+# 用法: make eval-progress              (查看 latest 运行)
+#       make eval-progress EVAL_RUN_ID=2026-03-16-007
+eval-progress:
+	@RUN=$$([ -n "$(EVAL_RUN_ID)" ] && echo "eval_output/runs/$(EVAL_RUN_ID)" || readlink -f eval_output/latest 2>/dev/null || echo "eval_output/latest"); \
+	echo "=== Benchmark progress: $$RUN ==="; \
+	echo ""; \
+	echo "--- Suite completion (model_result.json) ---"; \
+	for suite in bfcl context gaia resilience security swe_bench tau_bench terminal_bench; do \
+	  total=$$(ls "$$RUN/$$suite"/*/model_result.json 2>/dev/null | wc -l | tr -d ' '); \
+	  printf "  %-20s %s/4\n" "$$suite" "$$total"; \
+	done; \
+	echo ""; \
+	echo "--- Per-model task progress (tasks_progress.json or traces) ---"; \
+	for suite in bfcl context gaia resilience security swe_bench tau_bench terminal_bench; do \
+	  for mdir in "$$RUN/$$suite"/*/; do \
+	    [ -d "$$mdir" ] || continue; \
+	    model=$$(basename "$$mdir"); \
+	    if [ -f "$$mdir/model_result.json" ]; then \
+	      result=$$(python3 -c "import json; d=json.load(open('$$mdir/model_result.json')); print(f\"{d['total']} tasks done, {d['passed']} passed ({d['pass_rate']*100:.0f}%)\")" 2>/dev/null); \
+	      printf "  %-20s %-30s DONE %s\n" "$$suite" "$$model" "$$result"; \
+	    elif [ -f "$$mdir/tasks_progress.json" ]; then \
+	      result=$$(python3 -c "import json; d=json.load(open('$$mdir/tasks_progress.json')); print(f\"{d['completed']}/{d['total']} tasks, {d['passed']} passed\")" 2>/dev/null); \
+	      printf "  %-20s %-30s IN PROGRESS %s\n" "$$suite" "$$model" "$$result"; \
+	    else \
+	      traces=$$(ls "$$mdir/traces/" 2>/dev/null | wc -l | tr -d ' '); \
+	      printf "  %-20s %-30s running (%s traces)\n" "$$suite" "$$model" "$$traces"; \
+	    fi; \
+	  done; \
+	done; \
+	echo ""; \
+	if [ -f "$$RUN/benchmark.md" ]; then \
+	  echo "--- Final benchmark report ---"; \
+	  cat "$$RUN/benchmark.md"; \
+	fi
+
 # ============================================================
 # 手工验证命令 (octo-workbench)
 # ============================================================
@@ -353,6 +389,8 @@ help:
 	@echo "  make eval-trace EVAL_RUN_ID=<id> EVAL_TASK_ID=<tid>  查看 task trace"
 	@echo "  make eval-diagnose EVAL_RUN_ID=<id>  失败原因分类"
 	@echo "  make eval-diff EVAL_RUN_A=<a> EVAL_RUN_B=<b>  两次运行对比"
+	@echo "  make eval-progress                   即时查看正在运行的 benchmark 进度"
+	@echo "  make eval-progress EVAL_RUN_ID=<id>  查看指定运行的进度"
 	@echo ""
 	@echo "首次使用:"
 	@echo "  make setup            安装前端依赖"

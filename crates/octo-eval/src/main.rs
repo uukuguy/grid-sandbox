@@ -812,15 +812,20 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         .unwrap_or(false);
     let max_tasks = cli.max_tasks;
 
-    // Auto-generate timestamped run directory under eval_output/runs/ when --output not given.
+    // Auto-generate a dated run ID (YYYY-MM-DD-NNN) for the canonical run directory.
+    // All suite data AND the RunStore manifest live under the same directory.
     // When --output is explicit, use it as-is (enables named runs like benchmark-p5).
+    let runs_base = PathBuf::from("eval_output/runs");
     let output_root = if cli.output_explicit {
         cli.output.clone()
     } else {
-        let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
-        PathBuf::from("eval_output").join("runs").join(&ts)
+        use octo_eval::run_store::RunStore;
+        let store = RunStore::new(runs_base.clone())?;
+        let run_id = store.next_run_id();
+        runs_base.join(&run_id)
     };
     println!("Run directory: {}", output_root.display());
+    std::fs::create_dir_all(&output_root)?;
 
     let report_format = cli.format.clone();
 
@@ -1057,7 +1062,8 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
     // Serialize full benchmark report as the comparison payload stored in RunStore
     let benchmark_json_val = serde_json::to_value(&benchmark).ok();
 
-    match save_to_run_store(
+    match save_to_run_store_at(
+        &output_root,
         "benchmark",
         suite_list,
         &model_names,
@@ -1066,16 +1072,6 @@ fn cmd_benchmark(args: &[String]) -> Result<()> {
         cli.tag.as_deref(),
     ) {
         Ok(run_id) => {
-            // Copy benchmark.md and benchmark.json into the canonical run directory
-            let runs_dir = PathBuf::from("eval_output/runs").join(&run_id);
-            if runs_dir != output_root {
-                for filename in &["benchmark.md", "benchmark.json"] {
-                    let src = output_root.join(filename);
-                    if src.exists() {
-                        let _ = std::fs::copy(&src, runs_dir.join(filename));
-                    }
-                }
-            }
             println!("Run saved: {} (eval_output/runs/{})", run_id, run_id);
         }
         Err(e) => eprintln!("Warning: Failed to save run: {}", e),
@@ -1197,6 +1193,89 @@ fn output_benchmark(
     }
 
     Ok(())
+}
+
+/// Save evaluation results into a pre-determined directory (benchmark mode).
+/// The run_id is inferred from the last component of `run_dir`.
+fn save_to_run_store_at(
+    run_dir: &PathBuf,
+    command: &str,
+    suite: &str,
+    models: &[String],
+    report: &octo_eval::reporter::DetailedReport,
+    comparison: Option<&serde_json::Value>,
+    tag: Option<&str>,
+) -> Result<String> {
+    use octo_eval::run_store::{RunData, RunManifest, RunStore};
+    use std::process::Command;
+
+    // run_id is the directory name (last component), e.g. "2026-03-16-007"
+    let run_id = run_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // The store's base_dir is the parent of run_dir
+    let runs_base = run_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("eval_output/runs"));
+    let store = RunStore::new(runs_base)?;
+
+    // Get git info
+    let git_commit = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    let git_branch = Command::new("git")
+        .args(["branch", "--show-current"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+
+    let config_str = format!("{}:{}", suite, models.join(","));
+    let config_hash = {
+        let mut h: u64 = 0;
+        for b in config_str.bytes() {
+            h = h.wrapping_mul(31).wrapping_add(b as u64);
+        }
+        let hex = format!("{:x}", h);
+        hex[..8.min(hex.len())].to_string()
+    };
+
+    let manifest = RunManifest {
+        run_id: run_id.clone(),
+        tag: tag.map(|s| s.to_string()),
+        timestamp: chrono::Local::now().to_rfc3339(),
+        command: command.to_string(),
+        suite: suite.to_string(),
+        models: models.to_vec(),
+        git_commit,
+        git_branch,
+        task_count: report.summary.total,
+        passed: report.summary.passed,
+        pass_rate: report.summary.pass_rate,
+        avg_score: report.summary.avg_score,
+        duration_ms: report.latency.total_ms,
+        total_tokens: report.token_usage.total,
+        estimated_cost: 0.0,
+        eval_config_hash: config_hash,
+        failure_summary: octo_eval::benchmark::FailureSummary::default(),
+    };
+
+    let run_data = RunData {
+        manifest,
+        report: Some(report.clone()),
+        comparison: comparison.cloned(),
+        traces: vec![],
+    };
+
+    // Save directly into run_dir (RunStore writes to base_dir/run_id, which equals run_dir)
+    store.save_run(&run_data)?;
+    store.update_latest_link(&run_id)?;
+
+    Ok(run_id)
 }
 
 /// Save evaluation results to the versioned RunStore.

@@ -268,12 +268,15 @@ impl RunStore {
     pub fn update_latest_link(&self, run_id: &str) -> Result<()> {
         #[cfg(unix)]
         {
+            // `latest` symlink lives at eval_output/latest (parent of runs/)
             let link_path = self
                 .base_dir
                 .parent()
                 .unwrap_or(&self.base_dir)
                 .join("latest");
-            let target = self.base_dir.join(run_id);
+
+            // Use a relative target: "runs/<run_id>" so the symlink is portable
+            let target = PathBuf::from("runs").join(run_id);
 
             // Remove existing symlink/file if present
             if link_path.exists() || link_path.symlink_metadata().is_ok() {
