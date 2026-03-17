@@ -177,21 +177,88 @@ impl EvalTask for GaiaTask {
     }
 }
 
+/// Filter configuration for GAIA tasks.
+///
+/// Excludes tasks that require capabilities the agent doesn't have
+/// (e.g. image OCR, audio transcription, video understanding).
+#[derive(Debug, Clone, Default)]
+pub struct GaiaFilter {
+    /// File extensions to exclude (e.g. ["png", "jpg", "mp3"])
+    pub exclude_file_extensions: Vec<String>,
+    /// Patterns in question text to exclude (e.g. ["youtube.com"])
+    pub exclude_question_patterns: Vec<String>,
+}
+
+impl GaiaFilter {
+    /// Default filter: exclude image/audio/pptx attachments and YouTube URLs.
+    pub fn default_capability_filter() -> Self {
+        Self {
+            exclude_file_extensions: vec![
+                "png".into(), "jpg".into(), "jpeg".into(), "gif".into(),
+                "mp3".into(), "pptx".into(),
+            ],
+            exclude_question_patterns: vec!["youtube.com".into()],
+        }
+    }
+
+    /// Returns true if the record should be excluded.
+    fn should_exclude(&self, record: &GaiaRecord) -> bool {
+        // Check file extension
+        if let Some(ref fname) = record.file_name {
+            if !fname.is_empty() {
+                if let Some(ext) = fname.rsplit('.').next() {
+                    let ext_lower = ext.to_lowercase();
+                    if self.exclude_file_extensions.iter().any(|e| e == &ext_lower) {
+                        return true;
+                    }
+                }
+            }
+        }
+        // Check question patterns
+        let q_lower = record.question.to_lowercase();
+        for pattern in &self.exclude_question_patterns {
+            if q_lower.contains(&pattern.to_lowercase()) {
+                return true;
+            }
+        }
+        false
+    }
+}
+
 /// GAIA benchmark adapter
 pub struct GaiaBenchmark {
     dataset_path: Option<PathBuf>,
+    filter: Option<GaiaFilter>,
 }
 
 impl GaiaBenchmark {
     pub fn new() -> Self {
         Self {
             dataset_path: None,
+            filter: None,
         }
     }
 
     pub fn with_dataset(path: PathBuf) -> Self {
         Self {
             dataset_path: Some(path),
+            filter: None,
+        }
+    }
+
+    /// Create with default capability filter (excludes image/audio/video tasks).
+    pub fn with_default_filter() -> Self {
+        Self {
+            dataset_path: None,
+            filter: Some(GaiaFilter::default_capability_filter()),
+        }
+    }
+
+    /// Create with custom filter.
+    pub fn with_filter(filter: GaiaFilter) -> Self {
+        Self {
+            dataset_path: None,
+            filter: Some(filter),
         }
     }
 
@@ -200,8 +267,17 @@ impl GaiaBenchmark {
     }
 
     pub fn load_from_jsonl(path: &std::path::Path) -> anyhow::Result<Vec<Box<dyn EvalTask>>> {
+        Self::load_from_jsonl_filtered(path, None)
+    }
+
+    pub fn load_from_jsonl_filtered(
+        path: &std::path::Path,
+        filter: Option<&GaiaFilter>,
+    ) -> anyhow::Result<Vec<Box<dyn EvalTask>>> {
         let content = std::fs::read_to_string(path)?;
         let mut tasks: Vec<Box<dyn EvalTask>> = Vec::new();
+        let mut total = 0u32;
+        let mut excluded = 0u32;
 
         for line in content.lines() {
             let line = line.trim();
@@ -209,7 +285,18 @@ impl GaiaBenchmark {
                 continue;
             }
             let record: GaiaRecord = serde_json::from_str(line)?;
+            total += 1;
+            if let Some(f) = filter {
+                if f.should_exclude(&record) {
+                    excluded += 1;
+                    continue;
+                }
+            }
             tasks.push(Box::new(GaiaTask::new(record)));
+        }
+
+        if excluded > 0 {
+            eprintln!("GAIA: loaded {}/{total} tasks ({excluded} excluded by filter)", tasks.len());
         }
 
         Ok(tasks)
@@ -238,7 +325,7 @@ impl ExternalBenchmark for GaiaBenchmark {
             );
         }
 
-        Self::load_from_jsonl(&path)
+        Self::load_from_jsonl_filtered(&path, self.filter.as_ref())
     }
 
     fn custom_metrics(&self) -> Vec<MetricDefinition> {
@@ -259,6 +346,41 @@ impl ExternalBenchmark for GaiaBenchmark {
                 unit: crate::benchmarks::MetricUnit::Percentage,
             },
         ]
+    }
+}
+
+/// Pre-filtered GAIA benchmark — excludes image/audio/video tasks.
+///
+/// Registered as "gaia_filtered" in the benchmark registry.
+/// Uses `GaiaFilter::default_capability_filter()` to exclude tasks
+/// requiring OCR, audio transcription, or video understanding.
+pub struct GaiaFilteredBenchmark {
+    inner: GaiaBenchmark,
+}
+
+impl GaiaFilteredBenchmark {
+    pub fn new() -> Self {
+        Self {
+            inner: GaiaBenchmark::with_default_filter(),
+        }
+    }
+}
+
+impl ExternalBenchmark for GaiaFilteredBenchmark {
+    fn name(&self) -> &str {
+        "gaia_filtered"
+    }
+
+    fn description(&self) -> &str {
+        "GAIA (filtered) — excludes image/audio/video tasks that require unavailable capabilities"
+    }
+
+    fn load_tasks(&self) -> anyhow::Result<Vec<Box<dyn EvalTask>>> {
+        self.inner.load_tasks()
+    }
+
+    fn custom_metrics(&self) -> Vec<MetricDefinition> {
+        self.inner.custom_metrics()
     }
 }
 
@@ -348,5 +470,89 @@ mod tests {
         assert!(bm.sandbox_available());
         assert!(bm.custom_verifier().is_none());
         assert_eq!(bm.custom_metrics().len(), 3);
+    }
+
+    #[test]
+    fn test_gaia_filter_excludes_media_files() {
+        let filter = GaiaFilter::default_capability_filter();
+
+        let png_record = GaiaRecord {
+            task_id: "t1".into(), question: "What is in this image?".into(),
+            final_answer: "cat".into(), level: 2,
+            annotator_metadata: None, file_name: Some("image.png".into()),
+        };
+        assert!(filter.should_exclude(&png_record));
+
+        let mp3_record = GaiaRecord {
+            task_id: "t2".into(), question: "What is said?".into(),
+            final_answer: "hello".into(), level: 2,
+            annotator_metadata: None, file_name: Some("audio.mp3".into()),
+        };
+        assert!(filter.should_exclude(&mp3_record));
+
+        let jpg_record = GaiaRecord {
+            task_id: "t3".into(), question: "Count items".into(),
+            final_answer: "5".into(), level: 1,
+            annotator_metadata: None, file_name: Some("photo.JPG".into()),
+        };
+        assert!(filter.should_exclude(&jpg_record));
+    }
+
+    #[test]
+    fn test_gaia_filter_excludes_youtube() {
+        let filter = GaiaFilter::default_capability_filter();
+
+        let yt_record = GaiaRecord {
+            task_id: "t4".into(),
+            question: "Watch https://youtube.com/watch?v=abc and tell me".into(),
+            final_answer: "42".into(), level: 2,
+            annotator_metadata: None, file_name: None,
+        };
+        assert!(filter.should_exclude(&yt_record));
+    }
+
+    #[test]
+    fn test_gaia_filter_keeps_valid_tasks() {
+        let filter = GaiaFilter::default_capability_filter();
+
+        let text_record = GaiaRecord {
+            task_id: "t5".into(), question: "What is 2+2?".into(),
+            final_answer: "4".into(), level: 1,
+            annotator_metadata: None, file_name: None,
+        };
+        assert!(!filter.should_exclude(&text_record));
+
+        let xlsx_record = GaiaRecord {
+            task_id: "t6".into(), question: "Sum column A".into(),
+            final_answer: "100".into(), level: 2,
+            annotator_metadata: None, file_name: Some("data.xlsx".into()),
+        };
+        assert!(!filter.should_exclude(&xlsx_record));
+
+        let csv_record = GaiaRecord {
+            task_id: "t7".into(), question: "Count rows".into(),
+            final_answer: "10".into(), level: 1,
+            annotator_metadata: None, file_name: Some("data.csv".into()),
+        };
+        assert!(!filter.should_exclude(&csv_record));
+    }
+
+    #[test]
+    fn test_gaia_filter_on_real_dataset() {
+        let path = GaiaBenchmark::default_dataset_path();
+        if !path.exists() {
+            return; // skip if dataset not available
+        }
+        // Without filter
+        let all_tasks = GaiaBenchmark::load_from_jsonl(&path).unwrap();
+        assert_eq!(all_tasks.len(), 165);
+
+        // With default capability filter
+        let filter = GaiaFilter::default_capability_filter();
+        let filtered = GaiaBenchmark::load_from_jsonl_filtered(&path, Some(&filter)).unwrap();
+        // Should exclude ~16 tasks (10 image + 3 mp3 + 1 pptx + 9 youtube, minus overlaps)
+        assert!(filtered.len() < all_tasks.len());
+        assert!(filtered.len() >= 140, "filtered count {} too low", filtered.len());
+        assert!(filtered.len() <= 155, "filtered count {} too high", filtered.len());
     }
 }

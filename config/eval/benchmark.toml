@@ -56,6 +56,21 @@ full = 165
 default = "standard"
 stratified_ratio = [0.3, 0.5, 0.2]  # L1:L2:L3
 
+# === GAIA (filtered) ===
+# Excludes tasks requiring unavailable capabilities: OCR, audio, video
+[gaia_filtered]
+dataset = "crates/octo-eval/datasets/gaia_sample.jsonl"
+scorer = "exact_match"
+exclude_file_extensions = ["png", "jpg", "jpeg", "gif", "mp3", "pptx"]
+exclude_question_patterns = ["youtube.com"]
+
+[gaia_filtered.sampling]
+quick = 10
+standard = 30
+full = 149         # 165 - 16 excluded
+default = "standard"
+stratified_ratio = [0.3, 0.5, 0.2]  # L1:L2:L3
+
 # === SWE-bench ===
 [swe_bench]
 dataset = "crates/octo-eval/datasets/swe_bench_lite.jsonl"

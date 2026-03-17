@@ -1,69 +1,39 @@
 {
-  "plan_file": "docs/plans/2026-03-16-phase-q2-standard-benchmark.md",
+  "plan_file": "docs/plans/2026-03-17-phase-r-gaia-filtered-eval.md",
   "phase": "execution",
-  "created_at": "2026-03-16T17:30:00+08:00",
-  "updated_at": "2026-03-17T18:30:00+08:00",
-  "completed_tasks": [
-    "Q1-bugfix",
-    "Q2-design-and-planning",
-    "T1-base-scripts",
-    "T2-dockerfiles",
-    "T3-build-makefile",
-    "T4-imageregistry",
-    "T5-exact-match",
-    "T6-sampling-config",
-    "T7-websearch-verify",
-    "T8-gaia-baseline",
-    "T9-official-dataset",
-    "T10-harness-scorer",
-    "T11-docker-runner",
-    "T12-agent-prompt",
-    "T13-swebench-baseline",
-    "T14-toml-config",
-    "T15-baseline-report"
-  ],
-  "current_task": null,
-  "total_tasks": 15,
+  "created_at": "2026-03-17T18:55:00+08:00",
+  "updated_at": "2026-03-17T18:55:00+08:00",
+  "completed_tasks": [],
+  "current_task": "T1",
+  "total_tasks": 7,
   "task_groups": {
-    "Q1": {
-      "name": "Fix TaskRecord Scoring Bug",
-      "tasks": ["Q1-bugfix"],
-      "status": "COMPLETE",
-      "description": "Fixed TaskRecord::from_task() to preserve scoring_data. Commit: 0e2ac3e"
-    },
-    "Q2": {
-      "name": "Design & Planning",
-      "tasks": ["Q2-design-and-planning"],
-      "status": "COMPLETE",
-      "description": "Completed GAIA/SWE-bench standard verification design. Docs: STANDARD_BENCHMARK_DESIGN.md + phase-q2-standard-benchmark.md"
-    },
     "G1": {
-      "name": "Docker Standard Images",
-      "tasks": ["T1-base-scripts", "T2-dockerfiles", "T3-build-makefile", "T4-imageregistry"],
-      "status": "COMPLETE",
-      "description": "6 Docker images built + verified. Git config added. Commit: 62a27b0"
+      "name": "实现数据集筛选",
+      "tasks": ["T1", "T2"],
+      "status": "PENDING",
+      "description": "GaiaBenchmark 筛选逻辑 + benchmark.toml 配置更新"
     },
     "G2": {
-      "name": "GAIA Standardization",
-      "tasks": ["T5-exact-match", "T6-sampling-config", "T7-websearch-verify", "T8-gaia-baseline"],
-      "status": "COMPLETE",
-      "description": "T5-T7 done. T8 GAIA baseline complete: R1 (DDG) 18.3% avg, R2 (Tavily) 32.5% avg. Best: MiniMax-M2.1 43.3%. Run IDs: 2026-03-17-008 (R1), 2026-03-17-009 (R2)."
+      "name": "生成筛选后数据集",
+      "tasks": ["T3"],
+      "status": "PENDING",
+      "description": "运行时过滤（方案 A）或预生成 JSONL（方案 B）"
     },
     "G3": {
-      "name": "SWE-bench Standardization",
-      "tasks": ["T9-official-dataset", "T10-harness-scorer", "T11-docker-runner", "T12-agent-prompt", "T13-swebench-baseline"],
-      "status": "COMPLETE",
-      "description": "T9-T12 infrastructure + T13 baseline complete. Full harness verification via swebench 4.1.0 Docker. 4 models x 30 tasks, 3.3% resolved (astropy-14995 only). 87% patch apply failures. Run ID: 2026-03-17-007."
+      "name": "运行 GAIA 评估",
+      "tasks": ["T4", "T5"],
+      "status": "PENDING",
+      "description": "创建评估配置 + 执行 R3 评估"
     },
     "G4": {
-      "name": "Config & Baseline Report",
-      "tasks": ["T14-toml-config", "T15-baseline-report"],
-      "status": "COMPLETE",
-      "description": "T14 benchmark.toml unified. T15 standard benchmark report written: docs/design/EVAL_STANDARD_BENCHMARK_REPORT.md — includes GAIA deep analysis (per-model profiles, tool usage patterns, failure taxonomy) and dataset filtering strategy."
+      "name": "结果分析与报告",
+      "tasks": ["T6", "T7"],
+      "status": "PENDING",
+      "description": "R3 vs R2 对比分析 + 基线报告更新"
     }
   },
-  "phase_name": "Phase Q — GAIA & SWE-bench Standard Testing",
-  "status": "COMPLETE",
+  "phase_name": "Phase R — GAIA Filtered Evaluation",
+  "status": "IN_PROGRESS",
   "execution_mode": "subagent-driven-development",
-  "notes": "Phase Q 15/15 tasks COMPLETE. Post-phase fixes: (1) committed remaining Phase Q code changes (61f7920), (2) cleaned 43 temp files from source tree, (3) fixed eval runner workdir isolation — added EvalTask::attached_files() trait, GAIA prompts use relative paths, runner copies attachments to /tmp/octo-eval/{task_id}/, run_task_cli sets current_dir (9795754). Tests: 28/28 octo-eval pass."
+  "notes": "使用 Phase Q 制定的数据筛选策略重新评估。筛选规则: 排除 png/jpg/jpeg/gif/mp3/pptx 附件 + youtube.com URL。165 → 149 题 (L1:46, L2:78, L3:25)。"
 }
