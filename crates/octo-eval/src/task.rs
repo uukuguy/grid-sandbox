@@ -81,4 +81,12 @@ pub trait EvalTask: Send + Sync {
     fn scoring_data(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
+
+    /// Attached files that must be copied into the task working directory.
+    /// Returns (source_path, dest_filename) pairs. The runner copies each
+    /// source into `task_workdir/dest_filename` before execution, so the
+    /// agent prompt can reference files by relative name only.
+    fn attached_files(&self) -> Vec<(std::path::PathBuf, String)> {
+        Vec::new()
+    }
 }

@@ -256,6 +256,15 @@ impl EvalRunner {
             .join("octo-eval")
             .join(&task_id);
         let _ = std::fs::create_dir_all(&task_workdir);
+
+        // Copy task attachments (e.g. GAIA files) into the working directory
+        for (src, dest_name) in task.attached_files() {
+            let dest = task_workdir.join(&dest_name);
+            if src.exists() && !dest.exists() {
+                let _ = std::fs::copy(&src, &dest);
+            }
+        }
+
         let tool_ctx = octo_types::ToolContext {
             sandbox_id: octo_types::SandboxId::default(),
             working_dir: task_workdir.clone(),
@@ -371,7 +380,23 @@ impl EvalRunner {
 
         info!(task_id = %task_id, "Starting CLI evaluation task");
 
+        // Create an isolated per-task working directory so the CLI subprocess
+        // doesn't pollute the project source tree with agent-generated files.
+        let task_workdir = std::env::temp_dir()
+            .join("octo-eval")
+            .join(&task_id);
+        let _ = std::fs::create_dir_all(&task_workdir);
+
+        // Copy task attachments into the working directory
+        for (src, dest_name) in task.attached_files() {
+            let dest = task_workdir.join(&dest_name);
+            if src.exists() && !dest.exists() {
+                let _ = std::fs::copy(&src, &dest);
+            }
+        }
+
         let mut cmd = tokio::process::Command::new(&cli_config.binary_path);
+        cmd.current_dir(&task_workdir);
         cmd.arg("ask").arg("--output").arg("json");
 
         // Append extra CLI arguments
@@ -860,6 +885,14 @@ impl EvalRunner {
             .join("octo-eval")
             .join(&task_id);
         let _ = std::fs::create_dir_all(&task_workdir);
+
+        // Copy task attachments into the working directory
+        for (src, dest_name) in task.attached_files() {
+            let dest = task_workdir.join(&dest_name);
+            if src.exists() && !dest.exists() {
+                let _ = std::fs::copy(&src, &dest);
+            }
+        }
 
         // For SWE-bench tasks: set up repo at base_commit in working directory.
         // Uses a shared cache to avoid re-cloning the same repo for each task.

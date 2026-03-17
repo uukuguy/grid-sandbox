@@ -46,13 +46,13 @@ pub struct GaiaTask {
 
 impl GaiaTask {
     pub fn new(record: GaiaRecord) -> Self {
-        // Build prompt: append file path to question when an attachment is present
+        // Build prompt: reference attachment by relative filename only.
+        // The runner copies the file into the task working directory before execution.
         let prompt = if let Some(ref fname) = record.file_name {
             if !fname.is_empty() {
-                let file_path = Self::local_file_path(fname);
                 format!(
                     "{}\n\nNote: An attached file is available at `{}`. Use the file_read or bash tool to read its contents.",
-                    record.question, file_path
+                    record.question, fname
                 )
             } else {
                 record.question.clone()
@@ -71,9 +71,11 @@ impl GaiaTask {
         }
     }
 
-    fn local_file_path(file_name: &str) -> String {
-        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("datasets/gaia_files");
-        base.join(file_name).to_string_lossy().to_string()
+    /// Resolve the source path for a GAIA attachment file in the dataset directory.
+    fn source_file_path(file_name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("datasets/gaia_files")
+            .join(file_name)
     }
 }
 
@@ -162,6 +164,15 @@ impl EvalTask for GaiaTask {
                 .as_ref()
                 .map(|m| m.num_steps),
             tags: vec!["external".into(), "gaia".into()],
+        }
+    }
+
+    fn attached_files(&self) -> Vec<(std::path::PathBuf, String)> {
+        match &self.record.file_name {
+            Some(fname) if !fname.is_empty() => {
+                vec![(Self::source_file_path(fname), fname.clone())]
+            }
+            _ => Vec::new(),
         }
     }
 }
