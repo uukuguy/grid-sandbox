@@ -1,17 +1,16 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase R — GAIA Filtered Evaluation",
-      "started_at": "2026-03-17T18:55:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "plan": "docs/plans/2026-03-17-phase-r-gaia-filtered-eval.md",
-      "progress": "0/7 tasks",
-      "last_updated": "2026-03-17T18:55:00+08:00"
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
+    {
+      "name": "Phase R — GAIA Filtered Evaluation + Category Subsets",
+      "completed_at": "2026-03-18T02:30:00+08:00",
+      "progress": "100%",
+      "tests": 2210,
+      "commit": "50df5e6",
+      "tasks": "8/8 (7 planned + 1 bonus)",
+      "results": "R3: MiniMax-M2.1 41.6%, Qwen3.5-27B 36.9%, 6 GAIA subsets created"
+    },
     {
       "name": "Phase Q — GAIA & SWE-bench Standard Testing",
       "completed_at": "2026-03-17T18:30:00+08:00",

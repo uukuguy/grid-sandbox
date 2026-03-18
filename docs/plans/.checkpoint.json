@@ -1,39 +1,62 @@
 {
   "plan_file": "docs/plans/2026-03-17-phase-r-gaia-filtered-eval.md",
-  "phase": "execution",
+  "phase": "complete",
   "created_at": "2026-03-17T18:55:00+08:00",
-  "updated_at": "2026-03-17T18:55:00+08:00",
-  "completed_tasks": [],
-  "current_task": "T1",
+  "updated_at": "2026-03-18T02:30:00+08:00",
+  "completed_tasks": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8-bonus"],
+  "current_task": null,
   "total_tasks": 7,
   "task_groups": {
     "G1": {
       "name": "实现数据集筛选",
       "tasks": ["T1", "T2"],
-      "status": "PENDING",
-      "description": "GaiaBenchmark 筛选逻辑 + benchmark.toml 配置更新"
+      "status": "COMPLETE",
+      "description": "GaiaFilter + GaiaFilteredBenchmark + benchmark.toml 更新",
+      "commit": "81881e7"
     },
     "G2": {
-      "name": "生成筛选后数据集",
+      "name": "验证运行时过滤",
       "tasks": ["T3"],
-      "status": "PENDING",
-      "description": "运行时过滤（方案 A）或预生成 JSONL（方案 B）"
+      "status": "COMPLETE",
+      "description": "方案 A（运行时过滤）验证通过，149/165 tasks"
     },
     "G3": {
       "name": "运行 GAIA 评估",
       "tasks": ["T4", "T5"],
-      "status": "PENDING",
-      "description": "创建评估配置 + 执行 R3 评估"
+      "status": "COMPLETE",
+      "description": "gaia_r3.toml 配置 + 149题×4模型全量评估完成",
+      "commit": "57d38d2",
+      "run": "eval_output/runs/2026-03-17-011"
     },
     "G4": {
       "name": "结果分析与报告",
       "tasks": ["T6", "T7"],
-      "status": "PENDING",
-      "description": "R3 vs R2 对比分析 + 基线报告更新"
+      "status": "COMPLETE",
+      "description": "R3 vs R2 对比分析 + 64题全军覆没根因分类"
+    },
+    "G5-bonus": {
+      "name": "GAIA 分类子数据集",
+      "tasks": ["T8-bonus"],
+      "status": "COMPLETE",
+      "description": "6个固定子数据集: basic(31), file(22), web(44), reasoning(45), media(23), core(142)",
+      "commit": "50df5e6"
     }
   },
   "phase_name": "Phase R — GAIA Filtered Evaluation",
-  "status": "IN_PROGRESS",
+  "status": "COMPLETE",
   "execution_mode": "subagent-driven-development",
-  "notes": "使用 Phase Q 制定的数据筛选策略重新评估。筛选规则: 排除 png/jpg/jpeg/gif/mp3/pptx 附件 + youtube.com URL。165 → 149 题 (L1:46, L2:78, L3:25)。"
+  "results": {
+    "r3_run": "eval_output/runs/2026-03-17-011",
+    "models": {
+      "MiniMax-M2.1": {"passed": 62, "total": 149, "rate": 0.416},
+      "Qwen3.5-27B": {"passed": 55, "total": 149, "rate": 0.369},
+      "Qwen3-Coder-Next": {"passed": 40, "total": 149, "rate": 0.268},
+      "Qwen3.5-9B": {"passed": 20, "total": 149, "rate": 0.134}
+    },
+    "all_fail_count": 64,
+    "all_pass_count": 12,
+    "subsets_created": ["gaia_core", "gaia_basic", "gaia_file", "gaia_web", "gaia_reasoning", "gaia_media"],
+    "tests": 2210
+  },
+  "notes": "Phase R 完成。包括原计划 T1-T7 + 追加 T8 (分类子数据集)。R3 全量评估 MiniMax-M2.1 最优 41.6%。64/149 全军覆没，根因: YouTube泄漏5 + 文件解析14 + 精确搜索17 + 多步推理28。"
 }
