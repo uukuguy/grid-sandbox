@@ -56,8 +56,7 @@ full = 165
 default = "standard"
 stratified_ratio = [0.3, 0.5, 0.2]  # L1:L2:L3
 
-# === GAIA (filtered) ===
-# Excludes tasks requiring unavailable capabilities: OCR, audio, video
+# === GAIA (filtered) — runtime filter, deprecated in favor of subsets ===
 [gaia_filtered]
 dataset = "crates/octo-eval/datasets/gaia_sample.jsonl"
 scorer = "exact_match"
@@ -67,9 +66,78 @@ exclude_question_patterns = ["youtube.com"]
 [gaia_filtered.sampling]
 quick = 10
 standard = 30
-full = 149         # 165 - 16 excluded
+full = 149
 default = "standard"
-stratified_ratio = [0.3, 0.5, 0.2]  # L1:L2:L3
+stratified_ratio = [0.3, 0.5, 0.2]
+
+# === GAIA Category Subsets (fixed pre-generated JSONL files) ===
+#
+# | Subset          | Count | Description                                |
+# |-----------------|------:|--------------------------------------------|
+# | gaia_core       |   142 | All evaluable tasks (excludes media)       |
+# | gaia_basic      |    31 | L1 single-step reasoning                   |
+# | gaia_file       |    22 | File parsing (xlsx/pdf/csv/docx)           |
+# | gaia_web        |    44 | Precise web data lookup                    |
+# | gaia_reasoning  |    45 | L2/L3 multi-step reasoning (no files)      |
+# | gaia_media      |    23 | Blind spot: image/audio/video (reference)  |
+
+[gaia_core]
+dataset = "crates/octo-eval/datasets/gaia_core.jsonl"
+scorer = "exact_match"
+
+[gaia_core.sampling]
+quick = 10
+standard = 30
+half = 71
+full = 142
+default = "standard"
+
+[gaia_basic]
+dataset = "crates/octo-eval/datasets/gaia_basic.jsonl"
+scorer = "exact_match"
+
+[gaia_basic.sampling]
+quick = 10
+full = 31
+default = "full"
+
+[gaia_file]
+dataset = "crates/octo-eval/datasets/gaia_file.jsonl"
+scorer = "exact_match"
+
+[gaia_file.sampling]
+quick = 10
+full = 22
+default = "full"
+
+[gaia_web]
+dataset = "crates/octo-eval/datasets/gaia_web.jsonl"
+scorer = "exact_match"
+
+[gaia_web.sampling]
+quick = 10
+standard = 30
+full = 44
+default = "standard"
+
+[gaia_reasoning]
+dataset = "crates/octo-eval/datasets/gaia_reasoning.jsonl"
+scorer = "exact_match"
+
+[gaia_reasoning.sampling]
+quick = 10
+standard = 30
+full = 45
+default = "standard"
+
+[gaia_media]
+dataset = "crates/octo-eval/datasets/gaia_media.jsonl"
+scorer = "exact_match"
+
+[gaia_media.sampling]
+quick = 10
+full = 23
+default = "full"
 
 # === SWE-bench ===
 [swe_bench]

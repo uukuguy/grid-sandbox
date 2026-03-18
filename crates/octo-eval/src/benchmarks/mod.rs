@@ -89,6 +89,10 @@ impl BenchmarkRegistry {
         let mut reg = Self::new();
         reg.register(Box::new(gaia::GaiaBenchmark::new()));
         reg.register(Box::new(gaia::GaiaFilteredBenchmark::new()));
+        // GAIA category subsets (basic, file, web, reasoning, media, core)
+        for subset in gaia::GaiaSubsetBenchmark::all_subsets() {
+            reg.register(Box::new(subset));
+        }
         reg.register(Box::new(swe_bench::SweBenchmark::new()));
         reg.register(Box::new(tau_bench::TauBenchmark::new()));
         reg.register(Box::new(terminal_bench::TerminalBenchmark::new()));

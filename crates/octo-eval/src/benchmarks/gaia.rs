@@ -384,6 +384,84 @@ impl ExternalBenchmark for GaiaFilteredBenchmark {
     }
 }
 
+/// GAIA subset benchmark — loads from a pre-categorized JSONL file.
+///
+/// Used for category-specific evaluation (basic, file, web, reasoning, media).
+pub struct GaiaSubsetBenchmark {
+    suite_name: String,
+    desc: String,
+    dataset_file: String,
+}
+
+impl GaiaSubsetBenchmark {
+    pub fn new(suite_name: &str, desc: &str, dataset_file: &str) -> Self {
+        Self {
+            suite_name: suite_name.to_string(),
+            desc: desc.to_string(),
+            dataset_file: dataset_file.to_string(),
+        }
+    }
+
+    fn dataset_path(&self) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("datasets")
+            .join(&self.dataset_file)
+    }
+
+    /// Create all standard GAIA subset benchmarks.
+    pub fn all_subsets() -> Vec<Self> {
+        vec![
+            Self::new("gaia_core", "GAIA core — all evaluable tasks (excludes media blind spots)", "gaia_core.jsonl"),
+            Self::new("gaia_basic", "GAIA basic — L1 single-step reasoning tasks", "gaia_basic.jsonl"),
+            Self::new("gaia_file", "GAIA file — tasks requiring file parsing (xlsx/pdf/csv/docx)", "gaia_file.jsonl"),
+            Self::new("gaia_web", "GAIA web — tasks requiring precise web data lookup", "gaia_web.jsonl"),
+            Self::new("gaia_reasoning", "GAIA reasoning — L2/L3 multi-step reasoning without files", "gaia_reasoning.jsonl"),
+            Self::new("gaia_media", "GAIA media — blind spot tasks (image/audio/video, reference only)", "gaia_media.jsonl"),
+        ]
+    }
+}
+
+impl ExternalBenchmark for GaiaSubsetBenchmark {
+    fn name(&self) -> &str {
+        &self.suite_name
+    }
+
+    fn description(&self) -> &str {
+        &self.desc
+    }
+
+    fn load_tasks(&self) -> anyhow::Result<Vec<Box<dyn EvalTask>>> {
+        let path = self.dataset_path();
+        if !path.exists() {
+            anyhow::bail!(
+                "GAIA subset dataset not found at {}. Run dataset generation script.",
+                path.display()
+            );
+        }
+        GaiaBenchmark::load_from_jsonl(&path)
+    }
+
+    fn custom_metrics(&self) -> Vec<MetricDefinition> {
+        vec![
+            MetricDefinition {
+                name: "pass_rate_l1".into(),
+                description: "Pass rate for Level 1 (easy) tasks".into(),
+                unit: crate::benchmarks::MetricUnit::Percentage,
+            },
+            MetricDefinition {
+                name: "pass_rate_l2".into(),
+                description: "Pass rate for Level 2 (medium) tasks".into(),
+                unit: crate::benchmarks::MetricUnit::Percentage,
+            },
+            MetricDefinition {
+                name: "pass_rate_l3".into(),
+                description: "Pass rate for Level 3 (hard) tasks".into(),
+                unit: crate::benchmarks::MetricUnit::Percentage,
+            },
+        ]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,6 +613,34 @@ mod tests {
             annotator_metadata: None, file_name: Some("data.csv".into()),
         };
         assert!(!filter.should_exclude(&csv_record));
+    }
+
+    #[test]
+    fn test_gaia_subsets_load_and_sum_to_total() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("datasets");
+        let subsets = [
+            ("gaia_basic.jsonl", 31),
+            ("gaia_file.jsonl", 22),
+            ("gaia_web.jsonl", 44),
+            ("gaia_reasoning.jsonl", 45),
+            ("gaia_media.jsonl", 23),
+        ];
+        let mut total = 0;
+        for (file, expected) in subsets {
+            let path = base.join(file);
+            if !path.exists() { return; }
+            let tasks = GaiaBenchmark::load_from_jsonl(&path).unwrap();
+            assert_eq!(tasks.len(), expected, "{file} count mismatch");
+            total += tasks.len();
+        }
+        assert_eq!(total, 165, "subsets must sum to full dataset");
+
+        // gaia_core = total - media
+        let core_path = base.join("gaia_core.jsonl");
+        if core_path.exists() {
+            let core = GaiaBenchmark::load_from_jsonl(&core_path).unwrap();
+            assert_eq!(core.len(), 142, "gaia_core count mismatch");
+        }
     }
 
     #[test]
