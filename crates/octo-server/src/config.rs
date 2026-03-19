@@ -56,6 +56,9 @@ pub struct Config {
     /// Skills configuration
     #[serde(default)]
     pub skills: SkillsConfig,
+    /// Tools configuration
+    #[serde(default)]
+    pub tools: ToolsConfig,
     /// Auth configuration (optional)
     #[serde(default)]
     pub auth: AuthConfigYaml,
@@ -141,6 +144,14 @@ pub struct McpConfig {
 pub struct SkillsConfig {
     /// Skills directories to load from
     pub dirs: Vec<String>,
+}
+
+/// Tools configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ToolsConfig {
+    /// Web search engine priority order (e.g., ["jina", "tavily", "ddg"])
+    #[serde(default)]
+    pub web_search_priority: Vec<String>,
 }
 
 impl Config {

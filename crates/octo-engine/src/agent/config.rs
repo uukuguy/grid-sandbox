@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Agent loop configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AgentConfig {
     /// Maximum conversation rounds (0 = unlimited)
     pub max_rounds: u32,

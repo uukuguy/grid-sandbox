@@ -81,4 +81,4 @@ pub use session::{
 pub use skill_runtime::{RuntimeType, SkillContext, SkillRuntime, ToolInfo};
 pub use skills::{SkillLoader, SkillRegistry, SkillTool};
 pub use tools::recorder::ToolExecutionRecorder;
-pub use tools::{default_tools, register_memory_tools, Tool, ToolRegistry};
+pub use tools::{default_tools, default_tools_with_search_priority, register_memory_tools, Tool, ToolRegistry};

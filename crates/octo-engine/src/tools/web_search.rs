@@ -7,13 +7,43 @@ use octo_types::{RiskLevel, ToolContext, ToolOutput, ToolSource};
 
 use super::traits::Tool;
 
+/// Supported web search engines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SearchEngine {
+    Jina,
+    Tavily,
+    Ddg,
+}
+
+impl SearchEngine {
+    /// Parse from string (case-insensitive).
+    pub fn from_str_loose(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "jina" => Some(Self::Jina),
+            "tavily" => Some(Self::Tavily),
+            "ddg" | "duckduckgo" => Some(Self::Ddg),
+            _ => None,
+        }
+    }
+}
+
+/// Default engine priority: Jina → Tavily → DDG.
+pub const DEFAULT_SEARCH_PRIORITY: &[SearchEngine] = &[
+    SearchEngine::Jina,
+    SearchEngine::Tavily,
+    SearchEngine::Ddg,
+];
+
 /// Tool for searching the web.
 ///
-/// Uses Tavily Search API as primary backend (requires TAVILY_API_KEY env var).
-/// Falls back to DuckDuckGo Instant Answer API when Tavily is unavailable.
+/// Engine priority is configurable via `with_priority()`.
+/// Default: Jina → Tavily → DDG.
+/// Requires JINA_API_KEY and/or TAVILY_API_KEY env vars.
 pub struct WebSearchTool {
     client: reqwest::Client,
+    jina_api_key: Option<String>,
     tavily_api_key: Option<String>,
+    priority: Vec<SearchEngine>,
 }
 
 impl WebSearchTool {
@@ -22,11 +52,32 @@ impl WebSearchTool {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client");
+        let jina_api_key = std::env::var("JINA_API_KEY").ok().filter(|k| !k.is_empty());
         let tavily_api_key = std::env::var("TAVILY_API_KEY").ok().filter(|k| !k.is_empty());
         Self {
             client,
+            jina_api_key,
             tavily_api_key,
+            priority: DEFAULT_SEARCH_PRIORITY.to_vec(),
         }
+    }
+
+    /// Set custom engine priority order.
+    pub fn with_priority(mut self, priority: Vec<SearchEngine>) -> Self {
+        if !priority.is_empty() {
+            self.priority = priority;
+        }
+        self
+    }
+
+    /// Parse priority from a list of engine name strings (e.g., from config).
+    /// Unknown names are silently skipped.
+    pub fn with_priority_strings(self, names: &[String]) -> Self {
+        let engines: Vec<SearchEngine> = names
+            .iter()
+            .filter_map(|n| SearchEngine::from_str_loose(n))
+            .collect();
+        self.with_priority(engines)
     }
 }
 
@@ -73,22 +124,48 @@ impl Tool for WebSearchTool {
             .map(|v| v as usize)
             .unwrap_or(5);
 
-        debug!(query, max_results, "performing web search");
+        debug!(query, max_results, priority = ?self.priority, "performing web search");
 
-        // Try Tavily first, fall back to DDG Instant Answer API
-        if let Some(api_key) = &self.tavily_api_key {
-            match self
-                .search_tavily(query, max_results, api_key)
-                .await
-            {
-                Ok(output) => return Ok(output),
-                Err(e) => {
-                    warn!("Tavily search failed, falling back to DDG: {e}");
+        // Try engines in configured priority order with automatic fallback
+        for (idx, engine) in self.priority.iter().enumerate() {
+            let is_last = idx == self.priority.len() - 1;
+            match engine {
+                SearchEngine::Jina => {
+                    if let Some(api_key) = &self.jina_api_key {
+                        match self.search_jina(query, max_results, api_key).await {
+                            Ok(output) => return Ok(output),
+                            Err(e) if !is_last => {
+                                warn!("Jina search failed, trying next engine: {e}");
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    }
+                }
+                SearchEngine::Tavily => {
+                    if let Some(api_key) = &self.tavily_api_key {
+                        match self.search_tavily(query, max_results, api_key).await {
+                            Ok(output) => return Ok(output),
+                            Err(e) if !is_last => {
+                                warn!("Tavily search failed, trying next engine: {e}");
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    }
+                }
+                SearchEngine::Ddg => {
+                    match self.search_ddg_instant(query, max_results).await {
+                        Ok(output) => return Ok(output),
+                        Err(e) if !is_last => {
+                            warn!("DDG search failed, trying next engine: {e}");
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
             }
         }
 
-        self.search_ddg_instant(query, max_results).await
+        // All engines skipped (no API keys configured)
+        Ok(ToolOutput::success("No search engines available. Set JINA_API_KEY or TAVILY_API_KEY.".to_string()))
     }
 
     fn source(&self) -> ToolSource {
@@ -101,7 +178,77 @@ impl Tool for WebSearchTool {
 }
 
 impl WebSearchTool {
-    /// Search using Tavily Search API
+    /// Search using Jina Search API (primary)
+    async fn search_jina(
+        &self,
+        query: &str,
+        max_results: usize,
+        api_key: &str,
+    ) -> Result<ToolOutput> {
+        // Jina API limits num to 0..=20
+        let jina_num = max_results.min(20);
+        let body = json!({
+            "q": query,
+            "num": jina_num,
+        });
+
+        let response = self
+            .client
+            .post("https://s.jina.ai/")
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("Accept", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Jina request failed: {e}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("Jina HTTP {status}: {text}"));
+        }
+
+        let data: Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow::anyhow!("Jina JSON parse failed: {e}"))?;
+
+        let mut output = String::new();
+
+        if let Some(results) = data["data"].as_array() {
+            if results.is_empty() {
+                return Ok(ToolOutput::success("No search results found.".to_string()));
+            }
+            output.push_str("## Search Results\n\n");
+            for (i, r) in results.iter().take(max_results).enumerate() {
+                let title = r["title"].as_str().unwrap_or("(no title)");
+                let url = r["url"].as_str().unwrap_or("");
+                let description = r["description"].as_str().unwrap_or("");
+                let content = r["content"].as_str().unwrap_or("");
+                // Use description if available, otherwise first 500 chars of content
+                let snippet = if !description.is_empty() {
+                    description.to_string()
+                } else if content.len() > 500 {
+                    format!("{}...", &content[..500])
+                } else {
+                    content.to_string()
+                };
+                output.push_str(&format!(
+                    "{}. **{}**\n   URL: {}\n   {}\n\n",
+                    i + 1,
+                    title,
+                    url,
+                    snippet
+                ));
+            }
+        } else {
+            return Ok(ToolOutput::success("No search results found.".to_string()));
+        }
+
+        Ok(ToolOutput::success(output.trim_end().to_string()))
+    }
+
+    /// Search using Tavily Search API (secondary)
     async fn search_tavily(
         &self,
         query: &str,
@@ -283,10 +430,48 @@ mod tests {
     }
 
     #[test]
-    fn test_tavily_api_key_from_env() {
-        // Test that constructor reads TAVILY_API_KEY
+    fn test_api_keys_from_env() {
+        // Test that constructor reads JINA_API_KEY and TAVILY_API_KEY without panic
         let tool = WebSearchTool::new();
-        // We just verify the tool constructs without panic
         assert_eq!(tool.name(), "web_search");
+        // Default priority: jina > tavily > ddg
+        assert_eq!(tool.priority, vec![SearchEngine::Jina, SearchEngine::Tavily, SearchEngine::Ddg]);
+    }
+
+    #[test]
+    fn test_custom_priority() {
+        let tool = WebSearchTool::new()
+            .with_priority(vec![SearchEngine::Tavily, SearchEngine::Jina]);
+        assert_eq!(tool.priority, vec![SearchEngine::Tavily, SearchEngine::Jina]);
+    }
+
+    #[test]
+    fn test_priority_from_strings() {
+        let names = vec!["ddg".to_string(), "jina".to_string()];
+        let tool = WebSearchTool::new().with_priority_strings(&names);
+        assert_eq!(tool.priority, vec![SearchEngine::Ddg, SearchEngine::Jina]);
+    }
+
+    #[test]
+    fn test_priority_from_strings_unknown_ignored() {
+        let names = vec!["jina".to_string(), "google".to_string(), "tavily".to_string()];
+        let tool = WebSearchTool::new().with_priority_strings(&names);
+        // "google" is silently skipped
+        assert_eq!(tool.priority, vec![SearchEngine::Jina, SearchEngine::Tavily]);
+    }
+
+    #[test]
+    fn test_empty_priority_keeps_default() {
+        let tool = WebSearchTool::new().with_priority(vec![]);
+        assert_eq!(tool.priority, vec![SearchEngine::Jina, SearchEngine::Tavily, SearchEngine::Ddg]);
+    }
+
+    #[test]
+    fn test_search_engine_from_str_loose() {
+        assert_eq!(SearchEngine::from_str_loose("jina"), Some(SearchEngine::Jina));
+        assert_eq!(SearchEngine::from_str_loose("TAVILY"), Some(SearchEngine::Tavily));
+        assert_eq!(SearchEngine::from_str_loose("DuckDuckGo"), Some(SearchEngine::Ddg));
+        assert_eq!(SearchEngine::from_str_loose("ddg"), Some(SearchEngine::Ddg));
+        assert_eq!(SearchEngine::from_str_loose("google"), None);
     }
 }

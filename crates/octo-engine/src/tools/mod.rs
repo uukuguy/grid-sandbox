@@ -117,6 +117,12 @@ impl Default for ToolRegistry {
 }
 
 pub fn default_tools() -> ToolRegistry {
+    default_tools_with_search_priority(&[])
+}
+
+/// Create default tool registry with custom web search engine priority.
+/// Empty slice means use default priority (Jina → Tavily → DDG).
+pub fn default_tools_with_search_priority(search_priority: &[String]) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
     registry.register(BashTool::new());
     registry.register(FileReadTool::new());
@@ -126,7 +132,12 @@ pub fn default_tools() -> ToolRegistry {
     registry.register(GlobTool::new());
     registry.register(FindTool::new());
     registry.register(WebFetchTool::new());
-    registry.register(WebSearchTool::new());
+    let search_tool = if search_priority.is_empty() {
+        WebSearchTool::new()
+    } else {
+        WebSearchTool::new().with_priority_strings(search_priority)
+    };
+    registry.register(search_tool);
     registry
 }
 

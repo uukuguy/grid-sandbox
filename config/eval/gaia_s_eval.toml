@@ -10,7 +10,13 @@ record_traces = true
 max_iterations = 30
 agent_manifest = "config/agents/gaia_solver.yaml"
 
-# Use the best-performing model from R3 for controlled comparison
+# Two models for Phase S evaluation (R3 top-2)
+[[models]]
+name = "Qwen3.5-27B"
+provider = "openai"
+model = "qwen/qwen3.5-27b"
+tier = "standard"
+
 [[models]]
 name = "MiniMax-M2.1"
 provider = "openai"
