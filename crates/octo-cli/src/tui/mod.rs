@@ -2,6 +2,8 @@
 
 pub mod backend;
 pub mod event;
+pub mod formatters;
+pub mod managers;
 pub mod screens;
 pub mod theme;
 pub mod widgets;
