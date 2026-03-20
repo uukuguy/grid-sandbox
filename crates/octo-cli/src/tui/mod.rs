@@ -5,6 +5,7 @@ pub mod backend;
 pub mod event;
 pub mod event_handler;
 pub mod formatters;
+pub mod key_handler;
 pub mod managers;
 pub mod render;
 pub mod screens;
