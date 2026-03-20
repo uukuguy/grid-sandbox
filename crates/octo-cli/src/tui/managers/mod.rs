@@ -4,3 +4,4 @@
 pub mod spinner;
 pub mod message_history;
 pub mod display_ledger;
+pub mod interrupt;
