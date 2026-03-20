@@ -58,23 +58,8 @@ fn render_conversation(state: &TuiState, frame: &mut Frame, area: Rect) {
     frame.render_widget(block, area);
 
     if state.cached_lines.is_empty() {
-        // Welcome text when no messages
-        let welcome = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled(
-                "  Octo Agent — Conversation Mode",
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "  Type a message and press Enter to start.",
-                Style::default().fg(Color::DarkGray),
-            )),
-            Line::from(Span::styled(
-                "  Ctrl+C to cancel | Double Ctrl+C to quit",
-                Style::default().fg(Color::DarkGray),
-            )),
-        ]);
+        // Welcome panel with ASCII art
+        let welcome = super::widgets::welcome_panel::WelcomePanel::new(&state.model_name);
         frame.render_widget(welcome, inner);
         return;
     }
