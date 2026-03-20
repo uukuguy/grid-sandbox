@@ -125,6 +125,7 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
 
     // ── 5. Main loop ────────────────────────────────────────────────────
     let prompt = "octo> ".to_string();
+    let mut ctrl_c_count: u8 = 0;
 
     loop {
         // rustyline::Editor is !Send, so we move it into spawn_blocking
@@ -140,9 +141,13 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
         let result = readline_result.1;
 
         match result {
-            Ok(line) if line.trim().is_empty() => continue,
+            Ok(line) if line.trim().is_empty() => {
+                ctrl_c_count = 0;
+                continue;
+            }
 
             Ok(line) if line.starts_with('/') => {
+                ctrl_c_count = 0;
                 let action = slash::handle_slash_command(
                     line.trim(),
                     state,
@@ -156,6 +161,7 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
             }
 
             Ok(line) => {
+                ctrl_c_count = 0;
                 let _ = rl.add_history_entry(&line);
 
                 // Expand @file references
@@ -194,9 +200,15 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
             }
 
             Err(ReadlineError::Interrupted) => {
-                // Ctrl+C — cancel the current agent operation
+                ctrl_c_count += 1;
+                if ctrl_c_count >= 2 {
+                    eprintln!("\nExiting...");
+                    break;
+                }
+                // First Ctrl+C — cancel current operation, hint to press again
                 handle.send(AgentMessage::Cancel).await.ok();
-                eprintln!("^C");
+                eprintln!("^C (press Ctrl+C again to exit, or Ctrl+D)");
+                continue;
             }
 
             Err(ReadlineError::Eof) => {

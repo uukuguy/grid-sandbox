@@ -129,7 +129,7 @@ pub struct LoggingConfig {
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            level: "octo_server=debug,octo_engine=debug,tower_http=debug".to_string(),
+            level: "octo_server=info,octo_engine=info,tower_http=info".to_string(),
         }
     }
 }

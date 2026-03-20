@@ -8,7 +8,7 @@ use futures_util::stream::Stream;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::debug;
+use tracing::{debug, trace};
 
 use octo_types::{
     ChatMessage, CompletionRequest, CompletionResponse, ContentBlock, ImageSourceType, MessageRole,
@@ -716,7 +716,7 @@ impl<S> OpenAISseStream<S> {
             }
 
             // Parse JSON chunk
-            debug!("SSE chunk: {data}");
+            trace!("SSE chunk: {data}");
             let chunk: Value = match serde_json::from_str(&data) {
                 Ok(v) => v,
                 Err(e) => {

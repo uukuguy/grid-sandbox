@@ -4,6 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::time::Duration;
 
 /// Create a spinner for long-running operations
+#[allow(dead_code)]
 pub fn create_spinner(message: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(

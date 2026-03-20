@@ -35,6 +35,7 @@ pub enum ThemeName {
 }
 
 /// Active theme with computed styles
+#[allow(dead_code)]
 pub struct Theme {
     pub name: ThemeName,
     pub accent: Style,
@@ -46,6 +47,7 @@ pub struct Theme {
     pub bold: Style,
 }
 
+#[allow(dead_code)]
 impl Theme {
     pub fn from_name(name: ThemeName) -> Self {
         let (r, g, b) = match name {

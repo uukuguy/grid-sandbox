@@ -769,6 +769,7 @@ impl EvalRunner {
     /// 6. Cleanup container
     ///
     /// Falls back to engine mode if Docker is unavailable.
+    #[allow(dead_code)]
     async fn run_task_docker(
         &self,
         task: &dyn EvalTask,

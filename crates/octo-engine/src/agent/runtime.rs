@@ -244,9 +244,9 @@ impl AgentRuntime {
         let mcp_manager = Arc::new(Mutex::new(McpManager::new()));
 
         // 12. Working directory
-        let working_dir = config
-            .working_dir
-            .unwrap_or_else(|| PathBuf::from("/tmp/octo-sandbox"));
+        let working_dir = config.working_dir.unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/tmp/octo-sandbox"))
+        });
 
         // 13. Get default model
         let default_model = config

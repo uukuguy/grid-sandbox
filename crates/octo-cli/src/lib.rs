@@ -57,7 +57,7 @@ pub enum Commands {
     /// Start interactive REPL session
     Run {
         /// Resume last session
-        #[arg(short = 'c', long = "continue")]
+        #[arg(short = 'C', long = "continue")]
         resume: bool,
         /// Resume specific session
         #[arg(short, long)]

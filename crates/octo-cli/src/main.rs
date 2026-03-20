@@ -18,9 +18,12 @@ use octo_cli::{Cli, Commands};
 
 fn init_logging(verbose: bool) {
     let filter = if verbose {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"))
+        // -v: respect RUST_LOG if set, otherwise use debug level
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new("octo_cli=info,octo_engine=debug,octo_eval=debug"))
     } else {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+        // Default: always quiet, ignore RUST_LOG from .env
+        EnvFilter::new("octo_cli=warn,octo_engine=warn,octo_eval=warn")
     };
 
     fmt()

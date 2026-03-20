@@ -196,12 +196,14 @@ fn truncate_json(value: &serde_json::Value, max_len: usize) -> String {
     truncate(&s, max_len)
 }
 
-/// Truncate a string to `max_len` characters, appending "..." if truncated.
+/// Truncate a string to `max_len` bytes, appending "..." if truncated.
+/// Uses floor_char_boundary to avoid panicking on multi-byte UTF-8 characters.
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
+        let end = s.floor_char_boundary(max_len.saturating_sub(3));
+        format!("{}...", &s[..end])
     }
 }
 
@@ -224,6 +226,16 @@ mod tests {
         let result = truncate("hello world, this is long", 10);
         assert_eq!(result, "hello w...");
         assert!(result.len() <= 10);
+    }
+
+    #[test]
+    fn test_truncate_cjk() {
+        // Each Chinese char is 3 bytes. "今日国际财经新闻" = 8 chars = 24 bytes.
+        // Truncating to 15 bytes: 15-3=12 bytes → floor to char boundary → 4 chars (12 bytes).
+        let result = truncate("今日国际财经新闻", 15);
+        assert!(result.ends_with("..."));
+        // Must not panic on multi-byte boundary
+        assert!(result.len() <= 15);
     }
 
     #[test]

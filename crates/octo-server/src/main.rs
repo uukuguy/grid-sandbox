@@ -70,22 +70,21 @@ async fn main() -> Result<()> {
     // Load configuration: config.yaml < CLI args < .env
     let cfg = config::Config::load(config_path.as_ref(), cli_port, cli_host);
 
-    // Apply logging config (clone to avoid moving)
-    let log_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| cfg.logging.level.clone());
+    // Apply logging config: OCTO_LOG > config.yaml > fallback info
+    // Note: RUST_LOG from .env is intentionally ignored to avoid SSE debug noise.
+    // Use OCTO_LOG=octo_engine=debug for explicit server-level debug logging.
+    let log_filter = std::env::var("OCTO_LOG").unwrap_or_else(|_| cfg.logging.level.clone());
     let log_format = std::env::var("OCTO_LOG_FORMAT").unwrap_or_default();
+    let env_filter = EnvFilter::new(&log_filter);
 
     if log_format == "json" {
         tracing_subscriber::fmt()
             .json()
-            .with_env_filter(
-                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_filter)),
-            )
+            .with_env_filter(env_filter)
             .init();
     } else {
         tracing_subscriber::fmt()
-            .with_env_filter(
-                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&log_filter)),
-            )
+            .with_env_filter(env_filter)
             .init();
     }
 
@@ -331,8 +330,8 @@ async fn main() -> Result<()> {
     };
     tokio::select! {
         _ = cleanup => tracing::info!("MCP servers shut down"),
-        _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
-            tracing::warn!("MCP shutdown timed out after 30s, forcing exit");
+        _ = tokio::time::sleep(std::time::Duration::from_secs(3)) => {
+            tracing::warn!("MCP shutdown timed out, forcing exit");
         }
     }
 
@@ -363,6 +362,20 @@ async fn shutdown_signal(state: Arc<AppState>) {
     }
 
     tracing::info!("shutdown signal received, starting graceful shutdown...");
+    tracing::info!("Press Ctrl+C again to force quit immediately.");
+
+    // Spawn a force-exit guard: if graceful shutdown takes too long or user presses Ctrl+C again
+    tokio::spawn(async {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                tracing::warn!("Force quit requested");
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                tracing::warn!("Graceful shutdown timed out after 5s");
+            }
+        }
+        std::process::exit(0);
+    });
 
     // Stop scheduler if running
     if let Some(ref sched) = state.scheduler {

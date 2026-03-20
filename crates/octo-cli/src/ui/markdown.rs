@@ -1,6 +1,7 @@
 //! Markdown terminal rendering using termimad
 
 /// Render markdown text to terminal
+#[allow(dead_code)]
 pub fn render_markdown(text: &str) {
     // Use termimad for markdown rendering
     let skin = termimad::MadSkin::default();
@@ -8,6 +9,7 @@ pub fn render_markdown(text: &str) {
 }
 
 /// Render markdown to string (for piping)
+#[allow(dead_code)]
 pub fn render_markdown_to_string(text: &str) -> String {
     let skin = termimad::MadSkin::default();
     skin.term_text(text).to_string()

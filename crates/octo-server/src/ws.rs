@@ -32,6 +32,7 @@ enum ClientMessage {
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 enum ServerMessage {
     #[serde(rename = "session_created")]
     SessionCreated { session_id: String },

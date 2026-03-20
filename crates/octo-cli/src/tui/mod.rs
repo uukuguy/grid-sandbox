@@ -550,6 +550,7 @@ mod tests {
     // -- AppEvent / App state transition tests --
     // These tests verify the state machine without needing a terminal.
 
+    #[allow(dead_code)]
     fn make_test_app() -> App {
         // We cannot easily construct a real AppState in unit tests (requires DB).
         // So we test only the parts that don't need rendering.

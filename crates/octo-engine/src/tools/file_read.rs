@@ -27,6 +27,7 @@ impl FileReadTool {
 
 /// Recognized binary file formats
 #[derive(Debug, PartialEq)]
+#[allow(dead_code)]
 enum FileFormat {
     /// Plain text (UTF-8)
     Text,

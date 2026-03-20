@@ -1,4 +1,5 @@
 .PHONY: dev build check test clean fmt lint server web all install setup \
+        cli cli-run cli-ask cli-tui cli-agent cli-session cli-config cli-doctor \
         verify verify-runtime verify-api verify-api-mcp \
         eval-list eval-run eval-compare eval-benchmark eval-benchmark-mini \
         eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress \
@@ -43,9 +44,9 @@ build:
 release:
 	cargo build --release
 
-# 运行后端服务器
+# 运行后端服务器 (exec ensures Ctrl+C reaches the server directly)
 server:
-	cargo run -p octo-server
+	@exec cargo run -p octo-server
 
 # 运行测试
 test:
@@ -114,6 +115,47 @@ clean-web:
 
 # 清理全部
 clean-all: clean clean-web
+
+# ============================================================
+# CLI 命令 (octo-cli)
+# ============================================================
+
+CLI_ARGS ?=
+QUERY    ?=
+
+# 显示 CLI 帮助
+cli:
+	cargo run -p octo-cli -- --help
+
+# 交互式 REPL 会话
+cli-run:
+	@cargo run --quiet -p octo-cli -- run $(CLI_ARGS)
+
+# 单次提问 (headless 模式)
+# 用法: make cli-ask QUERY="你的问题"
+cli-ask:
+	@if [ -z "$(QUERY)" ]; then echo "Usage: make cli-ask QUERY=\"your question\""; exit 1; fi
+	@cargo run --quiet -p octo-cli -- ask "$(QUERY)" $(CLI_ARGS)
+
+# TUI 全屏模式
+cli-tui:
+	@cargo run --quiet -p octo-cli -- tui $(CLI_ARGS)
+
+# Agent 管理
+cli-agent:
+	cargo run -p octo-cli -- agent list
+
+# Session 管理
+cli-session:
+	cargo run -p octo-cli -- session list
+
+# 配置管理
+cli-config:
+	cargo run -p octo-cli -- config show
+
+# 健康诊断
+cli-doctor:
+	cargo run -p octo-cli -- doctor
 
 # ============================================================
 # 评估命令 (octo-eval)
@@ -396,6 +438,16 @@ help:
 	@echo "  make verify-runtime   打印运行时验证步骤清单 (需先启动服务)"
 	@echo "  make verify-api       REST API 端点可用性检查 (需先 make server)"
 	@echo "  make verify-api-mcp ID=<id>  MCP server 专属端点检查"
+	@echo ""
+	@echo "CLI (octo-cli):"
+	@echo "  make cli                             显示 CLI 帮助"
+	@echo "  make cli-run                         交互式 REPL 会话"
+	@echo "  make cli-ask QUERY=\"问题\"             单次提问 (headless)"
+	@echo "  make cli-tui                         TUI 全屏模式"
+	@echo "  make cli-agent                       列出 agents"
+	@echo "  make cli-session                     列出 sessions"
+	@echo "  make cli-config                      显示配置"
+	@echo "  make cli-doctor                      健康诊断"
 	@echo ""
 	@echo "构建:"
 	@echo "  make all              完整构建 (后端 + 前端)"
