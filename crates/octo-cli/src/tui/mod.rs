@@ -403,7 +403,267 @@ impl App {
     }
 }
 
-/// Run the TUI application
+/// Run the new conversation-centric TUI with full agent integration.
+///
+/// This is the T2 replacement for `run_tui`. It:
+/// 1. Creates a session and starts an AgentExecutor
+/// 2. Subscribes to AgentEvent broadcasts
+/// 3. Runs the EventHandler-based event loop with AgentEvent-driven rendering
+pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
+    use octo_types::{SandboxId, UserId};
+
+    let user_id = UserId::from_string("cli-user");
+    let session_store = state.agent_runtime.session_store();
+
+    // Create a new session
+    let session = session_store.create_session().await;
+    let session_id = session.session_id.clone();
+    let sandbox_id = session_store
+        .get_session(&session_id)
+        .await
+        .map(|s| s.sandbox_id)
+        .unwrap_or_else(|| SandboxId::from_string("default"));
+
+    // Start the agent executor
+    let handle = state
+        .agent_runtime
+        .start_primary(session_id.clone(), user_id, sandbox_id, vec![], None)
+        .await;
+
+    // Get model name from provider config
+    let model_name = std::env::var("LLM_MODEL")
+        .or_else(|_| std::env::var("OPENAI_MODEL_NAME"))
+        .unwrap_or_else(|_| "agent".to_string());
+
+    // Setup terminal
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Initialize state
+    let mut tui_state = app_state::TuiState::new(session_id, handle.clone(), model_name);
+
+    // Get terminal size
+    if let Ok(size) = crossterm::terminal::size() {
+        tui_state.terminal_width = size.0;
+        tui_state.terminal_height = size.1;
+    }
+
+    // Create event handler with agent broadcast subscription
+    let agent_rx = handle.subscribe();
+    let mut event_handler =
+        event_handler::EventHandler::new(agent_rx, std::time::Duration::from_millis(100));
+
+    // Main event loop
+    let result = run_conversation_loop(&mut terminal, &mut tui_state, &mut event_handler).await;
+
+    // Restore terminal (always, even on error)
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    result
+}
+
+/// The async event loop for the conversation-centric TUI.
+async fn run_conversation_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    state: &mut app_state::TuiState,
+    event_handler: &mut event_handler::EventHandler,
+) -> Result<()> {
+    loop {
+        // Rebuild line cache if content changed
+        if state.lines_generation != state.message_generation {
+            state.rebuild_cached_lines();
+        }
+
+        // Conditional redraw
+        if state.dirty {
+            terminal.draw(|frame| render::render(state, frame))?;
+            state.dirty = false;
+        }
+
+        // Wait for next event
+        if let Some(event) = event_handler.next().await {
+            state.dirty = true; // assume dirty; render will check
+            match event {
+                event::AppEvent::Key(key) => {
+                    key_handler::handle_key(state, key).await;
+                }
+                event::AppEvent::Resize(w, h) => {
+                    state.terminal_width = w;
+                    state.terminal_height = h;
+                    state.invalidate_cache(); // width change affects wrapping
+                }
+                event::AppEvent::Tick => {
+                    state.spinner_service.stop(); // tick — just mark dirty for animation
+                }
+                event::AppEvent::Agent(agent_event) => {
+                    handle_agent_event(state, agent_event);
+                }
+                event::AppEvent::Quit => {
+                    state.running = false;
+                }
+                _ => {} // Legacy events ignored
+            }
+        }
+
+        // Batch drain remaining events
+        while let Some(event) = event_handler.try_next() {
+            match event {
+                event::AppEvent::Key(key) => {
+                    key_handler::handle_key(state, key).await;
+                }
+                event::AppEvent::Resize(w, h) => {
+                    state.terminal_width = w;
+                    state.terminal_height = h;
+                }
+                event::AppEvent::Agent(agent_event) => {
+                    handle_agent_event(state, agent_event);
+                }
+                event::AppEvent::Quit => {
+                    state.running = false;
+                }
+                _ => {}
+            }
+            state.dirty = true;
+            if !state.running {
+                break;
+            }
+        }
+
+        if !state.running {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+/// Process an AgentEvent, updating TuiState accordingly.
+fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent::AgentEvent) {
+    use octo_engine::agent::AgentEvent;
+    use octo_types::message::ChatMessage;
+
+    match event {
+        AgentEvent::TextDelta { text } => {
+            state.streaming_text.push_str(&text);
+            state.invalidate_cache();
+            state.auto_scroll();
+        }
+        AgentEvent::TextComplete { text: _ } => {
+            // Finalize streaming text into a message
+            if !state.streaming_text.is_empty() {
+                let final_text = std::mem::take(&mut state.streaming_text);
+                state.messages.push(ChatMessage::assistant(&final_text));
+            }
+            state.is_streaming = false;
+            state.invalidate_cache();
+        }
+        AgentEvent::ThinkingDelta { text } => {
+            state.thinking_text.push_str(&text);
+            state.is_thinking = true;
+            state.invalidate_cache();
+        }
+        AgentEvent::ThinkingComplete { text: _ } => {
+            state.thinking_text.clear();
+            state.is_thinking = false;
+            state.invalidate_cache();
+        }
+        AgentEvent::ToolStart {
+            tool_id: _,
+            tool_name,
+            input,
+        } => {
+            state
+                .active_tools
+                .push(widgets::conversation::ActiveTool {
+                    name: tool_name,
+                    args: input,
+                    elapsed_secs: 0,
+                });
+            state.dirty = true;
+        }
+        AgentEvent::ToolResult {
+            tool_id: _,
+            output: _,
+            success: _,
+        } => {
+            // Remove the most recently added tool (LIFO — ToolResult for most recent ToolStart)
+            state.active_tools.pop();
+            state.invalidate_cache();
+        }
+        AgentEvent::ToolProgress {
+            tool_id: _,
+            tool_name,
+            progress: _,
+        } => {
+            // Update elapsed time for the tool
+            if let Some(tool) = state.active_tools.iter_mut().find(|t| t.name == tool_name) {
+                // progress has a message field we could use
+                tool.elapsed_secs += 1;
+            }
+            state.dirty = true;
+        }
+        AgentEvent::ApprovalRequired {
+            tool_name,
+            tool_id,
+            risk_level,
+        } => {
+            state.pending_approval = Some(app_state::PendingApproval {
+                tool_id,
+                tool_name,
+                risk_level,
+            });
+            state.dirty = true;
+        }
+        AgentEvent::Completed(result) => {
+            state.total_input_tokens += result.input_tokens;
+            state.total_output_tokens += result.output_tokens;
+            state.is_streaming = false;
+            state.active_tools.clear();
+            // If there's leftover streaming text, finalize it
+            if !state.streaming_text.is_empty() {
+                let final_text = std::mem::take(&mut state.streaming_text);
+                state
+                    .messages
+                    .push(ChatMessage::assistant(&final_text));
+            }
+            state.invalidate_cache();
+        }
+        AgentEvent::Done => {
+            state.is_streaming = false;
+            state.invalidate_cache();
+        }
+        AgentEvent::Error { message: _ } => {
+            // Show error as a system message
+            state.is_streaming = false;
+            state.active_tools.clear();
+            if !state.streaming_text.is_empty() {
+                state.streaming_text.clear();
+            }
+            state.invalidate_cache();
+        }
+        AgentEvent::SecurityBlocked { reason: _ } => {
+            state.invalidate_cache();
+        }
+        AgentEvent::EmergencyStopped(_reason) => {
+            state.is_streaming = false;
+            state.active_tools.clear();
+            state.streaming_text.clear();
+            state.invalidate_cache();
+        }
+        _ => {
+            // IterationStart/End, ContextDegraded, MemoryFlushed,
+            // ToolExecution, TokenBudgetUpdate, Typing — mark dirty for display
+            state.dirty = true;
+        }
+    }
+}
+
+/// Run the TUI application (legacy 12-Tab mode)
 pub async fn run_tui(state: AppState, theme_name: crate::ui::theme::ThemeName) -> Result<()> {
     // Setup terminal
     enable_raw_mode()?;

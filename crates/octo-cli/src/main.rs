@@ -108,9 +108,8 @@ async fn main() -> Result<()> {
         Commands::Tool { action } => handle_tools(action, &state).await?,
         Commands::Mcp { action } => handle_mcp(action, &state).await?,
         Commands::Config { action } => handle_config(action, &state).await?,
-        Commands::Tui { theme } => {
-            let theme_name = theme.parse().unwrap_or_default();
-            tui::run_tui(state, theme_name).await?;
+        Commands::Tui { theme: _ } => {
+            tui::run_tui_conversation(&state).await?;
         }
         Commands::Doctor { repair } => run_doctor(repair, &state).await?,
         Commands::Completions { action } => match action {
