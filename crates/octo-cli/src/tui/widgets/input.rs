@@ -1,7 +1,8 @@
 //! User input/prompt widget with multiline editing and cursor rendering.
 //!
-//! Ported from opendev-tui. Displays a separator line with mode indicator,
+//! Displays a mode-colored separator line with mode indicator,
 //! queue count, and multiline input area with visible cursor.
+//! No bottom border — saves vertical space.
 
 use ratatui::{
     buffer::Buffer,
@@ -55,7 +56,6 @@ impl<'a> InputWidget<'a> {
         let prefix_width = 2u16; // "❯ " or "  "
 
         if self.buffer.is_empty() {
-            // Cursor at start of placeholder
             return Some((area.x + prefix_width, text_y));
         }
 
@@ -80,6 +80,21 @@ impl<'a> InputWidget<'a> {
         let y = text_y + cursor_line as u16;
         Some((x, y))
     }
+
+    /// Get the accent color and mode label based on current mode.
+    fn mode_style(&self) -> (ratatui::style::Color, &'static str) {
+        match self.mode {
+            "Streaming" => (style_tokens::GREEN_LIGHT, "\u{25B8} Streaming"),
+            "Thinking" => (style_tokens::MAGENTA, "\u{25E6} Thinking"),
+            "PLAN" => (style_tokens::GREEN_LIGHT, "Plan"),
+            _ => (style_tokens::ACCENT, "Normal"),
+        }
+    }
+
+    /// Whether input text should be dimmed (during streaming/thinking).
+    fn is_dimmed(&self) -> bool {
+        self.mode == "Streaming" || self.mode == "Thinking"
+    }
 }
 
 impl Widget for InputWidget<'_> {
@@ -88,21 +103,11 @@ impl Widget for InputWidget<'_> {
             return;
         }
 
-        let accent = if self.mode == "PLAN" {
-            style_tokens::GREEN_LIGHT
-        } else {
-            style_tokens::ACCENT
-        };
+        let (accent, mode_label) = self.mode_style();
+        let dimmed = self.is_dimmed();
 
-        let placeholder = "Type a message...";
-
-        // Row 0: separator line with embedded mode indicator
-        let mode_label = match self.mode {
-            "NORMAL" => "Normal",
-            "PLAN" => "Plan",
-            other => other,
-        };
-        let mode_text = format!(" {mode_label} ");
+        // Row 0: separator line with mode-colored indicator
+        let mode_text = format!(" {} ", mode_label);
         let hint_text = "(Alt+Enter: newline) ";
         let prefix_dashes = 2;
 
@@ -140,18 +145,8 @@ impl Widget for InputWidget<'_> {
         let sep_line = Line::from(spans);
         buf.set_line(area.left(), area.top(), &sep_line, area.width);
 
-        // Bottom border line
-        let bottom_row = area.y + area.height.saturating_sub(1);
-        if bottom_row > area.top() {
-            let bottom_line = Line::from(Span::styled(
-                "\u{2500}".repeat(area.width as usize),
-                sep_style,
-            ));
-            buf.set_line(area.left(), bottom_row, &bottom_line, area.width);
-        }
-
-        // Rows between separator and bottom border: multiline input
-        let text_height = area.height.saturating_sub(2); // -1 top sep, -1 bottom border
+        // No bottom border — all remaining rows are text area
+        let text_height = area.height.saturating_sub(1); // -1 top separator only
         if text_height == 0 {
             return;
         }
@@ -162,19 +157,23 @@ impl Widget for InputWidget<'_> {
             height: text_height,
         };
 
+        // Text style: dimmed when streaming/thinking
+        let text_fg = if dimmed {
+            style_tokens::GREY
+        } else {
+            Color::Reset // default terminal color
+        };
+
         if self.buffer.is_empty() {
+            // Empty: show prompt with block cursor
             let prefix = Span::styled(
                 "\u{276f} ".to_string(),
                 Style::default().fg(accent).add_modifier(Modifier::BOLD),
             );
             let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-            // Show block cursor on first char of placeholder
-            let first_char = &placeholder[..1];
-            let rest_placeholder = &placeholder[1..];
             let content = vec![
                 prefix,
-                Span::styled(first_char.to_string(), cursor_style),
-                Span::styled(rest_placeholder, Style::default().fg(style_tokens::SUBTLE)),
+                Span::styled(" ", cursor_style), // block cursor
             ];
             Paragraph::new(Line::from(content)).render(text_area, buf);
         } else {
@@ -218,15 +217,15 @@ impl Widget for InputWidget<'_> {
                     };
                     let spans = Line::from(vec![
                         Span::styled(pfx, prefix_style),
-                        Span::raw(before.to_string()),
+                        Span::styled(before.to_string(), Style::default().fg(text_fg)),
                         Span::styled(cursor_char.to_string(), cursor_style),
-                        Span::raw(after.to_string()),
+                        Span::styled(after.to_string(), Style::default().fg(text_fg)),
                     ]);
                     buf.set_line(text_area.x, row, &spans, text_area.width);
                 } else {
                     let spans = Line::from(vec![
                         Span::styled(pfx, prefix_style),
-                        Span::raw(line_text.to_string()),
+                        Span::styled(line_text.to_string(), Style::default().fg(text_fg)),
                     ]);
                     buf.set_line(text_area.x, row, &spans, text_area.width);
                 }
@@ -290,6 +289,84 @@ mod tests {
         assert!(
             !rendered.contains("1 messages"),
             "Should use singular 'message' for count=1"
+        );
+    }
+
+    #[test]
+    fn test_input_no_bottom_border() {
+        let area = Rect::new(0, 0, 60, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("hello", 5, "NORMAL", 0);
+        widget.render(area, &mut buf);
+
+        // Bottom row (row 2) should be text content, not a border
+        let bottom: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 2))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        // Should NOT be entirely dashes (which would indicate a border)
+        let dash_count = bottom.chars().filter(|c| *c == '\u{2500}').count();
+        assert!(
+            dash_count < area.width as usize / 2,
+            "Bottom row should not be a full border line"
+        );
+    }
+
+    #[test]
+    fn test_input_streaming_mode_label() {
+        let area = Rect::new(0, 0, 60, 2);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "Streaming", 0);
+        widget.render(area, &mut buf);
+
+        let top: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(top.contains("Streaming"), "Should show streaming mode label");
+    }
+
+    #[test]
+    fn test_input_thinking_mode_label() {
+        let area = Rect::new(0, 0, 60, 2);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "Thinking", 0);
+        widget.render(area, &mut buf);
+
+        let top: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 0))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        assert!(top.contains("Thinking"), "Should show thinking mode label");
+    }
+
+    #[test]
+    fn test_input_empty_shows_cursor_only() {
+        let area = Rect::new(0, 0, 60, 2);
+        let mut buf = Buffer::empty(area);
+
+        let widget = InputWidget::new("", 0, "NORMAL", 0);
+        widget.render(area, &mut buf);
+
+        let text_row: String = (0..area.width)
+            .map(|x| {
+                buf.cell((x, 1))
+                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
+            })
+            .collect();
+        // Should NOT show the old placeholder "Type a message..."
+        assert!(
+            !text_row.contains("Type a message"),
+            "Should not show old placeholder text"
         );
     }
 }

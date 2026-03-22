@@ -138,6 +138,7 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
         | (KeyModifiers::CONTROL, KeyCode::Char('j')) => {
             state.input_buffer.insert(state.input_cursor, '\n');
             state.input_cursor += 1;
+            state.dirty = true;
         }
 
         // ── Arrow keys: history navigation / scroll ──
@@ -213,6 +214,7 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             state.input_buffer.insert(state.input_cursor, c);
             state.input_cursor += c.len_utf8();
             state.interrupt_manager.reset();
+            state.dirty = true;
         }
 
         // ── Backspace ──
@@ -226,6 +228,7 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     .unwrap_or(0);
                 state.input_buffer.remove(prev);
                 state.input_cursor = prev;
+                state.dirty = true;
             }
         }
 
@@ -233,6 +236,7 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
         (KeyModifiers::NONE, KeyCode::Delete) => {
             if state.input_cursor < state.input_buffer.len() {
                 state.input_buffer.remove(state.input_cursor);
+                state.dirty = true;
             }
         }
 

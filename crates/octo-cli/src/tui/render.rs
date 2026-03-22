@@ -26,7 +26,7 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
         .constraints([
             Constraint::Min(5),              // conversation area
             Constraint::Length(todo_height),  // todo panel (hidden when empty/invisible)
-            Constraint::Length(input_lines + 2), // input area (+border)
+            Constraint::Length(input_lines + 1), // input area (separator + text, no bottom border)
             Constraint::Length(status_height),   // status bar
         ])
         .split(area);
@@ -116,6 +116,8 @@ fn render_todo_panel(state: &TuiState, frame: &mut Frame, area: Rect) {
 fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
     let mode = if state.is_streaming {
         "Streaming"
+    } else if state.is_thinking {
+        "Thinking"
     } else {
         "NORMAL"
     };
