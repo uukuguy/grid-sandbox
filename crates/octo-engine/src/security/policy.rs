@@ -74,20 +74,9 @@ impl Default for SecurityPolicy {
             autonomy: AutonomyLevel::Supervised,
             workspace_dir: PathBuf::from("."),
             workspace_only: true,
-            allowed_commands: vec![
-                "git".into(),
-                "npm".into(),
-                "cargo".into(),
-                "ls".into(),
-                "cat".into(),
-                "grep".into(),
-                "find".into(),
-                "echo".into(),
-                "pwd".into(),
-                "wc".into(),
-                "head".into(),
-                "tail".into(),
-            ],
+            // Empty = allow all commands. Security enforcement is at sandbox level.
+            // Use AutonomyLevel + risk assessment for approval gates instead.
+            allowed_commands: vec![],
             forbidden_paths: vec![
                 // System directories (blocked even when workspace_only=false)
                 "/etc".into(),
@@ -329,18 +318,26 @@ mod tests {
     fn test_default_policy() {
         let policy = SecurityPolicy::default();
         assert_eq!(policy.autonomy, AutonomyLevel::Supervised);
-        assert!(!policy.allowed_commands.is_empty());
+        // Default: empty allowed_commands = allow all (security at sandbox level)
+        assert!(policy.allowed_commands.is_empty());
     }
 
     #[test]
-    fn test_command_whitelist() {
+    fn test_default_allows_all_commands() {
         let policy = SecurityPolicy::default();
-
-        // Allowed command
+        // All commands allowed by default — security is at sandbox level
         assert!(policy.check_command("ls").is_ok());
         assert!(policy.check_command("git status").is_ok());
+        assert!(policy.check_command("curl http://example.com").is_ok());
+        assert!(policy.check_command("rm -rf /tmp/test").is_ok());
+    }
 
-        // Blocked command
+    #[test]
+    fn test_explicit_whitelist_blocks_others() {
+        // When explicitly configured with a whitelist, it blocks non-listed commands
+        let mut policy = SecurityPolicy::default();
+        policy.allowed_commands = vec!["ls".into(), "git".into()];
+        assert!(policy.check_command("ls").is_ok());
         assert!(policy.check_command("rm -rf /").is_err());
     }
 

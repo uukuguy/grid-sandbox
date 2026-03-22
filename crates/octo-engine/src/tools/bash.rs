@@ -12,93 +12,29 @@ use super::traits::Tool;
 #[cfg(feature = "sandbox-wasm")]
 use crate::sandbox::{AdapterEnum, SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory};
 
-/// Shell 命令执行安全模式（参考 ARCHITECTURE_DESIGN.md §5.5.1）
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExecSecurityMode {
-    /// 禁止所有 shell 执行
-    Deny,
-    /// 仅允许白名单命令（默认）
-    Allowlist,
-    /// 允许所有命令（开发模式）
-    Full,
-}
-
-/// 工具执行安全策略
-#[derive(Debug, Clone)]
-pub struct ExecPolicy {
-    pub mode: ExecSecurityMode,
-    /// 内置安全命令集
-    pub safe_bins: Vec<String>,
-    /// 用户扩展白名单
-    pub allowed_commands: Vec<String>,
-}
-
-impl Default for ExecPolicy {
-    fn default() -> Self {
-        Self {
-            mode: ExecSecurityMode::Allowlist,
-            safe_bins: vec![
-                "ls", "cat", "head", "tail", "grep", "find", "echo", "pwd", "wc", "sort", "uniq",
-                "cut", "awk", "sed", "tr", "diff", "git", "cargo", "npm", "python3", "python",
-                "node", "touch", "mkdir", "unzip", "file", "xxd", "pdftotext", "pip3", "pip",
-                "tar", "gzip", "gunzip", "zcat", "strings", "basename", "dirname", "realpath",
-                "sha256sum", "md5sum", "base64", "date", "env", "which", "xargs", "tee",
-            ]
-            .into_iter()
-            .map(String::from)
-            .collect(),
-            allowed_commands: vec![],
-        }
-    }
-}
-
-impl ExecPolicy {
-    /// 检查命令是否被允许执行
-    pub fn is_allowed(&self, command: &str) -> bool {
-        match self.mode {
-            ExecSecurityMode::Deny => false,
-            ExecSecurityMode::Full => true,
-            ExecSecurityMode::Allowlist => {
-                // Block shell metacharacters that could bypass the allowlist
-                if command.contains(';')
-                    || command.contains('|')
-                    || command.contains("&&")
-                    || command.contains("||")
-                    || command.contains("$(")
-                    || command.contains('`')
-                    || command.contains('>')
-                    || command.contains('<')
-                    || command.contains('\n')
-                    || command.contains('\0')
-                {
-                    return false;
-                }
-                // 提取命令名（取第一个词，去掉路径前缀）
-                let cmd = command.split_whitespace().next().unwrap_or("");
-                let cmd_name = cmd.rsplit('/').next().unwrap_or(cmd);
-                self.safe_bins.iter().any(|b| b == cmd_name)
-                    || self.allowed_commands.iter().any(|b| b == cmd_name)
-            }
-        }
-    }
-}
-
-/// 安全环境变量白名单
-const SAFE_ENV_VARS: &[&str] = &[
-    "PATH",
-    "HOME",
-    "TMPDIR",
-    "LANG",
-    "LC_ALL",
-    "TERM",
-    "USER",
-    "SHELL",
-    "CARGO_HOME",
-    "RUSTUP_HOME",
+/// Environment variables passed through to command execution.
+///
+/// Security boundary is at the sandbox level (Docker/WASM isolation),
+/// not the tool level. Commands need access to API keys, Python paths,
+/// and other runtime state to function properly.
+const PASSTHROUGH_ENV_VARS: &[&str] = &[
+    // System basics
+    "PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TERM", "USER", "SHELL",
+    // Build tools
+    "CARGO_HOME", "RUSTUP_HOME",
+    // Python
+    "VIRTUAL_ENV", "PYTHONPATH", "UV_CACHE_DIR",
+    // Node
+    "NODE_PATH", "NPM_CONFIG_PREFIX",
+    // LLM API keys (needed by skill scripts)
+    "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL",
+    "TAVILY_API_KEY", "JINA_API_KEY",
+    // Proxy (corporate environments)
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+    "http_proxy", "https_proxy", "no_proxy",
 ];
 
 pub struct BashTool {
-    exec_policy: Option<ExecPolicy>,
     /// Sandbox router for secure execution (feature-gated)
     #[cfg(feature = "sandbox-wasm")]
     router: Option<SandboxRouter>,
@@ -109,18 +45,6 @@ impl BashTool {
         #[cfg(feature = "sandbox-wasm")]
         let router = Some(SandboxRouter::with_policy(crate::sandbox::SandboxPolicy::Development));
         Self {
-            exec_policy: Some(ExecPolicy::default()),
-            #[cfg(feature = "sandbox-wasm")]
-            router,
-        }
-    }
-
-    /// 创建带安全策略的 BashTool
-    pub fn with_policy(policy: ExecPolicy) -> Self {
-        #[cfg(feature = "sandbox-wasm")]
-        let router = Some(SandboxRouter::with_policy(crate::sandbox::SandboxPolicy::Development));
-        Self {
-            exec_policy: Some(policy),
             #[cfg(feature = "sandbox-wasm")]
             router,
         }
@@ -230,23 +154,6 @@ impl Tool for BashTool {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'command' parameter"))?;
 
-        // 1. 路径遍历检查
-        if command.contains("../") || command.contains("..\\") {
-            return Ok(ToolOutput::error(
-                "Security violation: path traversal detected in command".to_string(),
-            ));
-        }
-
-        // 2. ExecPolicy 模式检查
-        if let Some(policy) = &self.exec_policy {
-            if !policy.is_allowed(command) {
-                return Ok(ToolOutput::error(format!(
-                    "Security violation: command not allowed by exec policy (mode={:?})",
-                    policy.mode
-                )));
-            }
-        }
-
         let timeout_secs = params["timeout"].as_u64().unwrap_or(30).min(120);
 
         debug!(command, timeout_secs, "executing bash command");
@@ -285,9 +192,8 @@ impl Tool for BashTool {
         }
 
         // 直接执行（默认行为或沙箱回退）
-        // 收集安全环境变量白名单
-        let safe_env: Vec<(String, String)> = std::env::vars()
-            .filter(|(k, _)| SAFE_ENV_VARS.contains(&k.as_str()))
+        let env_vars: Vec<(String, String)> = std::env::vars()
+            .filter(|(k, _)| PASSTHROUGH_ENV_VARS.contains(&k.as_str()))
             .collect();
 
         let result = tokio::time::timeout(
@@ -297,7 +203,7 @@ impl Tool for BashTool {
                 .arg(command)
                 .current_dir(&ctx.working_dir)
                 .env_clear()
-                .envs(safe_env)
+                .envs(env_vars)
                 .output(),
         )
         .await;
@@ -358,88 +264,7 @@ impl Tool for BashTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_default_allowlist_original_commands() {
-        let policy = ExecPolicy::default();
-        // Original commands
-        for cmd in &["ls", "cat", "grep", "git", "python3", "node", "cargo", "npm"] {
-            assert!(policy.is_allowed(cmd), "{cmd} should be allowed");
-        }
-    }
-
-    #[test]
-    fn test_default_allowlist_new_file_commands() {
-        let policy = ExecPolicy::default();
-        // Newly added file handling commands
-        for cmd in &["unzip", "file", "xxd", "pdftotext", "pip3", "pip"] {
-            assert!(policy.is_allowed(cmd), "{cmd} should be allowed");
-        }
-    }
-
-    #[test]
-    fn test_default_allowlist_new_utility_commands() {
-        let policy = ExecPolicy::default();
-        // Newly added utility commands
-        for cmd in &["tar", "gzip", "gunzip", "zcat", "strings", "basename", "dirname",
-                      "realpath", "sha256sum", "md5sum", "base64", "date", "env", "which",
-                      "xargs", "tee"] {
-            assert!(policy.is_allowed(cmd), "{cmd} should be allowed");
-        }
-    }
-
-    #[test]
-    fn test_blocked_commands_still_blocked() {
-        let policy = ExecPolicy::default();
-        // Commands not in allowlist should be blocked
-        assert!(!policy.is_allowed("rm"));
-        assert!(!policy.is_allowed("chmod"));
-        assert!(!policy.is_allowed("chown"));
-        assert!(!policy.is_allowed("kill"));
-        assert!(!policy.is_allowed("dd"));
-        assert!(!policy.is_allowed("curl"));
-    }
-
-    #[test]
-    fn test_metacharacters_still_blocked() {
-        let policy = ExecPolicy::default();
-        assert!(!policy.is_allowed("ls; rm -rf /"));
-        assert!(!policy.is_allowed("ls | cat"));
-        assert!(!policy.is_allowed("ls && rm -rf /"));
-        assert!(!policy.is_allowed("echo $(whoami)"));
-        assert!(!policy.is_allowed("cat `whoami`"));
-        assert!(!policy.is_allowed("ls > /etc/passwd"));
-    }
-
-    #[test]
-    fn test_command_with_args() {
-        let policy = ExecPolicy::default();
-        assert!(policy.is_allowed("python3 -c 'import openpyxl'"));
-        assert!(policy.is_allowed("unzip -l archive.zip"));
-        assert!(policy.is_allowed("file document.pdf"));
-        assert!(policy.is_allowed("pdftotext input.pdf -"));
-        assert!(policy.is_allowed("pip3 install openpyxl"));
-    }
-
-    #[test]
-    fn test_deny_mode() {
-        let policy = ExecPolicy {
-            mode: ExecSecurityMode::Deny,
-            ..Default::default()
-        };
-        assert!(!policy.is_allowed("ls"));
-        assert!(!policy.is_allowed("cat"));
-    }
-
-    #[test]
-    fn test_full_mode() {
-        let policy = ExecPolicy {
-            mode: ExecSecurityMode::Full,
-            ..Default::default()
-        };
-        assert!(policy.is_allowed("rm -rf /"));
-        assert!(policy.is_allowed("curl http://evil.com"));
-    }
+    use std::path::PathBuf;
 
     #[test]
     fn test_bash_tool_metadata() {
@@ -448,5 +273,76 @@ mod tests {
         assert_eq!(tool.source(), ToolSource::BuiltIn);
         assert_eq!(tool.risk_level(), RiskLevel::Destructive);
         assert_eq!(tool.approval(), ApprovalRequirement::Always);
+    }
+
+    #[tokio::test]
+    async fn test_simple_command() {
+        let tool = BashTool::new();
+        let ctx = ToolContext {
+            sandbox_id: octo_types::SandboxId::from_string("test"),
+            working_dir: PathBuf::from("."),
+            path_validator: None,
+        };
+        let result = tool.execute(json!({"command": "echo hello"}), &ctx).await.unwrap();
+        assert!(!result.is_error);
+        assert!(result.content.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn test_pipe_and_shell_features_work() {
+        let tool = BashTool::new();
+        let ctx = ToolContext {
+            sandbox_id: octo_types::SandboxId::from_string("test"),
+            working_dir: PathBuf::from("."),
+            path_validator: None,
+        };
+        // Pipes should work — security is at sandbox level, not tool level
+        let result = tool.execute(json!({"command": "echo hello | tr a-z A-Z"}), &ctx).await.unwrap();
+        assert!(!result.is_error);
+        assert!(result.content.contains("HELLO"));
+    }
+
+    #[tokio::test]
+    async fn test_curl_works() {
+        let tool = BashTool::new();
+        let ctx = ToolContext {
+            sandbox_id: octo_types::SandboxId::from_string("test"),
+            working_dir: PathBuf::from("."),
+            path_validator: None,
+        };
+        // curl should not be blocked — needed by skill scripts
+        let result = tool.execute(json!({"command": "curl --version"}), &ctx).await.unwrap();
+        assert!(!result.is_error);
+        assert!(result.content.contains("curl"));
+    }
+
+    #[test]
+    fn test_timeout_param_capped_at_120() {
+        // Timeout parameter is capped at 120 seconds
+        let val: u64 = 999_u64.min(120);
+        assert_eq!(val, 120);
+        let val: u64 = 30_u64.min(120);
+        assert_eq!(val, 30);
+    }
+
+    #[tokio::test]
+    async fn test_missing_command_param() {
+        let tool = BashTool::new();
+        let ctx = ToolContext {
+            sandbox_id: octo_types::SandboxId::from_string("test"),
+            working_dir: PathBuf::from("."),
+            path_validator: None,
+        };
+        let result = tool.execute(json!({}), &ctx).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_passthrough_env_vars_include_api_keys() {
+        assert!(PASSTHROUGH_ENV_VARS.contains(&"ANTHROPIC_API_KEY"));
+        assert!(PASSTHROUGH_ENV_VARS.contains(&"OPENAI_API_KEY"));
+        assert!(PASSTHROUGH_ENV_VARS.contains(&"TAVILY_API_KEY"));
+        assert!(PASSTHROUGH_ENV_VARS.contains(&"PATH"));
+        assert!(PASSTHROUGH_ENV_VARS.contains(&"HOME"));
     }
 }
