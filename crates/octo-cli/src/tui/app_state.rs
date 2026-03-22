@@ -4,6 +4,8 @@
 //! conversation history, streaming buffer, active tool executions,
 //! input buffer, scroll position, and metrics.
 
+use std::time::Instant;
+
 use octo_engine::agent::AgentExecutorHandle;
 use octo_engine::tools::approval::ApprovalGate;
 use octo_types::message::{ChatMessage, ContentBlock, MessageRole};
@@ -122,6 +124,14 @@ pub struct TuiState {
     /// Animation state for the welcome panel (shown when conversation is empty).
     pub welcome_state: WelcomePanelState,
 
+    // ── Scroll acceleration ──
+    /// Last scroll direction: true=up, false=down.
+    pub scroll_last_dir: Option<bool>,
+    /// Timestamp of last scroll event.
+    pub scroll_last_time: Option<Instant>,
+    /// Current acceleration level (0=3 lines, 1=6, 2=12).
+    pub scroll_accel: u8,
+
     // ── Approval ──
     /// Gate for responding to tool approval requests from the engine.
     pub approval_gate: Option<ApprovalGate>,
@@ -187,6 +197,9 @@ impl TuiState {
             thinking_text: String::new(),
             is_thinking: false,
             welcome_state: WelcomePanelState::new(),
+            scroll_last_dir: None,
+            scroll_last_time: None,
+            scroll_accel: 0,
             approval_gate: None,
         }
     }

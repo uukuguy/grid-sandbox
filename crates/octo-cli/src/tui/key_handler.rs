@@ -3,11 +3,40 @@
 //! Maps key events to state mutations: text input, scrolling,
 //! Ctrl+C cancellation, overlay toggles, and approval responses.
 
+use std::time::Instant;
+
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use octo_engine::agent::AgentMessage;
 use octo_types::message::ChatMessage;
 
 use super::app_state::{OverlayMode, TuiState};
+
+const SCROLL_AMOUNTS: [u16; 3] = [3, 6, 12];
+const SCROLL_ACCEL_WINDOW_MS: u128 = 200;
+
+/// Compute the scroll amount with 3-level acceleration.
+///
+/// Rapidly scrolling in the same direction within 200ms accelerates:
+/// level 0 = 3 lines, level 1 = 6 lines, level 2 = 12 lines.
+/// Changing direction or pausing resets to level 0.
+fn compute_scroll_amount(state: &mut TuiState, direction_up: bool) -> u16 {
+    let now = Instant::now();
+    let same_dir = state.scroll_last_dir == Some(direction_up);
+    let within_window = state
+        .scroll_last_time
+        .map(|t| now.duration_since(t).as_millis() < SCROLL_ACCEL_WINDOW_MS)
+        .unwrap_or(false);
+
+    if same_dir && within_window {
+        state.scroll_accel = (state.scroll_accel + 1).min(2);
+    } else {
+        state.scroll_accel = 0;
+    }
+
+    state.scroll_last_dir = Some(direction_up);
+    state.scroll_last_time = Some(now);
+    SCROLL_AMOUNTS[state.scroll_accel as usize]
+}
 
 /// Handle a keyboard event, mutating TuiState accordingly.
 pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
@@ -96,8 +125,9 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     state.input_cursor = state.input_buffer.len();
                 }
             } else if state.input_buffer.is_empty() {
-                // No history — scroll up
-                state.scroll_offset = state.scroll_offset.saturating_add(3);
+                // No history — scroll up with acceleration
+                let amount = compute_scroll_amount(state, true);
+                state.scroll_offset = state.scroll_offset.saturating_add(amount);
                 state.user_scrolled = true;
             } else {
                 // Input has content — navigate history
@@ -119,8 +149,9 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     state.input_cursor = 0;
                 }
             } else if state.user_scrolled {
-                // Scroll down
-                state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                // Scroll down with acceleration
+                let amount = compute_scroll_amount(state, false);
+                state.scroll_offset = state.scroll_offset.saturating_sub(amount);
                 if state.scroll_offset == 0 {
                     state.user_scrolled = false;
                 }
@@ -582,5 +613,40 @@ mod tests {
         });
         handle_key(&mut state, make_key(KeyCode::Char('y'))).await;
         assert!(state.pending_approval.is_none());
+    }
+
+    #[test]
+    fn test_scroll_acceleration_levels() {
+        let mut state = make_test_state();
+        // First scroll: level 0 = 3 lines
+        let amount = compute_scroll_amount(&mut state, true);
+        assert_eq!(amount, 3);
+        // Immediately again (same direction): level 1 = 6 lines
+        let amount = compute_scroll_amount(&mut state, true);
+        assert_eq!(amount, 6);
+        // Again: level 2 = 12 lines
+        let amount = compute_scroll_amount(&mut state, true);
+        assert_eq!(amount, 12);
+        // Caps at 12
+        let amount = compute_scroll_amount(&mut state, true);
+        assert_eq!(amount, 12);
+    }
+
+    #[test]
+    fn test_scroll_direction_change_resets() {
+        let mut state = make_test_state();
+        compute_scroll_amount(&mut state, true);  // level 0
+        compute_scroll_amount(&mut state, true);  // level 1
+        // Direction change → reset to level 0
+        let amount = compute_scroll_amount(&mut state, false);
+        assert_eq!(amount, 3);
+    }
+
+    #[test]
+    fn test_scroll_accel_state_fields() {
+        let state = make_test_state();
+        assert!(state.scroll_last_dir.is_none());
+        assert!(state.scroll_last_time.is_none());
+        assert_eq!(state.scroll_accel, 0);
     }
 }
