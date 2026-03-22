@@ -2,8 +2,8 @@
   "plan_file": "docs/plans/2026-03-22-phase-u-tui-production-hardening.md",
   "phase": "execution",
   "created_at": "2026-03-22T10:32:00+08:00",
-  "updated_at": "2026-03-22T11:15:00+08:00",
-  "completed_tasks": ["U1-1", "U1-2", "U1-3"],
+  "updated_at": "2026-03-22T12:30:00+08:00",
+  "completed_tasks": ["U1-1", "U1-2", "U1-3", "U2-1", "U2-2", "U2-3"],
   "current_task": null,
   "total_tasks": 10,
   "task_groups": {
@@ -16,7 +16,7 @@
     "G2": {
       "name": "渲染优化",
       "tasks": ["U2-1", "U2-2", "U2-3"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "description": "Per-message 缓存, Formatter 注册表, Tool Collapse"
     },
     "G3": {
@@ -46,7 +46,7 @@
   "key_decisions": [
     "ApprovalGate: Arc<Mutex<HashMap>> oneshot 通道，TUI 调用 gate.respond()",
     "Per-message cache: Vec<(u64, Vec<Line>)> 按消息位置索引，content hash 失效",
-    "ToolFormatter: 动态 HashMap 注册表，支持 MCP 扩展",
+    "ToolFormatter: Vec<Box<dyn ToolFormatter>> 顺序匹配 + GenericFormatter 兜底",
     "Scroll: 3 级加速 (3/6/12 lines)，200ms 方向窗口",
     "Tool Collapse: CC 风格，默认折叠，Ctrl+O 最近 / Alt+O 全局",
     "Event Batch: while try_next() drain loop before render (Phase T 已实现)",
@@ -55,7 +55,7 @@
     "InputWidget: 去底框，mode-colored separator，ghost text + Tab accept",
     "Welcome: ASCII Art OCTO (Tier 3) + 🦑 fallback (Tier 1/2)，amber 呼吸动画"
   ],
-  "notes": "G1 complete: U1-1 ApprovalGate wired (047fdfa), U1-2 already done in Phase T, U1-3 scroll accel (5a31909). 2293 tests pass, 0 failures. Next: G2 渲染优化.",
+  "notes": "G1+G2 complete. U2-1 per-message cache (29156e6), U2-2 ToolFormatterRegistry (818ff51), U2-3 tool collapse (a4aa90f). 2307 tests pass, 0 failures. Next: G3 增强 Widgets.",
   "deferred": [
     {
       "id": "U-D1",
