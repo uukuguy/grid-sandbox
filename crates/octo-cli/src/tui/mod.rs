@@ -356,8 +356,30 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
                 state.cancelled = false;
                 // Don't replace — ESC handler already preserved partial messages
             } else if !result.final_messages.is_empty() {
+                // Preserve completion summary messages from previous rounds.
+                // These are TUI-only messages (not in agent history) starting with '─'.
+                let summaries: Vec<ChatMessage> = state
+                    .messages
+                    .iter()
+                    .filter(|m| {
+                        m.role == MessageRole::Assistant
+                            && m.content.iter().any(|c| matches!(c, ContentBlock::Text { text } if text.starts_with('\u{2500}')))
+                    })
+                    .cloned()
+                    .collect();
+
                 state.messages = result.final_messages;
                 state.streaming_text.clear();
+
+                // Re-insert previous summaries before the last user message of this round.
+                // Find the position of the last user message to insert summaries before it.
+                if !summaries.is_empty() {
+                    if let Some(last_user_pos) = state.messages.iter().rposition(|m| m.role == MessageRole::User) {
+                        for (i, s) in summaries.into_iter().enumerate() {
+                            state.messages.insert(last_user_pos + i, s);
+                        }
+                    }
+                }
             } else if !state.streaming_text.is_empty() {
                 let final_text = std::mem::take(&mut state.streaming_text);
                 state.messages.push(ChatMessage::assistant(&final_text));
