@@ -144,6 +144,9 @@ pub enum Commands {
         action: EvalCommands,
     },
 
+    /// Initialize Octo project in current directory
+    Init,
+
     /// Run health diagnostics
     Doctor {
         /// Attempt to fix issues automatically
