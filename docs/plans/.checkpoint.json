@@ -2,7 +2,7 @@
   "plan_file": ".claude/plans/cryptic-sauteeing-harp.md",
   "phase": "complete",
   "created_at": "2026-03-22T20:30:00+08:00",
-  "updated_at": "2026-03-22T21:45:00+08:00",
+  "updated_at": "2026-03-22T23:00:00+08:00",
   "completed_tasks": ["V1-1", "V1-2", "V2-1", "V2-2", "V2-3", "V3-1", "V3-2", "V3-3", "V4-1", "V4-2", "V4-3"],
   "current_task": null,
   "total_tasks": 12,
@@ -23,7 +23,7 @@
       "name": "内置 Skills + 自动同步",
       "tasks": ["V3-1", "V3-2", "V3-3"],
       "status": "COMPLETE",
-      "description": "5 builtin skills (filesystem, web-search, code-review, code-debugger, readme-writer), SHA256 sync, system prompt injection"
+      "description": "9 Memento-Skills originals in .octo/skills/ (git tracked), 2 fallback in builtin/, system prompt injection"
     },
     "G4": {
       "name": "CLI + TUI + 端到端验证",
@@ -52,7 +52,7 @@
     "ExecutionMode auto-inference: extra files in skill dir → Playbook",
     "SkillSelector: 4-phase pipeline (Gate→Score→Budget→Attenuate) wired into harness before Zone A",
     "Model Override: active_skill.model replaces config.model before LLM call",
-    "Builtin skills embedded via include_str!() with SHA256 sync on startup",
+    "Skills live in .octo/skills/ (git tracked, user-managed); include_str!() only as fallback for 2 core skills",
     "SlashCommand type changed to String for dynamic skill name support in TUI autocomplete"
   ],
   "deferred": [
@@ -69,7 +69,7 @@
       "precondition": "Phase U G3 StatusBar 完成后"
     }
   ],
-  "notes": "Phase V COMPLETE. 11/12 tasks (V1-3 deferred). Skills system activated from dead code to running. 5 builtin skills, SkillSelector auto-select, Model Override, SubAgent-based Playbook execution, CLI commands, TUI autocomplete, 15 e2e tests. Tests: 2329→2370 (+41).",
+  "notes": "Phase V COMPLETE + post-fix. 11/12 tasks (V1-3 deferred). Skills system activated from dead code to running. 9 Memento-Skills originals in .octo/skills/ (replaced 5 self-written), SkillSelector auto-select, Model Override, SubAgent-based Playbook execution, CLI commands, TUI autocomplete, 15 e2e tests. Tests: 2329→2370 (+41). Post-fix commit: a557204.",
   "previous_phase": {
     "name": "Phase U — TUI Production Hardening",
     "status": "COMPLETE",
