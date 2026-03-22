@@ -26,6 +26,7 @@ use crate::tui::formatters::base::strip_system_reminders;
 use crate::tui::formatters::diff::{
     is_diff_tool, parse_unified_diff, render_diff_entries,
 };
+use crate::tui::formatters::formatter_registry::ToolFormatterRegistry;
 use crate::tui::formatters::markdown::MarkdownRenderer;
 use crate::tui::formatters::style_tokens::{self, Indent};
 use crate::tui::widgets::spinner::{COMPLETED_CHAR, SPINNER_FRAMES};
@@ -39,6 +40,8 @@ pub struct ConversationWidget<'a> {
     /// Active tool executions (rendered as spinners below messages).
     active_tools: &'a [ActiveTool],
     spinner_char: char,
+    /// Optional formatter registry for tool-specific output rendering.
+    formatter_registry: Option<&'a ToolFormatterRegistry>,
 }
 
 impl<'a> ConversationWidget<'a> {
@@ -48,7 +51,13 @@ impl<'a> ConversationWidget<'a> {
             scroll_offset,
             active_tools: &[],
             spinner_char: SPINNER_FRAMES[0],
+            formatter_registry: None,
         }
+    }
+
+    pub fn formatter_registry(mut self, registry: &'a ToolFormatterRegistry) -> Self {
+        self.formatter_registry = Some(registry);
+        self
     }
 
     pub fn active_tools(mut self, tools: &'a [ActiveTool], spinner_char: char) -> Self {
@@ -222,7 +231,7 @@ impl<'a> ConversationWidget<'a> {
         }
     }
 
-    /// Build tool result lines with diff detection and collapsible display.
+    /// Build tool result lines with diff detection, formatter registry, and collapsible display.
     fn build_tool_result_lines(
         &self,
         content: &str,
@@ -252,8 +261,17 @@ impl<'a> ConversationWidget<'a> {
                 ]));
             }
             render_diff_entries(&entries, lines);
+        } else if let Some(registry) = self.formatter_registry {
+            // Use formatter registry for tool-specific rendering
+            let name = tool_name.unwrap_or("unknown");
+            let formatted = registry.format(name, content);
+            lines.push(formatted.header);
+            lines.extend(formatted.body);
+            if let Some(footer) = formatted.footer {
+                lines.push(footer);
+            }
         } else {
-            // Regular tool result — show with ⎿ continuation prefix
+            // Fallback: generic rendering without registry
             let color = if is_error {
                 style_tokens::ERROR
             } else {

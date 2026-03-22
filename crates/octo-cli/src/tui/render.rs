@@ -94,7 +94,8 @@ fn render_conversation(state: &TuiState, frame: &mut Frame, area: Rect) {
         &messages,
         state.scroll_offset,
     )
-    .active_tools(&state.active_tools, spinner_char);
+    .active_tools(&state.active_tools, spinner_char)
+    .formatter_registry(&state.tool_formatter_registry);
 
     frame.render_widget(conversation, area);
 }

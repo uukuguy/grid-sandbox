@@ -142,6 +142,10 @@ pub struct TuiState {
     /// Cached rendered lines per message: (content_hash, rendered_lines).
     /// Indexed by message position in `self.messages`.
     pub per_message_cache: Vec<(u64, Vec<Line<'static>>)>,
+
+    // ── Formatter registry ──
+    /// Dynamic tool output formatter registry.
+    pub tool_formatter_registry: super::formatters::formatter_registry::ToolFormatterRegistry,
 }
 
 impl TuiState {
@@ -209,6 +213,8 @@ impl TuiState {
             scroll_accel: 0,
             approval_gate: None,
             per_message_cache: Vec::new(),
+            tool_formatter_registry:
+                super::formatters::formatter_registry::ToolFormatterRegistry::new(),
         }
     }
 

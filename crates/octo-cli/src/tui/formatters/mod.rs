@@ -10,3 +10,4 @@ pub mod tool_registry;
 pub mod bash_formatter;
 pub mod file_formatter;
 pub mod diff;
+pub mod formatter_registry;
