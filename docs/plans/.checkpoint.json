@@ -1,8 +1,8 @@
 {
   "plan_file": null,
-  "phase": "in-progress",
+  "phase": "post-polish",
   "created_at": "2026-03-23T01:36:00+08:00",
-  "updated_at": "2026-03-23T02:30:00+08:00",
+  "updated_at": "2026-03-23T03:00:00+08:00",
   "completed_tasks": ["X-T1", "X-T2", "X-T3", "X-T4"],
   "current_task": null,
   "total_tasks": 4,
@@ -14,7 +14,7 @@
       "description": "ClearHistory 后端同步, Error/SecurityBlocked/EmergencyStopped 对话区显示, 活动指示器 3 行 + rounds/tools 计数, 完成摘要, CC 风格 git 状态"
     }
   },
-  "phase_name": "Phase X — TUI 运行状态增强",
+  "phase_name": "Post-Phase X — TUI + OctoRoot Polish",
   "status": "COMPLETE",
   "execution_mode": "direct",
   "design_file": null,
@@ -26,17 +26,14 @@
   },
   "final": {
     "tests": 2387,
-    "commit": null
+    "commit": "a5f4b0e"
   },
   "key_decisions": [
-    "AgentMessage::ClearHistory variant — /clear now clears backend history + session store",
-    "All error/security/emergency events render as visible messages in conversation area",
-    "task_start_time cleared on all terminal events (Completed/Done/Error/EmergencyStopped)",
-    "ActivityIndicator expanded to 3 rows (border-content-border) for visual prominence",
-    "Completion summary: elapsed | rounds r tools t | input output — only when tool_calls>0 or rounds>1",
-    "Git status CC-style: +staged ~modified ?untracked ↑unpushed",
-    "git_dirty_count replaced with git_staged/git_modified/git_untracked/git_unpushed",
-    "refresh_git_info() parses porcelain XY codes + rev-list @{u}..HEAD for unpushed count"
+    "Activity indicator: removed top/bottom borders, single content row (height 3→1)",
+    "Status bar: added empty bottom row for visual spacing (height 3→4)",
+    "Completion summaries preserved across rounds — extracted before final_messages replace, re-inserted before last user message",
+    "OctoRoot legacy db fallbacks removed — unified to ~/.octo/projects/<key>/octo.db, OCTO_DB_PATH kept for testing",
+    "Ctrl+O scroll: deferred to render phase via scroll_to_tool, uses ConversationWidget::scroll_offset_for_tool() for precise positioning"
   ],
   "deferred": [
     {
@@ -64,10 +61,10 @@
       "precondition": "Phase U G3 StatusBar complete"
     }
   ],
-  "notes": "Phase X COMPLETE. 4/4 tasks. TUI runtime status enhancements: (1) /clear now syncs backend history via ClearHistory message, (2) Error/Security/Emergency events show as visible messages in conversation area instead of silent state clearing, (3) Activity indicator expanded to 3 rows with rounds/tools counter, (4) Completion summary with elapsed/rounds/tools/tokens appended after tool-using tasks, (5) Git status CC-style with staged/modified/untracked/unpushed breakdown. Tests: 461 octo-cli tests pass, 2387 workspace total (unchanged).",
+  "notes": "Post-Phase X polish complete. 5 commits after Phase X: (1) activity indicator borders removed (1 row), (2) status bar bottom padding added, (3) completion summaries preserved across rounds, (4) OctoRoot legacy fallbacks removed — unified db path, (5) Ctrl+O precise scroll positioning via scroll_offset_for_tool(). Tests: 2387 workspace (unchanged).",
   "previous_phase": {
-    "name": "Phase W — OctoRoot 统一目录管理",
+    "name": "Phase X — TUI 运行状态增强",
     "status": "COMPLETE",
-    "commit": "4d045db"
+    "commit": "d4489f4"
   }
 }
