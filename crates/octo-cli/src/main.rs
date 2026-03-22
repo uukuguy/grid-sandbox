@@ -130,7 +130,7 @@ async fn main() -> Result<()> {
         },
         Commands::Dashboard { port, host, open, enable_tls, cert_path, key_path, require_auth, allowed_origins, generate_cert } => {
             let (cert_path, key_path, tls_enabled) = if generate_cert {
-                let cert_dir = std::path::PathBuf::from("./data/certs");
+                let cert_dir = state.octo_root.tls_dir();
                 let (cp, kp) = commands::dashboard_cert::generate_self_signed_cert(&cert_dir)?;
                 (Some(cp), Some(kp), true)
             } else {

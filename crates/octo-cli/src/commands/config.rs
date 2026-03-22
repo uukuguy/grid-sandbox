@@ -150,6 +150,71 @@ impl TextOutput for ConfigInitOutput {
 // ── Handlers ──────────────────────────────────────────────────
 
 async fn show_config(state: &AppState) -> Result<()> {
+    let root = &state.octo_root;
+
+    // Show config source chain
+    println!("Configuration Sources (highest priority first):");
+
+    // Check env vars
+    let env_count = [
+        "OCTO_PORT",
+        "OCTO_HOST",
+        "OCTO_LOG",
+        "LLM_PROVIDER",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+    ]
+    .iter()
+    .filter(|k| std::env::var(k).is_ok())
+    .count();
+    if env_count > 0 {
+        println!("  \u{2705} Env:     {} OCTO_*/provider vars set", env_count);
+    }
+
+    // Check local config
+    let local_path = root.project_local_config();
+    if local_path.exists() {
+        println!("  \u{2705} Local:   {}", local_path.display());
+    } else {
+        println!("  \u{2500}  Local:   {} (not found)", local_path.display());
+    }
+
+    // Check project config
+    let project_path = root.project_config();
+    if project_path.exists() {
+        println!("  \u{2705} Project: {}", project_path.display());
+    } else {
+        println!("  \u{2500}  Project: {} (not found)", project_path.display());
+    }
+
+    // Check global config
+    let global_path = root.global_config();
+    if global_path.exists() {
+        println!("  \u{2705} Global:  {}", global_path.display());
+    } else {
+        println!("  \u{2500}  Global:  {} (not found)", global_path.display());
+    }
+
+    // Check legacy
+    let legacy = root.working_dir().join("config.yaml");
+    if legacy.exists() && !project_path.exists() {
+        println!(
+            "  \u{26A0}\u{FE0F}  Legacy:  {} (move to .octo/config.yaml)",
+            legacy.display()
+        );
+    }
+
+    // Check credentials
+    let cred_path = root.credentials_path();
+    if cred_path.exists() {
+        println!("  \u{2705} Creds:   {}", cred_path.display());
+    } else {
+        println!("  \u{2500}  Creds:   {} (not found)", cred_path.display());
+    }
+
+    println!();
+
+    // Effective config entries
     let entries = vec![
         ConfigEntry {
             key: "OCTO_DB_PATH".to_string(),
@@ -346,16 +411,37 @@ async fn set_config(key: String, value: String, state: &AppState) -> Result<()> 
 }
 
 async fn show_paths(state: &AppState) -> Result<()> {
+    let root = &state.octo_root;
+    let global_cfg = root.global_config();
+    let project_cfg = root.project_config();
+    let local_cfg = root.project_local_config();
+    let creds = root.credentials_path();
+
     let paths = vec![
         ConfigPathEntry {
-            name: "Config".to_string(),
-            path: "config.yaml".to_string(),
-            exists: PathBuf::from("config.yaml").exists(),
+            name: "Global Config".to_string(),
+            path: global_cfg.display().to_string(),
+            exists: global_cfg.exists(),
         },
         ConfigPathEntry {
-            name: "Default Config".to_string(),
-            path: "config.default.yaml".to_string(),
-            exists: PathBuf::from("config.default.yaml").exists(),
+            name: "Project Config".to_string(),
+            path: project_cfg.display().to_string(),
+            exists: project_cfg.exists(),
+        },
+        ConfigPathEntry {
+            name: "Local Config".to_string(),
+            path: local_cfg.display().to_string(),
+            exists: local_cfg.exists(),
+        },
+        ConfigPathEntry {
+            name: "Credentials".to_string(),
+            path: creds.display().to_string(),
+            exists: creds.exists(),
+        },
+        ConfigPathEntry {
+            name: "Legacy Config".to_string(),
+            path: "config.yaml".to_string(),
+            exists: PathBuf::from("config.yaml").exists(),
         },
         ConfigPathEntry {
             name: "Environment".to_string(),
