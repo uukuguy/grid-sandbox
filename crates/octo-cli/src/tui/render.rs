@@ -18,15 +18,15 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
     } else {
         0
     };
-    let input_lines = state.input_buffer.lines().count().max(1).min(8) as u16;
-    let status_height = 1u16;
+    let input_lines = state.input_buffer.split('\n').count().max(1).min(8) as u16;
+    let status_height = 2u16;
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(5),              // conversation area
             Constraint::Length(todo_height),  // todo panel (hidden when empty/invisible)
-            Constraint::Length(input_lines + 1), // input area (separator + text, no bottom border)
+            Constraint::Length(input_lines + 2), // input area (top separator + text + bottom border)
             Constraint::Length(status_height),   // status bar
         ])
         .split(area);

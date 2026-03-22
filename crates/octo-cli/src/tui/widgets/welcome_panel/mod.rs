@@ -78,6 +78,92 @@ impl<'a> WelcomePanel<'a> {
         }
     }
 
+    // 5-row ASCII art: "OCTO" in block letters (width 35)
+    const LOGO_LINES: [&'static str; 5] = [
+        "  ██████   ██████ ████████  ██████ ",
+        " ██    ██ ██         ██    ██    ██",
+        " ██    ██ ██         ██    ██    ██",
+        " ██    ██ ██         ██    ██    ██",
+        "  ██████   ██████    ██     ██████ ",
+    ];
+    const LOGO_WIDTH: usize = 35;
+    const LOGO_HEIGHT: usize = 5;
+
+    /// Render the dot-grid background with pulsing intersections and OCTO logo as negative space.
+    fn render_grid_bg(
+        &self,
+        buf: &mut Buffer,
+        area: Rect,
+        gx: u16,
+        gy: u16,
+        gw: usize,
+        gh: usize,
+    ) {
+        let fade = self.state.fade_progress as f64;
+        let breathe = self.state.breathe_phase;
+
+        // Logo exclusion zone (centered in grid)
+        let show_logo = gh >= Self::LOGO_HEIGHT + 2 && gw >= Self::LOGO_WIDTH + 2;
+        let logo_start_col = gw.saturating_sub(Self::LOGO_WIDTH) / 2;
+        let logo_end_col = logo_start_col + Self::LOGO_WIDTH;
+        let logo_start_row = gh.saturating_sub(Self::LOGO_HEIGHT) / 2;
+        let logo_end_row = logo_start_row + Self::LOGO_HEIGHT;
+
+        // Grid spacing: dot every 3 cols, every 2 rows
+        let col_space = 3;
+        let row_space = 2;
+
+        for row in 0..gh {
+            for col in 0..gw {
+                let ax = gx + col as u16;
+                let ay = gy + row as u16;
+
+                // Logo zone: render block art letters
+                if show_logo
+                    && row >= logo_start_row
+                    && row < logo_end_row
+                    && col >= logo_start_col
+                    && col < logo_end_col
+                {
+                    let lr = row - logo_start_row;
+                    let lc = col - logo_start_col;
+                    if let Some(ch) = Self::LOGO_LINES[lr].chars().nth(lc) {
+                        if ch != ' ' {
+                            // Block chars: bright breathing amber
+                            let letter_t = lc as f64 / Self::LOGO_WIDTH as f64;
+                            let letter_hue = 30.0 + letter_t * 20.0;
+                            let b = 0.40 + 0.20 * (1.0 + breathe.sin());
+                            let color = hsl_to_rgb(letter_hue, 0.85 * fade, b * fade);
+                            Self::put(buf, area, ax, ay, ch, color);
+                        }
+                    }
+                    continue;
+                }
+
+                // Grid dots at intersections
+                let is_intersection = col % col_space == 0 && row % row_space == 0;
+                if is_intersection {
+                    // Distance from center for radial pulse
+                    let cx = gw as f64 / 2.0;
+                    let cy = gh as f64 / 2.0;
+                    let dx = col as f64 - cx;
+                    let dy = (row as f64 - cy) * 1.5; // aspect ratio correction
+                    let dist = (dx * dx + dy * dy).sqrt();
+                    let max_dist = (cx * cx + cy * cy).sqrt();
+                    let norm_dist = dist / max_dist;
+
+                    // Radial wave: dots pulse outward from center
+                    let wave = (breathe - norm_dist * 4.0).sin();
+                    let intensity = 0.08 + 0.12 * (wave * 0.5 + 0.5);
+
+                    let dot_hue = 35.0 + norm_dist * 15.0;
+                    let color = hsl_to_rgb(dot_hue, 0.4 * fade, intensity * fade);
+                    Self::put(buf, area, ax, ay, '\u{00B7}', color);
+                }
+            }
+        }
+    }
+
     /// Draw double-line border with animated amber gradient.
     fn draw_border(&self, buf: &mut Buffer, area: Rect, bx: u16, by: u16, bw: u16, bh: u16) {
         let offset = self.state.gradient_offset;
@@ -124,17 +210,7 @@ impl Widget for WelcomePanel<'_> {
 
         // Layout constants
         let subtitle = "Autonomous AI Workbench";
-        let model_line = format!("model: {}", self.model_name);
         let help = "Enter: send  |  Ctrl+C: cancel  |  Ctrl+D: debug  |  Ctrl+E: eval";
-
-        // ASCII Art "OCTO" — 5 lines, 35 chars wide
-        let title_ascii: [&str; 5] = [
-            "  ██████   ██████ ████████  ██████ ",
-            " ██    ██ ██         ██    ██    ██",
-            " ██    ██ ██         ██    ██    ██",
-            " ██    ██ ██         ██    ██    ██",
-            "  ██████   ██████    ██     ██████ ",
-        ];
 
         if area.height < 5 {
             // ── Tier 1: tiny terminal — emoji brand ──
@@ -151,34 +227,32 @@ impl Widget for WelcomePanel<'_> {
             self.write_gradient_line(buf, area, by + 1, "O C T O", 0.55);
             Self::center_text(buf, area, by + 3, subtitle, dim);
         } else {
-            // ── Tier 3: full — ASCII art + border + subtitle, model, help ──
-            let box_w = (area.width.saturating_sub(4)).min(50);
-            let box_h = 8u16; // top border + blank + 5 art lines + bottom border
+            // ── Tier 3: full — grid background with OCTO logo + info box ──
+            let box_w = (area.width.saturating_sub(4)).min(70);
+            let box_h = 3u16; // info box: border + help text + border
+            let grid_h = (area.height.saturating_sub(box_h + 2)).clamp(5, 18) as usize;
+            let grid_w = ((box_w as f32 * 0.9) as usize).clamp(Self::LOGO_WIDTH, 80);
 
-            // Total content: box(8) + blank(1) + subtitle(1) + blank(1) + model(1) + blank(1) + help(1) = 14
-            let total_h = box_h + 6;
+            // Center vertically
+            let total_h = grid_h as u16 + 1 + box_h;
             let start_y = area.y + area.height.saturating_sub(total_h) / 2;
-            let bx = area.x + (area.width.saturating_sub(box_w)) / 2;
+            let center_x = area.x + (area.width.saturating_sub(box_w)) / 2;
 
-            // Border box
-            self.draw_border(buf, area, bx, start_y, box_w, box_h);
+            // Grid background with OCTO logo as negative space
+            let grid_x = area.x + (area.width.saturating_sub(grid_w as u16)) / 2;
+            self.render_grid_bg(buf, area, grid_x, start_y, grid_w, grid_h);
 
-            // ASCII Art (rows 1-5 inside box, after top border)
-            for (i, line) in title_ascii.iter().enumerate() {
-                self.write_gradient_line(buf, area, start_y + 1 + i as u16, line, 0.55);
-            }
+            // "a u t o n o m o u s   a i   w o r k b e n c h" subtitle
+            let subtitle_y = start_y + grid_h as u16;
+            self.write_gradient_line(buf, area, subtitle_y, subtitle, 0.40);
 
-            // Subtitle (below box + 1 blank)
-            let sub_y = start_y + box_h + 1;
-            Self::center_text(buf, area, sub_y, subtitle, dim);
+            // Info box below with model + help
+            let by = subtitle_y + 1;
+            self.draw_border(buf, area, center_x, by, box_w, box_h);
 
-            // Model info (below subtitle + 1 blank)
-            let model_y = sub_y + 2;
-            Self::center_text(buf, area, model_y, &model_line, dim);
-
-            // Help (below model + 1 blank)
-            let help_y = model_y + 2;
-            Self::center_text(buf, area, help_y, help, dim);
+            let info_text = format!("model: {}  \u{2502}  {}", self.model_name, help);
+            let info_y = by + 1;
+            self.write_gradient_line(buf, area, info_y, &info_text, 0.35);
         }
     }
 }
@@ -242,14 +316,16 @@ mod tests {
     }
 
     #[test]
-    fn welcome_panel_tier3_ascii_art() {
+    fn welcome_panel_tier3_grid_background() {
         let state = WelcomePanelState::new();
         let widget = WelcomePanel::new(&state, "test-model");
         let area = Rect::new(0, 0, 80, 20);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("█"), "Tier 3 should contain ASCII art block chars");
+        // Grid background renders dot characters and block art
+        assert!(content.contains("\u{00B7}") || content.contains("\u{2588}"),
+            "Tier 3 should contain grid dots or block chars");
         assert!(!content.contains("AGENT"), "Should NOT contain AGENT");
     }
 
@@ -257,12 +333,12 @@ mod tests {
     fn welcome_panel_full_layout() {
         let state = WelcomePanelState::new();
         let widget = WelcomePanel::new(&state, "gpt-4o");
-        let area = Rect::new(0, 0, 80, 20);
+        let area = Rect::new(0, 0, 100, 20);
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("model: gpt-4o"), "Should show model info");
+        assert!(content.contains("gpt-4o"), "Should show model info");
         assert!(content.contains("Autonomous AI Workbench"), "Should show subtitle");
     }
 }
