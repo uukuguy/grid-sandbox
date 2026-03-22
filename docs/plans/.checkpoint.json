@@ -2,8 +2,8 @@
   "plan_file": "docs/plans/2026-03-22-phase-u-tui-production-hardening.md",
   "phase": "execution",
   "created_at": "2026-03-22T10:32:00+08:00",
-  "updated_at": "2026-03-22T12:30:00+08:00",
-  "completed_tasks": ["U1-1", "U1-2", "U1-3", "U2-1", "U2-2", "U2-3"],
+  "updated_at": "2026-03-22T12:20:00+08:00",
+  "completed_tasks": ["U1-1", "U1-2", "U1-3", "U2-1", "U2-2", "U2-3", "U3-1", "U3-2", "U3-3"],
   "current_task": null,
   "total_tasks": 10,
   "task_groups": {
@@ -22,7 +22,7 @@
     "G3": {
       "name": "增强 Widgets",
       "tasks": ["U3-1", "U3-2", "U3-3"],
-      "status": "PENDING",
+      "status": "COMPLETE",
       "description": "StatusBar 重设计, Todo Panel, InputWidget 改进"
     },
     "G4": {
@@ -52,10 +52,10 @@
     "Event Batch: while try_next() drain loop before render (Phase T 已实现)",
     "Todo Panel: 替代 Active Tools，需 engine AgentEvent::PlanUpdate",
     "StatusBar: Unicode 符号 (✳ ▸ ◦ ↕ ⊞)，分层亮度，amber 品牌色",
-    "InputWidget: 去底框，mode-colored separator，ghost text + Tab accept",
+    "InputWidget: 去底框，mode-colored separator，dimmed text，no placeholder",
     "Welcome: ASCII Art OCTO (Tier 3) + 🦑 fallback (Tier 1/2)，amber 呼吸动画"
   ],
-  "notes": "G1+G2 complete. U2-1 per-message cache (29156e6), U2-2 ToolFormatterRegistry (818ff51), U2-3 tool collapse (a4aa90f). 2307 tests pass, 0 failures. Next: G3 增强 Widgets.",
+  "notes": "G1+G2+G3 complete. U3-1 StatusBar brand+agent state (79bd20c), U3-2 Todo Panel (028f84c), U3-3 InputWidget improvements (d273013). 436 octo-cli tests pass. Next: G4 Welcome Panel ASCII Art.",
   "deferred": [
     {
       "id": "U-D1",
