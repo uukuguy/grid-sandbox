@@ -54,6 +54,39 @@ pub fn indent(text: &str, spaces: usize) -> String {
         .join("\n")
 }
 
+/// Strip `<system-reminder>` XML tags and their content from display text.
+///
+/// System reminders are injected into messages for the LLM but should not
+/// be shown to the user in the conversation view.
+pub fn strip_system_reminders(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut remaining = text;
+
+    while !remaining.is_empty() {
+        if let Some(start) = remaining.find("<system-reminder>") {
+            result.push_str(&remaining[..start]);
+            let after_open = &remaining[start..];
+            if let Some(end) = after_open.find("</system-reminder>") {
+                let close_tag_len = "</system-reminder>".len();
+                remaining = &after_open[end + close_tag_len..];
+            } else {
+                break;
+            }
+        } else {
+            result.push_str(remaining);
+            break;
+        }
+    }
+
+    // Collapse runs of 2+ newlines (left over from removal) into a single newline
+    let mut cleaned = result;
+    while cleaned.contains("\n\n") {
+        cleaned = cleaned.replace("\n\n", "\n");
+    }
+
+    cleaned.trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,5 +113,28 @@ mod tests {
         assert!(result.starts_with("    line 1"));
         assert!(result.contains("\n    line 2"));
         assert!(result.contains("\n\n"));
+    }
+
+    #[test]
+    fn test_strip_system_reminders() {
+        let input = "Hello<system-reminder>secret</system-reminder> world";
+        let result = strip_system_reminders(input);
+        assert!(result.contains("Hello"));
+        assert!(result.contains("world"));
+        assert!(!result.contains("secret"));
+    }
+
+    #[test]
+    fn test_strip_system_reminders_multiple() {
+        let input = "a<system-reminder>1</system-reminder>b<system-reminder>2</system-reminder>c";
+        let result = strip_system_reminders(input);
+        assert_eq!(result, "abc");
+    }
+
+    #[test]
+    fn test_strip_system_reminders_none() {
+        let input = "no tags here";
+        let result = strip_system_reminders(input);
+        assert_eq!(result, "no tags here");
     }
 }

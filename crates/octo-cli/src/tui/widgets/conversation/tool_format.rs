@@ -23,8 +23,8 @@ fn value_to_hashmap(input: &serde_json::Value) -> HashMap<String, serde_json::Va
     }
 }
 
-/// Format a tool call as a styled line.
-pub(super) fn format_tool_call(name: &str, input: &serde_json::Value) -> Line<'static> {
+/// Format a ToolUse content block as a styled line with verb(arg) pattern.
+pub(super) fn format_tool_use(name: &str, input: &serde_json::Value) -> Line<'static> {
     let args = value_to_hashmap(input);
     let (verb, arg) = format_tool_call_parts(name, &args);
 
@@ -46,70 +46,22 @@ pub(super) fn format_tool_call(name: &str, input: &serde_json::Value) -> Line<'s
     ])
 }
 
-/// Format a tool result as styled lines.
-pub(super) fn format_tool_result(content: &str, is_error: bool) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    let color = if is_error {
-        style_tokens::ERROR
-    } else {
-        style_tokens::SUBTLE
-    };
-
-    // Truncate long results
-    let max_lines = 20;
-    let result_lines: Vec<&str> = content.lines().collect();
-    let truncated = result_lines.len() > max_lines;
-    let display_lines = if truncated {
-        &result_lines[..max_lines]
-    } else {
-        &result_lines[..]
-    };
-
-    for line in display_lines {
-        lines.push(Line::from(Span::styled(
-            format!("     {line}"),
-            Style::default().fg(color),
-        )));
-    }
-
-    if truncated {
-        lines.push(Line::from(Span::styled(
-            format!("     ... ({} more lines)", result_lines.len() - max_lines),
-            Style::default().fg(style_tokens::GREY),
-        )));
-    }
-
-    lines
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_format_tool_call_bash() {
+    fn test_format_tool_use_bash() {
         let input = serde_json::json!({"command": "ls -la"});
-        let line = format_tool_call("bash", &input);
+        let line = format_tool_use("bash", &input);
         assert!(!line.spans.is_empty());
     }
 
     #[test]
-    fn test_format_tool_result_success() {
-        let lines = format_tool_result("output line 1\noutput line 2", false);
-        assert_eq!(lines.len(), 2);
-    }
-
-    #[test]
-    fn test_format_tool_result_error() {
-        let lines = format_tool_result("error message", true);
-        assert_eq!(lines.len(), 1);
-    }
-
-    #[test]
-    fn test_format_tool_result_truncation() {
-        let content: String = (0..30).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
-        let lines = format_tool_result(&content, false);
-        // 20 displayed + 1 truncation notice
-        assert_eq!(lines.len(), 21);
+    fn test_format_tool_use_read_file() {
+        let input = serde_json::json!({"file_path": "/src/main.rs"});
+        let line = format_tool_use("read_file", &input);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(text.contains('\u{23fa}'));
     }
 }

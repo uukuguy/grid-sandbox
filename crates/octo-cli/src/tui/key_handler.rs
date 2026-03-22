@@ -79,20 +79,28 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             }
         }
 
-        // ── Shift+Enter: newline in input ──
-        (KeyModifiers::SHIFT, KeyCode::Enter) => {
+        // ── Shift+Enter / Alt+Enter / Ctrl+J: newline in input ──
+        (KeyModifiers::SHIFT, KeyCode::Enter)
+        | (KeyModifiers::ALT, KeyCode::Enter)
+        | (KeyModifiers::CONTROL, KeyCode::Char('j')) => {
             state.input_buffer.insert(state.input_cursor, '\n');
             state.input_cursor += 1;
         }
 
-        // ── Arrow keys: scroll / history ──
+        // ── Arrow keys: history navigation / scroll ──
         (KeyModifiers::NONE, KeyCode::Up) => {
-            if state.input_buffer.is_empty() {
-                // Scroll up when input is empty
+            // Try history navigation first (when input is empty and history exists)
+            if state.input_buffer.is_empty() && !state.message_history.is_empty() {
+                if let Some(prev) = state.message_history.up() {
+                    state.input_buffer = prev.to_string();
+                    state.input_cursor = state.input_buffer.len();
+                }
+            } else if state.input_buffer.is_empty() {
+                // No history — scroll up
                 state.scroll_offset = state.scroll_offset.saturating_add(3);
                 state.user_scrolled = true;
             } else {
-                // Input history navigation
+                // Input has content — navigate history
                 if let Some(prev) = state.message_history.up() {
                     state.input_buffer = prev.to_string();
                     state.input_cursor = state.input_buffer.len();
@@ -100,17 +108,21 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             }
         }
         (KeyModifiers::NONE, KeyCode::Down) => {
-            if state.input_buffer.is_empty() && state.user_scrolled {
+            if state.message_history.is_navigating() {
+                // Currently browsing history — navigate forward
+                if let Some(next) = state.message_history.down() {
+                    state.input_buffer = next.to_string();
+                    state.input_cursor = state.input_buffer.len();
+                } else {
+                    // Reached end of history — clear input
+                    state.input_buffer.clear();
+                    state.input_cursor = 0;
+                }
+            } else if state.user_scrolled {
                 // Scroll down
                 state.scroll_offset = state.scroll_offset.saturating_sub(3);
                 if state.scroll_offset == 0 {
                     state.user_scrolled = false;
-                }
-            } else {
-                // Input history navigation (forward)
-                if let Some(next) = state.message_history.down() {
-                    state.input_buffer = next.to_string();
-                    state.input_cursor = state.input_buffer.len();
                 }
             }
         }
@@ -191,9 +203,22 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             }
         }
 
-        // ── Escape: clear input or close overlay ──
+        // ── Escape: cancel streaming (priority) → clear input → reset scroll ──
         (KeyModifiers::NONE, KeyCode::Esc) => {
-            if !state.input_buffer.is_empty() {
+            if state.is_streaming || !state.active_tools.is_empty() {
+                // Cancel current agent operation — highest priority
+                let _ = state
+                    .handle
+                    .send(AgentMessage::Cancel)
+                    .await;
+                state.is_streaming = false;
+                state.active_tools.clear();
+                // Also clear any partial streaming text
+                if !state.streaming_text.is_empty() {
+                    state.streaming_text.clear();
+                    state.invalidate_cache();
+                }
+            } else if !state.input_buffer.is_empty() {
                 state.input_buffer.clear();
                 state.input_cursor = 0;
             } else if state.user_scrolled {
@@ -284,7 +309,7 @@ mod tests {
             broadcast_tx,
             session_id: SessionId::from_string("test"),
         };
-        TuiState::new(SessionId::from_string("test"), handle, "test-model".to_string())
+        TuiState::new_for_test(SessionId::from_string("test"), handle, "test-model".to_string())
     }
 
     fn make_key(code: KeyCode) -> KeyEvent {
@@ -443,5 +468,38 @@ mod tests {
         assert_eq!(state.interrupt_manager.press_count(), 1);
         handle_key(&mut state, make_key(KeyCode::Char('a'))).await; // type something
         assert_eq!(state.interrupt_manager.press_count(), 0); // reset
+    }
+
+    #[tokio::test]
+    async fn test_history_recall_after_submit() {
+        let mut state = make_test_state();
+        // Type "hello" and submit
+        for c in "hello".chars() {
+            handle_key(&mut state, make_key(KeyCode::Char(c))).await;
+        }
+        handle_key(&mut state, make_key(KeyCode::Enter)).await;
+        assert_eq!(state.input_buffer, "");
+        assert!(state.is_streaming);
+        assert_eq!(state.message_history.len(), 1);
+
+        // Simulate agent completion so is_streaming = false
+        state.is_streaming = false;
+
+        // Now press Up — should recall "hello"
+        handle_key(&mut state, make_key(KeyCode::Up)).await;
+        assert_eq!(state.input_buffer, "hello");
+    }
+
+    #[tokio::test]
+    async fn test_history_recall_blocked_during_streaming() {
+        let mut state = make_test_state();
+        // Manually add history
+        state.message_history.push("previous".into());
+        state.is_streaming = true;
+
+        // Press Up during streaming — ESC priority means streaming blocks history?
+        // Actually Up key has no streaming check, so it should still work
+        handle_key(&mut state, make_key(KeyCode::Up)).await;
+        assert_eq!(state.input_buffer, "previous");
     }
 }

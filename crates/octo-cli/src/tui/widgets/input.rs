@@ -21,6 +21,12 @@ pub struct InputWidget<'a> {
     pending_count: usize,
 }
 
+/// Result of rendering the input widget, including cursor position for IME.
+pub struct InputRenderResult {
+    /// Absolute cursor position (x, y) for terminal IME placement.
+    pub cursor_position: Option<(u16, u16)>,
+}
+
 impl<'a> InputWidget<'a> {
     pub fn new(buffer: &'a str, cursor: usize, mode: &'a str, pending_count: usize) -> Self {
         Self {
@@ -29,6 +35,50 @@ impl<'a> InputWidget<'a> {
             mode,
             pending_count,
         }
+    }
+
+    /// Render the widget and return cursor position for IME.
+    pub fn render_with_cursor(self, area: Rect, buf: &mut Buffer) -> InputRenderResult {
+        let cursor_pos = self.compute_cursor_position(area);
+        Widget::render(self, area, buf);
+        InputRenderResult {
+            cursor_position: cursor_pos,
+        }
+    }
+
+    /// Compute absolute cursor position for IME placement.
+    fn compute_cursor_position(&self, area: Rect) -> Option<(u16, u16)> {
+        if area.height < 2 {
+            return None;
+        }
+        let text_y = area.y + 1; // below separator
+        let prefix_width = 2u16; // "❯ " or "  "
+
+        if self.buffer.is_empty() {
+            // Cursor at start of placeholder
+            return Some((area.x + prefix_width, text_y));
+        }
+
+        let input_lines: Vec<&str> = self.buffer.split('\n').collect();
+        let mut cursor_line = 0usize;
+        let mut cursor_col = 0usize;
+        let mut pos = 0usize;
+        for (i, line) in input_lines.iter().enumerate() {
+            if self.cursor <= pos + line.len() {
+                cursor_line = i;
+                cursor_col = self.cursor - pos;
+                break;
+            }
+            pos += line.len() + 1;
+            if i == input_lines.len() - 1 {
+                cursor_line = i;
+                cursor_col = line.len();
+            }
+        }
+
+        let x = area.x + prefix_width + cursor_col as u16;
+        let y = text_y + cursor_line as u16;
+        Some((x, y))
     }
 }
 
@@ -53,7 +103,7 @@ impl Widget for InputWidget<'_> {
             other => other,
         };
         let mode_text = format!(" {mode_label} ");
-        let hint_text = "(Shift+Tab) ";
+        let hint_text = "(Alt+Enter: newline) ";
         let prefix_dashes = 2;
 
         let queue_text = if self.pending_count > 0 {
@@ -90,8 +140,18 @@ impl Widget for InputWidget<'_> {
         let sep_line = Line::from(spans);
         buf.set_line(area.left(), area.top(), &sep_line, area.width);
 
-        // Rows below separator: multiline input
-        let text_height = area.height.saturating_sub(1);
+        // Bottom border line
+        let bottom_row = area.y + area.height.saturating_sub(1);
+        if bottom_row > area.top() {
+            let bottom_line = Line::from(Span::styled(
+                "\u{2500}".repeat(area.width as usize),
+                sep_style,
+            ));
+            buf.set_line(area.left(), bottom_row, &bottom_line, area.width);
+        }
+
+        // Rows between separator and bottom border: multiline input
+        let text_height = area.height.saturating_sub(2); // -1 top sep, -1 bottom border
         if text_height == 0 {
             return;
         }
@@ -104,12 +164,17 @@ impl Widget for InputWidget<'_> {
 
         if self.buffer.is_empty() {
             let prefix = Span::styled(
-                "> ".to_string(),
+                "\u{276f} ".to_string(),
                 Style::default().fg(accent).add_modifier(Modifier::BOLD),
             );
+            let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
+            // Show block cursor on first char of placeholder
+            let first_char = &placeholder[..1];
+            let rest_placeholder = &placeholder[1..];
             let content = vec![
                 prefix,
-                Span::styled(placeholder, Style::default().fg(style_tokens::SUBTLE)),
+                Span::styled(first_char.to_string(), cursor_style),
+                Span::styled(rest_placeholder, Style::default().fg(style_tokens::SUBTLE)),
             ];
             Paragraph::new(Line::from(content)).render(text_area, buf);
         } else {
@@ -140,7 +205,7 @@ impl Widget for InputWidget<'_> {
                     break;
                 }
                 let row = text_area.y + i as u16;
-                let pfx = if i == 0 { "> " } else { "  " };
+                let pfx = if i == 0 { "\u{276f} " } else { "  " };
 
                 if i == cursor_line {
                     let before = &line_text[..cursor_col];

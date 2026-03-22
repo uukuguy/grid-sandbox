@@ -93,8 +93,12 @@ impl MarkdownRenderer {
         let mut lines = Vec::new();
         let mut in_code_block = false;
         let base_mod = palette.base_modifier;
+        let raw_lines: Vec<&str> = text.lines().collect();
+        let mut i = 0;
 
-        for raw_line in text.lines() {
+        while i < raw_lines.len() {
+            let raw_line = raw_lines[i];
+
             if raw_line.starts_with("```") {
                 in_code_block = !in_code_block;
                 if in_code_block {
@@ -109,6 +113,7 @@ impl MarkdownRenderer {
                         )));
                     }
                 }
+                i += 1;
                 continue;
             }
 
@@ -121,6 +126,17 @@ impl MarkdownRenderer {
                         .bg(palette.code_bg)
                         .add_modifier(base_mod),
                 )));
+                i += 1;
+                continue;
+            }
+
+            // Table detection: collect consecutive table lines
+            if is_table_line(raw_line) {
+                let table_start = i;
+                while i < raw_lines.len() && is_table_line(raw_lines[i]) {
+                    i += 1;
+                }
+                render_table(&raw_lines[table_start..i], palette, &mut lines);
                 continue;
             }
 
@@ -183,6 +199,7 @@ impl MarkdownRenderer {
             } else {
                 lines.push(render_inline_line_with_palette(raw_line, palette));
             }
+            i += 1;
         }
 
         lines
@@ -291,6 +308,190 @@ fn parse_inline_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<
     }
 
     spans
+}
+
+/// Check if a line looks like a markdown table row (`| ... | ... |`).
+fn is_table_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() >= 3
+}
+
+/// Check if a table row is a separator (`|---|---|`).
+fn is_separator_row(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('|') || !trimmed.ends_with('|') {
+        return false;
+    }
+    trimmed[1..trimmed.len() - 1]
+        .split('|')
+        .all(|cell| {
+            let c = cell.trim();
+            !c.is_empty()
+                && c.chars()
+                    .all(|ch| ch == '-' || ch == ':' || ch == ' ')
+        })
+}
+
+/// Parse a table row into cells (trimmed content between `|`).
+fn parse_table_cells(line: &str) -> Vec<String> {
+    let trimmed = line.trim();
+    let inner = &trimmed[1..trimmed.len() - 1]; // strip leading/trailing |
+    inner.split('|').map(|c| c.trim().to_string()).collect()
+}
+
+/// Render a group of consecutive table lines into styled `Line`s.
+fn render_table(table_lines: &[&str], palette: &MdPalette, out: &mut Vec<Line<'static>>) {
+    if table_lines.is_empty() {
+        return;
+    }
+
+    let base_mod = palette.base_modifier;
+
+    // Parse all rows, skipping separator rows
+    let mut header_cells: Option<Vec<String>> = None;
+    let mut data_rows: Vec<Vec<String>> = Vec::new();
+
+    for (idx, line) in table_lines.iter().enumerate() {
+        if is_separator_row(line) {
+            continue;
+        }
+        let cells = parse_table_cells(line);
+        if idx == 0 {
+            header_cells = Some(cells);
+        } else {
+            data_rows.push(cells);
+        }
+    }
+
+    let header = match header_cells {
+        Some(h) => h,
+        None => return,
+    };
+
+    let num_cols = header.len();
+
+    // Compute column widths (display width of widest cell in each column)
+    let mut col_widths: Vec<usize> = header.iter().map(|c| display_width(c)).collect();
+    // Pad to num_cols
+    col_widths.resize(num_cols, 0);
+
+    for row in &data_rows {
+        for (j, cell) in row.iter().enumerate() {
+            if j < num_cols {
+                col_widths[j] = col_widths[j].max(display_width(cell));
+            }
+        }
+    }
+
+    // Cap column widths to prevent excessive width
+    for w in &mut col_widths {
+        *w = (*w).min(40);
+    }
+
+    let header_style = Style::default()
+        .fg(palette.heading)
+        .add_modifier(Modifier::BOLD | base_mod);
+    let border_style = Style::default()
+        .fg(style_tokens::GREY)
+        .add_modifier(base_mod);
+    let cell_style = Style::default()
+        .fg(palette.text)
+        .add_modifier(base_mod);
+
+    // Render header row
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    spans.push(Span::styled(Cow::<'static, str>::Borrowed("│"), border_style));
+    for (j, cell) in header.iter().enumerate() {
+        let width = col_widths.get(j).copied().unwrap_or(0);
+        let padded: Cow<'static, str> = Cow::Owned(pad_cell(cell, width));
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" "),
+            border_style,
+        ));
+        spans.push(Span::styled(padded, header_style));
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" │"),
+            border_style,
+        ));
+    }
+    out.push(Line::from(spans));
+
+    // Render separator line
+    let mut sep_spans: Vec<Span<'static>> = Vec::new();
+    sep_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("├"),
+        border_style,
+    ));
+    for (j, &w) in col_widths.iter().enumerate() {
+        let dash: Cow<'static, str> = Cow::Owned("─".repeat(w + 2));
+        sep_spans.push(Span::styled(dash, border_style));
+        if j < num_cols - 1 {
+            sep_spans.push(Span::styled(
+                Cow::<'static, str>::Borrowed("┼"),
+                border_style,
+            ));
+        }
+    }
+    sep_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("┤"),
+        border_style,
+    ));
+    out.push(Line::from(sep_spans));
+
+    // Render data rows
+    for row in &data_rows {
+        let mut spans: Vec<Span<'static>> = Vec::new();
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed("│"),
+            border_style,
+        ));
+        for j in 0..num_cols {
+            let cell = row.get(j).map(|s| s.as_str()).unwrap_or("");
+            let width = col_widths.get(j).copied().unwrap_or(0);
+            let padded: Cow<'static, str> = Cow::Owned(pad_cell(cell, width));
+            spans.push(Span::styled(
+                Cow::<'static, str>::Borrowed(" "),
+                border_style,
+            ));
+            spans.push(Span::styled(padded, cell_style));
+            spans.push(Span::styled(
+                Cow::<'static, str>::Borrowed(" │"),
+                border_style,
+            ));
+        }
+        out.push(Line::from(spans));
+    }
+}
+
+/// Pad a cell string to the given display width using spaces.
+fn pad_cell(text: &str, width: usize) -> String {
+    let dw = display_width(text);
+    if dw >= width {
+        text.to_string()
+    } else {
+        format!("{}{}", text, " ".repeat(width - dw))
+    }
+}
+
+/// Approximate display width of a string (accounts for CJK double-width).
+fn display_width(s: &str) -> usize {
+    s.chars()
+        .map(|c| {
+            if ('\u{1100}'..='\u{115F}').contains(&c)
+                || ('\u{2E80}'..='\u{A4CF}').contains(&c)
+                || ('\u{AC00}'..='\u{D7A3}').contains(&c)
+                || ('\u{F900}'..='\u{FAFF}').contains(&c)
+                || ('\u{FE10}'..='\u{FE6F}').contains(&c)
+                || ('\u{FF01}'..='\u{FF60}').contains(&c)
+                || ('\u{FFE0}'..='\u{FFE6}').contains(&c)
+                || c > '\u{1F000}'
+            {
+                2
+            } else {
+                1
+            }
+        })
+        .sum()
 }
 
 fn parse_bold_spans_with_palette(text: &str, palette: &MdPalette) -> Vec<Span<'static>> {
@@ -421,5 +622,63 @@ mod tests {
     fn test_muted_palette() {
         let lines = MarkdownRenderer::render_muted("# Hello\nsome text", style_tokens::THINKING_BG);
         assert_eq!(lines.len(), 2);
+    }
+
+    #[test]
+    fn test_table_basic() {
+        let md = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+        let lines = MarkdownRenderer::render(md);
+        // header + separator + 2 data rows = 4 lines
+        assert_eq!(lines.len(), 4);
+        let header_text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(header_text.contains("Name"));
+        assert!(header_text.contains("Age"));
+        // Separator uses box-drawing chars
+        let sep_text: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(sep_text.contains("─"));
+    }
+
+    #[test]
+    fn test_table_detection() {
+        assert!(is_table_line("| a | b |"));
+        assert!(is_table_line("| --- | --- |"));
+        assert!(!is_table_line("not a table"));
+        assert!(!is_table_line("|"));
+        assert!(!is_table_line("| only start"));
+    }
+
+    #[test]
+    fn test_separator_row() {
+        assert!(is_separator_row("|---|---|"));
+        assert!(is_separator_row("| --- | --- |"));
+        assert!(is_separator_row("|:---:|:---|"));
+        assert!(!is_separator_row("| Name | Age |"));
+    }
+
+    #[test]
+    fn test_table_with_surrounding_text() {
+        let md = "Before table\n| H1 | H2 |\n|---|---|\n| A | B |\nAfter table";
+        let lines = MarkdownRenderer::render(md);
+        // 1 text + 3 table (header+sep+data) + 1 text = 5
+        assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn test_display_width_ascii() {
+        assert_eq!(display_width("hello"), 5);
+        assert_eq!(display_width(""), 0);
+    }
+
+    #[test]
+    fn test_display_width_cjk() {
+        assert_eq!(display_width("中文"), 4); // 2 chars * 2 width each
+        assert_eq!(display_width("a中b"), 4); // 1 + 2 + 1
+    }
+
+    #[test]
+    fn test_pad_cell() {
+        assert_eq!(pad_cell("hi", 5), "hi   ");
+        assert_eq!(pad_cell("hello", 5), "hello");
+        assert_eq!(pad_cell("longer", 3), "longer");
     }
 }

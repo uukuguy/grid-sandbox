@@ -216,7 +216,7 @@ fn render_tool_info(state: &TuiState, frame: &mut Frame, area: Rect) {
                     Style::default().fg(Color::Magenta),
                 ),
                 Span::styled(
-                    format!(" ({}s)", tool.elapsed_secs),
+                    format!(" ({}s)", tool.elapsed_secs()),
                     Style::default().fg(Color::DarkGray),
                 ),
             ]));

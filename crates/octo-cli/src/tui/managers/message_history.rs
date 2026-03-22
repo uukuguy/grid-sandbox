@@ -1,4 +1,6 @@
-//! Input message history with up/down navigation.
+//! Input message history with up/down navigation and file persistence.
+
+use std::path::PathBuf;
 
 /// Manages a bounded history of sent messages with cursor-based navigation.
 pub struct MessageHistory {
@@ -6,6 +8,7 @@ pub struct MessageHistory {
     cursor: usize,
     capacity: usize,
     navigating: bool,
+    file_path: Option<PathBuf>,
 }
 
 impl MessageHistory {
@@ -15,7 +18,21 @@ impl MessageHistory {
             cursor: 0,
             capacity,
             navigating: false,
+            file_path: None,
         }
+    }
+
+    /// Create with file-backed persistence. Loads existing history from file.
+    pub fn with_file(capacity: usize, path: PathBuf) -> Self {
+        let mut hist = Self {
+            history: Vec::new(),
+            cursor: 0,
+            capacity,
+            navigating: false,
+            file_path: Some(path.clone()),
+        };
+        hist.load_from_file();
+        hist
     }
 
     pub fn push(&mut self, msg: String) {
@@ -31,6 +48,7 @@ impl MessageHistory {
             self.history.remove(0);
         }
         self.reset_cursor();
+        self.save_to_file();
     }
 
     pub fn up(&mut self) -> Option<&str> {
@@ -70,6 +88,50 @@ impl MessageHistory {
 
     pub fn is_empty(&self) -> bool {
         self.history.is_empty()
+    }
+
+    pub fn is_navigating(&self) -> bool {
+        self.navigating
+    }
+
+    /// Load history from file (one entry per line, newlines escaped as \n).
+    fn load_from_file(&mut self) {
+        let path = match &self.file_path {
+            Some(p) => p,
+            None => return,
+        };
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        for line in content.lines() {
+            if !line.is_empty() {
+                let msg = line.replace("\\n", "\n");
+                self.history.push(msg);
+            }
+        }
+        // Trim to capacity
+        while self.history.len() > self.capacity {
+            self.history.remove(0);
+        }
+    }
+
+    /// Save history to file.
+    fn save_to_file(&self) {
+        let path = match &self.file_path {
+            Some(p) => p,
+            None => return,
+        };
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let content: String = self
+            .history
+            .iter()
+            .map(|s| s.replace('\n', "\\n"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let _ = std::fs::write(path, content);
     }
 }
 
@@ -153,5 +215,66 @@ mod tests {
         hist.up();
         hist.reset_cursor();
         assert_eq!(hist.up(), Some("b"));
+    }
+
+    #[test]
+    fn test_file_persistence() {
+        let dir = std::env::temp_dir().join("octo_hist_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_history.txt");
+        let _ = std::fs::remove_file(&path); // clean slate
+
+        // Write history
+        {
+            let mut hist = MessageHistory::with_file(100, path.clone());
+            hist.push("alpha".into());
+            hist.push("beta".into());
+            hist.push("gamma".into());
+        }
+
+        // Read it back
+        {
+            let mut hist = MessageHistory::with_file(100, path.clone());
+            assert_eq!(hist.len(), 3);
+            assert_eq!(hist.up(), Some("gamma"));
+            assert_eq!(hist.up(), Some("beta"));
+            assert_eq!(hist.up(), Some("alpha"));
+        }
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_file_persistence_multiline() {
+        let dir = std::env::temp_dir().join("octo_hist_test_ml");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_history_ml.txt");
+        let _ = std::fs::remove_file(&path);
+
+        {
+            let mut hist = MessageHistory::with_file(100, path.clone());
+            hist.push("line1\nline2\nline3".into());
+        }
+
+        {
+            let mut hist = MessageHistory::with_file(100, path.clone());
+            assert_eq!(hist.len(), 1);
+            assert_eq!(hist.up(), Some("line1\nline2\nline3"));
+        }
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_is_navigating() {
+        let mut hist = MessageHistory::new(100);
+        assert!(!hist.is_navigating());
+        hist.push("a".into());
+        hist.up();
+        assert!(hist.is_navigating());
+        hist.reset_cursor();
+        assert!(!hist.is_navigating());
     }
 }

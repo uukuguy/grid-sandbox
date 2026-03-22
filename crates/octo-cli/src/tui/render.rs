@@ -4,7 +4,7 @@
 //! Overlays (approval dialog, debug panels) render on top.
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use super::app_state::{OverlayMode, PendingApproval, TuiState};
 
@@ -49,48 +49,54 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
     }
 }
 
-/// Render the conversation area with message history and scrollbar.
+/// Render the conversation area using ConversationWidget or welcome panel.
 fn render_conversation(state: &TuiState, frame: &mut Frame, area: Rect) {
-    let block = Block::default()
-        .borders(Borders::NONE);
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    if state.cached_lines.is_empty() {
-        // Welcome panel with ASCII art
-        let welcome = super::widgets::welcome_panel::WelcomePanel::new(&state.model_name);
-        frame.render_widget(welcome, inner);
+    if state.messages.is_empty() && state.streaming_text.is_empty() {
+        // Welcome panel when no messages yet
+        let welcome = super::widgets::welcome_panel::WelcomePanel::new(
+            &state.welcome_state,
+            &state.model_name,
+        );
+        frame.render_widget(welcome, area);
         return;
     }
 
-    let total_lines = state.cached_lines.len() as u16;
-    let visible_height = inner.height;
-
-    // Calculate scroll: we scroll from the bottom
-    let max_scroll = total_lines.saturating_sub(visible_height);
-    let scroll = max_scroll.saturating_sub(state.scroll_offset);
-
-    let conversation = Paragraph::new(state.cached_lines.clone())
-        .scroll((scroll, 0))
-        .wrap(Wrap { trim: false });
-    frame.render_widget(conversation, inner);
-
-    // Scrollbar
-    if total_lines > visible_height {
-        let mut scrollbar_state = ScrollbarState::new(total_lines as usize)
-            .position(scroll as usize)
-            .viewport_content_length(visible_height as usize);
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("▲"))
-            .end_symbol(Some("▼"));
-        frame.render_stateful_widget(
-            scrollbar,
-            inner.inner(Margin { vertical: 0, horizontal: 0 }),
-            &mut scrollbar_state,
-        );
+    // Build messages list: finalized + streaming (as temporary assistant message)
+    let mut messages = state.messages.clone();
+    if !state.streaming_text.is_empty() {
+        use octo_types::message::ChatMessage;
+        messages.push(ChatMessage::assistant(&state.streaming_text));
     }
+    if !state.thinking_text.is_empty() {
+        use octo_types::message::{ChatMessage, ContentBlock};
+        messages.push(ChatMessage {
+            role: octo_types::message::MessageRole::System,
+            content: vec![ContentBlock::Text {
+                text: format!(
+                    "{} Thinking...\n{}",
+                    crate::tui::formatters::style_tokens::THINKING_ICON,
+                    state.thinking_text,
+                ),
+            }],
+        });
+    }
+
+    // Use the real ConversationWidget (with markdown, tool formatting, scrollbar)
+    let spinner_char = super::widgets::spinner::SPINNER_FRAMES
+        [(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as usize
+            / 100)
+            % super::widgets::spinner::SPINNER_FRAMES.len()];
+
+    let conversation = super::widgets::conversation::ConversationWidget::new(
+        &messages,
+        state.scroll_offset,
+    )
+    .active_tools(&state.active_tools, spinner_char);
+
+    frame.render_widget(conversation, area);
 }
 
 /// Render the progress panel showing active tool executions.
@@ -124,7 +130,7 @@ fn render_progress(state: &TuiState, frame: &mut Frame, area: Rect) {
                     Style::default().fg(Color::Magenta),
                 ),
                 Span::styled(
-                    format!(" ({}s)", tool.elapsed_secs),
+                    format!(" ({}s)", tool.elapsed_secs()),
                     Style::default().fg(Color::DarkGray),
                 ),
             ])
@@ -135,72 +141,59 @@ fn render_progress(state: &TuiState, frame: &mut Frame, area: Rect) {
     frame.render_widget(para, inner);
 }
 
-/// Render the input area with cursor.
+/// Render the input area using the ported OpenDev InputWidget.
 fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
-    let title = if state.is_streaming {
-        " Streaming... (Ctrl+C to cancel) "
+    let mode = if state.is_streaming {
+        "Streaming"
     } else {
-        " Message "
+        "NORMAL"
     };
+    let input_widget = super::widgets::input::InputWidget::new(
+        &state.input_buffer,
+        state.input_cursor,
+        mode,
+        0, // pending_count — future: message queue
+    );
+    let result = input_widget.render_with_cursor(area, frame.buffer_mut());
 
-    let border_color = if state.is_streaming {
-        Color::Yellow
-    } else {
-        Color::Cyan
-    };
-
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
-
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let input_text = Paragraph::new(state.input_buffer.as_str())
-        .style(Style::default().fg(Color::White));
-    frame.render_widget(input_text, inner);
-
-    // Position cursor
-    let cursor_x = inner.x + state.input_cursor as u16;
-    let cursor_y = inner.y;
-    if cursor_x < inner.x + inner.width {
-        frame.set_cursor_position((cursor_x, cursor_y));
+    // Set terminal cursor position for IME (Chinese input method) placement
+    if let Some((cx, cy)) = result.cursor_position {
+        frame.set_cursor_position((cx, cy));
     }
 }
 
-/// Render the status bar with model, tokens, session info.
+/// Render the status bar with model, tokens, and hints.
 fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
+    if area.height == 0 {
+        return;
+    }
+
+    let dim = Style::default().fg(Color::DarkGray);
+
+    // Row 0: model | tokens (compact, left + right aligned)
     let left = format!(
-        " {} | Session: {} ",
+        " {} \u{00b7} {}",
         state.model_name,
         state.session_id.as_str(),
     );
     let right = format!(
-        "Tokens: {}↑ {}↓ ",
+        "{}↑ {}↓ ",
         state.total_input_tokens, state.total_output_tokens,
     );
 
-    // Split status bar into left and right halves
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
-        .split(area);
+        .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+        .split(Rect { height: 1, ..area });
 
-    let left_para = Paragraph::new(Line::from(Span::styled(
-        left,
-        Style::default().fg(Color::DarkGray),
-    )));
-    frame.render_widget(left_para, chunks[0]);
+    frame.render_widget(Paragraph::new(Line::from(Span::styled(left, dim))), chunks[0]);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(right, dim)))
+            .alignment(Alignment::Right),
+        chunks[1],
+    );
 
-    let right_para = Paragraph::new(Line::from(Span::styled(
-        right,
-        Style::default().fg(Color::DarkGray),
-    )))
-    .alignment(Alignment::Right);
-    frame.render_widget(right_para, chunks[1]);
-
-    // Second row: hints
+    // Row 1: hints
     if area.height >= 2 {
         let hints_area = Rect {
             x: area.x,
@@ -209,15 +202,14 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
             height: 1,
         };
         let hints = if state.overlay != OverlayMode::None {
-            " Esc: close overlay "
+            " Esc: close overlay"
         } else {
-            " Ctrl+D: debug | Ctrl+C: cancel | ↑↓: scroll "
+            " Ctrl+D: debug \u{00b7} Ctrl+C: cancel \u{00b7} \u{2191}\u{2193} scroll"
         };
-        let hints_para = Paragraph::new(Line::from(Span::styled(
-            hints,
-            Style::default().fg(Color::DarkGray),
-        )));
-        frame.render_widget(hints_para, hints_area);
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(hints, dim))),
+            hints_area,
+        );
     }
 }
 

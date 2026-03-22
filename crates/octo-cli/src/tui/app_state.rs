@@ -14,6 +14,7 @@ use super::managers::interrupt::InterruptManager;
 use super::managers::message_history::MessageHistory;
 use super::managers::spinner::SpinnerService;
 use super::widgets::conversation::ActiveTool;
+use super::widgets::welcome_panel::WelcomePanelState;
 
 /// Overlay mode — only one overlay can be active at a time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,12 +116,43 @@ pub struct TuiState {
     pub thinking_text: String,
     /// Whether the agent is in a thinking phase.
     pub is_thinking: bool,
+
+    // ── Welcome ──
+    /// Animation state for the welcome panel (shown when conversation is empty).
+    pub welcome_state: WelcomePanelState,
 }
 
 impl TuiState {
     /// Create a new TuiState for the given session and agent handle.
     pub fn new(session_id: SessionId, handle: AgentExecutorHandle, model_name: String) -> Self {
         let interrupt = InterruptManager::with_handle(handle.clone());
+
+        // Use file-backed history so it persists across sessions
+        let history_path = crate::repl::history::history_dir().join("tui_history.txt");
+        let message_history = MessageHistory::with_file(100, history_path);
+
+        Self::with_history(session_id, handle, model_name, interrupt, message_history)
+    }
+
+    /// Create TuiState with in-memory-only history (for tests).
+    #[cfg(test)]
+    pub fn new_for_test(
+        session_id: SessionId,
+        handle: AgentExecutorHandle,
+        model_name: String,
+    ) -> Self {
+        let interrupt = InterruptManager::with_handle(handle.clone());
+        let message_history = MessageHistory::new(100);
+        Self::with_history(session_id, handle, model_name, interrupt, message_history)
+    }
+
+    fn with_history(
+        session_id: SessionId,
+        handle: AgentExecutorHandle,
+        model_name: String,
+        interrupt: InterruptManager,
+        message_history: MessageHistory,
+    ) -> Self {
         Self {
             running: true,
             dirty: true,
@@ -145,10 +177,11 @@ impl TuiState {
             terminal_height: 24,
             interrupt_manager: interrupt,
             spinner_service: SpinnerService::new(),
-            message_history: MessageHistory::new(100),
+            message_history,
             overlay: OverlayMode::None,
             thinking_text: String::new(),
             is_thinking: false,
+            welcome_state: WelcomePanelState::new(),
         }
     }
 
@@ -298,7 +331,7 @@ mod tests {
     #[test]
     fn tui_state_new_defaults() {
         let handle = make_test_handle();
-        let state = TuiState::new(
+        let state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -321,7 +354,7 @@ mod tests {
     #[test]
     fn tui_state_invalidate_cache_bumps_generation() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -335,7 +368,7 @@ mod tests {
     #[test]
     fn tui_state_rebuild_empty() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -348,7 +381,7 @@ mod tests {
     #[test]
     fn tui_state_rebuild_with_messages() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -365,7 +398,7 @@ mod tests {
     #[test]
     fn tui_state_rebuild_with_streaming() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -378,7 +411,7 @@ mod tests {
     #[test]
     fn tui_state_auto_scroll_resets_when_not_user_scrolled() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -392,7 +425,7 @@ mod tests {
     #[test]
     fn tui_state_auto_scroll_preserves_when_user_scrolled() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),
@@ -425,7 +458,7 @@ mod tests {
     #[test]
     fn tui_state_rebuild_with_thinking() {
         let handle = make_test_handle();
-        let mut state = TuiState::new(
+        let mut state = TuiState::new_for_test(
             SessionId::from_string("s1"),
             handle,
             "test-model".to_string(),

@@ -41,6 +41,15 @@ pub const DIM_GREY: Color = Color::Rgb(107, 114, 128);
 pub const DIFF_ADD_BG: Color = Color::Rgb(0, 40, 0);
 pub const DIFF_DEL_BG: Color = Color::Rgb(40, 0, 0);
 
+/// Thinking icon (⟡)
+pub const THINKING_ICON: &str = "\u{27e1}";
+
+/// Continuation character (⎿) for tool results and nested calls.
+pub const CONTINUATION_CHAR: char = '\u{23bf}';
+
+/// Tool result prefix: ⎿ + 2 spaces
+pub const RESULT_PREFIX: &str = "\u{23bf}  ";
+
 /// Centralized indentation constants for conversation rendering.
 pub struct Indent;
 

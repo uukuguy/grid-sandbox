@@ -125,37 +125,37 @@ QUERY    ?=
 
 # 显示 CLI 帮助
 cli:
-	cargo run -p octo-cli -- --help
+	cargo run -p octo-cli --bin octo -- --help
 
 # 交互式 REPL 会话
 cli-run:
-	@cargo run --quiet -p octo-cli -- run $(CLI_ARGS)
+	@cargo run --quiet -p octo-cli --bin octo -- run $(CLI_ARGS)
 
 # 单次提问 (headless 模式)
 # 用法: make cli-ask QUERY="你的问题"
 cli-ask:
 	@if [ -z "$(QUERY)" ]; then echo "Usage: make cli-ask QUERY=\"your question\""; exit 1; fi
-	@cargo run --quiet -p octo-cli -- ask "$(QUERY)" $(CLI_ARGS)
+	@cargo run --quiet -p octo-cli --bin octo -- ask "$(QUERY)" $(CLI_ARGS)
 
 # TUI 全屏模式
 cli-tui:
-	@cargo run --quiet -p octo-cli -- tui $(CLI_ARGS)
+	@cargo run --quiet -p octo-cli --bin octo -- tui $(CLI_ARGS)
 
 # Agent 管理
 cli-agent:
-	cargo run -p octo-cli -- agent list
+	cargo run -p octo-cli --bin octo -- agent list
 
 # Session 管理
 cli-session:
-	cargo run -p octo-cli -- session list
+	cargo run -p octo-cli --bin octo -- session list
 
 # 配置管理
 cli-config:
-	cargo run -p octo-cli -- config show
+	cargo run -p octo-cli --bin octo -- config show
 
 # 健康诊断
 cli-doctor:
-	cargo run -p octo-cli -- doctor
+	cargo run -p octo-cli --bin octo -- doctor
 
 # ============================================================
 # 评估命令 (octo-eval)

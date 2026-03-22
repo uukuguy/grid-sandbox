@@ -5,7 +5,7 @@
 //! 2. Agent events (text deltas, tool calls, completions)
 //! 3. Tick timer (for spinner animations)
 
-use crossterm::event::{Event as CEvent, EventStream};
+use crossterm::event::{Event as CEvent, EventStream, KeyEventKind};
 use futures_util::StreamExt;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
@@ -35,7 +35,9 @@ impl EventHandler {
             let mut stream = EventStream::new();
             while let Some(Ok(event)) = stream.next().await {
                 let app_event = match event {
-                    CEvent::Key(key) => Some(AppEvent::Key(key)),
+                    CEvent::Key(key) if key.kind == KeyEventKind::Press => {
+                        Some(AppEvent::Key(key))
+                    }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
                     _ => None,
                 };
@@ -81,7 +83,9 @@ impl EventHandler {
             let mut stream = EventStream::new();
             while let Some(Ok(event)) = stream.next().await {
                 let app_event = match event {
-                    CEvent::Key(key) => Some(AppEvent::Key(key)),
+                    CEvent::Key(key) if key.kind == KeyEventKind::Press => {
+                        Some(AppEvent::Key(key))
+                    }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
                     _ => None,
                 };

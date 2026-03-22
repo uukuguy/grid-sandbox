@@ -18,7 +18,14 @@ use crate::tui::formatters::tool_registry::format_tool_call_parts;
 pub struct ActiveTool {
     pub name: String,
     pub args: serde_json::Value,
-    pub elapsed_secs: u64,
+    pub started_at: std::time::Instant,
+}
+
+impl ActiveTool {
+    /// Compute elapsed seconds since tool started.
+    pub fn elapsed_secs(&self) -> u64 {
+        self.started_at.elapsed().as_secs()
+    }
 }
 
 /// Render an active tool as a spinner line.
@@ -46,7 +53,7 @@ pub(super) fn render_active_tool(tool: &ActiveTool, spinner_char: char) -> Line<
             Style::default().fg(style_tokens::SUBTLE),
         ),
         Span::styled(
-            format!(" ({}s)", tool.elapsed_secs),
+            format!(" ({}s)", tool.elapsed_secs()),
             Style::default().fg(style_tokens::GREY),
         ),
     ])
@@ -61,7 +68,7 @@ mod tests {
         let tool = ActiveTool {
             name: "bash".into(),
             args: serde_json::json!({"command": "ls"}),
-            elapsed_secs: 5,
+            started_at: std::time::Instant::now(),
         };
         let line = render_active_tool(&tool, '\u{280b}');
         assert!(!line.spans.is_empty());

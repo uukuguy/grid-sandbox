@@ -121,6 +121,12 @@ async fn run_conversation_loop(
                 }
                 event::AppEvent::Tick => {
                     state.spinner_service.stop(); // tick — just mark dirty for animation
+                    // Drive welcome panel breathing animation when conversation is empty
+                    if state.cached_lines.is_empty() && !state.welcome_state.fade_complete {
+                        let w = state.terminal_width;
+                        let h = state.terminal_height;
+                        state.welcome_state.tick(w, h);
+                    }
                 }
                 event::AppEvent::Agent(agent_event) => {
                     handle_agent_event(state, agent_event);
@@ -171,6 +177,10 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
 
     match event {
         AgentEvent::TextDelta { text } => {
+            // Fade out welcome panel on first content
+            if !state.welcome_state.fade_complete && !state.welcome_state.is_fading {
+                state.welcome_state.start_fade();
+            }
             state.streaming_text.push_str(&text);
             state.invalidate_cache();
             state.auto_scroll();
@@ -204,7 +214,7 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
                 .push(widgets::conversation::ActiveTool {
                     name: tool_name,
                     args: input,
-                    elapsed_secs: 0,
+                    started_at: std::time::Instant::now(),
                 });
             state.dirty = true;
         }
@@ -219,12 +229,10 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
         }
         AgentEvent::ToolProgress {
             tool_id: _,
-            tool_name,
+            tool_name: _,
             progress: _,
         } => {
-            if let Some(tool) = state.active_tools.iter_mut().find(|t| t.name == tool_name) {
-                tool.elapsed_secs += 1;
-            }
+            // elapsed_secs is now computed dynamically from started_at
             state.dirty = true;
         }
         AgentEvent::ApprovalRequired {
