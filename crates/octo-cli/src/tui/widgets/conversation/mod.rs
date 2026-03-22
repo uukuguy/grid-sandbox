@@ -472,6 +472,90 @@ impl<'a> ConversationWidget<'a> {
         }
         None
     }
+    /// Compute scroll_offset (lines from bottom) to make a ToolUse with `tool_id` visible.
+    ///
+    /// Builds the full line list, wraps it at `width`, finds the ToolUse line for `tool_id`,
+    /// and returns a scroll_offset that places it near the top of the viewport.
+    pub fn scroll_offset_for_tool(&self, tool_id: &str, width: u16, viewport_height: u16) -> Option<u16> {
+        let lines = self.build_lines();
+
+        // Find the logical line index that contains the ToolUse for tool_id.
+        // We search for the ToolUse line (not ToolResult), since that's the call header.
+        // Strategy: scan messages to find which logical line range corresponds to the ToolUse.
+        let mut target_logical_line: Option<usize> = None;
+        let mut line_idx = 0usize;
+        for (msg_idx, msg) in self.messages.iter().enumerate() {
+            if msg.role == MessageRole::System {
+                continue;
+            }
+            for block in &msg.content {
+                let block_lines = match block {
+                    ContentBlock::ToolUse { id, .. } => {
+                        if id == tool_id {
+                            target_logical_line = Some(line_idx);
+                        }
+                        1 // ToolUse renders as 1 line
+                    }
+                    ContentBlock::ToolResult { tool_use_id, content, .. } => {
+                        if tool_use_id == tool_id {
+                            // If we haven't found the ToolUse yet (different message),
+                            // use the ToolResult position instead
+                            if target_logical_line.is_none() {
+                                target_logical_line = Some(line_idx);
+                            }
+                        }
+                        // Count how many lines this block contributes
+                        if let Some(ref cs) = self.collapse_state {
+                            if cs.is_collapsed(tool_use_id) {
+                                1 // collapsed = 1 line
+                            } else {
+                                // Expanded: header + content lines + separator
+                                content.lines().count().max(1) + 3
+                            }
+                        } else {
+                            content.lines().count().max(1) + 3
+                        }
+                    }
+                    ContentBlock::Text { text } => {
+                        let cleaned = strip_system_reminders(text);
+                        if cleaned.is_empty() { 0 } else { cleaned.lines().count() }
+                    }
+                    _ => 0,
+                };
+                line_idx += block_lines;
+            }
+            // Blank line between messages
+            if msg_idx + 1 < self.messages.len() {
+                line_idx += 1;
+            }
+        }
+
+        let target = target_logical_line?;
+
+        // Use ratatui's wrap to get accurate total line count
+        let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+        let effective_width = width.saturating_sub(1); // scrollbar
+        let total_wrapped = paragraph.line_count(effective_width);
+        let vh = viewport_height as usize;
+        let max_scroll = total_wrapped.saturating_sub(vh);
+
+        // Estimate wrapped position: use the ratio of logical line to total logical lines.
+        // This isn't 100% precise but much better than the old msgs_after * 2 heuristic.
+        let total_logical = line_idx; // total logical lines (last value)
+        if total_logical == 0 {
+            return Some(0);
+        }
+
+        // Approximate the wrapped line position of the target
+        let approx_wrapped_pos = (target as f64 / total_logical as f64 * total_wrapped as f64) as usize;
+
+        // scroll_offset is from bottom. We want to place the tool near the top of viewport.
+        // actual_scroll (from top) = approx_wrapped_pos, with a small margin above
+        let margin = 2usize;
+        let actual_scroll = approx_wrapped_pos.saturating_sub(margin);
+        let offset_from_bottom = max_scroll.saturating_sub(actual_scroll);
+        Some((offset_from_bottom as u16).min(u16::MAX))
+    }
 }
 
 impl Widget for ConversationWidget<'_> {

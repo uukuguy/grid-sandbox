@@ -169,6 +169,8 @@ pub struct TuiState {
     /// Cursor for Ctrl+O traversal: index into all_tool_use_ids() (from end).
     /// Increments each press, wraps around. Reset on new messages.
     pub tool_toggle_cursor: usize,
+    /// When set, render will scroll to make this tool_use_id visible, then clear.
+    pub scroll_to_tool: Option<String>,
 
     // ── StatusBar data ──
     /// Current working directory (shortened for display).
@@ -282,6 +284,7 @@ impl TuiState {
             tools_default_collapsed: true,
             tool_expanded_overrides: HashMap::new(),
             tool_toggle_cursor: 0,
+            scroll_to_tool: None,
             working_dir: std::env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string()),

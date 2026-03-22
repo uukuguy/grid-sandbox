@@ -289,21 +289,8 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     let tool_id = ids[target_idx].clone();
                     state.tool_expanded_overrides.insert(tool_id.clone(), true);
 
-                    // Scroll to make the tool visible: estimate lines below this tool
-                    // by counting messages after the ToolUse message containing this id.
-                    let msgs_after = state
-                        .messages
-                        .iter()
-                        .rev()
-                        .take_while(|m| {
-                            !m.content.iter().any(|b| matches!(b,
-                                octo_types::message::ContentBlock::ToolUse { id, .. } if id == &tool_id
-                            ))
-                        })
-                        .count();
-                    // ~2 lines per message (collapsed tool results, blank lines)
-                    let estimated_offset = (msgs_after * 2).min(u16::MAX as usize) as u16;
-                    state.scroll_offset = estimated_offset;
+                    // Defer scroll to render phase for precise positioning
+                    state.scroll_to_tool = Some(tool_id);
                     state.user_scrolled = true;
                 } else {
                     // cursor == n → all closed — scroll back to bottom

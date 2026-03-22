@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use super::app_state::{OverlayMode, PendingApproval, TuiState};
 
 /// Render the entire TUI frame.
-pub fn render(state: &TuiState, frame: &mut Frame) {
+pub fn render(state: &mut TuiState, frame: &mut Frame) {
     let area = frame.area();
 
     // Dynamic panel heights
@@ -26,6 +26,22 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
             Constraint::Length(status_height),      // status bar (border + info)
         ])
         .split(area);
+
+    // Process deferred scroll-to-tool before rendering conversation
+    if let Some(tool_id) = state.scroll_to_tool.take() {
+        let conv_area = chunks[0];
+        let messages = state.messages.clone();
+        let collapse = super::widgets::conversation::ToolCollapseState {
+            default_collapsed: state.tools_default_collapsed,
+            overrides: &state.tool_expanded_overrides,
+        };
+        let widget = super::widgets::conversation::ConversationWidget::new(&messages, 0)
+            .formatter_registry(&state.tool_formatter_registry)
+            .collapse_state(collapse);
+        if let Some(offset) = widget.scroll_offset_for_tool(&tool_id, conv_area.width, conv_area.height) {
+            state.scroll_offset = offset;
+        }
+    }
 
     render_conversation(state, frame, chunks[0]);
     if activity_height > 0 {
