@@ -173,6 +173,8 @@ pub struct TuiState {
     pub session_cost: f64,
     /// MCP server status: (connected, total).
     pub mcp_status: Option<(usize, usize)>,
+    /// Number of dirty (modified/untracked) files in git.
+    pub git_dirty_count: usize,
 
     // ── Todo Panel ──
     /// Plan steps from dual-mode agent.
@@ -273,6 +275,21 @@ impl TuiState {
             context_usage_pct: 0.0,
             session_cost: 0.0,
             mcp_status: None,
+            git_dirty_count: std::process::Command::new("git")
+                .args(["status", "--porcelain"])
+                .output()
+                .ok()
+                .map(|o| {
+                    if o.status.success() {
+                        String::from_utf8_lossy(&o.stdout)
+                            .lines()
+                            .filter(|l| !l.is_empty())
+                            .count()
+                    } else {
+                        0
+                    }
+                })
+                .unwrap_or(0),
             plan_steps: Vec::new(),
             todo_visible: false,
             autocomplete: super::autocomplete::AutocompleteEngine::new(

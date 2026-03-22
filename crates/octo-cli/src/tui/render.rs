@@ -156,6 +156,7 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
         &state.working_dir,
         state.git_branch.as_deref(),
     )
+    .git_dirty_count(state.git_dirty_count)
     .context_usage_pct(state.context_usage_pct)
     .session_cost(state.session_cost)
     .mcp_status(state.mcp_status, false)
@@ -172,8 +173,8 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
         return;
     }
 
-    let max_items = items.len().min(10);
-    let popup_height = max_items as u16 + 2; // +2 for border
+    let visible_count = items.len().min(10);
+    let popup_height = visible_count as u16 + 2; // +2 for border
     let popup_width = 50u16.min(input_area.width);
 
     // Position above the input area
@@ -198,12 +199,20 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
-    // Render each item
-    for (i, (label, desc, selected)) in items.iter().take(max_items).enumerate() {
-        if (i as u16) >= inner.height {
+    // Scroll offset: keep selected item in view
+    let selected_idx = state.autocomplete.selected_index();
+    let scroll_offset = if selected_idx >= visible_count {
+        selected_idx - visible_count + 1
+    } else {
+        0
+    };
+
+    // Render visible items with scroll
+    for (vi, (label, desc, selected)) in items.iter().skip(scroll_offset).take(visible_count).enumerate() {
+        if (vi as u16) >= inner.height {
             break;
         }
-        let row = inner.y + i as u16;
+        let row = inner.y + vi as u16;
         let style = if *selected {
             Style::default()
                 .fg(Color::Black)
@@ -219,7 +228,7 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
         };
 
         let label_width = label.len().min(inner.width as usize / 2);
-        let desc_width = inner.width as usize - label_width - 2;
+        let desc_width = (inner.width as usize).saturating_sub(label_width + 3);
         let desc_display: String = if desc.len() > desc_width {
             desc.chars().take(desc_width.saturating_sub(1)).chain(std::iter::once('\u{2026}')).collect()
         } else {

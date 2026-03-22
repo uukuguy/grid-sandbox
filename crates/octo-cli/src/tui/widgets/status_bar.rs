@@ -22,10 +22,12 @@ pub enum AgentStateDisplay {
 }
 
 /// Bottom status bar widget.
+#[allow(dead_code)]
 pub struct StatusBarWidget<'a> {
     model: &'a str,
     working_dir: &'a str,
     git_branch: Option<&'a str>,
+    git_dirty_count: usize,
     context_usage_pct: f64,
     session_cost: f64,
     mcp_status: Option<(usize, usize)>,
@@ -42,6 +44,7 @@ impl<'a> StatusBarWidget<'a> {
             model,
             working_dir,
             git_branch,
+            git_dirty_count: 0,
             context_usage_pct: 0.0,
             session_cost: 0.0,
             mcp_status: None,
@@ -51,6 +54,11 @@ impl<'a> StatusBarWidget<'a> {
             output_tokens: 0,
             agent_state: AgentStateDisplay::Idle,
         }
+    }
+
+    pub fn git_dirty_count(mut self, count: usize) -> Self {
+        self.git_dirty_count = count;
+        self
     }
 
     pub fn context_usage_pct(mut self, pct: f64) -> Self {
@@ -145,11 +153,15 @@ impl Widget for StatusBarWidget<'_> {
             ));
         }
 
-        // Repo info (path + git branch)
-        let repo_display = self.build_repo_display();
-        if !repo_display.is_empty() {
+        // Git info: ⏇ branch ?N
+        if let Some(branch) = self.git_branch {
+            // ⏇ = U+23C7 (branch symbol alternative)
+            let mut git_text = format!("\u{2387} {}", branch);
+            if self.git_dirty_count > 0 {
+                git_text.push_str(&format!(" ?{}", self.git_dirty_count));
+            }
             spans.push(Span::styled(
-                repo_display,
+                git_text,
                 Style::default().fg(style_tokens::BLUE_PATH),
             ));
             spans.push(Span::styled(
@@ -263,20 +275,7 @@ impl Widget for StatusBarWidget<'_> {
     }
 }
 
-impl StatusBarWidget<'_> {
-    fn build_repo_display(&self) -> String {
-        if self.working_dir.is_empty() || self.working_dir == "." {
-            return String::new();
-        }
-
-        let shortener = crate::tui::formatters::path_shortener::PathShortener::default();
-        let dir_display = shortener.shorten_display(self.working_dir);
-        match self.git_branch {
-            Some(branch) => format!("{dir_display} ({branch})"),
-            None => dir_display,
-        }
-    }
-}
+impl StatusBarWidget<'_> {}
 
 #[cfg(test)]
 mod tests {

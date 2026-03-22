@@ -108,7 +108,7 @@ impl Widget for InputWidget<'_> {
 
         // Row 0: separator line with mode-colored indicator
         let mode_text = format!(" {} ", mode_label);
-        let hint_text = "(Alt+Enter: newline) ";
+        let hint_text = "(Shift+Enter: newline) ";
         let prefix_dashes = 2;
 
         let queue_text = if self.pending_count > 0 {

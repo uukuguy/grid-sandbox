@@ -48,7 +48,7 @@ impl<'a> WelcomePanel<'a> {
         buf.set_string(x, y, text, ratatui::style::Style::default().fg(fg));
     }
 
-    /// Write a centered string with per-character amber gradient sweep.
+    /// Write a centered string with left-to-right amber gradient.
     fn write_gradient_line(
         &self,
         buf: &mut Buffer,
@@ -64,28 +64,31 @@ impl<'a> WelcomePanel<'a> {
         let start_x = area.x + area.width.saturating_sub(text_len) / 2;
         let fade = self.state.fade_progress as f64;
         let breathe = 0.85 + 0.15 * self.state.breathe_phase.sin();
+        let total = text.chars().count().max(1) as f64;
 
         for (i, ch) in text.chars().enumerate() {
             if ch == ' ' {
                 continue;
             }
-            let sweep = (i as u16 * 5 + self.state.gradient_offset) % 360;
-            let hue = 30.0 + (sweep as f64 / 360.0) * 30.0;
+            // Left-to-right gradient: hue sweeps 30→60 across text width
+            let t = i as f64 / total;
+            let hue = 30.0 + t * 30.0;
             let lit = base_lightness * breathe * fade;
             let color = hsl_to_rgb(hue, 0.80 * fade, lit);
             Self::put(buf, area, start_x + i as u16, y, ch, color);
         }
     }
 
-    // 5-row ASCII art: "OCTO" using half-block characters for smooth rounded look (width 37)
+    // 5-row ASCII art: "OCTO" using half-block characters for smooth rounded look (width 30)
+    // O: closed box, C: open right, T: wide crossbar + stem, O: closed box
     const LOGO_LINES: [&'static str; 5] = [
-        " \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584} ",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        " \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}  \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}\u{2580}  \u{2580}\u{2580}\u{2580}\u{2580}\u{2580} ",
+        " \u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}  ",
+        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
+        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
+        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
+        " \u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}  ",
     ];
-    const LOGO_WIDTH: usize = 37;
+    const LOGO_WIDTH: usize = 30;
     const LOGO_HEIGHT: usize = 5;
 
     /// Render the dot-grid background with pulsing intersections and OCTO logo as negative space.
@@ -128,9 +131,9 @@ impl<'a> WelcomePanel<'a> {
                     let lc = col - logo_start_col;
                     if let Some(ch) = Self::LOGO_LINES[lr].chars().nth(lc) {
                         if ch != ' ' {
-                            // Block chars: bright breathing amber
+                            // Block chars: left-to-right amber gradient
                             let letter_t = lc as f64 / Self::LOGO_WIDTH as f64;
-                            let letter_hue = 30.0 + letter_t * 20.0;
+                            let letter_hue = 30.0 + letter_t * 30.0;
                             let b = 0.40 + 0.20 * (1.0 + breathe.sin());
                             let color = hsl_to_rgb(letter_hue, 0.85 * fade, b * fade);
                             Self::put(buf, area, ax, ay, ch, color);
@@ -209,7 +212,7 @@ impl Widget for WelcomePanel<'_> {
 
         // Layout constants
         let subtitle = "Autonomous AI Workbench";
-        let help = "Enter: send  |  Ctrl+C: cancel  |  Ctrl+D: debug  |  Ctrl+E: eval";
+        let help = "Enter: send  |  Shift+Enter: newline  |  /help: commands";
 
         if area.height < 5 {
             // ── Tier 1: tiny terminal — emoji brand ──
@@ -232,8 +235,8 @@ impl Widget for WelcomePanel<'_> {
             let grid_h = (area.height.saturating_sub(box_h + 2)).clamp(5, 18) as usize;
             let grid_w = ((box_w as f32 * 0.9) as usize).clamp(Self::LOGO_WIDTH, 80);
 
-            // Center vertically
-            let total_h = grid_h as u16 + 1 + box_h;
+            // Center vertically: grid + 1 blank + subtitle + 1 blank + info box
+            let total_h = grid_h as u16 + 1 + 1 + 1 + box_h;
             let start_y = area.y + area.height.saturating_sub(total_h) / 2;
             let center_x = area.x + (area.width.saturating_sub(box_w)) / 2;
 
@@ -241,12 +244,12 @@ impl Widget for WelcomePanel<'_> {
             let grid_x = area.x + (area.width.saturating_sub(grid_w as u16)) / 2;
             self.render_grid_bg(buf, area, grid_x, start_y, grid_w, grid_h);
 
-            // "a u t o n o m o u s   a i   w o r k b e n c h" subtitle
-            let subtitle_y = start_y + grid_h as u16;
+            // Subtitle on its own line with spacing
+            let subtitle_y = start_y + grid_h as u16 + 1;
             self.write_gradient_line(buf, area, subtitle_y, subtitle, 0.40);
 
-            // Info box below with model + help
-            let by = subtitle_y + 1;
+            // Info box below with help text (1 blank line gap)
+            let by = subtitle_y + 2;
             self.draw_border(buf, area, center_x, by, box_w, box_h);
 
             let max_inner = (box_w as usize).saturating_sub(4); // 2 border chars + 2 padding
