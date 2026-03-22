@@ -1,21 +1,21 @@
 {
   "plan_file": null,
-  "phase": "in-progress",
+  "phase": "complete",
   "created_at": "2026-03-23T02:44:00+08:00",
-  "updated_at": "2026-03-23T03:30:00+08:00",
-  "completed_tasks": [],
-  "current_task": "SubAgent wiring for ExecuteSkillTool — compile pass, awaiting test",
+  "updated_at": "2026-03-23T03:45:00+08:00",
+  "completed_tasks": ["Y-T1"],
+  "current_task": null,
   "total_tasks": 1,
   "task_groups": {
     "Y": {
       "name": "Playbook Skill SubAgent Wiring",
       "tasks": ["Y-T1"],
-      "status": "IN_PROGRESS",
+      "status": "COMPLETE",
       "description": "Wire SubAgentManager into ExecuteSkillTool so PLAYBOOK skills (docx etc.) can spawn SubAgent in TUI/CLI"
     }
   },
   "phase_name": "Phase Y — Playbook Skill SubAgent Wiring",
-  "status": "IN_PROGRESS",
+  "status": "COMPLETE",
   "execution_mode": "direct",
   "design_file": null,
   "roadmap_file": null,
@@ -24,12 +24,17 @@
     "tests": 2387,
     "commit": "839b08f"
   },
-  "final": null,
+  "final": {
+    "tests": 2387,
+    "commit": "c0f92b4"
+  },
   "key_decisions": [
     "Introduced SubAgentContext struct to avoid circular dependency (AgentLoopConfig contains tools, tools contain ExecuteSkillTool which needs config)",
     "SubAgentContext holds provider/tools/model/user_id/sandbox_id/tool_ctx — all fields ExecuteSkillTool.execute_playbook() needs",
     "executor.rs creates SubAgentManager(max_concurrent=4, max_depth=3) per turn and injects into tools snapshot",
-    "Removed 2 pre-existing broken legacy db tests from test_octo_root.rs"
+    "Removed 2 pre-existing broken legacy db tests from test_octo_root.rs",
+    "SubAgent max_iterations raised from 10 to 30 (configurable per skill via max-rounds field)",
+    "Added execute_skill to TUI tool registry to display skill name in UI"
   ],
   "deferred": [
     {
@@ -57,7 +62,7 @@
       "precondition": "Phase U G3 StatusBar complete"
     }
   ],
-  "notes": "ExecuteSkillTool now receives SubAgentContext (provider, tools, model, etc.) via executor.rs per-turn injection. Fixes 'no SubAgent manager configured' error for PLAYBOOK skills like docx. Compile pass confirmed. Full test run pending.",
+  "notes": "Phase Y complete. SubAgentContext wiring enables PLAYBOOK skill execution (docx, pptx, etc.) in TUI/CLI. max_rounds configurable per skill. TUI now shows skill name in tool call display.",
   "previous_phase": {
     "name": "Post-Phase X — TUI + OctoRoot Polish",
     "status": "COMPLETE",
