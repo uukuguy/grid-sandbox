@@ -54,29 +54,13 @@ pub fn indent(text: &str, spaces: usize) -> String {
         .join("\n")
 }
 
-/// Strip `<system-reminder>` XML tags and their content from display text.
+/// Strip `<system-reminder>` and `<context>` XML tags and their content from display text.
 ///
-/// System reminders are injected into messages for the LLM but should not
-/// be shown to the user in the conversation view.
+/// System reminders and context blocks are injected into messages for the LLM
+/// but should not be shown to the user in the conversation view.
 pub fn strip_system_reminders(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut remaining = text;
-
-    while !remaining.is_empty() {
-        if let Some(start) = remaining.find("<system-reminder>") {
-            result.push_str(&remaining[..start]);
-            let after_open = &remaining[start..];
-            if let Some(end) = after_open.find("</system-reminder>") {
-                let close_tag_len = "</system-reminder>".len();
-                remaining = &after_open[end + close_tag_len..];
-            } else {
-                break;
-            }
-        } else {
-            result.push_str(remaining);
-            break;
-        }
-    }
+    let result = strip_xml_tag(text, "system-reminder");
+    let result = strip_xml_tag(&result, "context");
 
     // Collapse runs of 2+ newlines (left over from removal) into a single newline
     let mut cleaned = result;
@@ -85,6 +69,32 @@ pub fn strip_system_reminders(text: &str) -> String {
     }
 
     cleaned.trim().to_string()
+}
+
+/// Strip a specific XML tag and its content from text.
+fn strip_xml_tag(text: &str, tag: &str) -> String {
+    let open_tag = format!("<{tag}>");
+    let close_tag = format!("</{tag}>");
+    let mut result = String::with_capacity(text.len());
+    let mut remaining = text;
+
+    while !remaining.is_empty() {
+        if let Some(start) = remaining.find(&open_tag) {
+            result.push_str(&remaining[..start]);
+            let after_open = &remaining[start..];
+            if let Some(end) = after_open.find(&close_tag) {
+                remaining = &after_open[end + close_tag.len()..];
+            } else {
+                // No closing tag — strip from open tag to end
+                break;
+            }
+        } else {
+            result.push_str(remaining);
+            break;
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
@@ -136,5 +146,19 @@ mod tests {
         let input = "no tags here";
         let result = strip_system_reminders(input);
         assert_eq!(result, "no tags here");
+    }
+
+    #[test]
+    fn test_strip_context_tags() {
+        let input = "<context>\n<datetime>2026-03-22 23:37 +08:00</datetime>\n</context>\nHello";
+        let result = strip_system_reminders(input);
+        assert_eq!(result, "Hello");
+    }
+
+    #[test]
+    fn test_strip_context_only() {
+        let input = "<context>\n<datetime>2026-03-22 23:37 +08:00</datetime>\n<user_profile>test</user_profile>\n</context>";
+        let result = strip_system_reminders(input);
+        assert_eq!(result, "");
     }
 }

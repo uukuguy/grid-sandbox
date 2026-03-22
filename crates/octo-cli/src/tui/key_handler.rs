@@ -80,6 +80,16 @@ fn execute_slash_command(state: &mut TuiState, input: &str) {
             state.streaming_text.clear();
             state.thinking_text.clear();
             state.per_message_cache.clear();
+            state.active_tools.clear();
+            state.plan_steps.clear();
+            // Reset context and token counters
+            state.context_usage_pct = 0.0;
+            state.total_input_tokens = 0;
+            state.total_output_tokens = 0;
+            state.task_input_tokens = 0;
+            state.task_output_tokens = 0;
+            state.tool_expanded_overrides.clear();
+            state.tool_toggle_cursor = 0;
             state.invalidate_cache();
         }
         "/exit" | "/quit" | "/q" => {

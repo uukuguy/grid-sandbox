@@ -398,76 +398,201 @@ fn render_table(table_lines: &[&str], palette: &MdPalette, out: &mut Vec<Line<'s
         .fg(palette.text)
         .add_modifier(base_mod);
 
-    // Render header row
-    let mut spans: Vec<Span<'static>> = Vec::new();
-    spans.push(Span::styled(Cow::<'static, str>::Borrowed("│"), border_style));
-    for (j, cell) in header.iter().enumerate() {
-        let width = col_widths.get(j).copied().unwrap_or(0);
-        let padded: Cow<'static, str> = Cow::Owned(pad_cell(cell, width));
-        spans.push(Span::styled(
-            Cow::<'static, str>::Borrowed(" "),
-            border_style,
-        ));
-        spans.push(Span::styled(padded, header_style));
-        spans.push(Span::styled(
-            Cow::<'static, str>::Borrowed(" │"),
-            border_style,
-        ));
-    }
-    out.push(Line::from(spans));
+    // Blank line before table for spacing
+    out.push(Line::from(""));
 
-    // Render separator line
-    let mut sep_spans: Vec<Span<'static>> = Vec::new();
-    sep_spans.push(Span::styled(
-        Cow::<'static, str>::Borrowed("├"),
+    // Top border: ┌──────┬──────┐
+    let mut top_spans: Vec<Span<'static>> = Vec::new();
+    top_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{250C}"),
         border_style,
     ));
     for (j, &w) in col_widths.iter().enumerate() {
-        let dash: Cow<'static, str> = Cow::Owned("─".repeat(w + 2));
+        let dash: Cow<'static, str> = Cow::Owned("\u{2500}".repeat(w + 2));
+        top_spans.push(Span::styled(dash, border_style));
+        if j < num_cols - 1 {
+            top_spans.push(Span::styled(
+                Cow::<'static, str>::Borrowed("\u{252C}"),
+                border_style,
+            ));
+        }
+    }
+    top_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{2510}"),
+        border_style,
+    ));
+    out.push(Line::from(top_spans));
+
+    // Render header row
+    render_table_row(&header, &col_widths, num_cols, header_style, border_style, cell_style, palette, out);
+
+    // Render separator line: ├──────┼──────┤
+    let mut sep_spans: Vec<Span<'static>> = Vec::new();
+    sep_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{251C}"),
+        border_style,
+    ));
+    for (j, &w) in col_widths.iter().enumerate() {
+        let dash: Cow<'static, str> = Cow::Owned("\u{2500}".repeat(w + 2));
         sep_spans.push(Span::styled(dash, border_style));
         if j < num_cols - 1 {
             sep_spans.push(Span::styled(
-                Cow::<'static, str>::Borrowed("┼"),
+                Cow::<'static, str>::Borrowed("\u{253C}"),
                 border_style,
             ));
         }
     }
     sep_spans.push(Span::styled(
-        Cow::<'static, str>::Borrowed("┤"),
+        Cow::<'static, str>::Borrowed("\u{2524}"),
         border_style,
     ));
     out.push(Line::from(sep_spans));
 
     // Render data rows with inline markdown (bold, code, links)
     for row in &data_rows {
-        let mut spans: Vec<Span<'static>> = Vec::new();
-        spans.push(Span::styled(
-            Cow::<'static, str>::Borrowed("│"),
-            border_style,
-        ));
-        for j in 0..num_cols {
-            let cell = row.get(j).map(|s| s.as_str()).unwrap_or("");
-            let width = col_widths.get(j).copied().unwrap_or(0);
-            spans.push(Span::styled(
-                Cow::<'static, str>::Borrowed(" "),
-                border_style,
-            ));
-            // Render inline markdown within cell (bold, code, links)
-            let cell_spans = parse_inline_spans_with_palette(cell, palette);
-            let cell_display_width: usize = cell_spans.iter().map(|s| display_width(&s.content)).sum();
-            spans.extend(cell_spans);
-            // Pad remaining width
-            if cell_display_width < width {
-                let pad: Cow<'static, str> = Cow::Owned(" ".repeat(width - cell_display_width));
-                spans.push(Span::styled(pad, cell_style));
-            }
-            spans.push(Span::styled(
-                Cow::<'static, str>::Borrowed(" │"),
+        render_table_data_row(row, &col_widths, num_cols, border_style, cell_style, palette, out);
+    }
+
+    // Bottom border: └──────┴──────┘
+    let mut bot_spans: Vec<Span<'static>> = Vec::new();
+    bot_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{2514}"),
+        border_style,
+    ));
+    for (j, &w) in col_widths.iter().enumerate() {
+        let dash: Cow<'static, str> = Cow::Owned("\u{2500}".repeat(w + 2));
+        bot_spans.push(Span::styled(dash, border_style));
+        if j < num_cols - 1 {
+            bot_spans.push(Span::styled(
+                Cow::<'static, str>::Borrowed("\u{2534}"),
                 border_style,
             ));
         }
-        out.push(Line::from(spans));
     }
+    bot_spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{2518}"),
+        border_style,
+    ));
+    out.push(Line::from(bot_spans));
+
+    // Blank line after table for spacing
+    out.push(Line::from(""));
+}
+
+/// Render a table header row with padding.
+fn render_table_row(
+    cells: &[String],
+    col_widths: &[usize],
+    num_cols: usize,
+    content_style: Style,
+    border_style: Style,
+    _cell_style: Style,
+    _palette: &MdPalette,
+    out: &mut Vec<Line<'static>>,
+) {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    spans.push(Span::styled(Cow::<'static, str>::Borrowed("\u{2502}"), border_style));
+    for (j, cell) in cells.iter().enumerate() {
+        let width = col_widths.get(j).copied().unwrap_or(0);
+        let truncated = truncate_to_width(cell, width);
+        let padded: Cow<'static, str> = Cow::Owned(pad_cell(&truncated, width));
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" "),
+            border_style,
+        ));
+        spans.push(Span::styled(padded, content_style));
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" \u{2502}"),
+            border_style,
+        ));
+    }
+    // Fill missing columns
+    for j in cells.len()..num_cols {
+        let width = col_widths.get(j).copied().unwrap_or(0);
+        let pad: Cow<'static, str> = Cow::Owned(" ".repeat(width + 2));
+        spans.push(Span::styled(pad, border_style));
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed("\u{2502}"),
+            border_style,
+        ));
+    }
+    out.push(Line::from(spans));
+}
+
+/// Render a table data row with inline markdown and truncation.
+fn render_table_data_row(
+    row: &[String],
+    col_widths: &[usize],
+    num_cols: usize,
+    border_style: Style,
+    cell_style: Style,
+    palette: &MdPalette,
+    out: &mut Vec<Line<'static>>,
+) {
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    spans.push(Span::styled(
+        Cow::<'static, str>::Borrowed("\u{2502}"),
+        border_style,
+    ));
+    for j in 0..num_cols {
+        let cell = row.get(j).map(|s| s.as_str()).unwrap_or("");
+        let width = col_widths.get(j).copied().unwrap_or(0);
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" "),
+            border_style,
+        ));
+        // Truncate cell content to fit column width, then render inline markdown
+        let truncated = truncate_to_width(cell, width);
+        let cell_spans = parse_inline_spans_with_palette(&truncated, palette);
+        let cell_display_width: usize = cell_spans.iter().map(|s| display_width(&s.content)).sum();
+        spans.extend(cell_spans);
+        // Pad remaining width
+        if cell_display_width < width {
+            let pad: Cow<'static, str> = Cow::Owned(" ".repeat(width - cell_display_width));
+            spans.push(Span::styled(pad, cell_style));
+        }
+        spans.push(Span::styled(
+            Cow::<'static, str>::Borrowed(" \u{2502}"),
+            border_style,
+        ));
+    }
+    out.push(Line::from(spans));
+}
+
+/// Truncate text to fit within a given display width, adding ellipsis if needed.
+fn truncate_to_width(text: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+    let dw = display_width(text);
+    if dw <= max_width {
+        return text.to_string();
+    }
+    // Truncate character by character
+    let mut result = String::new();
+    let mut current_width = 0;
+    for c in text.chars() {
+        let cw = if ('\u{1100}'..='\u{115F}').contains(&c)
+            || ('\u{2E80}'..='\u{A4CF}').contains(&c)
+            || ('\u{AC00}'..='\u{D7A3}').contains(&c)
+            || ('\u{F900}'..='\u{FAFF}').contains(&c)
+            || ('\u{FE10}'..='\u{FE6F}').contains(&c)
+            || ('\u{FF01}'..='\u{FF60}').contains(&c)
+            || ('\u{FFE0}'..='\u{FFE6}').contains(&c)
+            || c > '\u{1F000}'
+        {
+            2
+        } else {
+            1
+        };
+        if current_width + cw > max_width.saturating_sub(1) {
+            result.push('\u{2026}'); // …
+            break;
+        }
+        result.push(c);
+        current_width += cw;
+    }
+    result
 }
 
 /// Pad a cell string to the given display width using spaces.
@@ -635,14 +760,16 @@ mod tests {
     fn test_table_basic() {
         let md = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
         let lines = MarkdownRenderer::render(md);
-        // header + separator + 2 data rows = 4 lines
-        assert_eq!(lines.len(), 4);
-        let header_text: String = lines[0].spans.iter().map(|s| s.content.as_ref()).collect();
+        // blank + top border + header + separator + 2 data rows + bottom border + blank = 8 lines
+        assert_eq!(lines.len(), 8);
+        // header is at index 2 (after blank + top border)
+        let header_text: String = lines[2].spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(header_text.contains("Name"));
         assert!(header_text.contains("Age"));
-        // Separator uses box-drawing chars
-        let sep_text: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
-        assert!(sep_text.contains("─"));
+        // Top border uses box-drawing chars
+        let top_text: String = lines[1].spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(top_text.contains("\u{2500}")); // ─
+        assert!(top_text.contains("\u{250C}")); // ┌
     }
 
     #[test]
@@ -666,8 +793,8 @@ mod tests {
     fn test_table_with_surrounding_text() {
         let md = "Before table\n| H1 | H2 |\n|---|---|\n| A | B |\nAfter table";
         let lines = MarkdownRenderer::render(md);
-        // 1 text + 3 table (header+sep+data) + 1 text = 5
-        assert_eq!(lines.len(), 5);
+        // 1 text + blank + top + header + sep + data + bottom + blank + 1 text = 9
+        assert_eq!(lines.len(), 9);
     }
 
     #[test]
