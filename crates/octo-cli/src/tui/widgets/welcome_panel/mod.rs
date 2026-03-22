@@ -6,7 +6,7 @@
 //! Visual identity (vs opendev-tui):
 //! - Amber-gold (hue 30-60) instead of cyan-blue (190-250)
 //! - Double-line border (╔═╗║╚═╝) instead of rounded (╭─╮│╰─╯)
-//! - "O C T O  A G E N T" title with "Autonomous AI Agent Workbench" subtitle
+//! - ASCII Art "OCTO" (Tier 3) / "O C T O" (Tier 2) / 🦑 (Tier 1)
 //! - Breathing gradient animation on border + title
 
 mod color;
@@ -123,46 +123,57 @@ impl Widget for WelcomePanel<'_> {
         let dim = hsl_to_rgb(40.0, 0.25 * fade, 0.35 * fade);
 
         // Layout constants
-        let title = "O C T O   A G E N T";
-        let subtitle = "Autonomous AI Agent Workbench";
+        let subtitle = "Autonomous AI Workbench";
         let model_line = format!("model: {}", self.model_name);
         let help = "Enter: send  |  Ctrl+C: cancel  |  Ctrl+D: debug  |  Ctrl+E: eval";
 
+        // ASCII Art "OCTO" — 5 lines, 35 chars wide
+        let title_ascii: [&str; 5] = [
+            "  ██████   ██████ ████████  ██████ ",
+            " ██    ██ ██         ██    ██    ██",
+            " ██    ██ ██         ██    ██    ██",
+            " ██    ██ ██         ██    ██    ██",
+            "  ██████   ██████    ██     ██████ ",
+        ];
+
         if area.height < 5 {
-            // ── Tier 1: tiny terminal — just title ──
+            // ── Tier 1: tiny terminal — emoji brand ──
             let cy = area.y + area.height / 2;
-            self.write_gradient_line(buf, area, cy, title, 0.55);
-        } else if area.height < 10 {
-            // ── Tier 2: small — border + title + subtitle ──
+            Self::center_text(buf, area, cy, "\u{1F991} octo \u{2014} autonomous ai workbench", dim);
+        } else if area.height < 12 {
+            // ── Tier 2: small — border + spaced title + subtitle ──
             let box_w = (area.width.saturating_sub(4)).min(50);
             let box_h = 5u16.min(area.height);
             let bx = area.x + (area.width.saturating_sub(box_w)) / 2;
             let by = area.y + (area.height.saturating_sub(box_h)) / 2;
 
             self.draw_border(buf, area, bx, by, box_w, box_h);
-            self.write_gradient_line(buf, area, by + 1, title, 0.55);
+            self.write_gradient_line(buf, area, by + 1, "O C T O", 0.55);
             Self::center_text(buf, area, by + 3, subtitle, dim);
         } else {
-            // ── Tier 3: full — border + title + subtitle, model, help ──
+            // ── Tier 3: full — ASCII art + border + subtitle, model, help ──
             let box_w = (area.width.saturating_sub(4)).min(50);
-            let box_h = 6u16;
+            let box_h = 8u16; // top border + blank + 5 art lines + bottom border
 
-            // Total content: box(6) + blank(1) + model(1) + blank(1) + help(1) = 10
-            let total_h = box_h + 4;
+            // Total content: box(8) + blank(1) + subtitle(1) + blank(1) + model(1) + blank(1) + help(1) = 14
+            let total_h = box_h + 6;
             let start_y = area.y + area.height.saturating_sub(total_h) / 2;
             let bx = area.x + (area.width.saturating_sub(box_w)) / 2;
 
             // Border box
             self.draw_border(buf, area, bx, start_y, box_w, box_h);
 
-            // Title (row 2 inside box)
-            self.write_gradient_line(buf, area, start_y + 2, title, 0.55);
+            // ASCII Art (rows 1-5 inside box, after top border)
+            for (i, line) in title_ascii.iter().enumerate() {
+                self.write_gradient_line(buf, area, start_y + 1 + i as u16, line, 0.55);
+            }
 
-            // Subtitle (row 4 inside box)
-            Self::center_text(buf, area, start_y + 4, subtitle, dim);
+            // Subtitle (below box + 1 blank)
+            let sub_y = start_y + box_h + 1;
+            Self::center_text(buf, area, sub_y, subtitle, dim);
 
-            // Model info (below box + 1 blank)
-            let model_y = start_y + box_h + 1;
+            // Model info (below subtitle + 1 blank)
+            let model_y = sub_y + 2;
             Self::center_text(buf, area, model_y, &model_line, dim);
 
             // Help (below model + 1 blank)
@@ -206,6 +217,17 @@ mod tests {
     }
 
     #[test]
+    fn welcome_panel_tier1_emoji() {
+        let state = WelcomePanelState::new();
+        let widget = WelcomePanel::new(&state, "test-model");
+        let area = Rect::new(0, 0, 60, 4);
+        let mut buf = Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("octo"), "Tier 1 should contain 'octo' brand");
+    }
+
+    #[test]
     fn welcome_panel_tier2() {
         let state = WelcomePanelState::new();
         let widget = WelcomePanel::new(&state, "gpt-4o");
@@ -220,6 +242,18 @@ mod tests {
     }
 
     #[test]
+    fn welcome_panel_tier3_ascii_art() {
+        let state = WelcomePanelState::new();
+        let widget = WelcomePanel::new(&state, "test-model");
+        let area = Rect::new(0, 0, 80, 20);
+        let mut buf = Buffer::empty(area);
+        widget.render(area, &mut buf);
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("█"), "Tier 3 should contain ASCII art block chars");
+        assert!(!content.contains("AGENT"), "Should NOT contain AGENT");
+    }
+
+    #[test]
     fn welcome_panel_full_layout() {
         let state = WelcomePanelState::new();
         let widget = WelcomePanel::new(&state, "gpt-4o");
@@ -227,8 +261,8 @@ mod tests {
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
 
-        // Collect all rendered text
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
         assert!(content.contains("model: gpt-4o"), "Should show model info");
+        assert!(content.contains("Autonomous AI Workbench"), "Should show subtitle");
     }
 }
