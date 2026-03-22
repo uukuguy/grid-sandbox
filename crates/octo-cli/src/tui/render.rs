@@ -14,8 +14,8 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
 
     // Dynamic panel heights
     let input_lines = state.input_buffer.split('\n').count().max(1).min(8) as u16;
-    let activity_height: u16 = if state.is_streaming || state.is_thinking { 3 } else { 0 };
-    let status_height = 3u16; // always: border + row1 (brand/dir/git) + row2 (tokens/mcp/cost/context)
+    let activity_height: u16 = if state.is_streaming || state.is_thinking { 1 } else { 0 };
+    let status_height = 4u16; // always: border + row1 (brand/dir/git) + row2 (tokens/mcp/cost/context) + empty
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

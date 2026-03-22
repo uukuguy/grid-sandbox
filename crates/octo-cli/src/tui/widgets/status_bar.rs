@@ -139,16 +139,9 @@ impl Widget for ActivityIndicatorWidget {
             ));
         }
 
-        // 3-row layout: top border, content (middle), bottom border
-        let border: String = "\u{2500}".repeat(area.width as usize);
-        buf.set_string(area.left(), area.top(), &border, Style::default().fg(style_tokens::BORDER));
-        if area.height >= 2 {
-            let content_line = Line::from(spans);
-            buf.set_line(area.left(), area.top() + 1, &content_line, area.width);
-        }
-        if area.height >= 3 {
-            buf.set_string(area.left(), area.top() + 2, &border, Style::default().fg(style_tokens::BORDER));
-        }
+        // Single row: content only (no borders)
+        let content_line = Line::from(spans);
+        buf.set_line(area.left(), area.top(), &content_line, area.width);
     }
 }
 
