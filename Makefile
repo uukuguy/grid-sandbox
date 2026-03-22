@@ -138,7 +138,7 @@ cli-ask:
 	@cargo run --quiet -p octo-cli --bin octo -- ask "$(QUERY)" $(CLI_ARGS)
 
 # TUI 全屏模式 (uses pre-built binary if available, otherwise builds first)
-cli-tui:
+cli-tui: build
 	@if [ -f target/debug/octo ]; then \
 		target/debug/octo tui $(CLI_ARGS); \
 	else \

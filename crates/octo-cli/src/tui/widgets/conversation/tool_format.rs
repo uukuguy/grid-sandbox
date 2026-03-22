@@ -12,7 +12,6 @@ use std::collections::HashMap;
 
 use crate::tui::formatters::style_tokens;
 use crate::tui::formatters::tool_registry::format_tool_call_parts;
-use crate::tui::widgets::spinner::COMPLETED_CHAR;
 
 /// Convert a serde_json::Value to HashMap for tool_registry API.
 fn value_to_hashmap(input: &serde_json::Value) -> HashMap<String, serde_json::Value> {
@@ -30,8 +29,8 @@ pub(super) fn format_tool_use(name: &str, input: &serde_json::Value) -> Line<'st
 
     Line::from(vec![
         Span::styled(
-            format!("{COMPLETED_CHAR} "),
-            Style::default().fg(style_tokens::GREEN_BRIGHT),
+            "\u{25B8} ", // ▸ small right triangle — distinguishes tool calls from final response (⏺)
+            Style::default().fg(style_tokens::AMBER),
         ),
         Span::styled(
             verb,
@@ -62,6 +61,6 @@ mod tests {
         let input = serde_json::json!({"file_path": "/src/main.rs"});
         let line = format_tool_use("read_file", &input);
         let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
-        assert!(text.contains('\u{23fa}'));
+        assert!(text.contains('\u{25B8}')); // ▸ tool call indicator
     }
 }

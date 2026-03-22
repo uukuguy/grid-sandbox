@@ -16,6 +16,7 @@ use crate::tui::formatters::tool_registry::format_tool_call_parts;
 /// Represents an active tool execution (for spinner display).
 #[derive(Debug, Clone)]
 pub struct ActiveTool {
+    pub tool_id: String,
     pub name: String,
     pub args: serde_json::Value,
     pub started_at: std::time::Instant,
@@ -66,6 +67,7 @@ mod tests {
     #[test]
     fn test_render_active_tool() {
         let tool = ActiveTool {
+            tool_id: "test-id".into(),
             name: "bash".into(),
             args: serde_json::json!({"command": "ls"}),
             started_at: std::time::Instant::now(),

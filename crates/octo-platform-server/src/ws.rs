@@ -18,7 +18,7 @@ use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
 use crate::{
-    agent_pool::{AgentInstance, AgentPool, InstanceId},
+    agent_pool::{AgentInstance, AgentPool},
     AppState, AuthExtractor, ErrorResponse,
 };
 

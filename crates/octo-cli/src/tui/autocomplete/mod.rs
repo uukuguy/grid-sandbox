@@ -43,6 +43,7 @@ pub static BUILTIN_COMMANDS: &[SlashCommand] = &[
     SlashCommand { name: "eval", description: "Toggle eval panel" },
     SlashCommand { name: "sessions", description: "Toggle session picker" },
     SlashCommand { name: "todo", description: "Toggle todo/plan panel" },
+    SlashCommand { name: "mouse", description: "Toggle mouse capture (off = select text to copy)" },
 ];
 
 // ── Completion item ────────────────────────────────────────────────

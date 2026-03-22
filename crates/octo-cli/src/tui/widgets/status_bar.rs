@@ -29,9 +29,7 @@ pub struct StatusBarWidget<'a> {
     git_branch: Option<&'a str>,
     git_dirty_count: usize,
     context_usage_pct: f64,
-    session_cost: f64,
-    mcp_status: Option<(usize, usize)>,
-    mcp_has_errors: bool,
+    session_elapsed: Option<std::time::Duration>,
     input_tokens: u64,
     output_tokens: u64,
 }
@@ -132,9 +130,7 @@ impl<'a> StatusBarWidget<'a> {
             git_branch,
             git_dirty_count: 0,
             context_usage_pct: 0.0,
-            session_cost: 0.0,
-            mcp_status: None,
-            mcp_has_errors: false,
+            session_elapsed: None,
             input_tokens: 0,
             output_tokens: 0,
         }
@@ -150,14 +146,8 @@ impl<'a> StatusBarWidget<'a> {
         self
     }
 
-    pub fn session_cost(mut self, cost: f64) -> Self {
-        self.session_cost = cost;
-        self
-    }
-
-    pub fn mcp_status(mut self, status: Option<(usize, usize)>, has_errors: bool) -> Self {
-        self.mcp_status = status;
-        self.mcp_has_errors = has_errors;
+    pub fn session_elapsed(mut self, elapsed: Option<std::time::Duration>) -> Self {
+        self.session_elapsed = elapsed;
         self
     }
 
@@ -213,46 +203,27 @@ impl Widget for StatusBarWidget<'_> {
             Style::default().fg(style_tokens::BORDER),
         );
 
-        // Row 1: brand | directory | git
+        // Row 1: brand 🦑 Octo | model | tokens | mcp | cost | context%
         if area.height >= 2 {
             let mut spans: Vec<Span> = Vec::new();
 
-            // Brand + Model name
+            // Brand
             spans.push(Span::styled(
-                format!(" \u{2733} {}", self.model),
+                " \u{1F991} Octo",
                 Style::default()
                     .fg(style_tokens::AMBER)
                     .add_modifier(Modifier::BOLD),
             ));
             spans.push(sep.clone());
 
-            // Working directory
-            let short_dir = shorten_path(self.working_dir, 30);
+            // Model name
             spans.push(Span::styled(
-                short_dir,
-                Style::default().fg(style_tokens::SUBTLE),
+                self.model.to_string(),
+                Style::default()
+                    .fg(style_tokens::PRIMARY)
+                    .add_modifier(Modifier::BOLD),
             ));
             spans.push(sep.clone());
-
-            // Git info: ⏇ branch ?N
-            if let Some(branch) = self.git_branch {
-                let mut git_text = format!("\u{23C7} {}", branch);
-                if self.git_dirty_count > 0 {
-                    git_text.push_str(&format!(" ?{}", self.git_dirty_count));
-                }
-                spans.push(Span::styled(
-                    git_text,
-                    Style::default().fg(style_tokens::BLUE_PATH),
-                ));
-            }
-
-            buf.set_line(area.left(), area.top() + 1, &Line::from(spans), area.width);
-        }
-
-        // Row 2: tokens | mcp | cost | context% with mini progress bar
-        if area.height >= 3 {
-            let mut spans: Vec<Span> = Vec::new();
-            spans.push(Span::raw(" "));
 
             // Session token usage
             if self.input_tokens > 0 || self.output_tokens > 0 {
@@ -265,35 +236,11 @@ impl Widget for StatusBarWidget<'_> {
                 spans.push(sep.clone());
             }
 
-            // MCP status
-            if let Some((connected, total)) = self.mcp_status {
-                let mcp_label = format!("MCP {connected}/{total}");
-                let mcp_color = if self.mcp_has_errors {
-                    style_tokens::ORANGE
-                } else if connected < total {
-                    style_tokens::GOLD
-                } else {
-                    style_tokens::GREEN_LIGHT
-                };
+            // Session elapsed time
+            if let Some(elapsed) = self.session_elapsed {
                 spans.push(Span::styled(
-                    mcp_label,
-                    Style::default().fg(mcp_color).add_modifier(Modifier::BOLD),
-                ));
-                spans.push(sep.clone());
-            }
-
-            // Session cost
-            if self.session_cost > 0.0 {
-                let cost_str = if self.session_cost < 0.01 {
-                    format!("${:.4}", self.session_cost)
-                } else {
-                    format!("${:.2}", self.session_cost)
-                };
-                spans.push(Span::styled(
-                    cost_str,
-                    Style::default()
-                        .fg(style_tokens::AMBER)
-                        .add_modifier(Modifier::BOLD),
+                    format!("\u{23F1} {}", Self::format_elapsed(elapsed)),
+                    Style::default().fg(style_tokens::SUBTLE),
                 ));
                 spans.push(sep.clone());
             }
@@ -308,7 +255,6 @@ impl Widget for StatusBarWidget<'_> {
                 style_tokens::ORANGE
             };
 
-            // 5-segment bar based on context_left %
             let filled = ((context_left / 100.0) * 5.0).round() as usize;
             let bar: String = "\u{25AE}".repeat(filled)
                 + &"\u{25AF}".repeat(5usize.saturating_sub(filled));
@@ -320,6 +266,43 @@ impl Widget for StatusBarWidget<'_> {
                 format!(" {context_left:.0}%"),
                 Style::default().fg(pct_color).add_modifier(Modifier::BOLD),
             ));
+
+            buf.set_line(area.left(), area.top() + 1, &Line::from(spans), area.width);
+        }
+
+        // Row 2: directory | git
+        if area.height >= 3 {
+            let mut spans: Vec<Span> = Vec::new();
+            spans.push(Span::raw(" "));
+
+            // Working directory
+            let short_dir = shorten_path(self.working_dir, 40);
+            spans.push(Span::styled(
+                short_dir,
+                Style::default().fg(style_tokens::SUBTLE),
+            ));
+
+            // Git info: ⏇ branch ?N — color by status
+            if let Some(branch) = self.git_branch {
+                spans.push(sep.clone());
+                let git_color = if self.git_dirty_count > 5 {
+                    style_tokens::ORANGE // many uncommitted changes
+                } else if self.git_dirty_count > 0 {
+                    style_tokens::GOLD // some uncommitted changes
+                } else {
+                    style_tokens::GREEN_LIGHT // clean
+                };
+                spans.push(Span::styled(
+                    format!("\u{23C7} {}", branch),
+                    Style::default().fg(git_color),
+                ));
+                if self.git_dirty_count > 0 {
+                    spans.push(Span::styled(
+                        format!(" ?{}", self.git_dirty_count),
+                        Style::default().fg(style_tokens::ORANGE),
+                    ));
+                }
+            }
 
             buf.set_line(area.left(), area.top() + 2, &Line::from(spans), area.width);
         }
@@ -395,8 +378,7 @@ mod tests {
     fn test_status_bar_creation() {
         let _widget = StatusBarWidget::new("claude-sonnet-4", "/home/user/project", Some("main"))
             .context_usage_pct(25.0)
-            .session_cost(0.05)
-            .mcp_status(Some((2, 3)), false)
+            .session_elapsed(Some(std::time::Duration::from_secs(120)))
             .tokens(5000, 1500);
     }
 
@@ -424,7 +406,7 @@ mod tests {
 
         // Collect all symbols from the buffer
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("\u{2733}"), "Should contain brand symbol ✳");
+        assert!(content.contains("Octo"), "Should contain brand name Octo");
         assert!(content.contains("test-model"), "Should contain model name");
     }
 
@@ -483,30 +465,16 @@ mod tests {
     }
 
     #[test]
-    fn test_status_bar_with_cost() {
+    fn test_status_bar_with_elapsed() {
         let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(area);
 
         let widget = StatusBarWidget::new("model", ".", None)
-            .session_cost(0.05);
+            .session_elapsed(Some(std::time::Duration::from_secs(125)));
         widget.render(area, &mut buf);
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("$0.05"), "Should show session cost");
-    }
-
-    #[test]
-    fn test_status_bar_with_mcp() {
-        let area = Rect::new(0, 0, 120, 3);
-        let mut buf = Buffer::empty(area);
-
-        let widget = StatusBarWidget::new("model", ".", None)
-            .mcp_status(Some((2, 3)), false);
-        widget.render(area, &mut buf);
-
-        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("MCP"), "Should show MCP status");
-        assert!(content.contains("2/3"), "Should show connected/total");
+        assert!(content.contains("2m5s"), "Should show session elapsed time");
     }
 
     #[test]

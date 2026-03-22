@@ -202,7 +202,7 @@ async fn run_conversation_loop(
 /// Process an AgentEvent, updating TuiState accordingly.
 fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent::AgentEvent) {
     use octo_engine::agent::AgentEvent;
-    use octo_types::message::ChatMessage;
+    use octo_types::message::{ChatMessage, ContentBlock, MessageRole};
 
     match event {
         AgentEvent::TextDelta { text } => {
@@ -234,13 +234,19 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
             state.invalidate_cache();
         }
         AgentEvent::ToolStart {
-            tool_id: _,
+            tool_id,
             tool_name,
             input,
         } => {
+            // Flush any streaming text as an assistant message before the tool call
+            if !state.streaming_text.is_empty() {
+                let partial = std::mem::take(&mut state.streaming_text);
+                state.messages.push(ChatMessage::assistant(&partial));
+            }
             state
                 .active_tools
                 .push(widgets::conversation::ActiveTool {
+                    tool_id,
                     name: tool_name,
                     args: input,
                     started_at: std::time::Instant::now(),
@@ -248,12 +254,42 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
             state.dirty = true;
         }
         AgentEvent::ToolResult {
-            tool_id: _,
-            output: _,
-            success: _,
+            tool_id,
+            output,
+            success,
         } => {
-            // Remove the most recently added tool (LIFO)
-            state.active_tools.pop();
+            // Find and remove the matching active tool
+            let tool_info = if let Some(idx) = state.active_tools.iter().position(|t| t.tool_id == tool_id) {
+                Some(state.active_tools.remove(idx))
+            } else {
+                state.active_tools.pop().map(|t| t)
+            };
+
+            // Build inline messages: Assistant(ToolUse) + User(ToolResult)
+            if let Some(tool) = tool_info {
+                // Assistant message with ToolUse content block
+                let tool_use_block = ContentBlock::ToolUse {
+                    id: tool_id.clone(),
+                    name: tool.name.clone(),
+                    input: tool.args.clone(),
+                };
+                state.messages.push(ChatMessage {
+                    role: MessageRole::Assistant,
+                    content: vec![tool_use_block],
+                });
+
+                // User message with ToolResult content block (collapsed by default)
+                let result_text = output;
+                let tool_result_block = ContentBlock::ToolResult {
+                    tool_use_id: tool_id,
+                    content: result_text,
+                    is_error: !success,
+                };
+                state.messages.push(ChatMessage {
+                    role: MessageRole::User,
+                    content: vec![tool_result_block],
+                });
+            }
             state.invalidate_cache();
         }
         AgentEvent::ToolProgress {
@@ -288,7 +324,11 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
 
             // Replace messages with final_messages from agent loop if available.
             // These include full tool call/result content blocks (collapsed in UI).
-            if !result.final_messages.is_empty() {
+            // When cancelled, keep the messages we already preserved (partial response).
+            if state.cancelled {
+                state.cancelled = false;
+                // Don't replace — ESC handler already preserved partial messages
+            } else if !result.final_messages.is_empty() {
                 state.messages = result.final_messages;
                 state.streaming_text.clear();
             } else if !state.streaming_text.is_empty() {

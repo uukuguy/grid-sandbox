@@ -69,8 +69,9 @@ impl<'a> WelcomePanel<'a> {
                 continue;
             }
             // Sweep-based gradient: each character gets a different hue that rotates over time
+            // Subtract gradient_offset so the sweep visually flows left-to-right
             let sweep =
-                (i as u16 * 4 + line_offset * 12 + self.state.gradient_offset) % 360;
+                (i as u16 * 4 + line_offset * 12 + 360 - self.state.gradient_offset) % 360;
             let hue = 25.0 + (sweep as f64 / 360.0) * 30.0;
             let sat = 0.80 * fade;
             let lit = 0.55 * fade + 0.1 * (1.0 - fade);
@@ -79,16 +80,18 @@ impl<'a> WelcomePanel<'a> {
         }
     }
 
-    // 5-row ASCII art: "OCTO" using half-block top/bottom edges (width 30)
-    // Each letter 6 chars wide, 2-char gaps. O=rounded, C=open right, T=crossbar+stem, O=rounded
+    // 5-row ASCII art: "OCTO" in slant style (width 30)
+    // Thin line aesthetic using underscores, slashes, and pipes
+    // 5-row ASCII art: "OCTO" in dense block style (width 31)
+    // Matches grid-tui proportions: 7-wide letters, 2-col strokes, 1-space gaps
     const LOGO_LINES: [&'static str; 5] = [
-        " \u{2584}\u{2584}\u{2584}\u{2584}    \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584} ",
-        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
-        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
-        "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
-        " \u{2580}\u{2580}\u{2580}\u{2580}    \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}    \u{2580}\u{2580}     \u{2580}\u{2580}\u{2580}\u{2580} ",
+        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} ",
+        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
+        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
+        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
+        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}    \u{2588}\u{2588}\u{2588}    \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} ",
     ];
-    const LOGO_WIDTH: usize = 30;
+    const LOGO_WIDTH: usize = 31;
     const LOGO_HEIGHT: usize = 5;
 
     /// Render the dot-grid background with pulsing intersections and OCTO logo as negative space.
@@ -131,11 +134,9 @@ impl<'a> WelcomePanel<'a> {
                     let lc = col - logo_start_col;
                     if let Some(ch) = Self::LOGO_LINES[lr].chars().nth(lc) {
                         if ch != ' ' {
-                            // Block chars: left-to-right amber gradient
-                            let letter_t = lc as f64 / Self::LOGO_WIDTH as f64;
-                            let letter_hue = 30.0 + letter_t * 30.0;
+                            // Uniform breathing: single amber hue, brightness oscillates
                             let b = 0.40 + 0.20 * (1.0 + breathe.sin());
-                            let color = hsl_to_rgb(letter_hue, 0.85 * fade, b * fade);
+                            let color = hsl_to_rgb(35.0, 0.85 * fade, b * fade);
                             Self::put(buf, area, ax, ay, ch, color);
                         }
                     }
@@ -173,7 +174,7 @@ impl<'a> WelcomePanel<'a> {
         let perimeter = 2 * (bw + bh);
 
         let border_color = |idx: u16| -> Color {
-            let t = ((idx as f64 / perimeter as f64) + offset as f64 / 360.0) % 1.0;
+            let t = ((idx as f64 / perimeter as f64) + (360 - offset) as f64 / 360.0) % 1.0;
             let hue = 25.0 + t * 30.0;
             hsl_to_rgb(hue, 0.5 * fade, 0.30 * fade + 0.06 * (1.0 - fade))
         };
@@ -211,7 +212,7 @@ impl Widget for WelcomePanel<'_> {
 
         // Layout constants
         let subtitle = "Autonomous AI Workbench";
-        let help = "Enter: send  |  Ctrl+C: quit  |  /help: commands";
+        let help = "Enter: send  |  Ctrl+C: quit  |  /help: commands  |  Terminal native: select & copy text";
 
         if area.height < 5 {
             // ── Tier 1: tiny terminal — emoji brand ──

@@ -93,12 +93,22 @@ impl ToolFormatterRegistry {
         let line_count = output.lines().count();
         Line::from(vec![
             Span::styled(
-                format!("  \u{2699} {tool_name} "),
+                "  \u{25B6} ",
+                Style::default().fg(style_tokens::ACCENT),
+            ),
+            Span::styled(
+                format!("\u{2699} {tool_name} "),
                 Style::default().fg(style_tokens::GREY),
             ),
             Span::styled(
-                format!("\u{2713} \u{2014} {line_count} lines"),
+                format!("\u{2713} \u{2014} {line_count} lines "),
                 Style::default().fg(style_tokens::SUBTLE),
+            ),
+            Span::styled(
+                "(Ctrl+O cycle | Ctrl+Shift+O all)",
+                Style::default()
+                    .fg(style_tokens::SUBTLE)
+                    .add_modifier(ratatui::style::Modifier::DIM),
             ),
         ])
     }

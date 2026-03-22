@@ -104,7 +104,8 @@ impl<'a> ConversationWidget<'a> {
                     self.build_assistant_lines(msg, &mut lines);
                 }
                 MessageRole::System => {
-                    self.build_system_lines(msg, &mut lines);
+                    // System messages are the agent's system prompt — not useful to display.
+                    // Skip them entirely in the conversation view.
                 }
             }
 
@@ -136,42 +137,12 @@ impl<'a> ConversationWidget<'a> {
     }
 
     /// Render user message lines with `> ` prefix.
+    /// Also handles ToolResult blocks (Anthropic API stores them in User role).
     fn build_user_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
         let user_style = Style::default()
             .fg(style_tokens::BLUE_BRIGHT)
             .add_modifier(Modifier::BOLD);
 
-        for block in &msg.content {
-            if let ContentBlock::Text { text } = block {
-                let cleaned = strip_system_reminders(text);
-                if cleaned.is_empty() {
-                    continue;
-                }
-                for (i, line) in cleaned.lines().enumerate() {
-                    if i == 0 {
-                        lines.push(Line::from(vec![
-                            Span::styled("> ", user_style),
-                            Span::styled(
-                                line.to_string(),
-                                Style::default().fg(style_tokens::PRIMARY),
-                            ),
-                        ]));
-                    } else {
-                        lines.push(Line::from(vec![
-                            Span::raw("  "),
-                            Span::styled(
-                                line.to_string(),
-                                Style::default().fg(style_tokens::PRIMARY),
-                            ),
-                        ]));
-                    }
-                }
-            }
-        }
-    }
-
-    /// Render assistant message with markdown and tool calls.
-    fn build_assistant_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
         for block in &msg.content {
             match block {
                 ContentBlock::Text { text } => {
@@ -179,7 +150,116 @@ impl<'a> ConversationWidget<'a> {
                     if cleaned.is_empty() {
                         continue;
                     }
-                    // Use markdown renderer for assistant text
+                    for (i, line) in cleaned.lines().enumerate() {
+                        if i == 0 {
+                            lines.push(Line::from(vec![
+                                Span::styled("> ", user_style),
+                                Span::styled(
+                                    line.to_string(),
+                                    Style::default().fg(style_tokens::PRIMARY),
+                                ),
+                            ]));
+                        } else {
+                            lines.push(Line::from(vec![
+                                Span::raw("  "),
+                                Span::styled(
+                                    line.to_string(),
+                                    Style::default().fg(style_tokens::PRIMARY),
+                                ),
+                            ]));
+                        }
+                    }
+                }
+                ContentBlock::ToolResult {
+                    content, is_error, tool_use_id, ..
+                } => {
+                    // Check if this tool result should be collapsed
+                    if let Some(ref cs) = self.collapse_state {
+                        if cs.is_collapsed(tool_use_id) {
+                            let tool_name = self.find_tool_name(tool_use_id);
+                            let name = tool_name.as_deref().unwrap_or("tool");
+                            if let Some(registry) = self.formatter_registry {
+                                lines.push(registry.format_collapsed(name, content));
+                            } else {
+                                let line_count = content.lines().count();
+                                lines.push(Line::from(vec![
+                                    Span::styled(
+                                        "  \u{25B6} ",
+                                        Style::default().fg(style_tokens::ACCENT),
+                                    ),
+                                    Span::styled(
+                                        format!("\u{2699} {name} \u{2713} \u{2014} {line_count} lines "),
+                                        Style::default().fg(style_tokens::GREY),
+                                    ),
+                                    Span::styled(
+                                        "(Ctrl+O cycle | Ctrl+Shift+O all)",
+                                        Style::default()
+                                            .fg(style_tokens::SUBTLE)
+                                            .add_modifier(Modifier::DIM),
+                                    ),
+                                ]));
+                            }
+                            continue;
+                        }
+                    }
+
+                    // Expanded: full rendering
+                    let tool_name = self.find_tool_name(tool_use_id);
+                    self.build_tool_result_lines(
+                        content,
+                        *is_error,
+                        tool_name.as_deref(),
+                        lines,
+                    );
+                }
+                _ => {} // ToolUse in User messages — skip
+            }
+        }
+    }
+
+    /// Render assistant message with markdown and tool calls.
+    fn build_assistant_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
+        let blocks = &msg.content;
+        for (block_idx, block) in blocks.iter().enumerate() {
+            match block {
+                ContentBlock::Text { text } => {
+                    let cleaned = strip_system_reminders(text);
+                    if cleaned.is_empty() {
+                        continue;
+                    }
+
+                    // Determine if this is an intermediate monologue (followed by ToolUse)
+                    // or a final response (last text block with no ToolUse after it)
+                    let has_tool_after = blocks[block_idx + 1..]
+                        .iter()
+                        .any(|b| matches!(b, ContentBlock::ToolUse { .. }));
+
+                    if has_tool_after {
+                        // Intermediate monologue: dim italic style, no markdown
+                        let prefix_char = "\u{25CB}"; // ○ hollow circle
+                        for (i, line) in cleaned.lines().enumerate() {
+                            let prefix = if i == 0 {
+                                format!("{prefix_char} ")
+                            } else {
+                                Indent::CONT.to_string()
+                            };
+                            lines.push(Line::from(vec![
+                                Span::styled(
+                                    prefix,
+                                    Style::default().fg(style_tokens::SUBTLE),
+                                ),
+                                Span::styled(
+                                    line.to_string(),
+                                    Style::default()
+                                        .fg(style_tokens::GREY)
+                                        .add_modifier(Modifier::ITALIC),
+                                ),
+                            ]));
+                        }
+                        continue;
+                    }
+
+                    // Final response: full markdown rendering with ⏺ marker
                     let md_lines = MarkdownRenderer::render(&cleaned);
                     let mut leading_consumed = false;
                     for md_line in md_lines.into_iter() {
@@ -222,12 +302,22 @@ impl<'a> ConversationWidget<'a> {
                             if let Some(registry) = self.formatter_registry {
                                 lines.push(registry.format_collapsed(name, content));
                             } else {
-                                lines.push(Line::from(Span::styled(
-                                    format!(
-                                        "  \u{2699} {name} \u{2713} \u{2014} {line_count} lines (Ctrl+O to expand)"
+                                lines.push(Line::from(vec![
+                                    Span::styled(
+                                        "  \u{25B6} ",
+                                        Style::default().fg(style_tokens::ACCENT),
                                     ),
-                                    Style::default().fg(style_tokens::GREY),
-                                )));
+                                    Span::styled(
+                                        format!("\u{2699} {name} \u{2713} \u{2014} {line_count} lines "),
+                                        Style::default().fg(style_tokens::GREY),
+                                    ),
+                                    Span::styled(
+                                        "(Ctrl+O cycle | Ctrl+Shift+O all)",
+                                        Style::default()
+                                            .fg(style_tokens::SUBTLE)
+                                            .add_modifier(Modifier::DIM),
+                                    ),
+                                ]));
                             }
                             continue;
                         }
@@ -248,6 +338,7 @@ impl<'a> ConversationWidget<'a> {
     }
 
     /// Render system message with ⚙ prefix, muted style.
+    #[allow(dead_code)]
     fn build_system_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
         let system_style = Style::default()
             .fg(style_tokens::GREY)
@@ -277,6 +368,7 @@ impl<'a> ConversationWidget<'a> {
     }
 
     /// Build tool result lines with diff detection, formatter registry, and collapsible display.
+    /// Expanded results are wrapped with subtle separator lines for visual clarity.
     fn build_tool_result_lines(
         &self,
         content: &str,
@@ -290,6 +382,14 @@ impl<'a> ConversationWidget<'a> {
 
         let continuation = style_tokens::CONTINUATION_CHAR;
 
+        // Top separator: ╭─ tool output ─────
+        let name_label = tool_name.unwrap_or("output");
+        let sep_text = format!("  \u{256D}\u{2500} {name_label} \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}");
+        lines.push(Line::from(Span::styled(
+            sep_text,
+            Style::default().fg(style_tokens::BORDER),
+        )));
+
         // Check if this is a diff tool result
         let use_diff = tool_name.is_some_and(|n| is_diff_tool(n));
 
@@ -299,8 +399,8 @@ impl<'a> ConversationWidget<'a> {
             if !summary.is_empty() {
                 lines.push(Line::from(vec![
                     Span::styled(
-                        format!("  {continuation}  "),
-                        Style::default().fg(style_tokens::GREY),
+                        format!("  \u{2502} "),
+                        Style::default().fg(style_tokens::BORDER),
                     ),
                     Span::styled(summary, Style::default().fg(style_tokens::SUBTLE)),
                 ]));
@@ -308,8 +408,7 @@ impl<'a> ConversationWidget<'a> {
             render_diff_entries(&entries, lines);
         } else if let Some(registry) = self.formatter_registry {
             // Use formatter registry for tool-specific rendering
-            let name = tool_name.unwrap_or("unknown");
-            let formatted = registry.format(name, content);
+            let formatted = registry.format(name_label, content);
             lines.push(formatted.header);
             lines.extend(formatted.body);
             if let Some(footer) = formatted.footer {
@@ -352,6 +451,12 @@ impl<'a> ConversationWidget<'a> {
                 )));
             }
         }
+
+        // Bottom separator: ╰──────────────
+        lines.push(Line::from(Span::styled(
+            "  \u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+            Style::default().fg(style_tokens::BORDER),
+        )));
     }
 
     /// Find the tool name for a given tool_use_id by searching back through messages.
@@ -544,7 +649,7 @@ mod tests {
             .flat_map(|l| l.spans.iter())
             .map(|s| s.content.to_string())
             .collect();
-        assert!(text.contains('\u{23fa}'), "Should have ⏺ marker");
+        assert!(text.contains('\u{25B8}'), "Should have ▸ tool call marker");
     }
 
     #[test]
@@ -663,6 +768,7 @@ mod tests {
     fn test_spinner_active_tools() {
         let messages = vec![ChatMessage::user("Hello")];
         let tools = vec![ActiveTool {
+            tool_id: "test-id".into(),
             name: "bash".into(),
             args: serde_json::json!({"command": "ls -la"}),
             started_at: std::time::Instant::now(),

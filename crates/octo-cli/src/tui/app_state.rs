@@ -58,6 +58,8 @@ pub struct TuiState {
     pub running: bool,
     /// Whether a redraw is needed.
     pub dirty: bool,
+    /// Whether mouse capture is enabled (toggled via /mouse command).
+    pub mouse_captured: bool,
 
     // ── Agent connection ──
     /// Handle to the agent executor for sending messages and subscribing.
@@ -70,6 +72,9 @@ pub struct TuiState {
     pub streaming_text: String,
     /// Whether the agent is currently streaming a response.
     pub is_streaming: bool,
+    /// Whether the current task was cancelled by user (ESC).
+    /// When true, the Completed event preserves existing messages instead of replacing them.
+    pub cancelled: bool,
 
     // ── Tool execution ──
     /// Currently executing tools (shown as inline spinners).
@@ -161,6 +166,9 @@ pub struct TuiState {
     pub tools_default_collapsed: bool,
     /// Per-tool override: tool_use_id -> expanded state. `true` = force expand.
     pub tool_expanded_overrides: HashMap<String, bool>,
+    /// Cursor for Ctrl+O traversal: index into all_tool_use_ids() (from end).
+    /// Increments each press, wraps around. Reset on new messages.
+    pub tool_toggle_cursor: usize,
 
     // ── StatusBar data ──
     /// Current working directory (shortened for display).
@@ -169,12 +177,10 @@ pub struct TuiState {
     pub git_branch: Option<String>,
     /// Context window usage percentage (0.0–100.0).
     pub context_usage_pct: f64,
-    /// Cumulative session cost in USD.
-    pub session_cost: f64,
-    /// MCP server status: (connected, total).
-    pub mcp_status: Option<(usize, usize)>,
     /// Number of dirty (modified/untracked) files in git.
     pub git_dirty_count: usize,
+    /// When the TUI session started (for elapsed time display).
+    pub session_start_time: Instant,
 
     // ── Plan steps (rendered inline in conversation) ──
     /// Plan steps from dual-mode agent (rendered as inline messages).
@@ -226,11 +232,13 @@ impl TuiState {
     ) -> Self {
         Self {
             running: true,
+            mouse_captured: true,
             dirty: true,
             handle,
             messages: Vec::new(),
             streaming_text: String::new(),
             is_streaming: false,
+            cancelled: false,
             active_tools: Vec::new(),
             pending_approval: None,
             input_buffer: String::new(),
@@ -262,6 +270,7 @@ impl TuiState {
                 super::formatters::formatter_registry::ToolFormatterRegistry::new(),
             tools_default_collapsed: true,
             tool_expanded_overrides: HashMap::new(),
+            tool_toggle_cursor: 0,
             working_dir: std::env::current_dir()
                 .map(|p| p.display().to_string())
                 .unwrap_or_else(|_| ".".to_string()),
@@ -279,8 +288,7 @@ impl TuiState {
                     }
                 }),
             context_usage_pct: 0.0,
-            session_cost: 0.0,
-            mcp_status: None,
+            session_start_time: Instant::now(),
             git_dirty_count: std::process::Command::new("git")
                 .args(["status", "--porcelain"])
                 .output()
@@ -523,6 +531,97 @@ impl TuiState {
                 ContentBlock::ToolResult { tool_use_id, .. } => Some(tool_use_id.clone()),
                 _ => None,
             })
+    }
+
+    /// Collect all tool_use_ids from messages in order (oldest first).
+    pub fn all_tool_use_ids(&self) -> Vec<String> {
+        self.messages
+            .iter()
+            .flat_map(|m| m.content.iter())
+            .filter_map(|b| match b {
+                ContentBlock::ToolResult { tool_use_id, .. } => Some(tool_use_id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Find the next collapsed tool_use_id after the most recently toggled one.
+    /// Returns the first collapsed tool if none was toggled yet, cycling through all.
+    pub fn find_next_collapsed_tool_id(&self) -> Option<String> {
+        let ids = self.all_tool_use_ids();
+        if ids.is_empty() {
+            return None;
+        }
+        // First try: find any collapsed tool (prefer last/most recent)
+        ids.iter()
+            .rev()
+            .find(|id| self.is_tool_collapsed(id))
+            .or_else(|| ids.last()) // all expanded — return last to allow re-collapse
+            .cloned()
+    }
+
+    /// Extract the last assistant response text (final text block only, not intermediate monologue).
+    pub fn last_assistant_response_text(&self) -> Option<String> {
+        for msg in self.messages.iter().rev() {
+            if msg.role != octo_types::message::MessageRole::Assistant {
+                continue;
+            }
+            // Find the last Text block that is NOT followed by a ToolUse
+            let blocks = &msg.content;
+            for (i, block) in blocks.iter().enumerate().rev() {
+                if let ContentBlock::Text { text } = block {
+                    let has_tool_after = blocks[i + 1..]
+                        .iter()
+                        .any(|b| matches!(b, ContentBlock::ToolUse { .. }));
+                    if !has_tool_after && !text.trim().is_empty() {
+                        return Some(text.clone());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Copy text to system clipboard (macOS: pbcopy, Linux: xclip/xsel, fallback: no-op).
+    pub fn copy_to_clipboard(text: &str) -> bool {
+        #[cfg(target_os = "macos")]
+        {
+            use std::io::Write;
+            if let Ok(mut child) = std::process::Command::new("pbcopy")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+            {
+                if let Some(ref mut stdin) = child.stdin {
+                    let _ = stdin.write_all(text.as_bytes());
+                }
+                return child.wait().map(|s| s.success()).unwrap_or(false);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            use std::io::Write;
+            // Try xclip first, then xsel
+            for cmd in &["xclip", "xsel"] {
+                let args: &[&str] = if *cmd == "xclip" {
+                    &["-selection", "clipboard"]
+                } else {
+                    &["--clipboard", "--input"]
+                };
+                if let Ok(mut child) = std::process::Command::new(cmd)
+                    .args(args)
+                    .stdin(std::process::Stdio::piped())
+                    .spawn()
+                {
+                    if let Some(ref mut stdin) = child.stdin {
+                        let _ = stdin.write_all(text.as_bytes());
+                    }
+                    if child.wait().map(|s| s.success()).unwrap_or(false) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     /// Invalidate all caches including per-message cache (e.g., on terminal resize).
@@ -819,8 +918,8 @@ mod tests {
         );
         assert!(!state.working_dir.is_empty());
         assert_eq!(state.context_usage_pct, 0.0);
-        assert_eq!(state.session_cost, 0.0);
-        assert!(state.mcp_status.is_none());
+        // session_start_time is set to Instant::now() on creation
+        assert!(state.session_start_time.elapsed().as_secs() < 2);
         assert!(state.plan_steps.is_empty());
         assert!(state.task_start_time.is_none());
         assert_eq!(state.task_input_tokens, 0);

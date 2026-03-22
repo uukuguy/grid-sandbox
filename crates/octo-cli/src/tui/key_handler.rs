@@ -51,6 +51,7 @@ fn execute_slash_command(state: &mut TuiState, input: &str) {
                 "  /help       — Show this help\n",
                 "  /clear      — Clear conversation history\n",
                 "  /exit /quit — Exit the session\n",
+                "  /mouse      — Toggle mouse capture (off = select text to copy)\n",
                 "  /debug      — Toggle debug panel\n",
                 "  /eval       — Toggle eval panel\n",
                 "  /sessions   — Toggle session picker\n",
@@ -60,6 +61,13 @@ fn execute_slash_command(state: &mut TuiState, input: &str) {
                 "  /model      — Switch the LLM model\n",
                 "  /mode       — Switch between plan/normal mode\n",
                 "  /theme      — Change color theme\n",
+                "\nKeyboard shortcuts:\n",
+                "  Ctrl+Y      — Copy last response to clipboard\n",
+                "  Ctrl+O      — Cycle through tool results (expand/collapse one by one)\n",
+                "  Ctrl+Shift+O — Toggle ALL tool results expand/collapse\n",
+                "\nText selection:\n",
+                "  Most terminals (iTerm2, etc.) support native text selection & copy.\n",
+                "  /mouse      — Toggle mouse capture off if native selection doesn't work.\n",
             );
             state
                 .messages
@@ -102,6 +110,26 @@ fn execute_slash_command(state: &mut TuiState, input: &str) {
             // Plan steps are now shown inline in conversation — no separate panel
             let msg = "Plan steps are shown inline in the conversation area.";
             state.messages.push(ChatMessage::assistant(msg));
+            state.invalidate_cache();
+            state.auto_scroll();
+        }
+        "/mouse" => {
+            state.mouse_captured = !state.mouse_captured;
+            if state.mouse_captured {
+                let _ = crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::event::EnableMouseCapture
+                );
+                let msg = "Mouse capture ON — scroll with mouse, Shift+drag to select text.";
+                state.messages.push(ChatMessage::assistant(msg));
+            } else {
+                let _ = crossterm::execute!(
+                    std::io::stdout(),
+                    crossterm::event::DisableMouseCapture
+                );
+                let msg = "Mouse capture OFF — select text with mouse to copy. Use keyboard (↑↓/PgUp/PgDn) to scroll. /mouse to re-enable.";
+                state.messages.push(ChatMessage::assistant(msg));
+            }
             state.invalidate_cache();
             state.auto_scroll();
         }
@@ -229,22 +257,54 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             // When input is single-line, Ctrl+P is a no-op (todo panel removed)
         }
 
-        // ── Ctrl+O: toggle most recent completed tool result collapse ──
+        // ── Ctrl+O: cycle tool results — open one at a time, then close all ──
+        // Cycle: open last → open second-to-last → ... → open first → close all → repeat
+        // Only one tool is expanded at a time (previous one closes when next opens).
         (KeyModifiers::CONTROL, KeyCode::Char('o')) => {
-            if let Some(tool_id) = state.find_last_tool_use_id() {
-                let currently_collapsed = state.is_tool_collapsed(&tool_id);
-                state
-                    .tool_expanded_overrides
-                    .insert(tool_id, currently_collapsed); // toggle: collapsed->expand, expanded->collapse
+            let ids = state.all_tool_use_ids();
+            if !ids.is_empty() {
+                let n = ids.len();
+                let cursor = state.tool_toggle_cursor % (n + 1); // extra slot = "close all"
+
+                // Clear all overrides first (close previous)
+                state.tool_expanded_overrides.clear();
+
+                if cursor < n {
+                    // Open one tool: cursor 0 = last, 1 = second-to-last, etc.
+                    let target_idx = n - 1 - cursor;
+                    let tool_id = ids[target_idx].clone();
+                    state.tool_expanded_overrides.insert(tool_id, true);
+                }
+                // cursor == n → all closed (no override inserted)
+
+                state.tool_toggle_cursor += 1;
                 state.invalidate_cache();
             }
         }
 
-        // ── Alt+O: toggle global tool collapse default ──
+        // ── Alt+O: toggle ALL tool results expand/collapse ──
         (KeyModifiers::ALT, KeyCode::Char('o')) => {
             state.tools_default_collapsed = !state.tools_default_collapsed;
-            state.tool_expanded_overrides.clear(); // reset per-tool overrides
+            state.tool_expanded_overrides.clear();
+            state.tool_toggle_cursor = 0;
             state.invalidate_cache();
+        }
+        // ── Ctrl+Shift+O: same as Alt+O (Alt may not work on macOS) ──
+        (_, KeyCode::Char('O')) if key.modifiers.contains(KeyModifiers::CONTROL) && key.modifiers.contains(KeyModifiers::SHIFT) => {
+            state.tools_default_collapsed = !state.tools_default_collapsed;
+            state.tool_expanded_overrides.clear();
+            state.tool_toggle_cursor = 0;
+            state.invalidate_cache();
+        }
+
+        // ── Ctrl+Y: copy last assistant response to clipboard ──
+        (KeyModifiers::CONTROL, KeyCode::Char('y')) => {
+            if let Some(text) = state.last_assistant_response_text() {
+                if super::app_state::TuiState::copy_to_clipboard(&text) {
+                    // Brief visual feedback — could add a toast/notification later
+                    state.dirty = true;
+                }
+            }
         }
 
         // ── Tab: accept autocomplete suggestion ──
@@ -300,6 +360,7 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                         })
                         .await;
                     state.is_streaming = true;
+                    state.cancelled = false;
                     state.interrupt_manager.reset();
                 }
             }
@@ -464,11 +525,16 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     .await;
                 state.is_streaming = false;
                 state.active_tools.clear();
-                // Also clear any partial streaming text
+                // Preserve partial streaming text as a message before clearing
                 if !state.streaming_text.is_empty() {
-                    state.streaming_text.clear();
+                    let partial = std::mem::take(&mut state.streaming_text);
+                    state
+                        .messages
+                        .push(octo_types::message::ChatMessage::assistant(&partial));
                     state.invalidate_cache();
                 }
+                // Mark as cancelled so Completed event won't overwrite preserved messages
+                state.cancelled = true;
             } else if !state.input_buffer.is_empty() {
                 state.input_buffer.clear();
                 state.input_cursor = 0;
@@ -903,6 +969,22 @@ mod tests {
             state: KeyEventState::NONE,
         };
         handle_key(&mut state, alt_o).await;
+        assert!(!state.tools_default_collapsed);
+        assert!(state.tool_expanded_overrides.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_ctrl_shift_o_toggles_global() {
+        let mut state = make_test_state();
+        assert!(state.tools_default_collapsed);
+
+        let ctrl_shift_o = KeyEvent {
+            code: KeyCode::Char('O'),
+            modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        handle_key(&mut state, ctrl_shift_o).await;
         assert!(!state.tools_default_collapsed);
         assert!(state.tool_expanded_overrides.is_empty());
     }

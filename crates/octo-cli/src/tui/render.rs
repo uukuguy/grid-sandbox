@@ -153,8 +153,7 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
     )
     .git_dirty_count(state.git_dirty_count)
     .context_usage_pct(state.context_usage_pct)
-    .session_cost(state.session_cost)
-    .mcp_status(state.mcp_status, false)
+    .session_elapsed(Some(state.session_start_time.elapsed()))
     .tokens(state.total_input_tokens, state.total_output_tokens);
 
     frame.render_widget(widget, area);
