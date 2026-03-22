@@ -21,7 +21,7 @@ pub enum AgentStateDisplay {
     Thinking,
 }
 
-/// Bottom status bar widget.
+/// Bottom status bar widget (always 2 rows: border + info).
 #[allow(dead_code)]
 pub struct StatusBarWidget<'a> {
     model: &'a str,
@@ -32,10 +32,96 @@ pub struct StatusBarWidget<'a> {
     session_cost: f64,
     mcp_status: Option<(usize, usize)>,
     mcp_has_errors: bool,
-    spinner_char: Option<char>,
     input_tokens: u64,
     output_tokens: u64,
+}
+
+/// Standalone activity indicator widget (1 row, shown between conversation and input).
+pub struct ActivityIndicatorWidget {
     agent_state: AgentStateDisplay,
+    task_elapsed: Option<std::time::Duration>,
+    task_input_tokens: u64,
+    task_output_tokens: u64,
+}
+
+impl ActivityIndicatorWidget {
+    pub fn new(
+        agent_state: AgentStateDisplay,
+        task_elapsed: Option<std::time::Duration>,
+        task_input_tokens: u64,
+        task_output_tokens: u64,
+    ) -> Self {
+        Self {
+            agent_state,
+            task_elapsed,
+            task_input_tokens,
+            task_output_tokens,
+        }
+    }
+}
+
+impl Widget for ActivityIndicatorWidget {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        if area.height == 0 {
+            return;
+        }
+
+        let mut spans: Vec<Span> = Vec::new();
+
+        // Breathing animation: cycle amber hue based on elapsed milliseconds
+        let elapsed_ms = self
+            .task_elapsed
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let phase = (elapsed_ms as f64 / 2000.0) * std::f64::consts::TAU;
+        let lightness = 0.55 + 0.15 * phase.sin();
+        let (r, g, b) = hsl_to_rgb(35.0, 1.0, lightness);
+        let breathing_color = ratatui::style::Color::Rgb(r, g, b);
+
+        // Spinner frame (braille dots)
+        let spinner_frames = ['\u{28F7}', '\u{28EF}', '\u{28DF}', '\u{287F}', '\u{28BF}',
+                              '\u{28FB}', '\u{28FD}', '\u{28FE}', '\u{28F7}', '\u{28EF}'];
+        let frame_idx = (elapsed_ms / 100) as usize % spinner_frames.len();
+        let spinner = spinner_frames[frame_idx];
+
+        // Mode label
+        let (mode_label, mode_color) = match self.agent_state {
+            AgentStateDisplay::Streaming => ("\u{25B8} Streaming", style_tokens::GREEN_LIGHT),
+            AgentStateDisplay::Thinking => ("\u{25E6} Thinking", style_tokens::MAGENTA),
+            AgentStateDisplay::Idle => return,
+        };
+
+        spans.push(Span::styled(
+            format!(" {} ", spinner),
+            Style::default().fg(breathing_color).add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            format!("{} ", mode_label),
+            Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
+        ));
+
+        // Elapsed time
+        if let Some(elapsed) = self.task_elapsed {
+            spans.push(Span::styled(
+                StatusBarWidget::format_elapsed(elapsed),
+                Style::default().fg(breathing_color),
+            ));
+            spans.push(Span::styled("  ", Style::default()));
+        }
+
+        // Task tokens
+        if self.task_input_tokens > 0 || self.task_output_tokens > 0 {
+            let ti = StatusBarWidget::format_tokens(self.task_input_tokens);
+            let to = StatusBarWidget::format_tokens(self.task_output_tokens);
+            spans.push(Span::styled(
+                format!("\u{25B8}{ti} \u{25BE}{to}"),
+                Style::default().fg(style_tokens::SUBTLE),
+            ));
+        }
+
+        let line = Line::from(spans);
+        buf.set_line(area.left(), area.top(), &line, area.width);
+    }
 }
 
 impl<'a> StatusBarWidget<'a> {
@@ -49,10 +135,8 @@ impl<'a> StatusBarWidget<'a> {
             session_cost: 0.0,
             mcp_status: None,
             mcp_has_errors: false,
-            spinner_char: None,
             input_tokens: 0,
             output_tokens: 0,
-            agent_state: AgentStateDisplay::Idle,
         }
     }
 
@@ -77,19 +161,9 @@ impl<'a> StatusBarWidget<'a> {
         self
     }
 
-    pub fn spinner_char(mut self, ch: Option<char>) -> Self {
-        self.spinner_char = ch;
-        self
-    }
-
     pub fn tokens(mut self, input: u64, output: u64) -> Self {
         self.input_tokens = input;
         self.output_tokens = output;
-        self
-    }
-
-    pub fn agent_state(mut self, state: AgentStateDisplay) -> Self {
-        self.agent_state = state;
         self
     }
 
@@ -104,178 +178,207 @@ impl<'a> StatusBarWidget<'a> {
     }
 }
 
+impl StatusBarWidget<'_> {
+    /// Format elapsed duration as compact string: "5s", "1m12s", "3m"
+    pub fn format_elapsed(d: std::time::Duration) -> String {
+        let secs = d.as_secs();
+        if secs < 60 {
+            format!("{}s", secs)
+        } else {
+            let m = secs / 60;
+            let s = secs % 60;
+            if s == 0 {
+                format!("{}m", m)
+            } else {
+                format!("{}m{}s", m, s)
+            }
+        }
+    }
+}
+
 impl Widget for StatusBarWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.height == 0 {
             return;
         }
 
-        let mut spans: Vec<Span> = Vec::new();
+        let sep = Span::styled("  \u{2502}  ", Style::default().fg(style_tokens::GREY));
 
-        // Brand + Model name (✳ = U+2733 Eight Spoked Asterisk)
-        spans.push(Span::styled(
-            format!("\u{2733} {}", self.model),
-            Style::default()
-                .fg(style_tokens::AMBER)
-                .add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(
-            "  \u{2502}  ",
-            Style::default().fg(style_tokens::GREY),
-        ));
+        // Row 0: border line (always)
+        let border_line: String = "\u{2500}".repeat(area.width as usize);
+        buf.set_string(
+            area.left(),
+            area.top(),
+            &border_line,
+            Style::default().fg(style_tokens::BORDER),
+        );
 
-        // Agent state indicator
-        let (state_symbol, state_color) = match self.agent_state {
-            AgentStateDisplay::Streaming => ("\u{25B8} streaming", style_tokens::GREEN_LIGHT),
-            AgentStateDisplay::Thinking => ("\u{25E6} thinking", style_tokens::MAGENTA),
-            AgentStateDisplay::Idle => ("\u{00B7} idle", style_tokens::DIM_GREY),
-        };
-        spans.push(Span::styled(
-            state_symbol,
-            Style::default().fg(state_color),
-        ));
-        spans.push(Span::styled(
-            "  \u{2502}  ",
-            Style::default().fg(style_tokens::GREY),
-        ));
+        // Row 1: brand | directory | git
+        if area.height >= 2 {
+            let mut spans: Vec<Span> = Vec::new();
 
-        // Token usage
-        if self.input_tokens > 0 || self.output_tokens > 0 {
-            let input_str = Self::format_tokens(self.input_tokens);
-            let output_str = Self::format_tokens(self.output_tokens);
+            // Brand + Model name
             spans.push(Span::styled(
-                format!("\u{25B8}{input_str} \u{25BE}{output_str}"),
+                format!(" \u{2733} {}", self.model),
+                Style::default()
+                    .fg(style_tokens::AMBER)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(sep.clone());
+
+            // Working directory
+            let short_dir = shorten_path(self.working_dir, 30);
+            spans.push(Span::styled(
+                short_dir,
                 Style::default().fg(style_tokens::SUBTLE),
             ));
-            spans.push(Span::styled(
-                "  \u{2502}  ",
-                Style::default().fg(style_tokens::GREY),
-            ));
-        }
+            spans.push(sep.clone());
 
-        // Git info: ⏇ branch ?N
-        if let Some(branch) = self.git_branch {
-            // ⏇ = U+23C7 (branch symbol alternative)
-            let mut git_text = format!("\u{2387} {}", branch);
-            if self.git_dirty_count > 0 {
-                git_text.push_str(&format!(" ?{}", self.git_dirty_count));
+            // Git info: ⏇ branch ?N
+            if let Some(branch) = self.git_branch {
+                let mut git_text = format!("\u{23C7} {}", branch);
+                if self.git_dirty_count > 0 {
+                    git_text.push_str(&format!(" ?{}", self.git_dirty_count));
+                }
+                spans.push(Span::styled(
+                    git_text,
+                    Style::default().fg(style_tokens::BLUE_PATH),
+                ));
             }
-            spans.push(Span::styled(
-                git_text,
-                Style::default().fg(style_tokens::BLUE_PATH),
-            ));
-            spans.push(Span::styled(
-                "  \u{2502}  ",
-                Style::default().fg(style_tokens::GREY),
-            ));
+
+            buf.set_line(area.left(), area.top() + 1, &Line::from(spans), area.width);
         }
 
-        // MCP status
-        if let Some((connected, total)) = self.mcp_status {
-            let mcp_label = format!("MCP: {connected}/{total}");
-            let mcp_color = if self.mcp_has_errors {
-                style_tokens::ORANGE
-            } else if connected < total {
+        // Row 2: tokens | mcp | cost | context% with mini progress bar
+        if area.height >= 3 {
+            let mut spans: Vec<Span> = Vec::new();
+            spans.push(Span::raw(" "));
+
+            // Session token usage
+            if self.input_tokens > 0 || self.output_tokens > 0 {
+                let input_str = Self::format_tokens(self.input_tokens);
+                let output_str = Self::format_tokens(self.output_tokens);
+                spans.push(Span::styled(
+                    format!("\u{25B8}{input_str} \u{25BE}{output_str}"),
+                    Style::default().fg(style_tokens::SUBTLE),
+                ));
+                spans.push(sep.clone());
+            }
+
+            // MCP status
+            if let Some((connected, total)) = self.mcp_status {
+                let mcp_label = format!("MCP {connected}/{total}");
+                let mcp_color = if self.mcp_has_errors {
+                    style_tokens::ORANGE
+                } else if connected < total {
+                    style_tokens::GOLD
+                } else {
+                    style_tokens::GREEN_LIGHT
+                };
+                spans.push(Span::styled(
+                    mcp_label,
+                    Style::default().fg(mcp_color).add_modifier(Modifier::BOLD),
+                ));
+                spans.push(sep.clone());
+            }
+
+            // Session cost
+            if self.session_cost > 0.0 {
+                let cost_str = if self.session_cost < 0.01 {
+                    format!("${:.4}", self.session_cost)
+                } else {
+                    format!("${:.2}", self.session_cost)
+                };
+                spans.push(Span::styled(
+                    cost_str,
+                    Style::default()
+                        .fg(style_tokens::AMBER)
+                        .add_modifier(Modifier::BOLD),
+                ));
+                spans.push(sep.clone());
+            }
+
+            // Context remaining % with mini progress bar ▮▮▮▯▯
+            let context_left = (100.0 - self.context_usage_pct).max(0.0);
+            let pct_color = if context_left > 50.0 {
+                style_tokens::GREEN_LIGHT
+            } else if context_left > 25.0 {
                 style_tokens::GOLD
             } else {
-                style_tokens::GREEN_LIGHT
+                style_tokens::ORANGE
             };
+
+            // 5-segment bar based on context_left %
+            let filled = ((context_left / 100.0) * 5.0).round() as usize;
+            let bar: String = "\u{25AE}".repeat(filled)
+                + &"\u{25AF}".repeat(5usize.saturating_sub(filled));
             spans.push(Span::styled(
-                mcp_label,
-                Style::default().fg(mcp_color).add_modifier(Modifier::BOLD),
+                bar,
+                Style::default().fg(pct_color),
             ));
             spans.push(Span::styled(
-                "  \u{2502}  ",
-                Style::default().fg(style_tokens::GREY),
+                format!(" {context_left:.0}%"),
+                Style::default().fg(pct_color).add_modifier(Modifier::BOLD),
             ));
-        }
 
-        // Spinner when agent is active
-        if let Some(ch) = self.spinner_char {
-            spans.push(Span::styled(
-                format!("{ch} "),
-                Style::default()
-                    .fg(style_tokens::AMBER)
-                    .add_modifier(Modifier::BOLD),
-            ));
-        }
-
-        // Right-aligned: cost + context remaining
-        let context_left = (100.0 - self.context_usage_pct).max(0.0);
-        let pct_str = format!("{context_left:.0}");
-        let pct_color = if context_left > 50.0 {
-            style_tokens::GREEN_LIGHT
-        } else if context_left > 25.0 {
-            style_tokens::GOLD
-        } else {
-            style_tokens::ORANGE
-        };
-
-        let cost_str = if self.session_cost > 0.0 {
-            if self.session_cost < 0.01 {
-                format!("${:.4}", self.session_cost)
-            } else {
-                format!("${:.2}", self.session_cost)
-            }
-        } else {
-            String::new()
-        };
-
-        let left_len: usize = spans.iter().map(|s| s.content.len()).sum();
-        let right_text = if cost_str.is_empty() {
-            format!("Context {pct_str}%")
-        } else {
-            format!("{cost_str}  \u{2502}  Context {pct_str}%")
-        };
-        let right_len = right_text.len();
-
-        let available_width = area.width as usize;
-        let gap = available_width.saturating_sub(left_len + right_len);
-        if gap >= 2 {
-            spans.push(Span::raw(" ".repeat(gap)));
-        } else {
-            spans.push(Span::styled(
-                "  \u{2502}  ",
-                Style::default().fg(style_tokens::GREY),
-            ));
-        }
-
-        if !cost_str.is_empty() {
-            spans.push(Span::styled(
-                cost_str,
-                Style::default()
-                    .fg(style_tokens::AMBER)
-                    .add_modifier(Modifier::BOLD),
-            ));
-            spans.push(Span::styled(
-                "  \u{2502}  ",
-                Style::default().fg(style_tokens::GREY),
-            ));
-        }
-
-        spans.push(Span::styled(
-            format!("Context {pct_str}%"),
-            Style::default().fg(pct_color).add_modifier(Modifier::BOLD),
-        ));
-
-        // Render border line + text
-        let line = Line::from(spans);
-        if area.height >= 2 {
-            let border_line: String = "\u{2500}".repeat(area.width as usize);
-            buf.set_string(
-                area.left(),
-                area.top(),
-                &border_line,
-                Style::default().fg(style_tokens::BORDER),
-            );
-            buf.set_line(area.left(), area.top() + 1, &line, area.width);
-        } else {
-            buf.set_line(area.left(), area.top(), &line, area.width);
+            buf.set_line(area.left(), area.top() + 2, &Line::from(spans), area.width);
         }
     }
 }
 
-impl StatusBarWidget<'_> {}
+/// HSL to RGB conversion (h in degrees, s and l in 0.0-1.0).
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+    let (r, g, b) = if h < 60.0 {
+        (c, x, 0.0)
+    } else if h < 120.0 {
+        (x, c, 0.0)
+    } else if h < 180.0 {
+        (0.0, c, x)
+    } else if h < 240.0 {
+        (0.0, x, c)
+    } else if h < 300.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+    (
+        ((r + m) * 255.0) as u8,
+        ((g + m) * 255.0) as u8,
+        ((b + m) * 255.0) as u8,
+    )
+}
+
+/// Shorten a path to at most `max_len` characters, keeping the last components.
+fn shorten_path(path: &str, max_len: usize) -> String {
+    if path.len() <= max_len {
+        return path.to_string();
+    }
+    // Keep last path components that fit
+    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let mut result = String::new();
+    for part in parts.iter().rev() {
+        let candidate = if result.is_empty() {
+            part.to_string()
+        } else {
+            format!("{}/{}", part, result)
+        };
+        if candidate.len() > max_len {
+            break;
+        }
+        result = candidate;
+    }
+    if result.is_empty() {
+        // Fallback: truncate from the end
+        format!("…{}", &path[path.len().saturating_sub(max_len - 1)..])
+    } else if result.len() < path.len() {
+        format!("…/{}", result)
+    } else {
+        result
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -298,25 +401,21 @@ mod tests {
     }
 
     #[test]
-    fn test_status_bar_render_single_row() {
-        let area = Rect::new(0, 0, 120, 1);
+    fn test_status_bar_render_info_row() {
+        let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(area);
 
         let widget = StatusBarWidget::new("test-model", ".", None);
         widget.render(area, &mut buf);
 
-        let rendered: String = (0..area.width)
-            .map(|x| {
-                buf.cell((x, 0))
-                    .map_or(' ', |c| c.symbol().chars().next().unwrap_or(' '))
-            })
-            .collect();
-        assert!(rendered.contains("test-model"));
+        // Row 1 contains brand + model
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("test-model"));
     }
 
     #[test]
     fn test_status_bar_brand_symbol() {
-        let area = Rect::new(0, 0, 120, 1);
+        let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(area);
 
         let widget = StatusBarWidget::new("test-model", "/home/user", Some("main"))
@@ -330,47 +429,62 @@ mod tests {
     }
 
     #[test]
-    fn test_status_bar_agent_state_streaming() {
+    fn test_activity_indicator_streaming() {
         let area = Rect::new(0, 0, 120, 1);
         let mut buf = Buffer::empty(area);
 
-        let widget = StatusBarWidget::new("model", ".", None)
-            .agent_state(AgentStateDisplay::Streaming);
+        let widget = ActivityIndicatorWidget::new(
+            AgentStateDisplay::Streaming,
+            Some(std::time::Duration::from_secs(5)),
+            100,
+            50,
+        );
         widget.render(area, &mut buf);
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("streaming"), "Should show streaming state");
+        assert!(content.contains("Streaming"), "Should show Streaming label");
+        assert!(content.contains("5s"), "Should show elapsed time");
     }
 
     #[test]
-    fn test_status_bar_agent_state_thinking() {
+    fn test_activity_indicator_thinking() {
         let area = Rect::new(0, 0, 120, 1);
         let mut buf = Buffer::empty(area);
 
-        let widget = StatusBarWidget::new("model", ".", None)
-            .agent_state(AgentStateDisplay::Thinking);
+        let widget = ActivityIndicatorWidget::new(
+            AgentStateDisplay::Thinking,
+            Some(std::time::Duration::from_secs(12)),
+            0,
+            0,
+        );
         widget.render(area, &mut buf);
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("thinking"), "Should show thinking state");
+        assert!(content.contains("Thinking"), "Should show Thinking label");
+        assert!(content.contains("12s"), "Should show elapsed time");
     }
 
     #[test]
-    fn test_status_bar_agent_state_idle() {
+    fn test_activity_indicator_idle_renders_nothing() {
         let area = Rect::new(0, 0, 120, 1);
         let mut buf = Buffer::empty(area);
 
-        let widget = StatusBarWidget::new("model", ".", None)
-            .agent_state(AgentStateDisplay::Idle);
+        let widget = ActivityIndicatorWidget::new(
+            AgentStateDisplay::Idle,
+            None,
+            0,
+            0,
+        );
         widget.render(area, &mut buf);
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("idle"), "Should show idle state");
+        assert!(!content.contains("Streaming"), "Should NOT show Streaming when idle");
+        assert!(!content.contains("Thinking"), "Should NOT show Thinking when idle");
     }
 
     #[test]
     fn test_status_bar_with_cost() {
-        let area = Rect::new(0, 0, 120, 1);
+        let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(area);
 
         let widget = StatusBarWidget::new("model", ".", None)
@@ -383,7 +497,7 @@ mod tests {
 
     #[test]
     fn test_status_bar_with_mcp() {
-        let area = Rect::new(0, 0, 120, 1);
+        let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(area);
 
         let widget = StatusBarWidget::new("model", ".", None)
@@ -393,5 +507,60 @@ mod tests {
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
         assert!(content.contains("MCP"), "Should show MCP status");
         assert!(content.contains("2/3"), "Should show connected/total");
+    }
+
+    #[test]
+    fn test_shorten_path_short() {
+        assert_eq!(shorten_path("/home/user", 30), "/home/user");
+    }
+
+    #[test]
+    fn test_shorten_path_long() {
+        let long = "/Users/someone/sandbox/LLM/speechless/Agents/octo-sandbox";
+        let short = shorten_path(long, 25);
+        assert!(short.len() <= 27); // 25 + "…/" prefix
+        assert!(short.contains("octo-sandbox"), "Should keep last component");
+    }
+
+    #[test]
+    fn test_status_bar_shows_working_dir() {
+        let area = Rect::new(0, 0, 120, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = StatusBarWidget::new("model", "/home/user/project", None);
+        widget.render(area, &mut buf);
+
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("project"), "Should show working directory");
+    }
+
+    #[test]
+    fn test_status_bar_git_symbol() {
+        let area = Rect::new(0, 0, 120, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = StatusBarWidget::new("model", ".", Some("main"))
+            .git_dirty_count(3);
+        widget.render(area, &mut buf);
+
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("\u{23C7}"), "Should use ⏇ (U+23C7) git symbol");
+        assert!(content.contains("main"), "Should show branch name");
+        assert!(content.contains("?3"), "Should show dirty count");
+    }
+
+    #[test]
+    fn test_status_bar_context_progress_bar() {
+        let area = Rect::new(0, 0, 120, 3);
+        let mut buf = Buffer::empty(area);
+
+        let widget = StatusBarWidget::new("model", ".", None)
+            .context_usage_pct(40.0); // 60% remaining → 3 filled
+        widget.render(area, &mut buf);
+
+        let content: String = buf.content().iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("60%"), "Should show context remaining percent");
+        assert!(content.contains("\u{25AE}"), "Should contain filled bar segment ▮");
+        assert!(content.contains("\u{25AF}"), "Should contain empty bar segment ▯");
     }
 }

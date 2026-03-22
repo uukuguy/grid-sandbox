@@ -39,11 +39,11 @@ impl WelcomePanelState {
             return;
         }
 
-        // Gradient rotation
-        self.gradient_offset = (self.gradient_offset + 2) % 360;
+        // Gradient rotation (slower, more elegant sweep)
+        self.gradient_offset = (self.gradient_offset + 3) % 360;
 
-        // Breathing phase: full cycle in ~80 ticks (~4.8s at 60ms)
-        self.breathe_phase += std::f64::consts::TAU / 80.0;
+        // Breathing phase: full cycle in ~67 ticks (~4s at 60ms)
+        self.breathe_phase += std::f64::consts::TAU / 67.0;
         if self.breathe_phase >= std::f64::consts::TAU {
             self.breathe_phase -= std::f64::consts::TAU;
         }
@@ -70,9 +70,9 @@ mod tests {
         let mut state = WelcomePanelState::new();
         assert_eq!(state.gradient_offset, 0);
         state.tick(80, 24);
-        assert_eq!(state.gradient_offset, 2);
+        assert_eq!(state.gradient_offset, 3);
         state.tick(80, 24);
-        assert_eq!(state.gradient_offset, 4);
+        assert_eq!(state.gradient_offset, 6);
     }
 
     #[test]

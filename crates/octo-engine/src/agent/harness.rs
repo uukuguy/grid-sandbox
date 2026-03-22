@@ -621,7 +621,7 @@ async fn run_agent_loop_inner(
                     role: MessageRole::User,
                     content: vec![ContentBlock::Text { text: prompt }],
                 });
-                let _ = tx.send(AgentEvent::IterationEnd { round }).await;
+                let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
                 continue; // Re-enter loop for next LLM call
             }
 
@@ -706,7 +706,7 @@ async fn run_agent_loop_inner(
                 let _ = tx.send(AgentEvent::Typing { state: false }).await;
             }
 
-            let _ = tx.send(AgentEvent::IterationEnd { round }).await;
+            let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
 
             fire_post_task_hooks(&config, &tx, round, turn_start.elapsed().as_millis() as u64)
                 .await;
@@ -1212,7 +1212,7 @@ async fn run_agent_loop_inner(
         });
 
         // --- IterationEnd + LoopTurnEnd hook ---
-        let _ = tx.send(AgentEvent::IterationEnd { round }).await;
+        let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
 
         if let Some(ref hooks) = config.hook_registry {
             let elapsed = turn_start.elapsed().as_millis() as u64;

@@ -9,6 +9,8 @@ pub enum AppEvent {
     // ── Terminal events ──
     /// Key event forwarded to active handler
     Key(KeyEvent),
+    /// Mouse scroll event: (direction_up, row)
+    MouseScroll { up: bool, row: u16 },
     /// Terminal resize
     Resize(u16, u16),
     /// Tick event (for animations/updates)

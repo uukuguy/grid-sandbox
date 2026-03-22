@@ -48,14 +48,14 @@ impl<'a> WelcomePanel<'a> {
         buf.set_string(x, y, text, ratatui::style::Style::default().fg(fg));
     }
 
-    /// Write a centered string with left-to-right amber gradient.
+    /// Write a centered string with animated amber gradient sweep.
     fn write_gradient_line(
         &self,
         buf: &mut Buffer,
         area: Rect,
         y: u16,
         text: &str,
-        base_lightness: f64,
+        line_offset: u16,
     ) {
         if y >= area.y + area.height {
             return;
@@ -63,30 +63,30 @@ impl<'a> WelcomePanel<'a> {
         let text_len = text.chars().count() as u16;
         let start_x = area.x + area.width.saturating_sub(text_len) / 2;
         let fade = self.state.fade_progress as f64;
-        let breathe = 0.85 + 0.15 * self.state.breathe_phase.sin();
-        let total = text.chars().count().max(1) as f64;
 
         for (i, ch) in text.chars().enumerate() {
             if ch == ' ' {
                 continue;
             }
-            // Left-to-right gradient: hue sweeps 30→60 across text width
-            let t = i as f64 / total;
-            let hue = 30.0 + t * 30.0;
-            let lit = base_lightness * breathe * fade;
-            let color = hsl_to_rgb(hue, 0.80 * fade, lit);
+            // Sweep-based gradient: each character gets a different hue that rotates over time
+            let sweep =
+                (i as u16 * 4 + line_offset * 12 + self.state.gradient_offset) % 360;
+            let hue = 25.0 + (sweep as f64 / 360.0) * 30.0;
+            let sat = 0.80 * fade;
+            let lit = 0.55 * fade + 0.1 * (1.0 - fade);
+            let color = hsl_to_rgb(hue, sat, lit);
             Self::put(buf, area, start_x + i as u16, y, ch, color);
         }
     }
 
-    // 5-row ASCII art: "OCTO" using half-block characters for smooth rounded look (width 30)
-    // O: closed box, C: open right, T: wide crossbar + stem, O: closed box
+    // 5-row ASCII art: "OCTO" using half-block top/bottom edges (width 30)
+    // Each letter 6 chars wide, 2-char gaps. O=rounded, C=open right, T=crossbar+stem, O=rounded
     const LOGO_LINES: [&'static str; 5] = [
-        " \u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584}  ",
+        " \u{2584}\u{2584}\u{2584}\u{2584}    \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}   \u{2584}\u{2584}\u{2584}\u{2584} ",
         "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
         "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
         "\u{2588}\u{2588}  \u{2588}\u{2588}  \u{2588}\u{2588}        \u{2588}\u{2588}    \u{2588}\u{2588}  \u{2588}\u{2588}",
-        " \u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}\u{2580}   \u{2580}\u{2580}\u{2580}\u{2580}  ",
+        " \u{2580}\u{2580}\u{2580}\u{2580}    \u{2580}\u{2580}\u{2580}\u{2580}\u{2580}    \u{2580}\u{2580}     \u{2580}\u{2580}\u{2580}\u{2580} ",
     ];
     const LOGO_WIDTH: usize = 30;
     const LOGO_HEIGHT: usize = 5;
@@ -166,17 +166,16 @@ impl<'a> WelcomePanel<'a> {
         }
     }
 
-    /// Draw double-line border with animated amber gradient.
+    /// Draw double-line border with animated amber gradient sweep.
     fn draw_border(&self, buf: &mut Buffer, area: Rect, bx: u16, by: u16, bw: u16, bh: u16) {
         let offset = self.state.gradient_offset;
         let fade = self.state.fade_progress as f64;
-        let breathe = 0.85 + 0.15 * self.state.breathe_phase.sin();
         let perimeter = 2 * (bw + bh);
 
         let border_color = |idx: u16| -> Color {
             let t = ((idx as f64 / perimeter as f64) + offset as f64 / 360.0) % 1.0;
-            let hue = 30.0 + t * 30.0;
-            hsl_to_rgb(hue, 0.60 * fade, 0.28 * breathe * fade)
+            let hue = 25.0 + t * 30.0;
+            hsl_to_rgb(hue, 0.5 * fade, 0.30 * fade + 0.06 * (1.0 - fade))
         };
 
         // Top: ╔═══╗
@@ -212,7 +211,7 @@ impl Widget for WelcomePanel<'_> {
 
         // Layout constants
         let subtitle = "Autonomous AI Workbench";
-        let help = "Enter: send  |  Shift+Enter: newline  |  /help: commands";
+        let help = "Enter: send  |  Ctrl+C: quit  |  /help: commands";
 
         if area.height < 5 {
             // ── Tier 1: tiny terminal — emoji brand ──
@@ -226,7 +225,7 @@ impl Widget for WelcomePanel<'_> {
             let by = area.y + (area.height.saturating_sub(box_h)) / 2;
 
             self.draw_border(buf, area, bx, by, box_w, box_h);
-            self.write_gradient_line(buf, area, by + 1, "O C T O", 0.55);
+            self.write_gradient_line(buf, area, by + 1, "O C T O", 0);
             Self::center_text(buf, area, by + 3, subtitle, dim);
         } else {
             // ── Tier 3: full — grid background with OCTO logo + info box ──
@@ -246,7 +245,7 @@ impl Widget for WelcomePanel<'_> {
 
             // Subtitle on its own line with spacing
             let subtitle_y = start_y + grid_h as u16 + 1;
-            self.write_gradient_line(buf, area, subtitle_y, subtitle, 0.40);
+            self.write_gradient_line(buf, area, subtitle_y, subtitle, 1);
 
             // Info box below with help text (1 blank line gap)
             let by = subtitle_y + 2;
@@ -259,7 +258,7 @@ impl Widget for WelcomePanel<'_> {
                 help.to_string()
             };
             let info_y = by + 1;
-            self.write_gradient_line(buf, area, info_y, &display_text, 0.35);
+            self.write_gradient_line(buf, area, info_y, &display_text, 2);
         }
     }
 }

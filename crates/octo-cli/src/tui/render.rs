@@ -13,27 +13,23 @@ pub fn render(state: &TuiState, frame: &mut Frame) {
     let area = frame.area();
 
     // Dynamic panel heights
-    let todo_height = if state.todo_visible && !state.plan_steps.is_empty() {
-        (state.plan_steps.len() as u16 + 2).min(10) // header + steps + progress bar
-    } else {
-        0
-    };
     let input_lines = state.input_buffer.split('\n').count().max(1).min(8) as u16;
-    let status_height = 2u16;
+    let activity_height: u16 = if state.is_streaming || state.is_thinking { 1 } else { 0 };
+    let status_height = 3u16; // always: border + row1 (brand/dir/git) + row2 (tokens/mcp/cost/context)
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(5),              // conversation area
-            Constraint::Length(todo_height),  // todo panel (hidden when empty/invisible)
-            Constraint::Length(input_lines + 1), // input area (top separator + text)
-            Constraint::Length(status_height),   // status bar
+            Constraint::Min(5),                    // conversation area
+            Constraint::Length(activity_height),    // activity indicator (0 or 1)
+            Constraint::Length(input_lines + 1),    // input area (top separator + text)
+            Constraint::Length(status_height),      // status bar (border + info)
         ])
         .split(area);
 
     render_conversation(state, frame, chunks[0]);
-    if todo_height > 0 {
-        render_todo_panel(state, frame, chunks[1]);
+    if activity_height > 0 {
+        render_activity_indicator(state, frame, chunks[1]);
     }
     render_input(state, frame, chunks[2]);
     render_status_bar(state, frame, chunks[3]);
@@ -111,25 +107,33 @@ fn render_conversation(state: &TuiState, frame: &mut Frame, area: Rect) {
     frame.render_widget(conversation, area);
 }
 
-/// Render the todo panel showing plan steps from dual-mode agent.
-fn render_todo_panel(state: &TuiState, frame: &mut Frame, area: Rect) {
-    let widget = super::widgets::todo_panel::TodoPanelWidget::new(&state.plan_steps);
+/// Render the activity indicator row (between conversation and input).
+fn render_activity_indicator(state: &TuiState, frame: &mut Frame, area: Rect) {
+    use super::widgets::status_bar::AgentStateDisplay;
+
+    let agent_display = if state.is_thinking {
+        AgentStateDisplay::Thinking
+    } else {
+        AgentStateDisplay::Streaming
+    };
+    let task_elapsed = state.task_start_time.map(|t| t.elapsed());
+
+    let widget = super::widgets::status_bar::ActivityIndicatorWidget::new(
+        agent_display,
+        task_elapsed,
+        state.task_input_tokens,
+        state.task_output_tokens,
+    );
     frame.render_widget(widget, area);
 }
 
 /// Render the input area using the ported OpenDev InputWidget.
 fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
-    let mode = if state.is_streaming {
-        "Streaming"
-    } else if state.is_thinking {
-        "Thinking"
-    } else {
-        "NORMAL"
-    };
+    // Input mode is always "NORMAL" — activity indicator is shown separately above
     let input_widget = super::widgets::input::InputWidget::new(
         &state.input_buffer,
         state.input_cursor,
-        mode,
+        "NORMAL",
         0, // pending_count — future: message queue
     );
     let result = input_widget.render_with_cursor(area, frame.buffer_mut());
@@ -140,17 +144,8 @@ fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
     }
 }
 
-/// Render the status bar using the StatusBarWidget.
+/// Render the status bar using the StatusBarWidget (always 2 rows: border + info).
 fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
-    use super::app_state::AgentState;
-    use super::widgets::status_bar::AgentStateDisplay;
-
-    let agent_display = match state.agent_state() {
-        AgentState::Streaming => AgentStateDisplay::Streaming,
-        AgentState::Thinking => AgentStateDisplay::Thinking,
-        AgentState::Idle => AgentStateDisplay::Idle,
-    };
-
     let widget = super::widgets::status_bar::StatusBarWidget::new(
         &state.model_name,
         &state.working_dir,
@@ -160,8 +155,7 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
     .context_usage_pct(state.context_usage_pct)
     .session_cost(state.session_cost)
     .mcp_status(state.mcp_status, false)
-    .tokens(state.total_input_tokens, state.total_output_tokens)
-    .agent_state(agent_display);
+    .tokens(state.total_input_tokens, state.total_output_tokens);
 
     frame.render_widget(widget, area);
 }

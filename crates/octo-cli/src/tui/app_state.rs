@@ -176,11 +176,17 @@ pub struct TuiState {
     /// Number of dirty (modified/untracked) files in git.
     pub git_dirty_count: usize,
 
-    // ── Todo Panel ──
-    /// Plan steps from dual-mode agent.
+    // ── Plan steps (rendered inline in conversation) ──
+    /// Plan steps from dual-mode agent (rendered as inline messages).
     pub plan_steps: Vec<octo_engine::agent::dual::PlanStep>,
-    /// Whether the todo panel is visible.
-    pub todo_visible: bool,
+
+    // ── Task timing ──
+    /// When the current task (user message → completion) started.
+    pub task_start_time: Option<Instant>,
+    /// Input tokens for the current task only.
+    pub task_input_tokens: u64,
+    /// Output tokens for the current task only.
+    pub task_output_tokens: u64,
 
     // ── Autocomplete ──
     /// Autocomplete engine for slash commands and file mentions.
@@ -291,7 +297,9 @@ impl TuiState {
                 })
                 .unwrap_or(0),
             plan_steps: Vec::new(),
-            todo_visible: false,
+            task_start_time: None,
+            task_input_tokens: 0,
+            task_output_tokens: 0,
             autocomplete: super::autocomplete::AutocompleteEngine::new(
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
             ),
@@ -439,6 +447,32 @@ impl TuiState {
             )));
             let md_lines = MarkdownRenderer::render(&self.streaming_text);
             lines.extend(md_lines);
+        }
+
+        // Plan steps — rendered inline after messages
+        if !self.plan_steps.is_empty() {
+            let completed = self.plan_steps.iter().filter(|s| s.completed).count();
+            let total = self.plan_steps.len();
+            lines.push(Line::from(ratatui::text::Span::styled(
+                format!("─── Plan ({}/{}) ───", completed, total),
+                ratatui::style::Style::default()
+                    .fg(ratatui::style::Color::Rgb(245, 158, 11)) // amber
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            )));
+            for (i, step) in self.plan_steps.iter().enumerate() {
+                let (icon, color) = if step.completed {
+                    ("\u{2705}", ratatui::style::Color::DarkGray) // ✅
+                } else if i == completed {
+                    ("\u{23F3}", ratatui::style::Color::White) // ⏳ current
+                } else {
+                    ("\u{25CB}", ratatui::style::Color::DarkGray) // ○ pending
+                };
+                lines.push(Line::from(ratatui::text::Span::styled(
+                    format!(" {} {}. {}", icon, step.number, step.description),
+                    ratatui::style::Style::default().fg(color),
+                )));
+            }
+            lines.push(Line::from("")); // spacing
         }
 
         // Thinking text — always re-render (not cached)
@@ -788,7 +822,8 @@ mod tests {
         assert_eq!(state.session_cost, 0.0);
         assert!(state.mcp_status.is_none());
         assert!(state.plan_steps.is_empty());
-        assert!(!state.todo_visible);
+        assert!(state.task_start_time.is_none());
+        assert_eq!(state.task_input_tokens, 0);
     }
 
     #[test]

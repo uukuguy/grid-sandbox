@@ -19,6 +19,7 @@ use std::io;
 
 use anyhow::Result;
 use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -33,6 +34,18 @@ use crate::commands::AppState;
 /// broadcasts, and runs the EventHandler-based event loop.
 pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     use octo_types::{SandboxId, UserId};
+
+    // Setup terminal FIRST so user sees the TUI immediately
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Get model name from provider config
+    let model_name = std::env::var("LLM_MODEL")
+        .or_else(|_| std::env::var("OPENAI_MODEL_NAME"))
+        .unwrap_or_else(|_| "agent".to_string());
 
     let user_id = UserId::from_string("cli-user");
     let session_store = state.agent_runtime.session_store();
@@ -51,18 +64,6 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
         .agent_runtime
         .start_primary(session_id.clone(), user_id, sandbox_id, vec![], None)
         .await;
-
-    // Get model name from provider config
-    let model_name = std::env::var("LLM_MODEL")
-        .or_else(|_| std::env::var("OPENAI_MODEL_NAME"))
-        .unwrap_or_else(|_| "agent".to_string());
-
-    // Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
 
     // Initialize state
     let mut tui_state = app_state::TuiState::new(session_id, handle.clone(), model_name);
@@ -88,7 +89,7 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
 
     // Restore terminal (always, even on error)
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
     result
@@ -119,6 +120,18 @@ async fn run_conversation_loop(
                 event::AppEvent::Key(key) => {
                     key_handler::handle_key(state, key).await;
                 }
+                event::AppEvent::MouseScroll { up, .. } => {
+                    // Mouse scroll always controls conversation area
+                    if up {
+                        state.scroll_offset = state.scroll_offset.saturating_add(3);
+                        state.user_scrolled = true;
+                    } else {
+                        state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                        if state.scroll_offset == 0 {
+                            state.user_scrolled = false;
+                        }
+                    }
+                }
                 event::AppEvent::Resize(w, h) => {
                     state.terminal_width = w;
                     state.terminal_height = h;
@@ -148,6 +161,17 @@ async fn run_conversation_loop(
             match event {
                 event::AppEvent::Key(key) => {
                     key_handler::handle_key(state, key).await;
+                }
+                event::AppEvent::MouseScroll { up, .. } => {
+                    if up {
+                        state.scroll_offset = state.scroll_offset.saturating_add(3);
+                        state.user_scrolled = true;
+                    } else {
+                        state.scroll_offset = state.scroll_offset.saturating_sub(3);
+                        if state.scroll_offset == 0 {
+                            state.user_scrolled = false;
+                        }
+                    }
                 }
                 event::AppEvent::Resize(w, h) => {
                     state.terminal_width = w;
@@ -255,23 +279,34 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
         AgentEvent::Completed(result) => {
             state.total_input_tokens += result.input_tokens;
             state.total_output_tokens += result.output_tokens;
+            state.task_input_tokens += result.input_tokens;
+            state.task_output_tokens += result.output_tokens;
             state.is_streaming = false;
+            state.is_thinking = false;
+            state.thinking_text.clear();
             state.active_tools.clear();
-            // If there's leftover streaming text, finalize it
-            if !state.streaming_text.is_empty() {
+
+            // Replace messages with final_messages from agent loop if available.
+            // These include full tool call/result content blocks (collapsed in UI).
+            if !result.final_messages.is_empty() {
+                state.messages = result.final_messages;
+                state.streaming_text.clear();
+            } else if !state.streaming_text.is_empty() {
                 let final_text = std::mem::take(&mut state.streaming_text);
-                state
-                    .messages
-                    .push(ChatMessage::assistant(&final_text));
+                state.messages.push(ChatMessage::assistant(&final_text));
             }
             state.invalidate_cache();
         }
         AgentEvent::Done => {
             state.is_streaming = false;
+            state.is_thinking = false;
+            state.thinking_text.clear();
             state.invalidate_cache();
         }
         AgentEvent::Error { message: _ } => {
             state.is_streaming = false;
+            state.is_thinking = false;
+            state.thinking_text.clear();
             state.active_tools.clear();
             if !state.streaming_text.is_empty() {
                 state.streaming_text.clear();
@@ -283,16 +318,16 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
         }
         AgentEvent::EmergencyStopped(_reason) => {
             state.is_streaming = false;
+            state.is_thinking = false;
+            state.thinking_text.clear();
             state.active_tools.clear();
             state.streaming_text.clear();
             state.invalidate_cache();
         }
         AgentEvent::PlanUpdate { steps } => {
             state.plan_steps = steps;
-            if !state.plan_steps.is_empty() && !state.todo_visible {
-                state.todo_visible = true; // auto-show on first plan
-            }
-            state.dirty = true;
+            // Plan steps are rendered inline in conversation area
+            state.invalidate_cache();
         }
         AgentEvent::TokenBudgetUpdate { budget } => {
             state.context_usage_pct = budget.usage_percent as f64;
@@ -302,8 +337,14 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
             state.context_usage_pct = usage_pct as f64;
             state.dirty = true;
         }
+        AgentEvent::IterationEnd { input_tokens, output_tokens, .. } => {
+            // Update task-level tokens from cumulative iteration data
+            state.task_input_tokens = input_tokens;
+            state.task_output_tokens = output_tokens;
+            state.dirty = true;
+        }
         _ => {
-            // IterationStart/End, MemoryFlushed, ToolExecution, Typing
+            // IterationStart, MemoryFlushed, ToolExecution, Typing
             state.dirty = true;
         }
     }

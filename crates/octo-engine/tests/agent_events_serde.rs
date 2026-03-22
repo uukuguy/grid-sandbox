@@ -41,7 +41,7 @@ fn test_all_agent_event_variants_serialize() {
             reason: "blocked".into(),
         },
         AgentEvent::IterationStart { round: 0 },
-        AgentEvent::IterationEnd { round: 0 },
+        AgentEvent::IterationEnd { round: 0, input_tokens: 0, output_tokens: 0 },
         AgentEvent::Completed(AgentLoopResult {
             rounds: 3,
             tool_calls: 5,

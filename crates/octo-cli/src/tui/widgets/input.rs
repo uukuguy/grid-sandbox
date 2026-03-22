@@ -11,6 +11,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
+use unicode_width::UnicodeWidthChar;
 
 use crate::tui::formatters::style_tokens;
 
@@ -48,12 +49,15 @@ impl<'a> InputWidget<'a> {
     }
 
     /// Compute absolute cursor position for IME placement.
+    ///
+    /// Uses display width (not byte length) for correct positioning with CJK text.
     fn compute_cursor_position(&self, area: Rect) -> Option<(u16, u16)> {
         if area.height < 2 {
             return None;
         }
         let text_y = area.y + 1; // below separator
-        let prefix_width = 2u16; // "❯ " or "  "
+        // "❯ " prefix: ❯ is 1 display column in most terminals + 1 space = 2
+        let prefix_width = 2u16;
 
         if self.buffer.is_empty() {
             return Some((area.x + prefix_width, text_y));
@@ -61,33 +65,40 @@ impl<'a> InputWidget<'a> {
 
         let input_lines: Vec<&str> = self.buffer.split('\n').collect();
         let mut cursor_line = 0usize;
-        let mut cursor_col = 0usize;
+        let mut cursor_byte_col = 0usize;
         let mut pos = 0usize;
         for (i, line) in input_lines.iter().enumerate() {
             if self.cursor <= pos + line.len() {
                 cursor_line = i;
-                cursor_col = self.cursor - pos;
+                cursor_byte_col = self.cursor - pos;
                 break;
             }
             pos += line.len() + 1;
             if i == input_lines.len() - 1 {
                 cursor_line = i;
-                cursor_col = line.len();
+                cursor_byte_col = line.len();
             }
         }
 
-        let x = area.x + prefix_width + cursor_col as u16;
+        // Convert byte offset within line to display width
+        let line_text = input_lines[cursor_line];
+        let display_col: usize = line_text[..cursor_byte_col]
+            .chars()
+            .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+            .sum();
+
+        let x = area.x + prefix_width + display_col as u16;
         let y = text_y + cursor_line as u16;
         Some((x, y))
     }
 
-    /// Get the accent color and mode label based on current mode.
+    /// Get the accent color and optional mode label based on current mode.
     fn mode_style(&self) -> (ratatui::style::Color, &'static str) {
         match self.mode {
             "Streaming" => (style_tokens::GREEN_LIGHT, "\u{25B8} Streaming"),
             "Thinking" => (style_tokens::MAGENTA, "\u{25E6} Thinking"),
             "PLAN" => (style_tokens::GREEN_LIGHT, "Plan"),
-            _ => (style_tokens::ACCENT, "Normal"),
+            _ => (style_tokens::ACCENT, ""),  // no label when idle
         }
     }
 
@@ -106,34 +117,29 @@ impl Widget for InputWidget<'_> {
         let (accent, mode_label) = self.mode_style();
         let dimmed = self.is_dimmed();
 
-        // Row 0: separator line with mode-colored indicator
-        let mode_text = format!(" {} ", mode_label);
-        let hint_text = "(Shift+Enter: newline) ";
-        let prefix_dashes = 2;
+        // Row 0: separator line with optional mode-colored indicator
+        let sep_style = Style::default().fg(accent);
+        let mut spans: Vec<Span> = Vec::new();
+        let mut used = 0usize;
 
-        let queue_text = if self.pending_count > 0 {
-            format!(
+        if mode_label.is_empty() {
+            // No mode label — plain separator line
+        } else {
+            let mode_text = format!("\u{2500}\u{2500} {} ", mode_label);
+            used += mode_text.len();
+            spans.push(Span::styled(
+                mode_text,
+                Style::default().fg(accent).add_modifier(Modifier::BOLD),
+            ));
+        }
+
+        if self.pending_count > 0 {
+            let queue_text = format!(
                 "\u{2500}\u{2500} {} message{} queued (ESC) ",
                 self.pending_count,
                 if self.pending_count == 1 { "" } else { "s" }
-            )
-        } else {
-            String::new()
-        };
-
-        let used = prefix_dashes + mode_text.len() + hint_text.len() + queue_text.len();
-        let remaining_dashes = (area.width as usize).saturating_sub(used);
-
-        let sep_style = Style::default().fg(accent);
-        let mut spans = vec![
-            Span::styled("\u{2500}\u{2500} ", sep_style),
-            Span::styled(
-                mode_text,
-                Style::default().fg(accent).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(hint_text, Style::default().fg(style_tokens::GREY)),
-        ];
-        if !queue_text.is_empty() {
+            );
+            used += queue_text.len();
             spans.push(Span::styled(
                 queue_text,
                 Style::default()
@@ -141,6 +147,8 @@ impl Widget for InputWidget<'_> {
                     .add_modifier(Modifier::BOLD),
             ));
         }
+
+        let remaining_dashes = (area.width as usize).saturating_sub(used);
         spans.push(Span::styled("\u{2500}".repeat(remaining_dashes), sep_style));
         let sep_line = Line::from(spans);
         buf.set_line(area.left(), area.top(), &sep_line, area.width);

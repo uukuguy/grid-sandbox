@@ -38,6 +38,18 @@ impl EventHandler {
                     CEvent::Key(key) if key.kind == KeyEventKind::Press => {
                         Some(AppEvent::Key(key))
                     }
+                    CEvent::Mouse(mouse) => {
+                        use crossterm::event::MouseEventKind;
+                        match mouse.kind {
+                            MouseEventKind::ScrollUp => {
+                                Some(AppEvent::MouseScroll { up: true, row: mouse.row })
+                            }
+                            MouseEventKind::ScrollDown => {
+                                Some(AppEvent::MouseScroll { up: false, row: mouse.row })
+                            }
+                            _ => None,
+                        }
+                    }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
                     _ => None,
                 };
@@ -85,6 +97,18 @@ impl EventHandler {
                 let app_event = match event {
                     CEvent::Key(key) if key.kind == KeyEventKind::Press => {
                         Some(AppEvent::Key(key))
+                    }
+                    CEvent::Mouse(mouse) => {
+                        use crossterm::event::MouseEventKind;
+                        match mouse.kind {
+                            MouseEventKind::ScrollUp => {
+                                Some(AppEvent::MouseScroll { up: true, row: mouse.row })
+                            }
+                            MouseEventKind::ScrollDown => {
+                                Some(AppEvent::MouseScroll { up: false, row: mouse.row })
+                            }
+                            _ => None,
+                        }
                     }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
                     _ => None,

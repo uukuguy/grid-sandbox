@@ -425,7 +425,7 @@ async fn test_harness_event_ordering() {
             AgentEvent::IterationStart { round } => {
                 open_rounds.push(*round);
             }
-            AgentEvent::IterationEnd { round } => {
+            AgentEvent::IterationEnd { round, .. } => {
                 assert!(
                     open_rounds.last() == Some(round),
                     "IterationEnd({round}) without matching IterationStart"

@@ -27,7 +27,36 @@ impl<'a> TodoPanelWidget<'a> {
 
 impl Widget for TodoPanelWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if area.height == 0 || self.steps.is_empty() {
+        if area.height == 0 {
+            return;
+        }
+
+        // Empty state: show header + placeholder
+        if self.steps.is_empty() {
+            let header = Line::from(vec![
+                Span::styled(
+                    "\u{2500}\u{2500} Plan ",
+                    Style::default()
+                        .fg(style_tokens::AMBER)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "\u{2500}".repeat((area.width as usize).saturating_sub(15)),
+                    Style::default().fg(style_tokens::BORDER),
+                ),
+                Span::styled(
+                    " Ctrl+P \u{2500}",
+                    Style::default().fg(style_tokens::DIM_GREY),
+                ),
+            ]);
+            buf.set_line(area.left(), area.top(), &header, area.width);
+            if area.height > 1 {
+                let empty_msg = Line::from(Span::styled(
+                    "  No plan steps yet. Agent will populate when planning.",
+                    Style::default().fg(style_tokens::DIM_GREY),
+                ));
+                buf.set_line(area.left(), area.top() + 1, &empty_msg, area.width);
+            }
             return;
         }
 
@@ -166,9 +195,10 @@ mod tests {
         let mut buf = Buffer::empty(area);
         widget.render(area, &mut buf);
 
-        // Should render nothing
+        // Should show header + empty placeholder
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(!content.contains("Plan"));
+        assert!(content.contains("Plan"), "Should show Plan header even when empty");
+        assert!(content.contains("No plan steps"), "Should show empty placeholder");
     }
 
     #[test]

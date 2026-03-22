@@ -99,8 +99,11 @@ fn execute_slash_command(state: &mut TuiState, input: &str) {
             };
         }
         "/todo" => {
-            state.todo_visible = !state.todo_visible;
-            state.dirty = true;
+            // Plan steps are now shown inline in conversation — no separate panel
+            let msg = "Plan steps are shown inline in the conversation area.";
+            state.messages.push(ChatMessage::assistant(msg));
+            state.invalidate_cache();
+            state.auto_scroll();
         }
         _ => {
             // Unknown slash command — show error message locally
@@ -222,10 +225,8 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     }
                     state.input_cursor = new_pos + new_col;
                 }
-            } else {
-                state.todo_visible = !state.todo_visible;
-                state.dirty = true;
             }
+            // When input is single-line, Ctrl+P is a no-op (todo panel removed)
         }
 
         // ── Ctrl+O: toggle most recent completed tool result collapse ──
@@ -284,6 +285,11 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     state.messages.push(ChatMessage::user(&text));
                     state.invalidate_cache();
                     state.auto_scroll();
+
+                    // Start task timing
+                    state.task_start_time = Some(std::time::Instant::now());
+                    state.task_input_tokens = 0;
+                    state.task_output_tokens = 0;
 
                     // Send to agent
                     let _ = state
@@ -929,13 +935,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ctrl_p_toggles_todo_panel() {
+    async fn test_ctrl_p_noop_when_single_line() {
         let mut state = make_test_state();
-        assert!(!state.todo_visible);
+        // Ctrl+P with empty input is a no-op (todo panel removed)
         handle_key(&mut state, make_ctrl_key('p')).await;
-        assert!(state.todo_visible);
-        handle_key(&mut state, make_ctrl_key('p')).await;
-        assert!(!state.todo_visible);
+        // No crash, no state change
+        assert!(state.messages.is_empty());
     }
 
     #[test]
@@ -1010,13 +1015,11 @@ mod tests {
     }
 
     #[test]
-    fn test_slash_command_todo_toggle() {
+    fn test_slash_command_todo_shows_message() {
         let mut state = make_test_state();
-        assert!(!state.todo_visible);
         execute_slash_command(&mut state, "/todo");
-        assert!(state.todo_visible);
-        execute_slash_command(&mut state, "/todo");
-        assert!(!state.todo_visible);
+        // /todo now shows an informational message instead of toggling a panel
+        assert_eq!(state.messages.len(), 1);
     }
 
     #[test]

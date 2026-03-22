@@ -438,7 +438,7 @@ fn render_table(table_lines: &[&str], palette: &MdPalette, out: &mut Vec<Line<'s
     ));
     out.push(Line::from(sep_spans));
 
-    // Render data rows
+    // Render data rows with inline markdown (bold, code, links)
     for row in &data_rows {
         let mut spans: Vec<Span<'static>> = Vec::new();
         spans.push(Span::styled(
@@ -448,12 +448,19 @@ fn render_table(table_lines: &[&str], palette: &MdPalette, out: &mut Vec<Line<'s
         for j in 0..num_cols {
             let cell = row.get(j).map(|s| s.as_str()).unwrap_or("");
             let width = col_widths.get(j).copied().unwrap_or(0);
-            let padded: Cow<'static, str> = Cow::Owned(pad_cell(cell, width));
             spans.push(Span::styled(
                 Cow::<'static, str>::Borrowed(" "),
                 border_style,
             ));
-            spans.push(Span::styled(padded, cell_style));
+            // Render inline markdown within cell (bold, code, links)
+            let cell_spans = parse_inline_spans_with_palette(cell, palette);
+            let cell_display_width: usize = cell_spans.iter().map(|s| display_width(&s.content)).sum();
+            spans.extend(cell_spans);
+            // Pad remaining width
+            if cell_display_width < width {
+                let pad: Cow<'static, str> = Cow::Owned(" ".repeat(width - cell_display_width));
+                spans.push(Span::styled(pad, cell_style));
+            }
             spans.push(Span::styled(
                 Cow::<'static, str>::Borrowed(" │"),
                 border_style,

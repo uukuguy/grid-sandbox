@@ -62,6 +62,10 @@ pub enum AgentEvent {
     },
     IterationEnd {
         round: u32,
+        /// Cumulative input tokens so far in this agent loop.
+        input_tokens: u64,
+        /// Cumulative output tokens so far in this agent loop.
+        output_tokens: u64,
     },
     /// Tool execution progress update (for long-running tools).
     ToolProgress {

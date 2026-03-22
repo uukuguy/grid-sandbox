@@ -94,7 +94,7 @@ async fn render_text_stream(
                 AgentEvent::IterationStart { round } => {
                     tracing::debug!("iteration start: round {}", round);
                 }
-                AgentEvent::IterationEnd { round } => {
+                AgentEvent::IterationEnd { round, .. } => {
                     tracing::debug!("iteration end: round {}", round);
                 }
                 // Silently ignore remaining events

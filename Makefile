@@ -137,9 +137,13 @@ cli-ask:
 	@if [ -z "$(QUERY)" ]; then echo "Usage: make cli-ask QUERY=\"your question\""; exit 1; fi
 	@cargo run --quiet -p octo-cli --bin octo -- ask "$(QUERY)" $(CLI_ARGS)
 
-# TUI 全屏模式
+# TUI 全屏模式 (uses pre-built binary if available, otherwise builds first)
 cli-tui:
-	@cargo run --quiet -p octo-cli --bin octo -- tui $(CLI_ARGS)
+	@if [ -f target/debug/octo ]; then \
+		target/debug/octo tui $(CLI_ARGS); \
+	else \
+		cargo run --quiet -p octo-cli --bin octo -- tui $(CLI_ARGS); \
+	fi
 
 # Agent 管理
 cli-agent:
