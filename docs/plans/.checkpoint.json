@@ -2,7 +2,7 @@
   "plan_file": "docs/plans/2026-03-22-phase-u-tui-production-hardening.md",
   "phase": "complete",
   "created_at": "2026-03-22T10:32:00+08:00",
-  "updated_at": "2026-03-22T12:45:00+08:00",
+  "updated_at": "2026-03-22T19:41:00+08:00",
   "completed_tasks": ["U1-1", "U1-2", "U1-3", "U2-1", "U2-2", "U2-3", "U3-1", "U3-2", "U3-3", "U4-1"],
   "current_task": null,
   "total_tasks": 10,
@@ -37,15 +37,33 @@
   "execution_mode": "subagent-driven-development",
   "design_file": null,
   "roadmap_file": null,
-  "branch": "feat/tui-opendev-integration",
+  "branch": "main",
   "baseline": {
     "tests": 2259,
     "commit": "74f4781"
   },
   "final": {
     "tests": 2329,
-    "octo_cli_tests": 438,
-    "commit": "9b68547"
+    "octo_cli_tests": 456,
+    "commit": "77c2297"
+  },
+  "post_phase_polish": {
+    "commits": [
+      "6e21f58 feat(tui): real-time tool folding, status bar brand/elapsed, ESC cancel preserves messages",
+      "f87b5d5 fix(tui): refresh git branch and dirty count every ~5 seconds",
+      "77c2297 feat(tui): auto-scroll to tool call when expanding, scroll to bottom when closing"
+    ],
+    "features": [
+      "Real-time tool result folding (ToolStart/ToolResult inline messages)",
+      "Status bar: brand, session elapsed, git status-based coloring",
+      "ESC cancel preserves partial streaming text as message",
+      "Periodic git refresh (~5s via tick counter)",
+      "Auto-scroll to tool call on Ctrl+O expand, scroll to bottom on close",
+      "System messages hidden from conversation area",
+      "Activity indicator row (thinking/streaming status + task tokens)",
+      "Welcome panel gradient animation"
+    ],
+    "octo_cli_tests": 456
   },
   "key_decisions": [
     "ApprovalGate: Arc<Mutex<HashMap>> oneshot 通道，TUI 调用 gate.respond()",
@@ -54,12 +72,14 @@
     "Scroll: 3 级加速 (3/6/12 lines)，200ms 方向窗口",
     "Tool Collapse: CC 风格，默认折叠，Ctrl+O 最近 / Alt+O 全局",
     "Event Batch: while try_next() drain loop before render (Phase T 已实现)",
-    "Todo Panel: 替代 Active Tools，需 engine AgentEvent::PlanUpdate",
-    "StatusBar: Unicode 符号 (✳ ▸ ◦ ↕ ⊞)，分层亮度，amber 品牌色",
-    "InputWidget: 去底框，mode-colored separator，dimmed text，no placeholder",
-    "Welcome: ASCII Art OCTO (Tier 3) + 🦑 fallback (Tier 1)，amber 呼吸动画"
+    "Real-time tool folding: ToolStart flushes streaming text, ToolResult inserts inline messages",
+    "ESC cancel: cancelled flag prevents Completed from overwriting preserved messages",
+    "Git refresh: tick counter 83 ≈ 5s, refresh_git_info() runs git rev-parse + git status --porcelain",
+    "Scroll-to-tool: count messages after expanded tool × 2 lines estimate",
+    "StatusBar: brand + model + tokens + elapsed + context% (row 1), dir + git (row 2)",
+    "Activity indicator: separate 1-row widget between conversation and input"
   ],
-  "notes": "Phase U COMPLETE — 10/10 tasks. G4 Welcome Panel ASCII Art (9b68547). 2329 workspace tests, 438 octo-cli tests. Baseline 2259 → Final 2329 (+70).",
+  "notes": "Phase U COMPLETE + post-phase polish. 10/10 tasks + 3 polish commits. Merged feat/tui-opendev-integration → main. 2329 workspace tests, 456 octo-cli tests. Latest commit 77c2297.",
   "deferred": [
     {
       "id": "U-D1",

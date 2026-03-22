@@ -1,5 +1,115 @@
 # octo-sandbox 工作日志
 
+## Phase U — TUI Production Hardening + Post-Polish (2026-03-22)
+
+### 完成内容
+
+Phase T 完成后，对 TUI 进行生产级强化（10 个任务）和额外打磨（3 个提交）。
+
+**G1 基础设施 (3/3)**
+- ApprovalGate Y/N/A 按键接线（Arc<Mutex<HashMap>> + oneshot 通道）
+- Event Batch Drain（while try_next() 循环）
+- Scroll 3 级加速（3/6/12 行，200ms 方向窗口）
+
+**G2 渲染优化 (3/3)**
+- Per-message 缓存（content hash 失效）
+- ToolFormatterRegistry（顺序匹配 + GenericFormatter 兜底）
+- Tool Collapse（CC 风格，默认折叠，Ctrl+O 最近 / Alt+O 全局）
+
+**G3 增强 Widgets (3/3)**
+- StatusBar 重设计（品牌 + 模型 + tokens + elapsed + context%，dir + git）
+- Todo Panel → PlanUpdate 事件替代 Active Tools
+- InputWidget（去底框，mode-colored separator，dimmed text）
+
+**G4 品牌完善 (1/1)**
+- Welcome Panel ASCII Art OCTO + 🦑 fallback + amber 呼吸动画
+
+**Post-Phase Polish (3 commits)**
+- 实时工具折叠：ToolStart flush streaming text，ToolResult 即时插入 ToolUse+ToolResult 消息
+- 状态栏：品牌、运行时长、git 状态颜色（clean/dirty/very dirty）
+- ESC 取消保留已完成消息内容（cancelled flag 防止 Completed 覆盖）
+- Git 信息每 5 秒自动刷新（tick counter 83 ≈ 5s）
+- 工具展开时自动滚动到工具调用位置，关闭时滚回底部
+- 系统消息（`<context>` XML）从对话区隐藏
+- Activity indicator 行（thinking/streaming 状态 + 任务 tokens）
+- Welcome panel 渐变动画
+
+### 技术变更
+
+| 文件 | 变更 |
+|------|------|
+| `tui/app_state.rs` | session_start_time, task_start_time, git_refresh_counter, cancelled flag |
+| `tui/mod.rs` | 实时 ToolStart/ToolResult 处理, git refresh in Tick, IterationEnd tokens |
+| `tui/key_handler.rs` | ESC cancel preserve, Ctrl+O scroll-to-tool, scroll reset on close |
+| `tui/render.rs` | activity indicator row, session_elapsed, 4-panel layout |
+| `tui/widgets/status_bar.rs` | 2-row layout, git status coloring, session elapsed |
+| `tui/widgets/conversation/mod.rs` | System messages hidden, build_system_lines dead_code |
+| `tui/widgets/conversation/spinner.rs` | ActiveTool + tool_id field |
+| `tui/widgets/input.rs` | pending_count parameter |
+| `tui/widgets/welcome_panel/` | gradient animation |
+| `octo-engine/src/agent/events.rs` | IterationEnd event + serde tests |
+| `octo-engine/src/agent/harness.rs` | IterationEnd broadcast |
+| `Makefile` | cli-tui 使用 pre-built binary |
+
+### 测试结果
+
+- Workspace tests: 2329 通过
+- octo-cli tests: 456 通过（基线 368 → 438 → 456）
+- `cargo check --workspace` 零错误
+
+### 提交记录
+
+- `77c2297` feat(tui): auto-scroll to tool call when expanding, scroll to bottom when closing
+- `f87b5d5` fix(tui): refresh git branch and dirty count every ~5 seconds
+- `6e21f58` feat(tui): real-time tool folding, status bar brand/elapsed, ESC cancel preserves messages
+- `8047947` feat(tui): status bar 3-row layout, activity indicator, welcome gradient animation
+- `8ef602f` chore: Phase U complete — TUI Production Hardening 10/10 tasks, 2329 tests pass
+- `9b68547` feat(tui): Welcome Panel brand upgrade — ASCII Art OCTO + 🦑 fallback (U4-1)
+- `32cc16e` ~ `05c6cce` Phase U G1-G3 checkpoints
+
+### 分支合并
+
+- `feat/tui-opendev-integration` → fast-forward merge → `main`
+- 当前在 `main` 分支
+
+---
+
+## Phase T — TUI OpenDev 整合 (2026-03-20 ~ 2026-03-22)
+
+### 完成内容
+
+将 opendev TUI 完整特性整合进 octo-cli，重建对话中心界面。24 个任务全部完成。
+
+**T1 基础设施移植 (10/10)** @ 1d66ee7
+- formatters (markdown, style_tokens, base)
+- managers (clipboard, history)
+- widgets (input, welcome_panel, conversation, spinner, status_bar, todo_panel)
+- event system (AppEvent, EventHandler)
+
+**T2 对话中心主界面 (8/8)** @ 6c5ac02 + e6c5f0d
+- TuiState, render, key_handler, approval dialog
+- Event loop with AgentEvent handling
+- Autocomplete engine + slash commands
+- Legacy 12-Tab cleanup
+
+**T3 调试浮层 + 完善 (6/6)** @ 22a13ed
+- agent_debug/eval/session_picker overlays
+- Welcome panel + thinking/progress
+- Theme validation
+
+### 核心决策
+
+- 类型统一：直接使用 octo-types（零适配层）
+- 布局：对话中心 + 浮层调试，废弃 12-Tab
+- 对接：与 REPL 共用 AgentExecutorHandle
+- 完整特性：无 mock/stub
+
+### 测试结果
+
+- Tests: 2250→2259 (+9), octo-cli tests: 368
+
+---
+
 ## CLI+Server Usability Fixes (2026-03-20)
 
 ### 完成内容

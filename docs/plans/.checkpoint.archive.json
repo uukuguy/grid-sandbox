@@ -1,71 +1,102 @@
 {
-  "plan_file": "docs/plans/2026-03-15-phase-o-deferred-unlock.md",
+  "plan_file": "docs/plans/2026-03-22-phase-u-tui-production-hardening.md",
   "phase": "complete",
-  "created_at": "2026-03-15T16:17:00+08:00",
-  "updated_at": "2026-03-15T17:50:00+08:00",
-  "completed_tasks": [
-    "O-T1", "O-T2", "O-T3", "O-T4", "O-T5", "O-T6",
-    "O-T7", "O-T8", "O-T9",
-    "O-T10", "O-T11", "O-T12", "O-T13",
-    "O-T14", "O-T15"
-  ],
+  "created_at": "2026-03-22T10:32:00+08:00",
+  "updated_at": "2026-03-22T19:41:00+08:00",
+  "completed_tasks": ["U1-1", "U1-2", "U1-3", "U2-1", "U2-2", "U2-3", "U3-1", "U3-2", "U3-3", "U4-1"],
   "current_task": null,
-  "total_tasks": 15,
+  "total_tasks": 10,
   "task_groups": {
     "G1": {
-      "name": "TUI Input Widget 抽取",
-      "tasks": ["O-T1", "O-T2", "O-T3", "O-T4", "O-T5", "O-T6"],
+      "name": "基础设施",
+      "tasks": ["U1-1", "U1-2", "U1-3"],
       "status": "COMPLETE",
-      "description": "TextInput widget + ChatScreen refactor + Eval dialogs/filter + Memory search + Watch progress"
+      "description": "Approval Gate 接线, Event Batch Drain (已有), Scroll 加速"
     },
     "G2": {
-      "name": "ProviderChain Failover Trace",
-      "tasks": ["O-T7", "O-T8", "O-T9"],
+      "name": "渲染优化",
+      "tasks": ["U2-1", "U2-2", "U2-3"],
       "status": "COMPLETE",
-      "description": "FailoverTrace data structures + ChainProvider instrumentation + Provider Inspector visualization"
+      "description": "Per-message 缓存, Formatter 注册表, Tool Collapse"
     },
     "G3": {
-      "name": "Session Event 广播",
-      "tasks": ["O-T10", "O-T11", "O-T12", "O-T13"],
+      "name": "增强 Widgets",
+      "tasks": ["U3-1", "U3-2", "U3-3"],
       "status": "COMPLETE",
-      "description": "SessionEvent enum + EventBus + WS SessionUpdate + DevAgent event-driven refresh"
+      "description": "StatusBar 重设计, Todo Panel, InputWidget 改进"
     },
     "G4": {
-      "name": "Workbench 收尾",
-      "tasks": ["O-T14", "O-T15"],
+      "name": "品牌完善",
+      "tasks": ["U4-1"],
       "status": "COMPLETE",
-      "description": "Workbench mode audit vs §6.9.2 + deferred status updates across 3 plan files"
+      "description": "Welcome Panel ASCII Art + 呼吸动画"
     }
   },
-  "execution_order": ["G1", "G2", "G3", "G4"],
-  "phase_name": "Phase O — Deferred 暂缓项全解锁",
+  "phase_name": "Phase U — TUI Production Hardening",
   "status": "COMPLETE",
-  "notes": "Phase O complete (15/15). All 10 deferred items across M-a/M-b/N resolved. Tests: 2126→2178 (+52). New components: TextInput widget, FailoverTrace, SessionEventBus.",
-  "related_plans": {
-    "design": "docs/design/AGENT_CLI_DESIGN.md",
-    "phase_o": "docs/plans/2026-03-15-phase-o-deferred-unlock.md",
-    "phase_n": "docs/plans/2026-03-15-phase-n-agent-debug.md",
-    "phase_mb": "docs/plans/2026-03-15-phase-mb-tui-dual-view.md",
-    "phase_ma": "docs/plans/2026-03-15-phase-m-eval-cli.md"
+  "execution_mode": "subagent-driven-development",
+  "design_file": null,
+  "roadmap_file": null,
+  "branch": "main",
+  "baseline": {
+    "tests": 2259,
+    "commit": "74f4781"
   },
-  "previous_plan": {
-    "file": "docs/plans/2026-03-15-phase-n-agent-debug.md",
+  "final": {
+    "tests": 2329,
+    "octo_cli_tests": 456,
+    "commit": "77c2297"
+  },
+  "post_phase_polish": {
+    "commits": [
+      "6e21f58 feat(tui): real-time tool folding, status bar brand/elapsed, ESC cancel preserves messages",
+      "f87b5d5 fix(tui): refresh git branch and dirty count every ~5 seconds",
+      "77c2297 feat(tui): auto-scroll to tool call when expanding, scroll to bottom when closing"
+    ],
+    "features": [
+      "Real-time tool result folding (ToolStart/ToolResult inline messages)",
+      "Status bar: brand, session elapsed, git status-based coloring",
+      "ESC cancel preserves partial streaming text as message",
+      "Periodic git refresh (~5s via tick counter)",
+      "Auto-scroll to tool call on Ctrl+O expand, scroll to bottom on close",
+      "System messages hidden from conversation area",
+      "Activity indicator row (thinking/streaming status + task tokens)",
+      "Welcome panel gradient animation"
+    ],
+    "octo_cli_tests": 456
+  },
+  "key_decisions": [
+    "ApprovalGate: Arc<Mutex<HashMap>> oneshot 通道，TUI 调用 gate.respond()",
+    "Per-message cache: Vec<(u64, Vec<Line>)> 按消息位置索引，content hash 失效",
+    "ToolFormatter: Vec<Box<dyn ToolFormatter>> 顺序匹配 + GenericFormatter 兜底",
+    "Scroll: 3 级加速 (3/6/12 lines)，200ms 方向窗口",
+    "Tool Collapse: CC 风格，默认折叠，Ctrl+O 最近 / Alt+O 全局",
+    "Event Batch: while try_next() drain loop before render (Phase T 已实现)",
+    "Real-time tool folding: ToolStart flushes streaming text, ToolResult inserts inline messages",
+    "ESC cancel: cancelled flag prevents Completed from overwriting preserved messages",
+    "Git refresh: tick counter 83 ≈ 5s, refresh_git_info() runs git rev-parse + git status --porcelain",
+    "Scroll-to-tool: count messages after expanded tool × 2 lines estimate",
+    "StatusBar: brand + model + tokens + elapsed + context% (row 1), dir + git (row 2)",
+    "Activity indicator: separate 1-row widget between conversation and input"
+  ],
+  "notes": "Phase U COMPLETE + post-phase polish. 10/10 tasks + 3 polish commits. Merged feat/tui-opendev-integration → main. 2329 workspace tests, 456 octo-cli tests. Latest commit 77c2297.",
+  "deferred": [
+    {
+      "id": "U-D1",
+      "description": "Agent Debug Panel 重设计 — 信息整合到 StatusBar 后 Debug 面板需深入调整",
+      "added_at": "2026-03-22",
+      "precondition": "Phase U G3 StatusBar 完成后"
+    },
+    {
+      "id": "S-D1",
+      "description": "Agent Skills 系统是否符合标准规范 — 专题研究",
+      "added_at": "2026-03-18",
+      "precondition": "Phase S 完成后"
+    }
+  ],
+  "previous_phase": {
+    "name": "Phase T — TUI OpenDev 整合",
     "status": "COMPLETE",
-    "tasks_completed": 7,
-    "total_tasks": 7,
-    "tests_baseline": 2096,
-    "tests_final": 2126
-  },
-  "deferred_resolved": {
-    "M-a_D1": "TUI 双视图 + Eval 面板 → Phase M-b",
-    "M-a_D2": "Agent 调试面板 + Inspector → Phase N",
-    "M-a_D3": "watch 实时 TUI 进度条 → Phase O G1-T6",
-    "M-b_D1": "Eval shortcut dialogs → Phase O G1-T3",
-    "M-b_D2": "Eval filter popup → Phase O G1-T4",
-    "M-b_D3": "Dev-Agent panel → Phase N",
-    "N_D1": "Session 实时数据流 → Phase O G3-T10~T13",
-    "N_D2": "Memory 搜索交互 → Phase O G1-T5",
-    "N_D3": "Provider failover 链路可视化 → Phase O G2-T7~T9",
-    "N_D4": "完整 Workbench 模式 → Phase O G4-T14"
+    "commit": "74464b9"
   }
 }
