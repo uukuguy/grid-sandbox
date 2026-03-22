@@ -1156,6 +1156,39 @@ async fn run_agent_loop_inner(
         for (tu, input, result) in tool_outputs {
             total_tool_calls += 1;
 
+            // Record tool execution to SQLite for observability
+            if let Some(ref recorder) = config.recorder {
+                let source = octo_types::ToolSource::BuiltIn;
+                let input_val = input.clone();
+                match recorder
+                    .record_start(
+                        config.session_id.as_str(),
+                        config.user_id.as_str(),
+                        &tu.name,
+                        &source,
+                        &input_val,
+                    )
+                    .await
+                {
+                    Ok(exec_id) => {
+                        let output_val = serde_json::Value::String(result.content.clone());
+                        let duration = result.duration_ms;
+                        if result.is_error {
+                            let _ = recorder
+                                .record_failed(&exec_id, &result.content, duration)
+                                .await;
+                        } else {
+                            let _ = recorder
+                                .record_complete(&exec_id, &output_val, duration)
+                                .await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::debug!(error = %e, tool = %tu.name, "Failed to record tool execution");
+                    }
+                }
+            }
+
             let _ = tx
                 .send(AgentEvent::ToolResult {
                     tool_id: tu.id.clone(),

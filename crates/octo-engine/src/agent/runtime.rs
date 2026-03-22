@@ -129,6 +129,8 @@ pub struct AgentRuntime {
         Option<Arc<Mutex<crate::agent::collaboration::manager::CollaborationManager>>>,
     // Knowledge graph for entity-relation storage (Wave 10 C1)
     pub(crate) knowledge_graph: Arc<tokio::sync::RwLock<crate::memory::KnowledgeGraph>>,
+    // Credential resolver for secure secret resolution (Vault > .env > env vars)
+    pub(crate) credential_resolver: Arc<crate::secret::CredentialResolver>,
 }
 
 impl AgentRuntime {
@@ -308,6 +310,23 @@ impl AgentRuntime {
         // 17. Shared ApprovalGate for interactive tool approval (T7)
         let approval_gate = crate::tools::approval::ApprovalGate::new();
 
+        // 18. CredentialResolver with optional Vault
+        let credential_resolver = {
+            let mut resolver = crate::secret::CredentialResolver::new();
+            if let Ok(password) = std::env::var("OCTO_VAULT_PASSWORD") {
+                match crate::secret::CredentialVault::new(password) {
+                    Ok(vault) => {
+                        tracing::info!("CredentialVault initialized (AES-GCM encrypted)");
+                        resolver = resolver.with_vault(vault);
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to init CredentialVault, using env-only resolver");
+                    }
+                }
+            }
+            Arc::new(resolver)
+        };
+
         let runtime = Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
@@ -335,6 +354,7 @@ impl AgentRuntime {
             approval_gate: Some(approval_gate),
             collaboration_manager: None,
             knowledge_graph,
+            credential_resolver,
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -445,6 +465,11 @@ impl AgentRuntime {
     /// Get safety pipeline (if any)
     pub fn safety_pipeline(&self) -> Option<&Arc<crate::security::SafetyPipeline>> {
         self.safety_pipeline.as_ref()
+    }
+
+    /// Get credential resolver for secure secret resolution
+    pub fn credential_resolver(&self) -> &Arc<crate::secret::CredentialResolver> {
+        &self.credential_resolver
     }
 
     /// Get shared approval gate (if any) — T7
@@ -590,6 +615,7 @@ impl AgentRuntime {
             self.canary_token.clone(),
             self.approval_gate.clone(),
             self.skill_registry.clone(),
+            Some(self.recorder.clone()),
         );
 
         // Spawn 持久化主循环

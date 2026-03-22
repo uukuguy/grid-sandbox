@@ -8,6 +8,7 @@ use tracing::info;
 use octo_types::{ChatMessage, PathValidator, SandboxId, SessionId, ToolContext, UserId};
 
 use crate::agent::{AgentConfig, AgentEvent, AgentLoopConfig};
+use crate::context::{ContextBudgetManager, ContextPruner};
 use crate::agent::subagent::SubAgentManager;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
@@ -105,6 +106,8 @@ pub struct AgentExecutor {
     approval_gate: Option<crate::tools::approval::ApprovalGate>,
     // Skill registry for SubAgent-backed playbook skill execution
     skill_registry: Option<Arc<SkillRegistry>>,
+    // Tool execution recorder for observability
+    recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
 }
 
 impl AgentExecutor {
@@ -132,6 +135,7 @@ impl AgentExecutor {
         canary_token: Option<String>,
         approval_gate: Option<crate::tools::approval::ApprovalGate>,
         skill_registry: Option<Arc<SkillRegistry>>,
+        recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
     ) -> Self {
         Self {
             session_id,
@@ -158,6 +162,7 @@ impl AgentExecutor {
             approval_gate,
             turn_gate: super::turn_gate::TurnGate::new(),
             skill_registry,
+            recorder,
         }
     }
 
@@ -268,6 +273,10 @@ impl AgentExecutor {
                         safety_pipeline: self.safety_pipeline.clone(),
                         canary_token: self.canary_token.clone(),
                         approval_gate: self.approval_gate.clone(),
+                        recorder: self.recorder.clone(),
+                        budget: Some(ContextBudgetManager::default()),
+                        pruner: Some(ContextPruner::new()),
+                        loop_guard: Some(super::loop_guard::LoopGuard::new()),
                         ..AgentLoopConfig::default()
                     };
 
