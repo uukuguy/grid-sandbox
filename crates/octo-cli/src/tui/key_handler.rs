@@ -260,6 +260,8 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
         // ── Ctrl+O: cycle tool results — open one at a time, then close all ──
         // Cycle: open last → open second-to-last → ... → open first → close all → repeat
         // Only one tool is expanded at a time (previous one closes when next opens).
+        // When opening: scroll to make the tool call visible.
+        // When closing all: scroll back to bottom.
         (KeyModifiers::CONTROL, KeyCode::Char('o')) => {
             let ids = state.all_tool_use_ids();
             if !ids.is_empty() {
@@ -273,9 +275,29 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     // Open one tool: cursor 0 = last, 1 = second-to-last, etc.
                     let target_idx = n - 1 - cursor;
                     let tool_id = ids[target_idx].clone();
-                    state.tool_expanded_overrides.insert(tool_id, true);
+                    state.tool_expanded_overrides.insert(tool_id.clone(), true);
+
+                    // Scroll to make the tool visible: estimate lines below this tool
+                    // by counting messages after the ToolUse message containing this id.
+                    let msgs_after = state
+                        .messages
+                        .iter()
+                        .rev()
+                        .take_while(|m| {
+                            !m.content.iter().any(|b| matches!(b,
+                                octo_types::message::ContentBlock::ToolUse { id, .. } if id == &tool_id
+                            ))
+                        })
+                        .count();
+                    // ~2 lines per message (collapsed tool results, blank lines)
+                    let estimated_offset = (msgs_after * 2).min(u16::MAX as usize) as u16;
+                    state.scroll_offset = estimated_offset;
+                    state.user_scrolled = true;
+                } else {
+                    // cursor == n → all closed — scroll back to bottom
+                    state.scroll_offset = 0;
+                    state.user_scrolled = false;
                 }
-                // cursor == n → all closed (no override inserted)
 
                 state.tool_toggle_cursor += 1;
                 state.invalidate_cache();
@@ -287,6 +309,11 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             state.tools_default_collapsed = !state.tools_default_collapsed;
             state.tool_expanded_overrides.clear();
             state.tool_toggle_cursor = 0;
+            // Scroll to bottom when collapsing all
+            if state.tools_default_collapsed {
+                state.scroll_offset = 0;
+                state.user_scrolled = false;
+            }
             state.invalidate_cache();
         }
         // ── Ctrl+Shift+O: same as Alt+O (Alt may not work on macOS) ──
@@ -294,6 +321,10 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             state.tools_default_collapsed = !state.tools_default_collapsed;
             state.tool_expanded_overrides.clear();
             state.tool_toggle_cursor = 0;
+            if state.tools_default_collapsed {
+                state.scroll_offset = 0;
+                state.user_scrolled = false;
+            }
             state.invalidate_cache();
         }
 
