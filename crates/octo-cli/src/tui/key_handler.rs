@@ -271,16 +271,31 @@ async fn handle_overlay_key(state: &mut TuiState, key: KeyEvent) {
 async fn handle_approval_key(state: &mut TuiState, key: KeyEvent) {
     match (key.modifiers, key.code) {
         (KeyModifiers::NONE, KeyCode::Char('y') | KeyCode::Char('Y')) => {
-            // Approve — consume pending approval.
-            // Actual ApprovalGate.respond() call wired in T2-7 via AppState.
+            // Approve
+            if let Some(ref approval) = state.pending_approval {
+                if let Some(ref gate) = state.approval_gate {
+                    gate.respond(&approval.tool_id, true).await;
+                }
+            }
             state.pending_approval = None;
         }
-        (KeyModifiers::NONE, KeyCode::Char('n') | KeyCode::Char('N')) => {
+        (KeyModifiers::NONE, KeyCode::Char('a') | KeyCode::Char('A')) => {
+            // Always approve (respond true; future: persist preference)
+            if let Some(ref approval) = state.pending_approval {
+                if let Some(ref gate) = state.approval_gate {
+                    gate.respond(&approval.tool_id, true).await;
+                }
+            }
+            state.pending_approval = None;
+        }
+        (KeyModifiers::NONE, KeyCode::Char('n') | KeyCode::Char('N'))
+        | (KeyModifiers::NONE, KeyCode::Esc) => {
             // Deny
-            state.pending_approval = None;
-        }
-        (KeyModifiers::NONE, KeyCode::Esc) => {
-            // Deny (same as N)
+            if let Some(ref approval) = state.pending_approval {
+                if let Some(ref gate) = state.approval_gate {
+                    gate.respond(&approval.tool_id, false).await;
+                }
+            }
             state.pending_approval = None;
         }
         (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
@@ -501,5 +516,71 @@ mod tests {
         // Actually Up key has no streaming check, so it should still work
         handle_key(&mut state, make_key(KeyCode::Up)).await;
         assert_eq!(state.input_buffer, "previous");
+    }
+
+    #[tokio::test]
+    async fn test_approval_y_with_gate_clears_pending() {
+        use octo_engine::tools::approval::ApprovalGate;
+        let mut state = make_test_state();
+        let gate = ApprovalGate::new();
+        state.approval_gate = Some(gate.clone());
+        // Register a pending approval in the gate and get the receiver
+        let rx = gate.register("t1").await;
+        state.pending_approval = Some(crate::tui::app_state::PendingApproval {
+            tool_id: "t1".into(),
+            tool_name: "bash".into(),
+            risk_level: octo_types::tool::RiskLevel::HighRisk,
+        });
+        handle_key(&mut state, make_key(KeyCode::Char('y'))).await;
+        assert!(state.pending_approval.is_none());
+        // The receiver should get `true` (approved)
+        assert_eq!(rx.await.unwrap(), true);
+    }
+
+    #[tokio::test]
+    async fn test_approval_n_with_gate_denies() {
+        use octo_engine::tools::approval::ApprovalGate;
+        let mut state = make_test_state();
+        let gate = ApprovalGate::new();
+        state.approval_gate = Some(gate.clone());
+        let rx = gate.register("t2").await;
+        state.pending_approval = Some(crate::tui::app_state::PendingApproval {
+            tool_id: "t2".into(),
+            tool_name: "bash".into(),
+            risk_level: octo_types::tool::RiskLevel::HighRisk,
+        });
+        handle_key(&mut state, make_key(KeyCode::Char('n'))).await;
+        assert!(state.pending_approval.is_none());
+        assert_eq!(rx.await.unwrap(), false);
+    }
+
+    #[tokio::test]
+    async fn test_approval_a_with_gate_approves() {
+        use octo_engine::tools::approval::ApprovalGate;
+        let mut state = make_test_state();
+        let gate = ApprovalGate::new();
+        state.approval_gate = Some(gate.clone());
+        let rx = gate.register("t3").await;
+        state.pending_approval = Some(crate::tui::app_state::PendingApproval {
+            tool_id: "t3".into(),
+            tool_name: "bash".into(),
+            risk_level: octo_types::tool::RiskLevel::HighRisk,
+        });
+        handle_key(&mut state, make_key(KeyCode::Char('a'))).await;
+        assert!(state.pending_approval.is_none());
+        assert_eq!(rx.await.unwrap(), true);
+    }
+
+    #[tokio::test]
+    async fn test_approval_without_gate_still_clears() {
+        let mut state = make_test_state();
+        // No gate set — approval_gate is None
+        state.pending_approval = Some(crate::tui::app_state::PendingApproval {
+            tool_id: "t1".into(),
+            tool_name: "bash".into(),
+            risk_level: octo_types::tool::RiskLevel::HighRisk,
+        });
+        handle_key(&mut state, make_key(KeyCode::Char('y'))).await;
+        assert!(state.pending_approval.is_none());
     }
 }

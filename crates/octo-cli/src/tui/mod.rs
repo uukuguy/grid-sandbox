@@ -67,6 +67,11 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     // Initialize state
     let mut tui_state = app_state::TuiState::new(session_id, handle.clone(), model_name);
 
+    // Inject approval gate for Y/N/A key responses
+    if let Some(gate) = state.agent_runtime.approval_gate() {
+        tui_state.approval_gate = Some(gate.clone());
+    }
+
     // Get terminal size
     if let Ok(size) = crossterm::terminal::size() {
         tui_state.terminal_width = size.0;

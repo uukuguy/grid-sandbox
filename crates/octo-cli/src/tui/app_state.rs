@@ -5,6 +5,7 @@
 //! input buffer, scroll position, and metrics.
 
 use octo_engine::agent::AgentExecutorHandle;
+use octo_engine::tools::approval::ApprovalGate;
 use octo_types::message::{ChatMessage, ContentBlock, MessageRole};
 use octo_types::tool::RiskLevel;
 use octo_types::SessionId;
@@ -120,6 +121,10 @@ pub struct TuiState {
     // ── Welcome ──
     /// Animation state for the welcome panel (shown when conversation is empty).
     pub welcome_state: WelcomePanelState,
+
+    // ── Approval ──
+    /// Gate for responding to tool approval requests from the engine.
+    pub approval_gate: Option<ApprovalGate>,
 }
 
 impl TuiState {
@@ -182,6 +187,7 @@ impl TuiState {
             thinking_text: String::new(),
             is_thinking: false,
             welcome_state: WelcomePanelState::new(),
+            approval_gate: None,
         }
     }
 
