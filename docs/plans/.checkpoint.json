@@ -44,7 +44,7 @@
   },
   "final": {
     "tests": 2370,
-    "commit": null
+    "commit": "19d3f30"
   },
   "key_decisions": [
     "KNOWLEDGE skills: body injected into system prompt, Agent follows instructions",

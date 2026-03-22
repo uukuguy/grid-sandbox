@@ -7,7 +7,7 @@
       "completed_at": "2026-03-22T21:45:00+08:00",
       "progress": "100%",
       "tests": 2370,
-      "commit": null,
+      "commit": "19d3f30",
       "tasks": "11/12 (V1-3 deferred)"
     },
     {
