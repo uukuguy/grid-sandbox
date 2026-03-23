@@ -7,6 +7,12 @@
 
 ## [Active Work]
 
+- 2026-03-23 21:45 | Phase AE plan written (7 tasks, 4 groups). Ready to execute.
+  - G1: --project CLI + OctoRoot::with_project_dir()
+  - G2: Delete workspace_dir() + SecurityPolicy rename working_dir
+  - G3: Dockerfile cleanup /workspace/* → /home/sandbox
+  - G4: examples/demo-project + Makefile TEST_PROJECT
+  - Deferred: AE-D1~D3 (bind mount impl, octo init, container OctoRoot)
 - 2026-03-23 19:50 | Phase AD images built locally (base 1.32GB, dev 4.59GB). Design discussion → Phase AE: Agent Workspace Architecture
   - Fixes: GID 1000 conflict, ltrace arm64, container-test entrypoint @ f7827af, 73295f5
   - Phase AE scope: --project CLI param, examples/demo-project, container bind mount $PWD:$PWD, remove unused workspace_dir/Dockerfile /workspace/*
