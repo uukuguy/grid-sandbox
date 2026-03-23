@@ -437,7 +437,7 @@ container-clean:
 # Smoke-test: build base image and verify key tools
 container-test: container-build
 	@echo "=== Container Smoke Test ==="
-	@docker run --rm octo-sandbox:base sh -c '\
+	@docker run --rm --entrypoint sh octo-sandbox:base -c '\
 	  echo "--- System tools ---" && \
 	  pdftotext -v 2>&1 | head -1 && \
 	  tesseract --version 2>&1 | head -1 && \

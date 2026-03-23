@@ -71,8 +71,9 @@ LABEL org.opencontainers.image.title="octo-sandbox"
 LABEL org.opencontainers.image.description="Octo agent tool execution sandbox"
 
 # Create sandbox user (non-root)
-RUN groupadd -g 1000 sandbox \
-    && useradd -u 1000 -g sandbox -m -s /bin/bash sandbox
+# node:22-slim already has uid/gid 1000 (node), so use -o to allow duplicate
+RUN groupadd -g 1000 -o sandbox 2>/dev/null || true \
+    && useradd -u 1000 -g 1000 -o -m -s /bin/bash sandbox
 
 # Create workspace directories
 RUN mkdir -p /workspace/project \
