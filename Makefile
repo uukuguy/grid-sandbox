@@ -3,6 +3,7 @@
         verify verify-runtime verify-api verify-api-mcp \
         eval-list eval-run eval-compare eval-benchmark eval-benchmark-mini \
         eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress \
+        container-build container-build-dev container-build-multi container-build-multi-dev \
         docker-build docker-build-python docker-build-rust docker-build-nodejs \
         docker-build-bash docker-build-general docker-build-swebench docker-list docker-clean
 
@@ -392,7 +393,32 @@ verify-api-mcp:
 	curl -sf "http://localhost:3001/api/mcp/servers/$(ID)/logs" && echo " ✅ GET /api/mcp/servers/$(ID)/logs" || echo " ❌ GET /api/mcp/servers/$(ID)/logs"
 
 # ============================================================
-# Docker sandbox images
+# Container images (octo-sandbox base/dev)
+# ============================================================
+
+# Build base image (local, single platform)
+container-build:
+	docker build -t octo-sandbox:base container/
+
+# Build dev image (local, single platform)
+container-build-dev: container-build
+	docker build -f container/Dockerfile.dev -t octo-sandbox:dev container/
+
+# Build base image (multi-platform, push to GHCR)
+container-build-multi:
+	docker buildx build --platform linux/amd64,linux/arm64 \
+	  -t ghcr.io/uukuguy/octo-sandbox:base \
+	  --push container/
+
+# Build dev image (multi-platform, push to GHCR)
+container-build-multi-dev: container-build-multi
+	docker buildx build --platform linux/amd64,linux/arm64 \
+	  -f container/Dockerfile.dev \
+	  -t ghcr.io/uukuguy/octo-sandbox:dev \
+	  --push container/
+
+# ============================================================
+# Docker sandbox images (legacy per-language images)
 # ============================================================
 
 docker-build:
@@ -481,7 +507,13 @@ help:
 	@echo "  make eval-progress                   即时查看正在运行的 benchmark 进度"
 	@echo "  make eval-progress EVAL_RUN_ID=<id>  查看指定运行的进度"
 	@echo ""
-	@echo "Docker sandbox images:"
+	@echo "Container images (octo-sandbox):"
+	@echo "  make container-build           构建 base 镜像 (本地单平台)"
+	@echo "  make container-build-dev       构建 dev 镜像 (本地单平台)"
+	@echo "  make container-build-multi     构建 base 镜像 (多平台, 推送 GHCR)"
+	@echo "  make container-build-multi-dev 构建 dev 镜像 (多平台, 推送 GHCR)"
+	@echo ""
+	@echo "Docker sandbox images (legacy):"
 	@echo "  make docker-build              构建全部 sandbox Docker 镜像"
 	@echo "  make docker-build-python       构建 Python sandbox 镜像"
 	@echo "  make docker-build-rust         构建 Rust sandbox 镜像"

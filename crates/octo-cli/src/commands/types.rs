@@ -273,9 +273,12 @@ pub enum SandboxCommands {
         /// Build without cache
         #[arg(long)]
         no_cache: bool,
-        /// Build the dev image (includes Rust toolchain)
+        /// Build the dev image (includes Rust toolchain + agent dev tools)
         #[arg(long)]
         dev: bool,
+        /// Build multi-platform image (linux/amd64,linux/arm64) via buildx
+        #[arg(long)]
+        multi_platform: bool,
     },
     /// Clean up sandbox containers
     Cleanup {

@@ -14,7 +14,7 @@ pub async fn handle_sandbox(action: SandboxCommands, _state: &AppState) -> Resul
         SandboxCommands::Status => show_status(),
         SandboxCommands::DryRun => show_dry_run(),
         SandboxCommands::ListBackends => list_backends(),
-        SandboxCommands::Build { tag, no_cache, dev } => build_image(&tag, no_cache, dev).await,
+        SandboxCommands::Build { tag, no_cache, dev, multi_platform } => build_image(&tag, no_cache, dev, multi_platform).await,
         SandboxCommands::Cleanup { force, session } => cleanup_containers(force, session.as_deref()).await,
     }
 }
@@ -92,7 +92,7 @@ fn list_backends() -> Result<()> {
     Ok(())
 }
 
-async fn build_image(tag: &str, no_cache: bool, dev: bool) -> Result<()> {
+async fn build_image(tag: &str, no_cache: bool, dev: bool, multi_platform: bool) -> Result<()> {
     let dockerfile = if dev {
         "container/Dockerfile.dev"
     } else {
@@ -109,14 +109,25 @@ async fn build_image(tag: &str, no_cache: bool, dev: bool) -> Result<()> {
 
     println!("Building sandbox image: {}", tag);
     println!("  Dockerfile: {}", dockerfile);
+    if multi_platform {
+        println!("  Platforms:  linux/amd64,linux/arm64 (buildx)");
+    }
     if no_cache {
         println!("  Cache: disabled");
     }
     println!();
 
-    let mut cmd = tokio::process::Command::new("docker");
-    cmd.arg("build")
-        .arg("-t")
+    let mut cmd = if multi_platform {
+        let mut c = tokio::process::Command::new("docker");
+        c.args(["buildx", "build", "--platform", "linux/amd64,linux/arm64"]);
+        c
+    } else {
+        let mut c = tokio::process::Command::new("docker");
+        c.arg("build");
+        c
+    };
+
+    cmd.arg("-t")
         .arg(tag)
         .arg("-f")
         .arg(dockerfile)
@@ -124,6 +135,10 @@ async fn build_image(tag: &str, no_cache: bool, dev: bool) -> Result<()> {
 
     if no_cache {
         cmd.arg("--no-cache");
+    }
+
+    if multi_platform {
+        cmd.arg("--push");
     }
 
     // Stream output directly to the terminal
