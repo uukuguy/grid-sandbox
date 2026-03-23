@@ -22,6 +22,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     wget \
+    # --- AD-T1: Document processing ---
+    poppler-utils \
+    pandoc \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-chi-tra \
+    # --- AD-T2: Database clients ---
+    postgresql-client \
+    default-mysql-client \
+    sqlite3 \
+    # --- AD-T2: Network & file tools ---
+    dnsutils \
+    netcat-openbsd \
+    openssl \
+    zip \
+    unzip \
+    file \
+    tree \
     && rm -rf /var/lib/apt/lists/*
 
 # Symlink python -> python3 for convenience
