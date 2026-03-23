@@ -21,6 +21,7 @@ use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemor
 use crate::metering::Metering;
 use crate::providers::ProviderConfig;
 use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
+use crate::sandbox::{DockerAdapter, OctoRunMode, SandboxProfile, SessionSandboxConfig, SessionSandboxManager};
 use crate::security::SecurityPolicy;
 use crate::session::{SessionStore, SqliteSessionStore};
 use crate::skills::{
@@ -52,6 +53,8 @@ pub struct AgentRuntimeConfig {
     pub agents_dir: Option<std::path::PathBuf>,
     /// Optional OctoRoot for unified path management
     pub octo_root: Option<crate::root::OctoRoot>,
+    /// Sandbox profile override (development/staging/production)
+    pub sandbox_profile: Option<String>,
 }
 
 impl AgentRuntimeConfig {
@@ -73,6 +76,7 @@ impl AgentRuntimeConfig {
             enable_event_bus,
             agents_dir: None,
             octo_root: None,
+            sandbox_profile: None,
         }
     }
 
@@ -131,6 +135,8 @@ pub struct AgentRuntime {
     pub(crate) knowledge_graph: Arc<tokio::sync::RwLock<crate::memory::KnowledgeGraph>>,
     // Credential resolver for secure secret resolution (Vault > .env > env vars)
     pub(crate) credential_resolver: Arc<crate::secret::CredentialResolver>,
+    // Session-scoped sandbox container manager (Phase AF)
+    pub(crate) session_sandbox: Option<Arc<SessionSandboxManager>>,
 }
 
 impl AgentRuntime {
@@ -327,6 +333,35 @@ impl AgentRuntime {
             Arc::new(resolver)
         };
 
+        // 19. SessionSandboxManager (SSM) — conditional on run mode + profile
+        let session_sandbox: Option<Arc<SessionSandboxManager>> = {
+            let run_mode = OctoRunMode::detect();
+            let profile = SandboxProfile::resolve(
+                false,
+                config.sandbox_profile.as_deref(),
+                None,
+            );
+            if run_mode == OctoRunMode::Host && profile != SandboxProfile::Development {
+                // Attempt to create DockerAdapter for container-backed sandbox
+                let docker = DockerAdapter::new(crate::sandbox::DEFAULT_SANDBOX_IMAGE);
+                let ssm_config = SessionSandboxConfig::default();
+                let ssm = SessionSandboxManager::new(Arc::new(docker), ssm_config);
+                tracing::info!(
+                    run_mode = %run_mode,
+                    profile = %profile,
+                    "SessionSandboxManager initialized (Docker backend)"
+                );
+                Some(Arc::new(ssm))
+            } else {
+                tracing::debug!(
+                    run_mode = %run_mode,
+                    profile = %profile,
+                    "SessionSandboxManager skipped (development mode or already sandboxed)"
+                );
+                None
+            }
+        };
+
         let runtime = Self {
             primary_handle: Mutex::new(None),
             agent_handles: DashMap::new(),
@@ -355,6 +390,7 @@ impl AgentRuntime {
             collaboration_manager: None,
             knowledge_graph,
             credential_resolver,
+            session_sandbox,
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -616,7 +652,7 @@ impl AgentRuntime {
             self.approval_gate.clone(),
             self.skill_registry.clone(),
             Some(self.recorder.clone()),
-            None, // session_sandbox: AC-T7
+            self.session_sandbox.clone(), // AF-T1: SSM wired from AgentRuntime
         );
 
         // Spawn 持久化主循环
