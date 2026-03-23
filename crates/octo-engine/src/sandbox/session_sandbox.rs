@@ -39,7 +39,7 @@ pub struct SessionSandboxConfig {
     pub max_lifetime: Duration,
     /// Maximum number of concurrent session containers (default: 5).
     pub max_containers: usize,
-    /// Container working directory (default: `/workspace/session`).
+    /// Container working directory (default: `/home/sandbox`).
     pub working_dir: String,
 }
 
@@ -50,7 +50,7 @@ impl Default for SessionSandboxConfig {
             idle_timeout: Duration::from_secs(30 * 60),
             max_lifetime: Duration::from_secs(4 * 3600),
             max_containers: 5,
-            working_dir: "/workspace/session".to_string(),
+            working_dir: "/home/sandbox".to_string(),
         }
     }
 }
@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(config.idle_timeout, Duration::from_secs(30 * 60));
         assert_eq!(config.max_lifetime, Duration::from_secs(4 * 3600));
         assert_eq!(config.max_containers, 5);
-        assert_eq!(config.working_dir, "/workspace/session");
+        assert_eq!(config.working_dir, "/home/sandbox");
     }
 
     #[test]

@@ -51,5 +51,5 @@ RUN npm install -g \
     @modelcontextprotocol/inspector
 
 USER sandbox
-WORKDIR /workspace/session
+WORKDIR /home/sandbox
 ENTRYPOINT ["sleep", "infinity"]

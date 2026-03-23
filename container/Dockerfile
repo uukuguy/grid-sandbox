@@ -75,11 +75,6 @@ LABEL org.opencontainers.image.description="Octo agent tool execution sandbox"
 RUN groupadd -g 1000 -o sandbox 2>/dev/null || true \
     && useradd -u 1000 -g 1000 -o -m -s /bin/bash sandbox
 
-# Create workspace directories
-RUN mkdir -p /workspace/project \
-             /workspace/session \
-    && chown -R sandbox:sandbox /workspace/session
-
 # Health check: verify basic tools are available
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python3 --version && git --version && bash --version || exit 1
@@ -88,7 +83,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
 USER sandbox
 
 # Working directory for tool execution
-WORKDIR /workspace/session
+WORKDIR /home/sandbox
 
 # Keep container alive for exec calls
 ENTRYPOINT ["sleep", "infinity"]
