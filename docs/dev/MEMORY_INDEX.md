@@ -7,6 +7,18 @@
 
 ## [Active Work]
 
+- 2026-03-23 18:45 | Phase AD COMPLETE (5/5 tasks) — container image enhancement @ 1431bc5
+  - G3: GitHub Actions CI/CD workflow + Makefile targets + CLI --multi-platform flag
+  - All groups complete: G1 (base enterprise), G2 (dev agent), G3 (CI/CD)
+  - 6 deferred: AD-D1~D6
+- 2026-03-23 18:30 | Phase AD G2 COMPLETE (3/5 tasks) — dev image agent toolchain @ 30142be
+  - AD-T3: MCP SDK, LLM SDK, Skill dev, ML CPU-only, PyTorch CPU, wasm-pack, flamegraph, strace/ltrace/tcpdump
+  - Next: G3 (AD-T4 CI/CD + AD-T5 Makefile/CLI)
+- 2026-03-23 18:15 | Phase AD G1 COMPLETE (2/5 tasks) — base image enterprise tooling @ 2ffbde3
+  - AD-T1: document processing (poppler-utils, pandoc, tesseract-ocr chi_sim/chi_tra, pymupdf, python-docx, openpyxl, python-pptx, chardet, tabulate, markitdown)
+  - AD-T2: DB clients (postgresql-client, default-mysql-client, sqlite3) + network tools (dnsutils, nc, openssl, zip, file, tree)
+  - Removed premature docling dep (AD-D6 deferred)
+  - Next: G2 (AD-T3 dev image), G3 (AD-T4/T5 CI/CD)
 - 15:50 | Phase T COMPLETE (24/24 tasks) — TUI OpenDev Integration @ 74464b9
   - T2-D1 autocomplete resolved: slash commands, file finder, frecency ranking (e6c5f0d)
   - T3 overlays: agent_debug, eval, session_picker (0050e07)
