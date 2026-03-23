@@ -23,7 +23,7 @@ Wave 1-10: Core Engine + CLI          → COMPLETE @ 675155d
 
 ### 基线数据
 
-- **Tests**: octo-cli 472, 全量需确认
+- **Tests**: 2446 passing (was 2394, +52)
 - **测试命令**: `cargo test --workspace -- --test-threads=1`
 
 ---
