@@ -1,53 +1,41 @@
 {
-  "plan_file": "docs/plans/2026-03-23-phase-ae-agent-workspace-architecture.md",
+  "plan_file": "docs/plans/2026-03-24-phase-af-ssm-wiring.md",
   "phase": "execution",
-  "created_at": "2026-03-23T19:55:00+08:00",
-  "updated_at": "2026-03-24T00:20:00+08:00",
-  "completed_tasks": ["AE-T1", "AE-T2", "AE-T3", "AE-T4", "AE-T5", "AE-T6", "AE-T7"],
+  "created_at": "2026-03-24T00:40:00+08:00",
+  "updated_at": "2026-03-24T01:15:00+08:00",
+  "completed_tasks": ["AF-T1", "AF-T2", "AF-T3"],
   "current_task": null,
-  "total_tasks": 7,
-  "phase_name": "Phase AE - Agent Workspace Architecture",
+  "total_tasks": 3,
+  "phase_name": "Phase AF - SSM Wiring",
   "status": "COMPLETE",
-  "execution_mode": "subagent-driven-development",
+  "execution_mode": "manual",
   "branch": "main",
   "baseline": {
     "tests": 2467,
-    "commit": "73295f5"
+    "commit": "ee4986f"
   },
-  "final_commit": "ee4986f",
+  "final_commit": "7ea6e5d",
   "scope": [
-    "CLI --project param for OctoRoot",
-    "examples/demo-project/ test target",
-    "Container bind mount $PWD:$PWD for path consistency",
-    "Remove unused workspace_dir() from OctoRoot",
-    "Remove Dockerfile /workspace/project and /workspace/session",
-    "Makefile TEST_PROJECT variable for cli commands"
+    "AgentRuntime session_sandbox field + conditional SSM construction",
+    "AgentRuntimeConfig sandbox_profile option",
+    "AgentExecutor SSM wiring (replaces AC-T7 None placeholder)"
   ],
   "groups": {
-    "G1": {"tasks": ["AE-T1", "AE-T2"], "desc": "--project CLI + OctoRoot扩展", "deps": [], "status": "COMPLETE", "commit": "1535d1a"},
-    "G2": {"tasks": ["AE-T3", "AE-T4"], "desc": "清理workspace_dir + rename", "deps": ["G1"], "status": "COMPLETE", "commit": "317d6c2"},
-    "G3": {"tasks": ["AE-T5"], "desc": "Dockerfile清理", "deps": [], "status": "COMPLETE", "commit": "1423b8d"},
-    "G4": {"tasks": ["AE-T6", "AE-T7"], "desc": "Demo项目 + Makefile", "deps": ["G1"], "status": "COMPLETE", "commit": "d0bb7f1"}
+    "G1": {"tasks": ["AF-T1", "AF-T2"], "desc": "AgentRuntime 注入 SSM + config", "deps": [], "status": "COMPLETE", "commit": "7ea6e5d"},
+    "G2": {"tasks": ["AF-T3"], "desc": "编译验证 + 测试不回归", "deps": ["G1"], "status": "COMPLETE", "commit": "7ea6e5d"}
   },
-  "deferred": ["AE-D1"],
-  "deferred_resolved": {
-    "AE-D2": "✅ --project 参数已在 AE-T1 实现，init 自动尊重",
-    "AE-D3": "✅ Dockerfile ENV OCTO_GLOBAL_ROOT + OCTO_SANDBOXED=1",
-    "AD-D5": "✅ sandbox-shell 透传 API key 环境变量"
+  "deferred": ["AF-D1"],
+  "deferred_desc": {
+    "AF-D1": "BashTool 自动从 AgentExecutor 获取 SSM 并构建 with_session_sandbox — 需 ToolRegistry per-session 化"
   },
-  "post_phase_work": {
-    "commit": "ee4986f",
-    "items": [
-      "docs/design/SANDBOX_ENVIRONMENT_GUIDE.md — 沙箱环境操作指南",
-      "Makefile sandbox-* targets (7 commands)",
-      "Dockerfile ENV OCTO_GLOBAL_ROOT + OCTO_SANDBOXED (AE-D3)",
-      "sandbox-shell API key passthrough (AD-D5)",
-      "Deferred resolved: AE-D2, AE-D3, AD-D5 (21→18)"
-    ]
+  "tests": {
+    "passed": 2469,
+    "failed": 0,
+    "note": "+2 from baseline 2467"
   },
   "previous_phase": {
-    "name": "Phase AD - Container Image Enhancement",
+    "name": "Phase AE - Agent Workspace Architecture",
     "status": "COMPLETE",
-    "commit": "73295f5"
+    "commit": "ee4986f"
   }
 }
