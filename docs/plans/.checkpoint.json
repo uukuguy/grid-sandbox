@@ -2,7 +2,7 @@
   "plan_file": "docs/plans/2026-03-23-phase-ae-agent-workspace-architecture.md",
   "phase": "execution",
   "created_at": "2026-03-23T19:55:00+08:00",
-  "updated_at": "2026-03-23T22:30:00+08:00",
+  "updated_at": "2026-03-24T00:20:00+08:00",
   "completed_tasks": ["AE-T1", "AE-T2", "AE-T3", "AE-T4", "AE-T5", "AE-T6", "AE-T7"],
   "current_task": null,
   "total_tasks": 7,
@@ -14,7 +14,7 @@
     "tests": 2467,
     "commit": "73295f5"
   },
-  "final_commit": "d0bb7f1",
+  "final_commit": "ee4986f",
   "scope": [
     "CLI --project param for OctoRoot",
     "examples/demo-project/ test target",
@@ -29,7 +29,22 @@
     "G3": {"tasks": ["AE-T5"], "desc": "Dockerfile清理", "deps": [], "status": "COMPLETE", "commit": "1423b8d"},
     "G4": {"tasks": ["AE-T6", "AE-T7"], "desc": "Demo项目 + Makefile", "deps": ["G1"], "status": "COMPLETE", "commit": "d0bb7f1"}
   },
-  "deferred": ["AE-D1", "AE-D2", "AE-D3"],
+  "deferred": ["AE-D1"],
+  "deferred_resolved": {
+    "AE-D2": "✅ --project 参数已在 AE-T1 实现，init 自动尊重",
+    "AE-D3": "✅ Dockerfile ENV OCTO_GLOBAL_ROOT + OCTO_SANDBOXED=1",
+    "AD-D5": "✅ sandbox-shell 透传 API key 环境变量"
+  },
+  "post_phase_work": {
+    "commit": "ee4986f",
+    "items": [
+      "docs/design/SANDBOX_ENVIRONMENT_GUIDE.md — 沙箱环境操作指南",
+      "Makefile sandbox-* targets (7 commands)",
+      "Dockerfile ENV OCTO_GLOBAL_ROOT + OCTO_SANDBOXED (AE-D3)",
+      "sandbox-shell API key passthrough (AD-D5)",
+      "Deferred resolved: AE-D2, AE-D3, AD-D5 (21→18)"
+    ]
+  },
   "previous_phase": {
     "name": "Phase AD - Container Image Enhancement",
     "status": "COMPLETE",
