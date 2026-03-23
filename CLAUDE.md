@@ -310,6 +310,15 @@ make verify-api-mcp ID=x # MCP server-specific endpoint check
 # ── Configuration ──
 make config-gen          # Generate config.yaml from code defaults
 
+# ── Container Images (octo-sandbox base/dev) ──
+make container-build           # Build base image (local, single platform)
+make container-build-dev       # Build dev image (local, single platform)
+make container-build-multi     # Build base image (multi-platform, push GHCR)
+make container-build-multi-dev # Build dev image (multi-platform, push GHCR)
+make container-list            # List images and running containers
+make container-clean           # Remove stopped containers and images
+make container-test            # Build and verify base image tools
+
 # ── Cleanup ──
 make clean               # Clean Rust build artifacts
 make clean-web           # Clean frontend (node_modules, dist)

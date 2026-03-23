@@ -4,6 +4,7 @@
         eval-list eval-run eval-compare eval-benchmark eval-benchmark-mini \
         eval-history eval-report eval-trace eval-diagnose eval-diff eval-progress \
         container-build container-build-dev container-build-multi container-build-multi-dev \
+        container-list container-clean container-test \
         docker-build docker-build-python docker-build-rust docker-build-nodejs \
         docker-build-bash docker-build-general docker-build-swebench docker-list docker-clean
 
@@ -417,8 +418,46 @@ container-build-multi-dev: container-build-multi
 	  -t ghcr.io/uukuguy/octo-sandbox:dev \
 	  --push container/
 
+# List octo-sandbox container images
+container-list:
+	@echo "=== Octo Sandbox Images ==="
+	@docker images 'octo-sandbox' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null || echo "  (none)"
+	@echo ""
+	@echo "=== Running Octo Sandbox Containers ==="
+	@docker ps --filter 'label=octo.sandbox=true' --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo "  (none)"
+
+# Remove octo-sandbox images and stopped containers
+container-clean:
+	@echo "Removing stopped Octo sandbox containers..."
+	@docker ps -a --filter 'label=octo.sandbox=true' --filter 'status=exited' -q | xargs -r docker rm -f 2>/dev/null || true
+	@echo "Removing Octo sandbox images..."
+	@docker images 'octo-sandbox' -q | xargs -r docker rmi -f 2>/dev/null || true
+	@echo "Done."
+
+# Smoke-test: build base image and verify key tools
+container-test: container-build
+	@echo "=== Container Smoke Test ==="
+	@docker run --rm octo-sandbox:base sh -c '\
+	  echo "--- System tools ---" && \
+	  pdftotext -v 2>&1 | head -1 && \
+	  tesseract --version 2>&1 | head -1 && \
+	  pandoc --version | head -1 && \
+	  psql --version && \
+	  sqlite3 --version && \
+	  dig -v 2>&1 | head -1 && \
+	  echo "--- Python packages ---" && \
+	  python3 -c "import pymupdf, docx, openpyxl, pptx, chardet, tabulate; print(\"All document processing packages OK\")" && \
+	  echo "--- CLI tools ---" && \
+	  rg --version | head -1 && \
+	  fd --version && \
+	  bat --version | head -1 && \
+	  echo "" && \
+	  echo "All checks passed."'
+
 # ============================================================
-# Docker sandbox images (legacy per-language images)
+# Docker sandbox images (legacy per-language images from Phase J)
+# NOTE: These use docker/sandbox-images/ — the older per-language approach.
+#       Prefer container-* targets above for the unified base/dev images.
 # ============================================================
 
 docker-build:
@@ -507,13 +546,16 @@ help:
 	@echo "  make eval-progress                   即时查看正在运行的 benchmark 进度"
 	@echo "  make eval-progress EVAL_RUN_ID=<id>  查看指定运行的进度"
 	@echo ""
-	@echo "Container images (octo-sandbox):"
+	@echo "Container images (octo-sandbox base/dev):"
 	@echo "  make container-build           构建 base 镜像 (本地单平台)"
 	@echo "  make container-build-dev       构建 dev 镜像 (本地单平台)"
 	@echo "  make container-build-multi     构建 base 镜像 (多平台, 推送 GHCR)"
 	@echo "  make container-build-multi-dev 构建 dev 镜像 (多平台, 推送 GHCR)"
+	@echo "  make container-list            列出镜像和运行中容器"
+	@echo "  make container-clean           清理停止的容器和镜像"
+	@echo "  make container-test            构建并验证 base 镜像工具可用"
 	@echo ""
-	@echo "Docker sandbox images (legacy):"
+	@echo "Docker sandbox images (legacy, per-language):"
 	@echo "  make docker-build              构建全部 sandbox Docker 镜像"
 	@echo "  make docker-build-python       构建 Python sandbox 镜像"
 	@echo "  make docker-build-rust         构建 Rust sandbox 镜像"
