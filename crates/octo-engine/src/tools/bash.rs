@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -10,7 +12,7 @@ use super::traits::Tool;
 
 use crate::sandbox::{
     AdapterEnum, ExecutionTarget, ExecutionTargetResolver, OctoRunMode, SandboxProfile,
-    SandboxRouter, SandboxType, SubprocessAdapter, ToolCategory,
+    SandboxRef, SandboxRouter, SandboxType, SessionSandboxManager, SubprocessAdapter, ToolCategory,
 };
 
 /// Environment variables passed through to command execution.
@@ -40,6 +42,8 @@ pub struct BashTool {
     router: Option<SandboxRouter>,
     /// Execution target resolver
     target_resolver: Option<ExecutionTargetResolver>,
+    /// Session sandbox manager for per-session container reuse
+    session_sandbox: Option<Arc<SessionSandboxManager>>,
 }
 
 impl BashTool {
@@ -48,6 +52,7 @@ impl BashTool {
         Self {
             router: None,
             target_resolver: None,
+            session_sandbox: None,
         }
     }
 
@@ -63,6 +68,26 @@ impl BashTool {
         Self {
             router: Some(router),
             target_resolver: Some(target_resolver),
+            session_sandbox: None,
+        }
+    }
+
+    /// Create a BashTool with sandbox routing and session container reuse.
+    pub fn with_session_sandbox(
+        run_mode: OctoRunMode,
+        profile: SandboxProfile,
+        router: SandboxRouter,
+        session_sandbox: Arc<SessionSandboxManager>,
+        session_id: String,
+    ) -> Self {
+        let available_backends = router.registered_backends();
+        let target_resolver =
+            ExecutionTargetResolver::new(run_mode, profile, available_backends)
+                .with_session(session_id);
+        Self {
+            router: Some(router),
+            target_resolver: Some(target_resolver),
+            session_sandbox: Some(session_sandbox),
         }
     }
 
@@ -254,8 +279,62 @@ impl Tool for BashTool {
                         .execute_local(command, &ctx.working_dir, timeout_secs, pass_env)
                         .await;
                 }
-                ExecutionTarget::Sandbox(_) => {
-                    // Try sandbox execution, fall back to local on failure
+                ExecutionTarget::Sandbox(SandboxRef::Session { ref id }) => {
+                    // Session container reuse — execute in long-lived container
+                    if let Some(ssm) = &self.session_sandbox {
+                        match ssm.execute(id, command).await {
+                            Ok(result) => {
+                                let combined = if result.stderr.is_empty() {
+                                    result.stdout
+                                } else if result.stdout.is_empty() {
+                                    format!("STDERR:\n{}", result.stderr)
+                                } else {
+                                    format!("{}\nSTDERR:\n{}", result.stdout, result.stderr)
+                                };
+                                let output_text = truncate_output(combined);
+                                if result.success {
+                                    return Ok(ToolOutput::success(output_text));
+                                } else {
+                                    return Ok(ToolOutput::error(format!(
+                                        "Exit code: {}\n{}",
+                                        result.exit_code, output_text
+                                    )));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Session sandbox execution failed, falling back: {}",
+                                    e
+                                );
+                                let pass_env = resolver.profile().env_passthrough();
+                                return self
+                                    .execute_local(command, &ctx.working_dir, timeout_secs, pass_env)
+                                    .await;
+                            }
+                        }
+                    }
+                    // No session sandbox manager — fall through to ephemeral
+                    match self.execute_via_sandbox(command, &ctx.working_dir).await {
+                        Ok((output_text, exit_code)) => {
+                            let output_text = truncate_output(output_text);
+                            if exit_code == 0 {
+                                return Ok(ToolOutput::success(output_text));
+                            } else {
+                                return Ok(ToolOutput::error(format!(
+                                    "Exit code: {exit_code}\n{output_text}"
+                                )));
+                            }
+                        }
+                        Err(_) => {
+                            let pass_env = resolver.profile().env_passthrough();
+                            return self
+                                .execute_local(command, &ctx.working_dir, timeout_secs, pass_env)
+                                .await;
+                        }
+                    }
+                }
+                ExecutionTarget::Sandbox(SandboxRef::Ephemeral { .. }) => {
+                    // Ephemeral sandbox — create, execute, destroy per call
                     match self
                         .execute_via_sandbox(command, &ctx.working_dir)
                         .await

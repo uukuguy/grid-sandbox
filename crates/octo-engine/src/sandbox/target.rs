@@ -59,11 +59,16 @@ impl fmt::Display for SandboxRef {
 /// - Mode B (Host) + Development: Always Local (zero-friction dev)
 /// - Mode B (Host) + Staging: Sandbox preferred, Local fallback
 /// - Mode B (Host) + Production: Sandbox required (no Local fallback)
+///
+/// When `session_id` is set and Docker is available, Docker-targeted
+/// executions use `SandboxRef::Session` instead of `SandboxRef::Ephemeral`,
+/// enabling per-session container reuse.
 #[derive(Debug, Clone)]
 pub struct ExecutionTargetResolver {
     run_mode: OctoRunMode,
     profile: SandboxProfile,
     available_backends: Vec<SandboxType>,
+    session_id: Option<String>,
 }
 
 impl ExecutionTargetResolver {
@@ -76,7 +81,19 @@ impl ExecutionTargetResolver {
             run_mode,
             profile,
             available_backends,
+            session_id: None,
         }
+    }
+
+    /// Attach a session ID for per-session container reuse.
+    pub fn with_session(mut self, session_id: String) -> Self {
+        self.session_id = Some(session_id);
+        self
+    }
+
+    /// Get the current session ID (if any).
+    pub fn session_id(&self) -> Option<&str> {
+        self.session_id.as_deref()
     }
 
     /// Get the current run mode.
@@ -137,10 +154,9 @@ impl ExecutionTargetResolver {
         let preferred = self.preferred_backend(category);
 
         if let Some(backend) = preferred {
+            let sandbox_ref = self.make_sandbox_ref(backend.clone());
             (
-                ExecutionTarget::Sandbox(SandboxRef::Ephemeral {
-                    sandbox_type: backend.clone(),
-                }),
+                ExecutionTarget::Sandbox(sandbox_ref),
                 format!(
                     "SandboxProfile=Staging: {} routed to {}",
                     category_name(category),
@@ -163,10 +179,9 @@ impl ExecutionTargetResolver {
         let preferred = self.preferred_backend(category);
 
         if let Some(backend) = preferred {
+            let sandbox_ref = self.make_sandbox_ref(backend.clone());
             (
-                ExecutionTarget::Sandbox(SandboxRef::Ephemeral {
-                    sandbox_type: backend.clone(),
-                }),
+                ExecutionTarget::Sandbox(sandbox_ref),
                 format!(
                     "SandboxProfile=Production: {} routed to {}",
                     category_name(category),
@@ -185,6 +200,18 @@ impl ExecutionTargetResolver {
                     category_name(category)
                 ),
             )
+        }
+    }
+
+    /// Build the appropriate SandboxRef based on session_id and backend type.
+    ///
+    /// Session containers are only used with Docker (long-lived containers).
+    /// Wasm and External backends use ephemeral sandboxes (lightweight enough).
+    fn make_sandbox_ref(&self, sandbox_type: SandboxType) -> SandboxRef {
+        if let (Some(sid), SandboxType::Docker) = (&self.session_id, &sandbox_type) {
+            SandboxRef::Session { id: sid.clone() }
+        } else {
+            SandboxRef::Ephemeral { sandbox_type }
         }
     }
 
@@ -252,6 +279,8 @@ pub struct RoutingPreview {
     pub target: String,
     pub reason: String,
     pub available_backends: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 impl ExecutionTargetResolver {
@@ -269,6 +298,7 @@ impl ExecutionTargetResolver {
                 .iter()
                 .map(|b| b.to_string())
                 .collect(),
+            session_id: self.session_id.clone(),
         }
     }
 }
@@ -439,6 +469,76 @@ mod tests {
         assert_eq!(preview.profile, "development");
         assert_eq!(preview.target, "local");
         assert_eq!(preview.available_backends.len(), 2);
+    }
+
+    #[test]
+    fn test_session_routing_docker() {
+        let resolver = ExecutionTargetResolver::new(
+            OctoRunMode::Host,
+            SandboxProfile::Staging,
+            vec![SandboxType::Docker],
+        )
+        .with_session("sess-123".to_string());
+
+        let (target, _) = resolver.resolve(ToolCategory::Shell);
+        match target {
+            ExecutionTarget::Sandbox(SandboxRef::Session { id }) => {
+                assert_eq!(id, "sess-123");
+            }
+            _ => panic!("Expected Sandbox(Session), got: {:?}", target),
+        }
+    }
+
+    #[test]
+    fn test_session_routing_wasm_stays_ephemeral() {
+        // Wasm should stay ephemeral even with session_id
+        let resolver = ExecutionTargetResolver::new(
+            OctoRunMode::Host,
+            SandboxProfile::Staging,
+            vec![SandboxType::Wasm],
+        )
+        .with_session("sess-456".to_string());
+
+        let (target, _) = resolver.resolve(ToolCategory::Compute);
+        match target {
+            ExecutionTarget::Sandbox(SandboxRef::Ephemeral { sandbox_type }) => {
+                assert_eq!(sandbox_type, SandboxType::Wasm);
+            }
+            _ => panic!("Expected Sandbox(Ephemeral(Wasm)), got: {:?}", target),
+        }
+    }
+
+    #[test]
+    fn test_no_session_uses_ephemeral() {
+        // Without session_id, Docker should still use Ephemeral
+        let resolver = ExecutionTargetResolver::new(
+            OctoRunMode::Host,
+            SandboxProfile::Staging,
+            vec![SandboxType::Docker],
+        );
+
+        assert!(resolver.session_id().is_none());
+        let (target, _) = resolver.resolve(ToolCategory::Shell);
+        match target {
+            ExecutionTarget::Sandbox(SandboxRef::Ephemeral { sandbox_type }) => {
+                assert_eq!(sandbox_type, SandboxType::Docker);
+            }
+            _ => panic!("Expected Sandbox(Ephemeral(Docker)), got: {:?}", target),
+        }
+    }
+
+    #[test]
+    fn test_session_in_dry_run_preview() {
+        let resolver = ExecutionTargetResolver::new(
+            OctoRunMode::Host,
+            SandboxProfile::Staging,
+            vec![SandboxType::Docker],
+        )
+        .with_session("sess-789".to_string());
+
+        let preview = resolver.dry_run(ToolCategory::Shell);
+        assert_eq!(preview.session_id, Some("sess-789".to_string()));
+        assert!(preview.target.contains("session"));
     }
 
     #[test]

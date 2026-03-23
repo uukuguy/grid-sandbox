@@ -1,0 +1,25 @@
+# Additional Python packages for grid-sandbox:dev
+# Extends base packages with data science, ML, and dev tooling.
+
+# --- Data Science ---
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+scikit-learn>=1.4
+
+# --- Code Quality (heavy) ---
+black>=24.0
+mypy>=1.9
+isort>=5.13
+
+# --- Type Stubs ---
+types-requests>=2.31
+types-pyyaml>=6.0
+
+# --- Debugging ---
+ipython>=8.20
+ipdb>=0.13
+
+# --- Documentation ---
+sphinx>=7.2
+mkdocs>=1.5

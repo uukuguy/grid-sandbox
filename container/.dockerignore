@@ -1,0 +1,5 @@
+# Octo Sandbox Docker build context exclusions
+*.md
+LICENSE
+.git
+.gitignore

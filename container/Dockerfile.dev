@@ -1,0 +1,28 @@
+# Octo Sandbox Dev Image — extends base with Rust toolchain + dev tools
+# Build: docker build -f container/Dockerfile.dev -t octo-sandbox:dev container/
+
+FROM octo-sandbox:base AS dev
+
+USER root
+
+# C/C++ compilers for native extensions
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+
+# Python dev packages
+COPY scripts/requirements-dev.txt /tmp/requirements-dev.txt
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements-dev.txt \
+    && rm /tmp/requirements-dev.txt
+
+USER sandbox
+WORKDIR /workspace/session
+ENTRYPOINT ["sleep", "infinity"]

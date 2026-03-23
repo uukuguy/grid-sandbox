@@ -265,6 +265,27 @@ pub enum SandboxCommands {
     DryRun,
     /// List registered sandbox backends
     ListBackends,
+    /// Build the Octo sandbox Docker image
+    Build {
+        /// Image tag (default: octo-sandbox:base)
+        #[arg(short, long, default_value = "octo-sandbox:base")]
+        tag: String,
+        /// Build without cache
+        #[arg(long)]
+        no_cache: bool,
+        /// Build the dev image (includes Rust toolchain)
+        #[arg(long)]
+        dev: bool,
+    },
+    /// Clean up sandbox containers
+    Cleanup {
+        /// Force-remove all Octo sandbox containers
+        #[arg(long)]
+        force: bool,
+        /// Clean up containers for a specific session
+        #[arg(long)]
+        session: Option<String>,
+    },
 }
 
 /// Root path management subcommands

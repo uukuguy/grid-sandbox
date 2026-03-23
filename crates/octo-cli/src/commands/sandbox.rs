@@ -14,6 +14,8 @@ pub async fn handle_sandbox(action: SandboxCommands, _state: &AppState) -> Resul
         SandboxCommands::Status => show_status(),
         SandboxCommands::DryRun => show_dry_run(),
         SandboxCommands::ListBackends => list_backends(),
+        SandboxCommands::Build { tag, no_cache, dev } => build_image(&tag, no_cache, dev).await,
+        SandboxCommands::Cleanup { force, session } => cleanup_containers(force, session.as_deref()).await,
     }
 }
 
@@ -90,6 +92,126 @@ fn list_backends() -> Result<()> {
     Ok(())
 }
 
+async fn build_image(tag: &str, no_cache: bool, dev: bool) -> Result<()> {
+    let dockerfile = if dev {
+        "container/Dockerfile.dev"
+    } else {
+        "container/Dockerfile"
+    };
+
+    // Check that the Dockerfile exists
+    if !std::path::Path::new(dockerfile).exists() {
+        anyhow::bail!(
+            "Dockerfile not found at '{}'. Run this command from the project root.",
+            dockerfile
+        );
+    }
+
+    println!("Building sandbox image: {}", tag);
+    println!("  Dockerfile: {}", dockerfile);
+    if no_cache {
+        println!("  Cache: disabled");
+    }
+    println!();
+
+    let mut cmd = tokio::process::Command::new("docker");
+    cmd.arg("build")
+        .arg("-t")
+        .arg(tag)
+        .arg("-f")
+        .arg(dockerfile)
+        .arg("container/");
+
+    if no_cache {
+        cmd.arg("--no-cache");
+    }
+
+    // Stream output directly to the terminal
+    cmd.stdout(std::process::Stdio::inherit());
+    cmd.stderr(std::process::Stdio::inherit());
+
+    let status = cmd.status().await?;
+    if status.success() {
+        println!();
+        println!("Image built successfully: {}", tag);
+    } else {
+        anyhow::bail!("Docker build failed with exit code: {:?}", status.code());
+    }
+
+    Ok(())
+}
+
+async fn cleanup_containers(force: bool, session: Option<&str>) -> Result<()> {
+    println!("Cleaning up Octo sandbox containers...");
+
+    let mut cmd = tokio::process::Command::new("docker");
+    cmd.arg("ps")
+        .arg("-a")
+        .arg("--filter")
+        .arg("label=octo-sandbox=true")
+        .arg("--format")
+        .arg("{{.ID}}\t{{.Names}}\t{{.Status}}");
+
+    let output = cmd.output().await?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to list containers: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let lines: Vec<&str> = stdout.lines().collect();
+
+    if lines.is_empty() {
+        println!("  No Octo sandbox containers found.");
+        return Ok(());
+    }
+
+    let mut removed = 0;
+    for line in &lines {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let container_id = parts[0];
+        let name = parts[1];
+
+        // If session filter is set, only remove matching containers
+        if let Some(sid) = session {
+            if !name.contains(sid) {
+                continue;
+            }
+        }
+
+        // If not force, only remove stopped containers
+        if !force && parts[2].starts_with("Up") {
+            println!("  Skipping running container: {} ({})", name, container_id);
+            continue;
+        }
+
+        println!("  Removing: {} ({})", name, container_id);
+        let rm_status = tokio::process::Command::new("docker")
+            .args(["rm", "-f", container_id])
+            .output()
+            .await?;
+
+        if rm_status.status.success() {
+            removed += 1;
+        } else {
+            eprintln!(
+                "  Warning: failed to remove {}: {}",
+                container_id,
+                String::from_utf8_lossy(&rm_status.stderr)
+            );
+        }
+    }
+
+    println!();
+    println!("Removed {} container(s).", removed);
+    Ok(())
+}
+
 fn profile_display(profile: &SandboxProfile) -> &'static str {
     match profile {
         SandboxProfile::Development => "development",
@@ -139,5 +261,14 @@ mod tests {
     fn test_list_backends_runs() {
         let result = list_backends();
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_dockerfile_check() {
+        // build_image should fail if Dockerfile doesn't exist at expected path
+        // (we can't actually run docker build in tests)
+        let path = std::path::Path::new("container/Dockerfile");
+        // Just verify we can check the path
+        let _ = path.exists();
     }
 }

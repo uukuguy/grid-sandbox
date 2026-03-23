@@ -11,32 +11,67 @@ use std::sync::Arc;
 #[cfg(feature = "sandbox-docker")]
 use tokio::sync::RwLock;
 
-/// Preset image registry for language-based Docker image selection
+/// Default image used when no language-specific image is configured.
+pub const DEFAULT_SANDBOX_IMAGE: &str = "octo-sandbox:base";
+
+/// Preset image registry for language-based Docker image selection.
+///
+/// Supports custom overrides via `with_custom_images()`.
 pub struct ImageRegistry {
     images: HashMap<String, String>,
+    default_image: String,
 }
 
 impl ImageRegistry {
+    /// Create a registry with built-in defaults pointing to `octo-sandbox:base`.
     pub fn default_registry() -> Self {
         let mut images = HashMap::new();
-        images.insert("python".into(), "octo-sandbox/python:1.0".into());
-        images.insert("rust".into(), "octo-sandbox/rust:1.0".into());
-        images.insert("node".into(), "octo-sandbox/nodejs:1.0".into());
-        images.insert("javascript".into(), "octo-sandbox/nodejs:1.0".into());
-        images.insert("typescript".into(), "octo-sandbox/nodejs:1.0".into());
-        images.insert("bash".into(), "octo-sandbox/bash:1.0".into());
-        images.insert("sh".into(), "octo-sandbox/bash:1.0".into());
-        images.insert("general".into(), "octo-sandbox/general:1.0".into());
-        images.insert("swebench".into(), "octo-sandbox/swebench:1.0".into());
-        Self { images }
+        // All languages default to the same base image.
+        // Users can override per-language via with_custom_images().
+        for lang in &[
+            "python",
+            "rust",
+            "node",
+            "javascript",
+            "typescript",
+            "bash",
+            "sh",
+            "general",
+            "swebench",
+        ] {
+            images.insert((*lang).to_string(), DEFAULT_SANDBOX_IMAGE.to_string());
+        }
+        Self {
+            images,
+            default_image: DEFAULT_SANDBOX_IMAGE.to_string(),
+        }
     }
 
-    /// Resolve a language to a Docker image name
+    /// Apply custom image overrides (e.g., from config file).
+    pub fn with_custom_images(mut self, overrides: HashMap<String, String>) -> Self {
+        for (lang, image) in overrides {
+            self.images.insert(lang, image);
+        }
+        self
+    }
+
+    /// Override the default fallback image.
+    pub fn with_default_image(mut self, image: impl Into<String>) -> Self {
+        self.default_image = image.into();
+        self
+    }
+
+    /// Resolve a language to a Docker image name.
     pub fn resolve(&self, language: &str) -> &str {
         self.images
             .get(language)
             .map(|s| s.as_str())
-            .unwrap_or("octo-sandbox/general:1.0")
+            .unwrap_or(&self.default_image)
+    }
+
+    /// Get the default image name.
+    pub fn default_image(&self) -> &str {
+        &self.default_image
     }
 }
 
@@ -92,9 +127,17 @@ impl DockerAdapter {
         }
     }
 
-    /// Create a new DockerAdapter with default image "octo-sandbox/general:1.0"
+    /// Create a new DockerAdapter with default image `octo-sandbox:base`.
     pub fn with_default_image() -> Self {
-        Self::new("octo-sandbox/general:1.0")
+        Self::new(DEFAULT_SANDBOX_IMAGE)
+    }
+
+    /// Create a new DockerAdapter with a custom image registry.
+    pub fn with_registry(registry: ImageRegistry) -> Self {
+        let default_image = registry.default_image().to_string();
+        let mut adapter = Self::new(default_image);
+        adapter.image_registry = registry;
+        adapter
     }
 
     /// Create Docker client
@@ -125,6 +168,22 @@ impl DockerAdapter {
     /// Get the image registry
     pub fn image_registry(&self) -> &ImageRegistry {
         &self.image_registry
+    }
+
+    /// Check if a Docker image is available locally.
+    #[cfg(feature = "sandbox-docker")]
+    pub async fn is_image_available(&self, image: &str) -> bool {
+        if let Some(client) = &self.client {
+            client.inspect_image(image).await.is_ok()
+        } else {
+            false
+        }
+    }
+
+    /// Check if a Docker image is available locally (stub without feature).
+    #[cfg(not(feature = "sandbox-docker"))]
+    pub async fn is_image_available(&self, _image: &str) -> bool {
+        false
     }
 
     /// Pull an image from Docker Hub (helper method)

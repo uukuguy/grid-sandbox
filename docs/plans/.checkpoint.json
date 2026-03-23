@@ -1,104 +1,80 @@
 {
-  "plan_file": "docs/plans/2026-03-23-phase-ab-tool-execution-environment.md",
-  "phase": "review",
-  "created_at": "2026-03-23T07:30:00+08:00",
-  "updated_at": "2026-03-23T10:00:00+08:00",
-  "completed_tasks": [
-    "AB-T1", "AB-T2", "AB-T3", "AB-T4", "AB-T5", "AB-T6", "AB-T7", "AB-T8", "AB-T9", "AB-T10"
-  ],
+  "plan_file": "docs/plans/2026-03-23-phase-ac-sandbox-container.md",
+  "phase": "design",
+  "created_at": "2026-03-23T13:30:00+08:00",
+  "updated_at": "2026-03-23T13:30:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 10,
+  "total_tasks": 9,
   "task_groups": {
     "G1": {
-      "name": "Profile + RunMode + Config",
-      "tasks": ["AB-T1", "AB-T2", "AB-T3"],
-      "status": "COMPLETE"
+      "name": "Octo 沙箱 Docker 镜像 (AB-D1)",
+      "tasks": ["AC-T1", "AC-T2", "AC-T3"],
+      "status": "PENDING"
     },
     "G2": {
-      "name": "BashTool + SkillRuntime Integration",
-      "tasks": ["AB-T4", "AB-T5", "AB-T6"],
-      "status": "COMPLETE"
+      "name": "Session Sandbox 生命周期 (AB-D4)",
+      "tasks": ["AC-T4", "AC-T5", "AC-T6"],
+      "status": "PENDING"
     },
     "G3": {
-      "name": "Observability — Record + Display",
-      "tasks": ["AB-T7", "AB-T8"],
-      "status": "COMPLETE"
-    },
-    "G4": {
-      "name": "External Sandbox + CLI",
-      "tasks": ["AB-T9", "AB-T10"],
-      "status": "COMPLETE"
+      "name": "集成与可观测",
+      "tasks": ["AC-T7", "AC-T8", "AC-T9"],
+      "status": "PENDING"
     }
   },
-  "phase_name": "Phase AB — 智能体工具执行环境",
-  "status": "IMPLEMENTATION_COMPLETE",
-  "execution_mode": "writing-plans",
-  "design_file": "docs/design/TOOL_EXECUTION_ENVIRONMENT_DESIGN.md",
+  "phase_name": "Phase AC — 沙箱容器",
+  "status": "DESIGN_COMPLETE",
+  "execution_mode": null,
+  "design_file": null,
   "branch": "main",
   "baseline": {
-    "tests": 2394,
-    "commit": "4d45e9a"
-  },
-  "final": {
     "tests": 2446,
-    "commit": "282d3f6"
+    "commit": "d813625"
   },
   "deferred": [
     {
-      "id": "AB-D1",
-      "description": "Octo sandbox Docker image (Dockerfile + CI)",
-      "precondition": "Basic integration complete"
+      "id": "AC-D1",
+      "description": "CI/CD 镜像构建流水线（GitHub Actions）",
+      "precondition": "AC-T1 Dockerfile 稳定"
     },
     {
-      "id": "AB-D2",
-      "description": "E2B provider full implementation",
-      "precondition": "ExternalSandboxProvider trait stable"
+      "id": "AC-D2",
+      "description": "容器资源限制（memory/cpu cgroup 配额）",
+      "precondition": "AC-T4 基础功能验证"
     },
     {
-      "id": "AB-D3",
-      "description": "WASM plugin loading (.octo/plugins/*.wasm)",
-      "precondition": "WASM routing activated"
+      "id": "AC-D3",
+      "description": "容器网络隔离（自定义 Docker network）",
+      "precondition": "安全需求评估"
     },
     {
-      "id": "AB-D4",
-      "description": "Session Sandbox persistence (per-session Docker reuse)",
-      "precondition": "BashTool sandbox integration complete"
+      "id": "AC-D4",
+      "description": "多镜像支持（按 language/tool 选择不同镜像）",
+      "precondition": "AC-T2 ImageRegistry 稳定"
     },
     {
-      "id": "AB-D5",
-      "description": "CredentialResolver → sandbox env injection",
-      "precondition": "Z-D1 complete"
+      "id": "AC-D5",
+      "description": "容器文件系统快照/恢复",
+      "precondition": "session sandbox 生产验证"
     },
     {
-      "id": "AB-D6",
-      "description": "gVisor / Firecracker provider",
-      "precondition": "External trait stable"
+      "id": "AC-D6",
+      "description": "Docker Compose 编排（多容器协同）",
+      "precondition": "多 Agent 协作场景"
     }
   ],
   "key_decisions": [
-    "Four sandbox backends: Native/WASM/Docker/External",
-    "Two deployment modes: Sandboxed (mode A) vs Host (mode B)",
-    "SandboxProfile as one-line config switch (dev/stg/prod/custom)",
-    "Development profile = zero-friction (no sandbox overhead)",
-    "Keep two RuntimeAdapter traits (octo-sandbox vs octo-engine) — no merge",
-    "Tool/SkillRuntime trait interfaces unchanged — changes internal only",
-    "--sandbox-bypass preserves SecurityPolicy.forbidden_paths"
+    "container/ 独立于 container.sample/（后者保留为 Claude Code 参考）",
+    "镜像精简：去掉 claude-code/bun/AI CLI/playwright/agent-runner",
+    "SessionSandboxManager 持有容器池，与 AgentExecutor 生命周期对齐",
+    "Session 容器用 sleep infinity 保活，通过 exec 执行命令",
+    "SandboxRef::Session 路由仅 Docker 后端，Wasm/External 仍用 Ephemeral",
+    "所有新字段 Option<T>，with_* 构造器保留无参版本确保向后兼容"
   ],
-  "implementation_notes": {
-    "AB-T1": "SandboxProfile enum (dev/stg/prod/custom) with resolve() priority chain, 16 tests",
-    "AB-T2": "OctoRunMode auto-detect (dockerenv/containerenv/k8s), 9 tests",
-    "AB-T3": "SandboxType +External(String) broke Copy→Clone, updated all call sites",
-    "AB-T4": "ExecutionTargetResolver routing decision engine, 12 tests",
-    "AB-T5": "BashTool refactored: with_sandbox() constructor, profile-aware env filtering",
-    "AB-T6": "SkillContext +sandbox_profile field, runtimes respect profile timeout",
-    "AB-T7": "ToolExecution +4 telemetry fields (sandbox_profile/target/backend/reason)",
-    "AB-T8": "StatusBar sandbox profile badge with color coding",
-    "AB-T9": "ExternalSandboxProvider async trait + StubE2BProvider, 9 tests",
-    "AB-T10": "CLI `octo sandbox` (status/dry-run/list-backends), 5 tests"
-  },
   "previous_phase": {
-    "name": "Phase AA — Octo 部署配置架构",
+    "name": "Phase AB — 智能体工具执行环境",
     "status": "COMPLETE",
-    "commit": "4d45e9a"
+    "commit": "d813625"
   }
 }

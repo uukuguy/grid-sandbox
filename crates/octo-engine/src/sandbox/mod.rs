@@ -12,12 +12,13 @@ pub mod external;
 pub mod profile;
 pub mod router;
 pub mod run_mode;
+pub mod session_sandbox;
 pub mod subprocess;
 pub mod target;
 pub mod traits;
 pub mod wasm;
 
-pub use docker::{DockerAdapter, ImageRegistry};
+pub use docker::{DockerAdapter, ImageRegistry, DEFAULT_SANDBOX_IMAGE};
 pub use external::{
     ExecRequest, ExternalSandboxConfig, ExternalSandboxId, ExternalSandboxProvider, StubE2BProvider,
 };
@@ -27,6 +28,7 @@ pub use run_mode::OctoRunMode;
 pub use subprocess::SubprocessAdapter;
 pub use target::{ExecutionTarget, ExecutionTargetResolver, RoutingPreview, SandboxRef};
 pub use audit::{ResourceUsage, SandboxAction, SandboxAuditEvent};
+pub use session_sandbox::{SessionContainer, SessionSandboxConfig, SessionSandboxManager};
 pub use traits::{
     ExecResult, RuntimeAdapter, SandboxConfig, SandboxError, SandboxId, SandboxPolicy, SandboxType,
 };

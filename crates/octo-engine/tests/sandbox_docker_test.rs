@@ -218,7 +218,7 @@ async fn test_docker_adapter_default_image() {
 
     // Test with default image
     let adapter = DockerAdapter::default();
-    assert_eq!(adapter.image(), "octo-sandbox/general:1.0");
+    assert_eq!(adapter.image(), "octo-sandbox:base");
 }
 
 // ── ContainerGuard RAII + helpers (Phase J3-T2) ─────────────────────────
