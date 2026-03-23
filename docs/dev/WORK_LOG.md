@@ -1,5 +1,57 @@
 # octo-sandbox 工作日志
 
+## Phase AB — 智能体工具执行环境 (2026-03-23)
+
+### 完成内容
+
+实现沙箱执行环境，将现有沙箱基础设施（SandboxRouter/SandboxPolicy/Docker/WASM/Subprocess 适配器）与实际工具/技能执行层连接。
+
+**G1 Profile + RunMode + Config (AB-T1 ~ AB-T3)**
+- SandboxProfile 枚举：dev/stg/prod/custom，resolve() 优先级链 (--sandbox-bypass > --sandbox-profile > env > config)
+- OctoRunMode 自动检测：/.dockerenv > /run/.containerenv > KUBERNETES_SERVICE_HOST > env
+- SandboxType 新增 External(String) 变体，Copy→Clone 迁移，所有调用点更新为引用
+
+**G2 BashTool + SkillRuntime 集成 (AB-T4 ~ AB-T6)**
+- ExecutionTargetResolver 路由决策引擎：RunMode × Profile × ToolCategory → Local|Sandbox
+- BashTool 重构：with_sandbox() 构造器，profile-aware 环境变量过滤
+- SkillContext +sandbox_profile 字段，Shell/Node/Python 运行时尊重 profile timeout
+
+**G3 可观测性 (AB-T7 ~ AB-T8)**
+- ToolExecution +4 遥测字段：sandbox_profile, execution_target, actual_backend, routing_reason
+- StatusBar 沙箱 profile 徽章，颜色编码（绿=dev, 黄=staging, 红=production）
+
+**G4 外部沙箱 + CLI (AB-T9 ~ AB-T10)**
+- ExternalSandboxProvider async trait + StubE2BProvider（E2B/Modal/Firecracker 接口定义）
+- CLI `octo sandbox` 诊断命令：status/dry-run/list-backends
+
+### 技术变更
+- `crates/octo-engine/src/sandbox/profile.rs` — 新建：SandboxProfile 枚举 (16 tests)
+- `crates/octo-engine/src/sandbox/run_mode.rs` — 新建：OctoRunMode 自动检测 (9 tests)
+- `crates/octo-engine/src/sandbox/target.rs` — 新建：ExecutionTargetResolver (12 tests)
+- `crates/octo-engine/src/sandbox/external.rs` — 新建：ExternalSandboxProvider trait (9 tests)
+- `crates/octo-engine/src/sandbox/traits.rs` — SandboxType +External, Copy→Clone
+- `crates/octo-engine/src/sandbox/router.rs` — ToolCategory +Script/Gpu/Untrusted, 引用化 API
+- `crates/octo-engine/src/tools/bash.rs` — BashTool 重构：sandbox routing 集成
+- `crates/octo-engine/src/skill_runtime/` — SkillContext +sandbox_profile, timeout 尊重
+- `crates/octo-types/src/execution.rs` — ToolExecution +4 遥测字段
+- `crates/octo-cli/src/commands/sandbox.rs` — 新建：sandbox 诊断命令 (5 tests)
+- `crates/octo-cli/src/tui/widgets/status_bar.rs` — sandbox profile 显示
+
+### 测试
+- octo-cli: 472 tests (was 456, +16)
+- 所有 engine/types 测试通过
+- Commit: 282d3f6
+
+### 暂缓项
+- AB-D1: Octo sandbox Docker image (Dockerfile + CI)
+- AB-D2: E2B provider 完整实现
+- AB-D3: WASM plugin loading
+- AB-D4: Session Sandbox persistence
+- AB-D5: CredentialResolver → sandbox env injection
+- AB-D6: gVisor / Firecracker provider
+
+---
+
 ## Phase AA — Octo 部署配置架构 (2026-03-23)
 
 ### 完成内容
