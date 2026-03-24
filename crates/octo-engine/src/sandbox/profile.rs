@@ -106,6 +106,39 @@ impl SandboxProfile {
         }
     }
 
+    /// Memory limit in bytes for Docker containers.
+    /// Development: unlimited, Staging: 2GB, Production: 1GB
+    pub fn memory_limit(&self) -> Option<i64> {
+        match self {
+            SandboxProfile::Development => None,
+            SandboxProfile::Staging => Some(2 * 1024 * 1024 * 1024), // 2 GiB
+            SandboxProfile::Production => Some(1024 * 1024 * 1024),  // 1 GiB
+            SandboxProfile::Custom(c) => c.memory_limit,
+        }
+    }
+
+    /// CPU quota (in microseconds per 100ms period).
+    /// Development: unlimited, Staging: 200% (2 cores), Production: 100% (1 core)
+    pub fn cpu_quota(&self) -> Option<i64> {
+        match self {
+            SandboxProfile::Development => None,
+            SandboxProfile::Staging => Some(200_000),  // 200% = 2 cores
+            SandboxProfile::Production => Some(100_000), // 100% = 1 core
+            SandboxProfile::Custom(c) => c.cpu_quota,
+        }
+    }
+
+    /// Network mode for Docker containers.
+    /// Development: "bridge" (full access), Staging: "bridge", Production: "none" (no network)
+    pub fn network_mode(&self) -> &str {
+        match self {
+            SandboxProfile::Development => "bridge",
+            SandboxProfile::Staging => "bridge",
+            SandboxProfile::Production => "none",
+            SandboxProfile::Custom(c) => c.network_mode.as_deref().unwrap_or("bridge"),
+        }
+    }
+
     /// Resolve SandboxProfile from multiple sources with priority:
     /// `--sandbox-bypass` > `--sandbox-profile` > `OCTO_SANDBOX_PROFILE` > config > default
     pub fn resolve(
@@ -172,6 +205,15 @@ pub struct CustomSandboxConfig {
     /// Audit level: "none", "warnings", "full"
     #[serde(default = "default_audit_level")]
     pub audit_level: String,
+    /// Memory limit in bytes for Docker containers (None = unlimited)
+    #[serde(default)]
+    pub memory_limit: Option<i64>,
+    /// CPU quota in microseconds per 100ms period (None = unlimited)
+    #[serde(default)]
+    pub cpu_quota: Option<i64>,
+    /// Docker network mode (None defaults to "bridge")
+    #[serde(default)]
+    pub network_mode: Option<String>,
 }
 
 fn default_timeout() -> u64 {
@@ -190,6 +232,9 @@ impl Default for CustomSandboxConfig {
             approval_gate: true,
             timeout_secs: default_timeout(),
             audit_level: default_audit_level(),
+            memory_limit: None,
+            cpu_quota: None,
+            network_mode: None,
         }
     }
 }
@@ -241,6 +286,9 @@ mod tests {
             approval_gate: false,
             timeout_secs: 90,
             audit_level: "full".to_string(),
+            memory_limit: Some(512 * 1024 * 1024),
+            cpu_quota: Some(50_000),
+            network_mode: Some("host".to_string()),
         };
         let p = SandboxProfile::Custom(custom);
         assert_eq!(p.policy(), SandboxPolicy::Strict);
@@ -248,6 +296,9 @@ mod tests {
         assert!(!p.approval_gate());
         assert_eq!(p.timeout_secs(), 90);
         assert_eq!(p.audit_level(), "full");
+        assert_eq!(p.memory_limit(), Some(512 * 1024 * 1024));
+        assert_eq!(p.cpu_quota(), Some(50_000));
+        assert_eq!(p.network_mode(), "host");
     }
 
     #[test]
@@ -339,6 +390,43 @@ mod tests {
     }
 
     #[test]
+    fn test_memory_limit() {
+        assert!(SandboxProfile::Development.memory_limit().is_none());
+        assert_eq!(
+            SandboxProfile::Staging.memory_limit(),
+            Some(2 * 1024 * 1024 * 1024)
+        );
+        assert_eq!(
+            SandboxProfile::Production.memory_limit(),
+            Some(1024 * 1024 * 1024)
+        );
+    }
+
+    #[test]
+    fn test_cpu_quota() {
+        assert!(SandboxProfile::Development.cpu_quota().is_none());
+        assert_eq!(SandboxProfile::Staging.cpu_quota(), Some(200_000));
+        assert_eq!(SandboxProfile::Production.cpu_quota(), Some(100_000));
+    }
+
+    #[test]
+    fn test_network_mode() {
+        assert_eq!(SandboxProfile::Development.network_mode(), "bridge");
+        assert_eq!(SandboxProfile::Staging.network_mode(), "bridge");
+        assert_eq!(SandboxProfile::Production.network_mode(), "none");
+    }
+
+    #[test]
+    fn test_custom_network_mode_default() {
+        let custom = CustomSandboxConfig {
+            network_mode: None,
+            ..Default::default()
+        };
+        let p = SandboxProfile::Custom(custom);
+        assert_eq!(p.network_mode(), "bridge");
+    }
+
+    #[test]
     fn test_custom_serde_roundtrip() {
         let custom = SandboxProfile::Custom(CustomSandboxConfig {
             policy: SandboxPolicy::Strict,
@@ -346,6 +434,9 @@ mod tests {
             approval_gate: false,
             timeout_secs: 45,
             audit_level: "full".to_string(),
+            memory_limit: Some(1024 * 1024 * 1024),
+            cpu_quota: Some(100_000),
+            network_mode: Some("none".to_string()),
         });
         let json = serde_json::to_string(&custom).unwrap();
         let deserialized: SandboxProfile = serde_json::from_str(&json).unwrap();

@@ -41,6 +41,9 @@ pub struct SessionSandboxConfig {
     pub max_containers: usize,
     /// Container working directory (default: `/home/sandbox`).
     pub working_dir: String,
+    /// Host working directory to bind-mount into the container.
+    /// When set, creates a bind mount: host_working_dir -> working_dir
+    pub host_working_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for SessionSandboxConfig {
@@ -51,6 +54,7 @@ impl Default for SessionSandboxConfig {
             max_lifetime: Duration::from_secs(4 * 3600),
             max_containers: 5,
             working_dir: "/home/sandbox".to_string(),
+            host_working_dir: None,
         }
     }
 }
@@ -100,8 +104,16 @@ impl SessionSandboxManager {
         }
 
         // Create new container
-        let sandbox_config = SandboxConfig::new(super::traits::SandboxType::Docker)
+        let mut sandbox_config = SandboxConfig::new(super::traits::SandboxType::Docker)
             .with_working_dir(std::path::PathBuf::from(&self.config.working_dir));
+
+        // Bind mount host working directory into container
+        if let Some(ref host_dir) = self.config.host_working_dir {
+            sandbox_config = sandbox_config.with_bind_mount(
+                host_dir.to_string_lossy().to_string(),
+                &self.config.working_dir,
+            );
+        }
 
         let sandbox_id = self.docker.create(&sandbox_config).await?;
 
@@ -442,5 +454,14 @@ mod tests {
     #[test]
     fn test_default_cleanup_interval() {
         assert_eq!(DEFAULT_CLEANUP_INTERVAL, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_config_with_host_working_dir() {
+        let config = SessionSandboxConfig {
+            host_working_dir: Some(std::path::PathBuf::from("/home/user/project")),
+            ..Default::default()
+        };
+        assert_eq!(config.host_working_dir.unwrap().to_str().unwrap(), "/home/user/project");
     }
 }

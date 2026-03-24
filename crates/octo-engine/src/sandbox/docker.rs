@@ -419,6 +419,22 @@ async fn create_container(
     labels.insert("octo-sandbox".to_string(), "true".to_string());
     labels.insert("sandbox-id".to_string(), id.to_string());
 
+    // Build bind mounts from config
+    let binds: Vec<String> = config.bind_mounts.iter()
+        .map(|(host, container)| format!("{}:{}", host, container))
+        .collect();
+
+    // Resource limits from config env (set by session sandbox manager via SandboxProfile)
+    let memory_limit = config
+        .env
+        .get("OCTO_MEMORY_LIMIT")
+        .and_then(|v| v.parse::<i64>().ok());
+    let cpu_quota = config
+        .env
+        .get("OCTO_CPU_QUOTA")
+        .and_then(|v| v.parse::<i64>().ok());
+    let network_mode = config.env.get("OCTO_NETWORK_MODE").cloned();
+
     // Container config - keep the container alive with a sleeping shell
     // Alpine exits immediately without a blocking process; `sh` + tty keeps it running
     let container_config = Config {
@@ -428,6 +444,18 @@ async fn create_container(
         cmd: Some(vec!["sh".to_string()]),
         tty: Some(true),
         open_stdin: Some(true),
+        host_config: Some(bollard::models::HostConfig {
+            binds: if binds.is_empty() { None } else { Some(binds) },
+            memory: memory_limit,
+            cpu_quota,
+            cpu_period: if cpu_quota.is_some() {
+                Some(100_000)
+            } else {
+                None
+            },
+            network_mode,
+            ..Default::default()
+        }),
         ..Default::default()
     };
 

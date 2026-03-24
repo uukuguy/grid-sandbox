@@ -344,7 +344,9 @@ impl AgentRuntime {
             if run_mode == OctoRunMode::Host && profile != SandboxProfile::Development {
                 // Attempt to create DockerAdapter for container-backed sandbox
                 let docker = DockerAdapter::new(crate::sandbox::DEFAULT_SANDBOX_IMAGE);
-                let ssm_config = SessionSandboxConfig::default();
+                let mut ssm_config = SessionSandboxConfig::default();
+                // Pass host working directory for bind mount into container
+                ssm_config.host_working_dir = Some(working_dir.clone());
                 let ssm = SessionSandboxManager::new(Arc::new(docker), ssm_config);
                 tracing::info!(
                     run_mode = %run_mode,

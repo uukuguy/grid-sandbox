@@ -57,6 +57,8 @@ pub struct SandboxConfig {
     pub memory_limit: Option<u64>,
     /// CPU time limit in seconds
     pub time_limit: Option<u64>,
+    /// Bind mount mappings: (host_path, container_path)
+    pub bind_mounts: Vec<(String, String)>,
 }
 
 impl SandboxConfig {
@@ -67,6 +69,7 @@ impl SandboxConfig {
             env: std::collections::HashMap::new(),
             memory_limit: None,
             time_limit: None,
+            bind_mounts: Vec::new(),
         }
     }
 
@@ -87,6 +90,11 @@ impl SandboxConfig {
 
     pub fn with_time_limit(mut self, limit: u64) -> Self {
         self.time_limit = Some(limit);
+        self
+    }
+
+    pub fn with_bind_mount(mut self, host_path: impl Into<String>, container_path: impl Into<String>) -> Self {
+        self.bind_mounts.push((host_path.into(), container_path.into()));
         self
     }
 }
@@ -227,6 +235,27 @@ impl From<std::io::Error> for SandboxError {
 impl From<serde_json::Error> for SandboxError {
     fn from(e: serde_json::Error) -> Self {
         SandboxError::SerdeError(e)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sandbox_config_bind_mounts() {
+        let config = SandboxConfig::new(SandboxType::Docker)
+            .with_bind_mount("/host/path", "/container/path")
+            .with_bind_mount("/host/path2", "/container/path2");
+        assert_eq!(config.bind_mounts.len(), 2);
+        assert_eq!(config.bind_mounts[0], ("/host/path".to_string(), "/container/path".to_string()));
+        assert_eq!(config.bind_mounts[1], ("/host/path2".to_string(), "/container/path2".to_string()));
+    }
+
+    #[test]
+    fn test_sandbox_config_bind_mounts_empty_by_default() {
+        let config = SandboxConfig::new(SandboxType::Docker);
+        assert!(config.bind_mounts.is_empty());
     }
 }
 
