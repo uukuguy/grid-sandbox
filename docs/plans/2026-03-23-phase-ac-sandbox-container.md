@@ -248,8 +248,8 @@ pub struct SessionSandboxConfig {
 | ID | 内容 | 前置条件 | 状态 |
 |----|------|---------|------|
 | AC-D1 | CI/CD 镜像构建流水线（GitHub Actions） | AC-T1 Dockerfile 稳定 | ⏳ |
-| AC-D2 | 容器资源限制（memory/cpu cgroup 配额） | AC-T4 基础功能验证 | ⏳ |
-| AC-D3 | 容器网络隔离（自定义 Docker network） | 安全需求评估 | ⏳ |
+| AC-D2 | 容器资源限制（memory/cpu cgroup 配额） | AC-T4 基础功能验证 | ✅ 已补 @ f452f5c |
+| AC-D3 | 容器网络隔离（自定义 Docker network） | 安全需求评估 | ✅ 已补 @ f452f5c |
 | AC-D4 | 多镜像支持（按 language/tool 选择不同镜像） | AC-T2 ImageRegistry 稳定 | ⏳ |
 | AC-D5 | 容器文件系统快照/恢复 | session sandbox 生产验证 | ⏳ |
 | AC-D6 | Docker Compose 编排（多容器协同） | 多 Agent 协作场景 | ⏳ |

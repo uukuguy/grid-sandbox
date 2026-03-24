@@ -79,7 +79,7 @@ AgentRuntime (持有 Option<Arc<SSM>>)
 
 | ID | 描述 | 原因 |
 |----|------|------|
-| AF-D1 | BashTool 自动从 AgentExecutor 获取 SSM 并构建 `with_session_sandbox` | 当前 BashTool 在 ToolRegistry 中是全局共享的，per-session wiring 需要 ToolRegistry per-session 化 |
+| AF-D1 | BashTool 自动从 AgentExecutor 获取 SSM 并构建 `with_session_sandbox` | 当前 BashTool 在 ToolRegistry 中是全局共享的，per-session wiring 需要 ToolRegistry per-session 化 | ✅ 已补 @ 6d99361 — AgentExecutor.tools_snapshot 中 per-session 替换 BashTool |
 
 ---
 
