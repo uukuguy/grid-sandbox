@@ -11,8 +11,8 @@ use octo_types::{ApprovalRequirement, RiskLevel, ToolContext, ToolOutput, ToolSo
 use super::traits::Tool;
 
 use crate::sandbox::{
-    AdapterEnum, ExecutionTarget, ExecutionTargetResolver, OctoRunMode, SandboxProfile,
-    SandboxRef, SandboxRouter, SandboxType, SessionSandboxManager, SubprocessAdapter, ToolCategory,
+    ExecutionTarget, ExecutionTargetResolver, OctoRunMode, SandboxProfile,
+    SandboxRef, SandboxRouter, SessionSandboxManager, ToolCategory,
 };
 
 /// Environment variables passed through to command execution.
@@ -97,14 +97,7 @@ impl BashTool {
         command: &str,
         working_dir: &std::path::Path,
     ) -> Result<(String, i32), String> {
-        let router = self.router.as_ref().ok_or("No sandbox router")?;
-
-        // Clone the router and ensure subprocess is registered
-        let mut router = router.clone();
-        if router.get_adapter(&SandboxType::Subprocess).is_none() {
-            router.register_adapter(AdapterEnum::Subprocess(SubprocessAdapter::new()));
-        }
-        router.set_mapping(ToolCategory::Shell, SandboxType::Subprocess);
+        let router = self.router.as_ref().ok_or("No sandbox router configured")?;
 
         let full_command = format!("cd {} && {}", working_dir.display(), command);
 
@@ -123,13 +116,7 @@ impl BashTool {
                 let code = if result.success { 0 } else { result.exit_code };
                 Ok((combined, code))
             }
-            Err(e) => {
-                tracing::warn!(
-                    "Sandbox execution failed, falling back to direct execution: {}",
-                    e
-                );
-                Err(format!("Sandbox execution failed: {}", e))
-            }
+            Err(e) => Err(format!("Sandbox execution failed: {}", e)),
         }
     }
 
@@ -281,86 +268,53 @@ impl Tool for BashTool {
                 }
                 ExecutionTarget::Sandbox(SandboxRef::Session { ref id }) => {
                     // Session container reuse — execute in long-lived container
-                    if let Some(ssm) = &self.session_sandbox {
-                        match ssm.execute(id, command).await {
-                            Ok(result) => {
-                                let combined = if result.stderr.is_empty() {
-                                    result.stdout
-                                } else if result.stdout.is_empty() {
-                                    format!("STDERR:\n{}", result.stderr)
-                                } else {
-                                    format!("{}\nSTDERR:\n{}", result.stdout, result.stderr)
-                                };
-                                let output_text = truncate_output(combined);
-                                if result.success {
-                                    return Ok(ToolOutput::success(output_text));
-                                } else {
-                                    return Ok(ToolOutput::error(format!(
-                                        "Exit code: {}\n{}",
-                                        result.exit_code, output_text
-                                    )));
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    "Session sandbox execution failed, falling back: {}",
-                                    e
-                                );
-                                let pass_env = resolver.profile().env_passthrough();
-                                return self
-                                    .execute_local(command, &ctx.working_dir, timeout_secs, pass_env)
-                                    .await;
-                            }
-                        }
-                    }
-                    // No session sandbox manager — fall through to ephemeral
-                    match self.execute_via_sandbox(command, &ctx.working_dir).await {
-                        Ok((output_text, exit_code)) => {
-                            let output_text = truncate_output(output_text);
-                            if exit_code == 0 {
+                    let ssm = self.session_sandbox.as_ref().ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Sandbox routing resolved to session container '{}' but SessionSandboxManager is not configured. \
+                             Ensure Docker is running and sandbox profile is correctly set.",
+                            id
+                        )
+                    })?;
+                    match ssm.execute(id, command).await {
+                        Ok(result) => {
+                            let combined = if result.stderr.is_empty() {
+                                result.stdout
+                            } else if result.stdout.is_empty() {
+                                format!("STDERR:\n{}", result.stderr)
+                            } else {
+                                format!("{}\nSTDERR:\n{}", result.stdout, result.stderr)
+                            };
+                            let output_text = truncate_output(combined);
+                            if result.success {
                                 return Ok(ToolOutput::success(output_text));
                             } else {
                                 return Ok(ToolOutput::error(format!(
-                                    "Exit code: {exit_code}\n{output_text}"
+                                    "Exit code: {}\n{}",
+                                    result.exit_code, output_text
                                 )));
                             }
                         }
-                        Err(_) => {
-                            let pass_env = resolver.profile().env_passthrough();
-                            return self
-                                .execute_local(command, &ctx.working_dir, timeout_secs, pass_env)
-                                .await;
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Session sandbox execution failed for session '{}': {}",
+                                id, e
+                            ));
                         }
                     }
                 }
                 ExecutionTarget::Sandbox(SandboxRef::Ephemeral { .. }) => {
                     // Ephemeral sandbox — create, execute, destroy per call
-                    match self
+                    let (output_text, exit_code) = self
                         .execute_via_sandbox(command, &ctx.working_dir)
                         .await
-                    {
-                        Ok((output_text, exit_code)) => {
-                            let output_text = truncate_output(output_text);
-                            if exit_code == 0 {
-                                return Ok(ToolOutput::success(output_text));
-                            } else {
-                                return Ok(ToolOutput::error(format!(
-                                    "Exit code: {exit_code}\n{output_text}"
-                                )));
-                            }
-                        }
-                        Err(_) => {
-                            // Sandbox failed — behavior depends on profile
-                            let pass_env = resolver.profile().env_passthrough();
-                            return self
-                                .execute_local(
-                                    command,
-                                    &ctx.working_dir,
-                                    timeout_secs,
-                                    pass_env,
-                                )
-                                .await;
-                        }
+                        .map_err(|e| anyhow::anyhow!("Ephemeral sandbox execution failed: {}", e))?;
+                    let output_text = truncate_output(output_text);
+                    if exit_code == 0 {
+                        return Ok(ToolOutput::success(output_text));
+                    } else {
+                        return Ok(ToolOutput::error(format!(
+                            "Exit code: {exit_code}\n{output_text}"
+                        )));
                     }
                 }
             }

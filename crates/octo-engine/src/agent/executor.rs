@@ -13,8 +13,12 @@ use crate::agent::subagent::SubAgentManager;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
-use crate::sandbox::SessionSandboxManager;
+use crate::sandbox::{
+    DockerAdapter, OctoRunMode, SandboxProfile, SandboxRouter,
+    SessionSandboxManager,
+};
 use crate::skills::{ExecuteSkillTool, SkillRegistry, SubAgentContext};
+use crate::tools::bash::BashTool;
 use crate::tools::ToolRegistry;
 
 use super::entry::AgentManifest;
@@ -194,11 +198,32 @@ impl AgentExecutor {
 
                     // 从共享 ToolRegistry 生成快照（每 round 新建，实现 MCP 热插拔）
                     // 同时为 execute_skill 工具注入 SubAgent 执行上下文
+                    // AF-D1: 如果有 SSM，替换 BashTool 为带 session sandbox 的版本
                     let tools_snapshot = {
                         let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
                         let mut registry = ToolRegistry::new();
                         for (name, tool) in guard.iter() {
+                            // Skip default BashTool — we'll replace it with SSM-wired version below
+                            if name == "bash" && self.session_sandbox.is_some() {
+                                continue;
+                            }
                             registry.register_arc(name.clone(), tool);
+                        }
+                        // Wire SSM into BashTool for per-session container execution
+                        if let Some(ref ssm) = self.session_sandbox {
+                            let run_mode = OctoRunMode::detect();
+                            let profile = SandboxProfile::resolve(false, None, None);
+                            let docker = DockerAdapter::new(crate::sandbox::DEFAULT_SANDBOX_IMAGE);
+                            let mut router = SandboxRouter::with_policy(profile.policy());
+                            router.register_adapter(crate::sandbox::AdapterEnum::Docker(docker));
+                            let bash = BashTool::with_session_sandbox(
+                                run_mode,
+                                profile,
+                                router,
+                                ssm.clone(),
+                                self.session_id.as_str().to_string(),
+                            );
+                            registry.register(bash);
                         }
                         // Replace execute_skill with SubAgent-wired version
                         if let Some(ref skill_reg) = self.skill_registry {

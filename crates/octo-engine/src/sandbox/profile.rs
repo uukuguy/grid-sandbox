@@ -13,7 +13,7 @@ use super::traits::SandboxPolicy;
 ///
 /// Each profile bundles a complete set of sandbox parameters:
 /// - `Development`: Zero-friction local execution (no sandbox overhead)
-/// - `Staging`: Docker-first with subprocess fallback + audit warnings
+/// - `Staging`: Docker required, no fallback + audit warnings
 /// - `Production`: Strict isolation required (Docker/WASM/External only)
 /// - `Custom`: User-defined fine-grained control
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,7 +24,7 @@ pub enum SandboxProfile {
     /// Full environment passthrough. No approval gates.
     Development,
 
-    /// Staging mode — Docker preferred, subprocess fallback with audit warning.
+    /// Staging mode — Docker required, no local fallback.
     /// Approval gate for destructive operations.
     /// Limited environment passthrough (no API keys).
     Staging,

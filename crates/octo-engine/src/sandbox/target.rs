@@ -57,7 +57,7 @@ impl fmt::Display for SandboxRef {
 /// Implements the routing decision matrix:
 /// - Mode A (Sandboxed): Always Local (container provides isolation)
 /// - Mode B (Host) + Development: Always Local (zero-friction dev)
-/// - Mode B (Host) + Staging: Sandbox preferred, Local fallback
+/// - Mode B (Host) + Staging: Sandbox required (no Local fallback)
 /// - Mode B (Host) + Production: Sandbox required (no Local fallback)
 ///
 /// When `session_id` is set and Docker is available, Docker-targeted
@@ -149,7 +149,9 @@ impl ExecutionTargetResolver {
         }
     }
 
-    /// Staging: prefer sandbox, fall back to local with warning.
+    /// Staging: require sandbox, no local fallback.
+    /// If no backend is available, still return Sandbox target — the executor
+    /// will fail with a clear error rather than silently degrading to local.
     fn resolve_staging(&self, category: ToolCategory) -> (ExecutionTarget, String) {
         let preferred = self.preferred_backend(category);
 
@@ -165,9 +167,11 @@ impl ExecutionTargetResolver {
             )
         } else {
             (
-                ExecutionTarget::Local,
+                ExecutionTarget::Sandbox(SandboxRef::Ephemeral {
+                    sandbox_type: self.default_backend_for(category),
+                }),
                 format!(
-                    "SandboxProfile=Staging: no backend available for {}, degrading to local",
+                    "SandboxProfile=Staging: {} requires sandbox but no backend available",
                     category_name(category)
                 ),
             )
@@ -346,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    fn test_staging_no_backend_degrades() {
+    fn test_staging_no_backend_still_sandbox() {
         let resolver = ExecutionTargetResolver::new(
             OctoRunMode::Host,
             SandboxProfile::Staging,
@@ -354,8 +358,9 @@ mod tests {
         );
 
         let (target, reason) = resolver.resolve(ToolCategory::Shell);
-        assert_eq!(target, ExecutionTarget::Local);
-        assert!(reason.contains("degrading"));
+        // Staging never degrades to local — fails at execution if backend unavailable
+        assert!(matches!(target, ExecutionTarget::Sandbox(_)));
+        assert!(reason.contains("requires sandbox"));
     }
 
     #[test]
