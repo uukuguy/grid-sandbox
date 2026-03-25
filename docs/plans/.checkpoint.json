@@ -1,41 +1,53 @@
 {
   "plan_file": "docs/plans/2026-03-24-phase-af-ssm-wiring.md",
-  "phase": "execution",
+  "phase": "complete",
   "created_at": "2026-03-24T00:40:00+08:00",
-  "updated_at": "2026-03-24T01:15:00+08:00",
-  "completed_tasks": ["AF-T1", "AF-T2", "AF-T3"],
+  "updated_at": "2026-03-25T22:30:00+08:00",
+  "completed_tasks": ["AF-T1", "AF-T2", "AF-T3", "AF-D1", "AE-D1", "AC-D2", "AC-D3"],
   "current_task": null,
   "total_tasks": 3,
-  "phase_name": "Phase AF - SSM Wiring",
+  "phase_name": "Phase AF - SSM Wiring + Deferred Batch",
   "status": "COMPLETE",
-  "execution_mode": "manual",
+  "execution_mode": "manual + parallel-agents",
   "branch": "main",
   "baseline": {
     "tests": 2467,
     "commit": "ee4986f"
   },
-  "final_commit": "7ea6e5d",
+  "final_commit": "976e813",
   "scope": [
     "AgentRuntime session_sandbox field + conditional SSM construction",
     "AgentRuntimeConfig sandbox_profile option",
-    "AgentExecutor SSM wiring (replaces AC-T7 None placeholder)"
+    "AgentExecutor SSM wiring (replaces AC-T7 None placeholder)",
+    "BashTool per-session SSM wiring via tools_snapshot (AF-D1)",
+    "No-fallback enforcement: Staging+Production fail-fast",
+    "SandboxConfig bind_mounts + SessionSandboxConfig host_working_dir (AE-D1)",
+    "SandboxProfile memory_limit/cpu_quota/network_mode (AC-D2, AC-D3)",
+    "DockerAdapter HostConfig: binds, memory, cpu_quota, cpu_period, network_mode",
+    "Makefile: unified --project $(TEST_PROJECT) for all CLI targets"
   ],
   "groups": {
     "G1": {"tasks": ["AF-T1", "AF-T2"], "desc": "AgentRuntime 注入 SSM + config", "deps": [], "status": "COMPLETE", "commit": "7ea6e5d"},
-    "G2": {"tasks": ["AF-T3"], "desc": "编译验证 + 测试不回归", "deps": ["G1"], "status": "COMPLETE", "commit": "7ea6e5d"}
+    "G2": {"tasks": ["AF-T3"], "desc": "编译验证 + 测试不回归", "deps": ["G1"], "status": "COMPLETE", "commit": "7ea6e5d"},
+    "G3": {"tasks": ["AF-D1"], "desc": "BashTool per-session SSM + no-fallback", "deps": ["G2"], "status": "COMPLETE", "commit": "6d99361"},
+    "G4": {"tasks": ["AE-D1", "AC-D2", "AC-D3"], "desc": "bind mount + resource limits + network isolation", "deps": ["G3"], "status": "COMPLETE", "commit": "f452f5c"}
   },
-  "deferred": ["AF-D1"],
-  "deferred_desc": {
-    "AF-D1": "BashTool 自动从 AgentExecutor 获取 SSM 并构建 with_session_sandbox — 需 ToolRegistry per-session 化"
+  "deferred": [],
+  "deferred_resolved": {
+    "AF-D1": "BashTool per-session SSM wiring @ 6d99361",
+    "AE-D1": "Container bind mount @ f452f5c",
+    "AC-D2": "Container resource limits @ f452f5c",
+    "AC-D3": "Container network isolation @ f452f5c"
   },
   "tests": {
-    "passed": 2469,
+    "passed": 2476,
     "failed": 0,
-    "note": "+2 from baseline 2467"
+    "note": "+9 from baseline 2467 (+7 from deferred batch, +2 from AF phase)"
   },
   "previous_phase": {
     "name": "Phase AE - Agent Workspace Architecture",
     "status": "COMPLETE",
     "commit": "ee4986f"
-  }
+  },
+  "notes": "All sandbox switching deferred items resolved. Makefile --project unified. Remaining deferred items (AB-D1~D6, AC-D1/D4~D6, AD-D1~D6, AA-D1/D3/D4) require external deps or low priority."
 }

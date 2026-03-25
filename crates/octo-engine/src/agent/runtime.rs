@@ -216,27 +216,32 @@ impl AgentRuntime {
         let should_load_skills = config.octo_root.is_some() || !config.skills_dirs.is_empty();
         if should_load_skills {
             // Resolve project_dir and home_dir from OctoRoot or fallback
-            let (project_dir, home_dir, project_skills_target) =
-                if let Some(ref root) = config.octo_root {
-                    (
-                        Some(root.working_dir().to_path_buf()),
-                        Some(root.global_root().parent().unwrap_or(root.global_root()).to_path_buf()),
-                        root.project_skills_dir(),
-                    )
-                } else {
-                    let pdir = std::env::current_dir().ok();
-                    let hdir = dirs::home_dir();
-                    let target = pdir
-                        .as_ref()
-                        .map(|p| p.join(".octo").join("skills"))
-                        .unwrap_or_else(|| PathBuf::from(".octo/skills"));
-                    (pdir, hdir, target)
-                };
+            let (project_dir, home_dir) = if let Some(ref root) = config.octo_root {
+                (
+                    Some(root.working_dir().to_path_buf()),
+                    Some(
+                        root.global_root()
+                            .parent()
+                            .unwrap_or(root.global_root())
+                            .to_path_buf(),
+                    ),
+                )
+            } else {
+                (std::env::current_dir().ok(), dirs::home_dir())
+            };
 
-            // Sync builtins to project skills dir
-            if let Err(e) = std::fs::create_dir_all(&project_skills_target) {
-                tracing::warn!("Failed to create skills dir: {}", e);
-            } else if let Err(e) = sync_builtin_skills(&project_skills_target) {
+            // Sync builtin skills to global ~/.octo/skills/ (never overwrites existing)
+            let global_skills_dir = if let Some(ref root) = config.octo_root {
+                root.global_skills_dir()
+            } else {
+                home_dir
+                    .as_ref()
+                    .map(|h| h.join(".octo").join("skills"))
+                    .unwrap_or_else(|| PathBuf::from(".octo/skills"))
+            };
+            if let Err(e) = std::fs::create_dir_all(&global_skills_dir) {
+                tracing::warn!("Failed to create global skills dir: {}", e);
+            } else if let Err(e) = sync_builtin_skills(&global_skills_dir) {
                 tracing::warn!("Failed to sync builtin skills: {}", e);
             }
 

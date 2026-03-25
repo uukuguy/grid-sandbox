@@ -63,13 +63,13 @@ fn test_builtin_skills_execution_modes() {
         "Seeded filesystem (SKILL.md only) should be Knowledge mode"
     );
 
-    // web-search — only SKILL.md in seeded fallback → Knowledge
+    // web-search — has scripts/ directory → Playbook (auto-inferred)
     let skill_file = dir.path().join("web-search").join("SKILL.md");
     let skill = SkillLoader::parse_skill(&skill_file).unwrap();
     assert_eq!(
         skill.execution_mode,
-        ExecutionMode::Knowledge,
-        "Seeded web-search (SKILL.md only) should be Knowledge mode"
+        ExecutionMode::Playbook,
+        "Seeded web-search (has scripts/) should be Playbook mode"
     );
 }
 

@@ -1,54 +1,44 @@
-//! Builtin Skills Initializer — seeds embedded skills to `.octo/skills/` on startup.
+//! Builtin Skills Initializer — seeds embedded skills to `~/.octo/skills/` on startup.
 //!
-//! Only writes a builtin skill when the skill directory does NOT exist on disk.
-//! If a user has placed or modified a skill in `.octo/skills/`, it is never overwritten.
+//! All skills under `builtin/skills/` are compiled into the binary via `include_dir!`.
+//! On startup, they are extracted to the global skills directory (`~/.octo/skills/`).
+//! Existing skill directories are never overwritten — user customizations take priority.
 
 use std::path::Path;
 
 use anyhow::Result;
+use include_dir::{include_dir, Dir};
 use tracing::{debug, info};
 
-/// Embedded builtin skill: name and SKILL.md content.
-struct BuiltinSkill {
-    name: &'static str,
-    content: &'static str,
-}
+/// All builtin skills embedded at compile time from `builtin/skills/`.
+static BUILTIN_SKILLS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/builtin/skills");
 
-/// Minimal builtin skills compiled into the binary as fallback.
-/// Only seeded when `.octo/skills/` doesn't have them yet.
-/// The full set of skills lives in `.octo/skills/` (git tracked, user-managed).
-const BUILTIN_SKILLS: &[BuiltinSkill] = &[
-    BuiltinSkill {
-        name: "filesystem",
-        content: include_str!("../../builtin/skills/filesystem/SKILL.md"),
-    },
-    BuiltinSkill {
-        name: "web-search",
-        content: include_str!("../../builtin/skills/web-search/SKILL.md"),
-    },
-];
-
-/// Seed builtin skills to the target directory (fallback for fresh projects).
+/// Sync all builtin skills to the target directory (typically `~/.octo/skills/`).
 ///
-/// For each builtin skill:
-/// - If `<target_dir>/<name>/` does NOT exist → create it and write SKILL.md
+/// For each skill directory in the embedded tree:
+/// - If `<target_dir>/<name>/` does NOT exist → create it and extract all files
 /// - If it already exists → skip entirely (never overwrite user files)
 ///
 /// Returns the number of skills seeded.
 pub fn sync_builtin_skills(target_dir: &Path) -> Result<usize> {
     let mut synced = 0;
 
-    for skill in BUILTIN_SKILLS {
-        let skill_dir = target_dir.join(skill.name);
+    for skill_entry in BUILTIN_SKILLS_DIR.dirs() {
+        let name = skill_entry
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+
+        let skill_dir = target_dir.join(name);
 
         if skill_dir.exists() {
-            debug!(name = skill.name, "Skill directory exists, skipping");
+            debug!(name = name, "Skill directory exists, skipping");
             continue;
         }
 
-        info!(name = skill.name, "Seeding builtin skill");
-        std::fs::create_dir_all(&skill_dir)?;
-        std::fs::write(skill_dir.join("SKILL.md"), skill.content)?;
+        info!(name = name, "Seeding builtin skill");
+        extract_dir(skill_entry, &skill_dir)?;
         synced += 1;
     }
 
@@ -61,9 +51,47 @@ pub fn sync_builtin_skills(target_dir: &Path) -> Result<usize> {
     Ok(synced)
 }
 
+/// Recursively extract an embedded directory to a filesystem path.
+fn extract_dir(dir: &Dir, target: &Path) -> Result<()> {
+    std::fs::create_dir_all(target)?;
+
+    // Extract files
+    for file in dir.files() {
+        let file_name = file
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        let file_path = target.join(file_name);
+        std::fs::write(&file_path, file.contents())?;
+
+        // Preserve executable permission for scripts
+        #[cfg(unix)]
+        if file_name.ends_with(".py") || file_name.ends_with(".sh") {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&file_path, std::fs::Permissions::from_mode(0o755))?;
+        }
+    }
+
+    // Recurse into subdirectories
+    for subdir in dir.dirs() {
+        let subdir_name = subdir
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        extract_dir(subdir, &target.join(subdir_name))?;
+    }
+
+    Ok(())
+}
+
 /// Get the list of builtin skill names.
 pub fn builtin_skill_names() -> Vec<&'static str> {
-    BUILTIN_SKILLS.iter().map(|s| s.name).collect()
+    BUILTIN_SKILLS_DIR
+        .dirs()
+        .filter_map(|d| d.path().file_name().and_then(|n| n.to_str()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -72,36 +100,47 @@ mod tests {
 
     #[test]
     fn test_builtin_skills_count() {
-        assert_eq!(BUILTIN_SKILLS.len(), 2);
+        let names = builtin_skill_names();
+        assert!(names.len() >= 10, "Expected at least 10 builtin skills, got {}", names.len());
     }
 
     #[test]
-    fn test_builtin_skill_names() {
+    fn test_builtin_skill_names_include_key_skills() {
         let names = builtin_skill_names();
-        assert!(names.contains(&"filesystem"));
-        assert!(names.contains(&"web-search"));
+        for expected in &["docx", "pdf", "pptx", "xlsx", "filesystem", "web-search"] {
+            assert!(names.contains(expected), "Missing builtin skill: {}", expected);
+        }
     }
 
     #[test]
     fn test_sync_to_empty_dir() {
         let dir = tempfile::tempdir().unwrap();
         let count = sync_builtin_skills(dir.path()).unwrap();
-        assert_eq!(count, 2);
+        assert!(count >= 10, "Expected at least 10 skills synced, got {}", count);
 
-        // Verify files exist
-        for skill in BUILTIN_SKILLS {
-            let path = dir.path().join(skill.name).join("SKILL.md");
-            assert!(path.exists(), "Missing: {}", path.display());
+        // Verify key skills have SKILL.md
+        for name in &["docx", "pdf", "filesystem"] {
+            let path = dir.path().join(name).join("SKILL.md");
+            assert!(path.exists(), "Missing SKILL.md for: {}", name);
         }
+    }
+
+    #[test]
+    fn test_sync_preserves_scripts() {
+        let dir = tempfile::tempdir().unwrap();
+        sync_builtin_skills(dir.path()).unwrap();
+
+        // docx should have scripts/
+        let scripts = dir.path().join("docx").join("scripts");
+        assert!(scripts.is_dir(), "docx/scripts/ should exist");
     }
 
     #[test]
     fn test_sync_idempotent() {
         let dir = tempfile::tempdir().unwrap();
 
-        // First sync
         let count1 = sync_builtin_skills(dir.path()).unwrap();
-        assert_eq!(count1, 2);
+        assert!(count1 >= 10);
 
         // Second sync — should be no-op
         let count2 = sync_builtin_skills(dir.path()).unwrap();
@@ -111,19 +150,16 @@ mod tests {
     #[test]
     fn test_sync_does_not_overwrite_user_files() {
         let dir = tempfile::tempdir().unwrap();
-
-        // First sync
         sync_builtin_skills(dir.path()).unwrap();
 
-        // Modify one file
+        // Modify a file
         let path = dir.path().join("filesystem").join("SKILL.md");
         std::fs::write(&path, "user modified content").unwrap();
 
-        // Second sync — should NOT overwrite (directory exists)
+        // Second sync — should NOT overwrite
         let count = sync_builtin_skills(dir.path()).unwrap();
         assert_eq!(count, 0);
 
-        // Verify user's modification is preserved
         let content = std::fs::read_to_string(&path).unwrap();
         assert_eq!(content, "user modified content");
     }

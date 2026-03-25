@@ -136,29 +136,29 @@ cli:
 
 # 交互式 REPL 会话
 cli-run:
-	@cargo run --quiet -p octo-cli --bin octo -- run $(CLI_ARGS)
+	@cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # 单次提问 (headless 模式)
 # 用法: make cli-ask QUERY="你的问题"
 cli-ask:
 	@if [ -z "$(QUERY)" ]; then echo "Usage: make cli-ask QUERY=\"your question\""; exit 1; fi
-	@cargo run --quiet -p octo-cli --bin octo -- ask "$(QUERY)" $(CLI_ARGS)
+	@cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) ask "$(QUERY)" $(CLI_ARGS)
 
 # TUI 全屏模式 (uses pre-built binary if available, otherwise builds first)
 cli-tui: build
 	@if [ -f target/debug/octo ]; then \
-		target/debug/octo tui $(CLI_ARGS); \
+		target/debug/octo --project $(TEST_PROJECT) tui $(CLI_ARGS); \
 	else \
-		cargo run --quiet -p octo-cli --bin octo -- tui $(CLI_ARGS); \
+		cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) tui $(CLI_ARGS); \
 	fi
 
 # Agent 管理
 cli-agent:
-	cargo run -p octo-cli --bin octo -- agent list
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) agent list
 
 # Session 管理
 cli-session:
-	cargo run -p octo-cli --bin octo -- session list
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) session list
 
 # 配置管理
 cli-config:
@@ -166,7 +166,7 @@ cli-config:
 
 # 健康诊断
 cli-doctor:
-	cargo run -p octo-cli --bin octo -- doctor
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) doctor
 
 # ============================================================
 # 评估命令 (octo-eval)
@@ -405,27 +405,27 @@ verify-api-mcp:
 
 # 查看当前沙箱状态 (RunMode, Profile, Policy 等)
 sandbox-status:
-	cargo run -p octo-cli --bin octo -- sandbox status
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox status
 
 # 预览所有工具类别的路由决策 (不实际执行)
 sandbox-dry-run:
-	cargo run -p octo-cli --bin octo -- sandbox dry-run
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox dry-run
 
 # 列出已注册的沙箱后端
 sandbox-backends:
-	cargo run -p octo-cli --bin octo -- sandbox list-backends
+	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox list-backends
 
 # Development 模式运行 CLI (默认, 所有工具本地执行)
 sandbox-dev:
-	OCTO_SANDBOX_PROFILE=dev cargo run --quiet -p octo-cli --bin octo -- run $(CLI_ARGS)
+	OCTO_SANDBOX_PROFILE=dev cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
-# Staging 模式运行 CLI (优先容器, 无后端时降级本地)
+# Staging 模式运行 CLI (强制容器, 无后端时报错)
 sandbox-staging:
-	OCTO_SANDBOX_PROFILE=staging cargo run --quiet -p octo-cli --bin octo -- run $(CLI_ARGS)
+	OCTO_SANDBOX_PROFILE=staging cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # Production 模式运行 CLI (强制容器隔离)
 sandbox-production:
-	OCTO_SANDBOX_PROFILE=production cargo run --quiet -p octo-cli --bin octo -- run $(CLI_ARGS)
+	OCTO_SANDBOX_PROFILE=production cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # 进入容器内交互式 shell (自动检测为 Sandboxed 模式)
 # API keys 从宿主机环境透传 (AD-D5)

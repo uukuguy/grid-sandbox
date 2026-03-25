@@ -48,6 +48,7 @@ keyring = { version = "3", optional = true }
 regex = "1"
 dirs = { workspace = true }
 lru = "0.12"
+include_dir = "0.7"
 calamine = { version = "0.26", optional = true }
 pdf-extract = { version = "0.7", optional = true }
 zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
