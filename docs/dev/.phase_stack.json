@@ -1,15 +1,31 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase AE - Agent Workspace Architecture",
-      "started_at": "2026-03-23T19:55:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "progress": "0%"
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
+    {
+      "name": "Post-AF Cleanup — Builtin Skills + Config Seeding + TUI Fix",
+      "completed_at": "2026-03-25T15:30:00+08:00",
+      "progress": "100%",
+      "tests": 2476,
+      "commit": "072c15b",
+      "tasks": "3 commits (skills refactor, config seeding, TUI fix)"
+    },
+    {
+      "name": "Phase AF - SSM Wiring + Deferred Batch",
+      "completed_at": "2026-03-25T00:30:00+08:00",
+      "progress": "100%",
+      "tests": 2476,
+      "commit": "976e813",
+      "tasks": "3/3 + 4 deferred resolved"
+    },
+    {
+      "name": "Phase AE - Agent Workspace Architecture",
+      "completed_at": "2026-03-24T22:00:00+08:00",
+      "progress": "100%",
+      "tests": 2467,
+      "commit": "ee4986f",
+      "tasks": "7/7 + 3 deferred resolved"
+    },
     {
       "name": "Phase AD - Container Image Enhancement",
       "completed_at": "2026-03-23T19:30:00+08:00",
@@ -114,8 +130,7 @@
       "progress": "100%",
       "tests": 2250,
       "commit": "68ad13e",
-      "tasks": "13/13",
-      "results": "Qwen3.5-27B 39.2% (net zero vs baseline), model capability is bottleneck"
+      "tasks": "13/13"
     },
     {
       "name": "Phase R — GAIA Filtered Evaluation + Category Subsets",
@@ -123,8 +138,7 @@
       "progress": "100%",
       "tests": 2210,
       "commit": "50df5e6",
-      "tasks": "8/8 (7 planned + 1 bonus)",
-      "results": "R3: MiniMax-M2.1 41.6%, Qwen3.5-27B 36.9%, 6 GAIA subsets created"
+      "tasks": "8/8"
     },
     {
       "name": "Phase Q — GAIA & SWE-bench Standard Testing",

@@ -1,5 +1,45 @@
 # octo-sandbox 工作日志
 
+## Post-AF Cleanup — Builtin Skills + Config Seeding + TUI Fix (2026-03-25)
+
+### 完成内容
+
+三项架构改进，解决 builtin skills 分发、配置可发现性、和 --project TUI 显示问题。
+
+**1. Builtin Skills 架构重构 (98e781c)**
+- 将 10 个 builtin skills（docx, pdf, pptx, xlsx, filesystem, web-search, image-analysis, skill-creator, uv-pip-install, docling）从 `.octo/skills/` 迁移到 `crates/octo-engine/builtin/skills/`
+- 使用 `include_dir!` 宏将完整目录树编译进二进制文件（替代旧的 `include_str!` 只嵌入 2 个 skill）
+- 首次启动时自动 sync 到 `~/.octo/skills/`，永不覆盖用户自定义
+- `.octo/skills/` 现在仅用于项目级自定义 skills
+- 修复 web-search 测试：include_dir 带入 scripts/ 目录后自动推断为 Playbook 模式
+
+**2. Config Auto-Seeding (47dafb9)**
+- `config.default.yaml` 更新为全量注释参考文件，覆盖所有配置项
+- `OctoRoot::seed_default_config()` 使用 `include_str!` 编译时嵌入
+- `ensure_dirs()` 自动 seed 到 `~/.octo/config.yaml` 和 `$PROJECT/.octo/config.yaml`
+- 已有文件永不覆盖
+
+**3. TUI Working Dir 修复 (072c15b)**
+- TuiState 原本硬编码 `std::env::current_dir()` 作为状态栏路径和自动补全基目录
+- 新增 `set_working_dir()` 方法，从 AppState.working_dir（来自 OctoRoot）正确传入
+- `--project` 启动时状态栏和文件自动补全现在显示正确路径
+
+### 技术变更
+- `crates/octo-engine/Cargo.toml` — 新增 `include_dir = "0.7"` 依赖
+- `crates/octo-engine/src/skills/initializer.rs` — 完全重写，`include_dir!` 嵌入全部 skills
+- `crates/octo-engine/src/agent/runtime.rs` — sync 目标改为 `~/.octo/skills/`（全局）
+- `crates/octo-engine/src/root.rs` — 新增 `seed_default_config()` + `ensure_dirs()` 调用
+- `crates/octo-engine/tests/skills_e2e.rs` — web-search 测试从 Knowledge → Playbook
+- `crates/octo-cli/src/tui/app_state.rs` — 新增 `set_working_dir()`
+- `crates/octo-cli/src/tui/mod.rs` — 调用 `set_working_dir(state.working_dir)`
+- `config.default.yaml` — 全量注释参考
+
+### 测试
+- 2476 tests passing（与 Phase AF 基线持平）
+- 0 failures
+
+---
+
 ## Phase AB — 智能体工具执行环境 (2026-03-23)
 
 ### 完成内容
