@@ -16,18 +16,77 @@ use super::traits::{
     McpServerConfig, McpServerConfigV2, McpToolInfo, McpTransport,
 };
 
-/// MCP config file format (.octo/mcp.json).
-#[derive(Debug, serde::Deserialize)]
+/// MCP config file format — supports both octo and Claude Code formats.
+///
+/// Octo format:     `{ "servers": { ... } }`
+/// CC format:       `{ "mcpServers": { ... } }`
+/// Both supported simultaneously; entries are merged (CC takes precedence on conflict).
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
 struct McpConfigFile {
+    /// Octo-native format key.
+    #[serde(default)]
     servers: HashMap<String, McpServerEntry>,
+    /// Claude Code compatible format key.
+    #[serde(default, rename = "mcpServers")]
+    mcp_servers: HashMap<String, McpServerEntry>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 struct McpServerEntry {
     command: String,
     args: Vec<String>,
     #[serde(default)]
     env: HashMap<String, String>,
+    /// Transport type: "stdio" (default) or "http"/"sse".
+    #[serde(default, rename = "type")]
+    transport_type: Option<String>,
+    /// URL for HTTP/SSE transport.
+    #[serde(default)]
+    url: Option<String>,
+}
+
+/// Expand `${VAR}` and `${VAR:-default}` references in a string using env vars.
+fn expand_env_vars(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next(); // consume '{'
+            let mut var_expr = String::new();
+            for ch in chars.by_ref() {
+                if ch == '}' {
+                    break;
+                }
+                var_expr.push(ch);
+            }
+            // Parse VAR:-default
+            if let Some((var_name, default_val)) = var_expr.split_once(":-") {
+                result.push_str(
+                    &std::env::var(var_name).unwrap_or_else(|_| default_val.to_string()),
+                );
+            } else {
+                result.push_str(&std::env::var(&var_expr).unwrap_or_default());
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Expand env vars in all string fields of an McpServerEntry.
+fn expand_entry_env_vars(entry: &McpServerEntry) -> McpServerEntry {
+    McpServerEntry {
+        command: expand_env_vars(&entry.command),
+        args: entry.args.iter().map(|a| expand_env_vars(a)).collect(),
+        env: entry
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), expand_env_vars(v)))
+            .collect(),
+        transport_type: entry.transport_type.clone(),
+        url: entry.url.as_ref().map(|u| expand_env_vars(u)),
+    }
 }
 
 /// Runtime state of an MCP server.
@@ -79,22 +138,94 @@ impl McpManager {
     }
 
     /// Load MCP server configs from a JSON file.
+    ///
+    /// Supports both octo format (`servers`) and Claude Code format (`mcpServers`).
+    /// Environment variables (`${VAR}`, `${VAR:-default}`) are expanded in all string fields.
     pub fn load_config(config_path: &Path) -> Result<Vec<McpServerConfig>> {
         let content = std::fs::read_to_string(config_path)
             .with_context(|| format!("reading {}", config_path.display()))?;
         let config: McpConfigFile = serde_json::from_str(&content)
             .with_context(|| format!("parsing {}", config_path.display()))?;
 
-        Ok(config
-            .servers
+        // Merge both keys: octo `servers` + CC `mcpServers` (CC wins on conflict)
+        let mut merged: HashMap<String, McpServerEntry> = config.servers;
+        merged.extend(config.mcp_servers);
+
+        Ok(merged
             .into_iter()
-            .map(|(name, entry)| McpServerConfig {
-                name,
-                command: entry.command,
-                args: entry.args,
-                env: entry.env,
+            .map(|(name, entry)| {
+                let expanded = expand_entry_env_vars(&entry);
+                McpServerConfig {
+                    name,
+                    command: expanded.command,
+                    args: expanded.args,
+                    env: expanded.env,
+                }
             })
             .collect())
+    }
+
+    /// Add a server entry to an mcp.json config file (creates if missing).
+    ///
+    /// Uses the CC-compatible `mcpServers` key for broad compatibility.
+    pub fn add_to_config_file(config_path: &Path, config: &McpServerConfig) -> Result<()> {
+        let mut file_config = if config_path.exists() {
+            let content = std::fs::read_to_string(config_path)
+                .with_context(|| format!("reading {}", config_path.display()))?;
+            serde_json::from_str::<McpConfigFile>(&content)
+                .with_context(|| format!("parsing {}", config_path.display()))?
+        } else {
+            McpConfigFile {
+                servers: HashMap::new(),
+                mcp_servers: HashMap::new(),
+            }
+        };
+
+        let entry = McpServerEntry {
+            command: config.command.clone(),
+            args: config.args.clone(),
+            env: config.env.clone(),
+            transport_type: None,
+            url: None,
+        };
+        file_config.mcp_servers.insert(config.name.clone(), entry);
+
+        // Ensure parent directory exists
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating directory {}", parent.display()))?;
+        }
+
+        let json = serde_json::to_string_pretty(&file_config)?;
+        std::fs::write(config_path, json)
+            .with_context(|| format!("writing {}", config_path.display()))?;
+        info!(path = %config_path.display(), server = %config.name, "Saved MCP server to config");
+        Ok(())
+    }
+
+    /// Remove a server entry from an mcp.json config file.
+    pub fn remove_from_config_file(config_path: &Path, name: &str) -> Result<bool> {
+        if !config_path.exists() {
+            return Ok(false);
+        }
+
+        let content = std::fs::read_to_string(config_path)
+            .with_context(|| format!("reading {}", config_path.display()))?;
+        let mut file_config: McpConfigFile = serde_json::from_str(&content)
+            .with_context(|| format!("parsing {}", config_path.display()))?;
+
+        let removed_servers = file_config.servers.remove(name).is_some();
+        let removed_mcp = file_config.mcp_servers.remove(name).is_some();
+
+        if removed_servers || removed_mcp {
+            let json = serde_json::to_string_pretty(&file_config)?;
+            std::fs::write(config_path, json)
+                .with_context(|| format!("writing {}", config_path.display()))?;
+            info!(path = %config_path.display(), server = %name, "Removed MCP server from config");
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Add and connect a new MCP server.
@@ -102,8 +233,22 @@ impl McpManager {
     /// Prefer add_server_nonblocking() from AgentRuntime which connects outside the lock.
     pub async fn add_server(&mut self, config: McpServerConfig) -> Result<Vec<McpToolInfo>> {
         let name = config.name.clone();
+        self.runtime_states
+            .insert(name.clone(), ServerRuntimeState::Starting);
+
         let mut client = StdioMcpClient::new(config);
-        client.connect().await?;
+        match client.connect().await {
+            Ok(()) => {}
+            Err(e) => {
+                self.runtime_states.insert(
+                    name.clone(),
+                    ServerRuntimeState::Error {
+                        message: e.to_string(),
+                    },
+                );
+                return Err(e);
+            }
+        }
 
         let tools = client.list_tools().await?;
         info!(
@@ -114,7 +259,9 @@ impl McpManager {
 
         let client: Arc<RwLock<Box<dyn McpClient>>> = Arc::new(RwLock::new(Box::new(client)));
         self.clients.insert(name.clone(), client);
-        self.tool_infos.insert(name, tools.clone());
+        self.tool_infos.insert(name.clone(), tools.clone());
+        self.runtime_states
+            .insert(name, ServerRuntimeState::Running { pid: 0 });
         Ok(tools)
     }
 
@@ -185,6 +332,8 @@ impl McpManager {
             }
         };
 
+        self.runtime_states
+            .insert(name.clone(), ServerRuntimeState::Starting);
         client.connect().await?;
         let tools = client.list_tools().await?;
 
@@ -197,7 +346,9 @@ impl McpManager {
 
         let client: Arc<RwLock<Box<dyn McpClient>>> = Arc::new(RwLock::new(client));
         self.clients.insert(name.clone(), client);
-        self.tool_infos.insert(name, tools.clone());
+        self.tool_infos.insert(name.clone(), tools.clone());
+        self.runtime_states
+            .insert(name, ServerRuntimeState::Running { pid: 0 });
         Ok(tools)
     }
 
@@ -208,6 +359,7 @@ impl McpManager {
             client.shutdown().await?;
         }
         self.tool_infos.remove(name);
+        self.runtime_states.remove(name);
         info!(server = %name, "MCP server removed");
         Ok(())
     }
@@ -331,5 +483,172 @@ impl McpManager {
 impl Default for McpManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_expand_env_vars_simple() {
+        std::env::set_var("OCTO_TEST_VAR_XYZ", "hello");
+        assert_eq!(expand_env_vars("${OCTO_TEST_VAR_XYZ}"), "hello");
+        assert_eq!(expand_env_vars("pre-${OCTO_TEST_VAR_XYZ}-post"), "pre-hello-post");
+        std::env::remove_var("OCTO_TEST_VAR_XYZ");
+    }
+
+    #[test]
+    fn test_expand_env_vars_default() {
+        std::env::remove_var("OCTO_TEST_MISSING_VAR");
+        assert_eq!(expand_env_vars("${OCTO_TEST_MISSING_VAR:-fallback}"), "fallback");
+        assert_eq!(expand_env_vars("${OCTO_TEST_MISSING_VAR}"), "");
+    }
+
+    #[test]
+    fn test_expand_env_vars_no_expansion() {
+        assert_eq!(expand_env_vars("no vars here"), "no vars here");
+        assert_eq!(expand_env_vars("$plain"), "$plain");
+    }
+
+    #[test]
+    fn test_load_config_octo_format() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            tmp.as_file(),
+            r#"{{ "servers": {{ "test-srv": {{ "command": "echo", "args": ["hello"], "env": {{}} }} }} }}"#
+        )
+        .unwrap();
+
+        let configs = McpManager::load_config(tmp.path()).unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name, "test-srv");
+        assert_eq!(configs[0].command, "echo");
+    }
+
+    #[test]
+    fn test_load_config_cc_format() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            tmp.as_file(),
+            r#"{{ "mcpServers": {{ "cc-srv": {{ "command": "npx", "args": ["-y", "@test/pkg"], "env": {{}} }} }} }}"#
+        )
+        .unwrap();
+
+        let configs = McpManager::load_config(tmp.path()).unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name, "cc-srv");
+        assert_eq!(configs[0].command, "npx");
+    }
+
+    #[test]
+    fn test_load_config_merged_format() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            tmp.as_file(),
+            r#"{{
+                "servers": {{ "srv-a": {{ "command": "a", "args": [] }} }},
+                "mcpServers": {{ "srv-b": {{ "command": "b", "args": [] }} }}
+            }}"#
+        )
+        .unwrap();
+
+        let configs = McpManager::load_config(tmp.path()).unwrap();
+        assert_eq!(configs.len(), 2);
+        let names: Vec<&str> = configs.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"srv-a"));
+        assert!(names.contains(&"srv-b"));
+    }
+
+    #[test]
+    fn test_load_config_env_expansion() {
+        std::env::set_var("OCTO_TEST_API_KEY", "secret123");
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        writeln!(
+            tmp.as_file(),
+            r#"{{ "mcpServers": {{ "test": {{ "command": "cmd", "args": [], "env": {{ "API_KEY": "${{OCTO_TEST_API_KEY}}" }} }} }} }}"#
+        )
+        .unwrap();
+
+        let configs = McpManager::load_config(tmp.path()).unwrap();
+        assert_eq!(configs[0].env.get("API_KEY").unwrap(), "secret123");
+        std::env::remove_var("OCTO_TEST_API_KEY");
+    }
+
+    #[test]
+    fn test_add_to_config_file_creates_new() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("mcp.json");
+
+        let config = McpServerConfig {
+            name: "my-server".to_string(),
+            command: "npx".to_string(),
+            args: vec!["-y".to_string(), "@test/pkg".to_string()],
+            env: HashMap::from([("KEY".to_string(), "val".to_string())]),
+        };
+
+        McpManager::add_to_config_file(&config_path, &config).unwrap();
+        assert!(config_path.exists());
+
+        // Verify it loads back
+        let loaded = McpManager::load_config(&config_path).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].name, "my-server");
+        assert_eq!(loaded[0].command, "npx");
+        assert_eq!(loaded[0].env.get("KEY").unwrap(), "val");
+    }
+
+    #[test]
+    fn test_add_to_config_file_appends() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("mcp.json");
+
+        let config1 = McpServerConfig {
+            name: "srv-1".to_string(),
+            command: "cmd1".to_string(),
+            args: vec![],
+            env: HashMap::new(),
+        };
+        let config2 = McpServerConfig {
+            name: "srv-2".to_string(),
+            command: "cmd2".to_string(),
+            args: vec![],
+            env: HashMap::new(),
+        };
+
+        McpManager::add_to_config_file(&config_path, &config1).unwrap();
+        McpManager::add_to_config_file(&config_path, &config2).unwrap();
+
+        let loaded = McpManager::load_config(&config_path).unwrap();
+        assert_eq!(loaded.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_from_config_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("mcp.json");
+
+        let config = McpServerConfig {
+            name: "to-remove".to_string(),
+            command: "cmd".to_string(),
+            args: vec![],
+            env: HashMap::new(),
+        };
+
+        McpManager::add_to_config_file(&config_path, &config).unwrap();
+        let removed = McpManager::remove_from_config_file(&config_path, "to-remove").unwrap();
+        assert!(removed);
+
+        let loaded = McpManager::load_config(&config_path).unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_remove_from_config_file_nonexistent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config_path = tmp.path().join("nonexistent.json");
+        let removed = McpManager::remove_from_config_file(&config_path, "x").unwrap();
+        assert!(!removed);
     }
 }

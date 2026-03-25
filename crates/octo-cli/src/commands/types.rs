@@ -157,17 +157,20 @@ pub enum ToolsCommands {
 pub enum McpCommands {
     /// List configured MCP servers
     List,
-    /// Add a new MCP server
+    /// Add a new MCP server (persisted to .octo/mcp.json)
     Add {
         /// Server name
         #[arg(value_name = "NAME")]
         name: String,
-        /// Server command
+        /// Server command (e.g., "npx", "uvx", "docker")
         #[arg(value_name = "COMMAND")]
         command: String,
         /// Command arguments
-        #[arg(value_name = "ARGS")]
+        #[arg(value_name = "ARGS", trailing_var_arg = true)]
         args: Vec<String>,
+        /// Environment variables (KEY=VALUE, repeatable)
+        #[arg(short, long = "env", value_name = "KEY=VALUE")]
+        env_vars: Vec<String>,
     },
     /// Remove an MCP server
     Remove {

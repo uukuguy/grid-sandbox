@@ -15,7 +15,8 @@ pub async fn handle_mcp(action: McpCommands, state: &AppState) -> Result<()> {
             name,
             command,
             args,
-        } => add_server(name, command, args, state).await?,
+            env_vars,
+        } => add_server(name, command, args, env_vars, state).await?,
         McpCommands::Remove { name } => remove_server(name, state).await?,
         McpCommands::Status { name } => show_status(name, state).await?,
         McpCommands::Logs { name, lines } => show_logs(name, lines, state).await?,
@@ -154,17 +155,33 @@ async fn add_server(
     name: String,
     command: String,
     args: Vec<String>,
+    env_vars: Vec<String>,
     state: &AppState,
 ) -> Result<()> {
-    use octo_engine::mcp::McpServerConfig;
+    use octo_engine::mcp::{McpManager, McpServerConfig};
+
+    // Parse KEY=VALUE env vars
+    let mut env = HashMap::new();
+    for kv in &env_vars {
+        if let Some((key, value)) = kv.split_once('=') {
+            env.insert(key.to_string(), value.to_string());
+        } else {
+            anyhow::bail!("Invalid env var format '{}', expected KEY=VALUE", kv);
+        }
+    }
 
     let config = McpServerConfig {
         name: name.clone(),
         command,
         args,
-        env: HashMap::new(),
+        env,
     };
 
+    // Persist to .octo/mcp.json
+    let config_path = state.octo_root.project_root().join("mcp.json");
+    McpManager::add_to_config_file(&config_path, &config)?;
+
+    // Connect the server at runtime
     let mgr = state.agent_runtime.mcp_manager();
     let mut guard = mgr.lock().await;
     let tools = guard.add_server(config).await?;
@@ -180,10 +197,17 @@ async fn add_server(
 }
 
 async fn remove_server(name: String, state: &AppState) -> Result<()> {
+    use octo_engine::mcp::McpManager;
+
+    // Remove from runtime
     let mgr = state.agent_runtime.mcp_manager();
     let mut guard = mgr.lock().await;
     guard.remove_server(&name).await?;
     drop(guard);
+
+    // Remove from config file
+    let config_path = state.octo_root.project_root().join("mcp.json");
+    McpManager::remove_from_config_file(&config_path, &name)?;
 
     let out = McpRemoveOutput { name };
     output::print_output(&out, &state.output_config);

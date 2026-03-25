@@ -291,8 +291,85 @@ impl AgentRuntime {
             None
         };
 
-        // 11. McpManager initialization
-        let mcp_manager = Arc::new(Mutex::new(McpManager::new()));
+        // 11. McpManager initialization — auto-load from mcp.json if available
+        let mcp_manager = {
+            let mut mgr = McpManager::new();
+
+            // Collect config paths to load (highest priority first):
+            // 1. $PROJECT/.octo/mcp.json    (octo-native, project-level)
+            // 2. $PROJECT/.mcp.json         (CC-compatible, project-level)
+            // 3. ~/.octo/mcp/mcp.json       (octo-native, global)
+            let mut config_paths = Vec::new();
+            if let Some(ref root) = config.octo_root {
+                let project_mcp = root.project_root().join("mcp.json");
+                let cc_compat_mcp = root.working_dir().join(".mcp.json");
+                let global_mcp = root.global_mcp_dir().join("mcp.json");
+                if project_mcp.exists() {
+                    config_paths.push(project_mcp);
+                }
+                if cc_compat_mcp.exists() {
+                    config_paths.push(cc_compat_mcp);
+                }
+                if global_mcp.exists() {
+                    config_paths.push(global_mcp);
+                }
+            }
+
+            let mut loaded_names = std::collections::HashSet::new();
+            for path in &config_paths {
+                match McpManager::load_config(path) {
+                    Ok(configs) => {
+                        for server_config in configs {
+                            if loaded_names.contains(&server_config.name) {
+                                tracing::debug!(
+                                    server = %server_config.name,
+                                    path = %path.display(),
+                                    "Skipping duplicate MCP server (already loaded from higher-priority config)"
+                                );
+                                continue;
+                            }
+                            let name = server_config.name.clone();
+                            match mgr.add_server(server_config).await {
+                                Ok(tools) => {
+                                    tracing::info!(
+                                        server = %name,
+                                        tools = tools.len(),
+                                        config = %path.display(),
+                                        "Auto-loaded MCP server from config"
+                                    );
+                                    loaded_names.insert(name);
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        server = %name,
+                                        config = %path.display(),
+                                        error = %e,
+                                        "Failed to auto-load MCP server (will continue without it)"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            path = %path.display(),
+                            error = %e,
+                            "Failed to parse MCP config file"
+                        );
+                    }
+                }
+            }
+
+            if !loaded_names.is_empty() {
+                tracing::info!(
+                    count = loaded_names.len(),
+                    servers = ?loaded_names,
+                    "MCP servers auto-loaded from config"
+                );
+            }
+
+            Arc::new(Mutex::new(mgr))
+        };
 
         // 12. Working directory
         let working_dir = config.working_dir.unwrap_or_else(|| {
