@@ -65,8 +65,9 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
         .start_primary(session_id.clone(), user_id, sandbox_id, vec![], None)
         .await;
 
-    // Initialize state
+    // Initialize state with project working directory
     let mut tui_state = app_state::TuiState::new(session_id, handle.clone(), model_name);
+    tui_state.set_working_dir(state.working_dir.clone());
 
     // Inject approval gate for Y/N/A key responses
     if let Some(gate) = state.agent_runtime.approval_gate() {

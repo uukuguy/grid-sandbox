@@ -224,6 +224,13 @@ impl TuiState {
         state
     }
 
+    /// Override the working directory (e.g. from --project flag).
+    /// Also updates the autocomplete engine's base directory.
+    pub fn set_working_dir(&mut self, dir: std::path::PathBuf) {
+        self.working_dir = dir.display().to_string();
+        self.autocomplete = super::autocomplete::AutocompleteEngine::new(dir);
+    }
+
     /// Create TuiState with in-memory-only history (for tests).
     #[cfg(test)]
     pub fn new_for_test(
