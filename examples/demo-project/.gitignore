@@ -1,0 +1,8 @@
+# Ignore everything except skeleton files
+*
+!.gitignore
+!README.md
+!src/
+!src/main.py
+!.octo/
+!.octo/config.yaml

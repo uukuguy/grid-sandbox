@@ -1,35 +1,30 @@
 {
   "plan_file": null,
   "phase": "execution",
-  "created_at": "2026-03-26T13:00:00+08:00",
-  "updated_at": "2026-03-26T17:30:00+08:00",
+  "created_at": "2026-03-26T18:30:00+08:00",
+  "updated_at": "2026-03-26T19:10:00+08:00",
   "completed_tasks": [
-    "MCP stderr fix: use TokioChildProcess::builder().stderr(null) instead of configure closure",
-    "TUI ESC cancel: add is_thinking check so Thinking spinner stops on ESC",
-    "TUI panic hook: restore terminal on panic to prevent garbled screen",
-    "TUI terminal restore: use let _ instead of ? to ensure all restore steps execute",
-    "Stdin isolation: prevent child processes (bash, grep, find, python, nodejs, shell, sandbox) from stealing terminal stdin",
-    "Raw mode defense: re-enable raw_mode on agent Completed/Done/Error events",
-    "Table rendering: dynamic column width + HTML tag cleaning for Chinese text",
-    "UTF-8 safe truncation: prevent boundary panic in web_search, file_read, CLI preview, TUI tool display",
-    "Qwen XML tool call recovery: parse XML-style tool calls from non-standard LLM outputs",
-    "Custom slash commands: .md files from .octo/commands/ loaded as /command-name with autocomplete",
-    "Builtin commands: 10 embedded commands (review, explain, refactor, test, fix, doc, optimize, summarize, translate, commit) via include_dir!"
+    "Redesign builtin commands: upgrade 6 templates from one-liner to structured multi-step prompts",
+    "Add 4 enterprise-value commands: /security (OWASP audit), /plan (requirement decomposition), /audit (6-dimension codebase assessment), /bootstrap (scaffolding)",
+    "Remove 4 low-value commands: summarize, translate, explain, optimize",
+    "Fix display bug: slash commands show concise input instead of full expanded prompt",
+    "Update test assertions for new 10-command set",
+    "Add design document with research sources"
   ],
   "current_task": null,
-  "total_tasks": 11,
-  "phase_name": "MCP Support + TUI Robustness + Custom Commands",
+  "total_tasks": 6,
+  "phase_name": "Builtin Commands Redesign",
   "status": "COMPLETE",
   "execution_mode": "direct",
   "branch": "main",
   "baseline": {
     "tests": 2476,
-    "commit": "7b4e678"
+    "commit": "8b34240"
   },
   "previous_phase": {
-    "name": "Post-AF Cleanup — Builtin Skills + Config Seeding + TUI Fix",
+    "name": "MCP Support + TUI Robustness + Custom Commands",
     "status": "COMPLETE",
-    "commit": "072c15b"
+    "commit": "263eeb2"
   },
-  "notes": "Session completed 11 tasks across 3 areas: (1) MCP/TUI robustness fixes (stdin isolation, stderr suppression, panic recovery, ESC cancel), (2) UTF-8 safety + table rendering + Qwen tool call recovery, (3) custom slash commands with 10 builtin commands. Key commits: 7bb3757 (stdin fix), c1e99ca (custom commands), 263eeb2 (builtin commands)."
+  "notes": "Redesigned builtin commands based on research of GitHub Copilot, Claude Code bundled skills, Awesome Claude Skills (9.8k stars), and Skills Marketplace. Final set: 6 code engineering (review/test/fix/refactor/doc/commit) + 4 enterprise (security/plan/audit/bootstrap). All 66 tests pass (22 commands + 44 key_handler). Commit: 1916320."
 }

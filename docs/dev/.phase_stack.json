@@ -3,6 +3,14 @@
   "suspended_phases": [],
   "archived_phases": [
     {
+      "name": "Builtin Commands Redesign",
+      "completed_at": "2026-03-26T19:10:00+08:00",
+      "progress": "100%",
+      "tests": 2476,
+      "commit": "1916320",
+      "tasks": "6/6 (6 template upgrades, 4 new commands, 4 removed, display fix, test update, design doc)"
+    },
+    {
       "name": "MCP Support + TUI Robustness + Custom Commands",
       "completed_at": "2026-03-26T17:30:00+08:00",
       "progress": "100%",
