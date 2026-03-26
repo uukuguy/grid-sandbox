@@ -225,13 +225,11 @@ impl WebSearchTool {
                 let url = r["url"].as_str().unwrap_or("");
                 let description = r["description"].as_str().unwrap_or("");
                 let content = r["content"].as_str().unwrap_or("");
-                // Use description if available, otherwise first 500 chars of content
+                // Use description if available, otherwise first ~500 chars of content
                 let snippet = if !description.is_empty() {
                     description.to_string()
-                } else if content.len() > 500 {
-                    format!("{}...", &content[..500])
                 } else {
-                    content.to_string()
+                    truncate_str(content, 500)
                 };
                 output.push_str(&format!(
                     "{}. **{}**\n   URL: {}\n   {}\n\n",
@@ -388,6 +386,21 @@ impl WebSearchTool {
 
         Ok(ToolOutput::success(output.trim_end().to_string()))
     }
+}
+
+/// Truncate a string to at most `max_bytes` bytes at a valid UTF-8 char boundary.
+fn truncate_str(s: &str, max_bytes: usize) -> String {
+    if s.len() <= max_bytes {
+        return s.to_string();
+    }
+    // Find the last char boundary at or before max_bytes
+    let end = s
+        .char_indices()
+        .take_while(|&(i, _)| i <= max_bytes)
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    format!("{}...", &s[..end])
 }
 
 #[cfg(test)]

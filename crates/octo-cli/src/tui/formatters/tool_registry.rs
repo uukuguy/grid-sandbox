@@ -292,7 +292,14 @@ pub fn format_tool_call_parts_short(
     let (verb, arg) = format_parts_inner(tool_name, args, shortener);
     let shortened = shortener.shorten_text(&arg);
     let truncated = if shortened.len() > 80 {
-        format!("{}...", &shortened[..77])
+        // Find a valid UTF-8 char boundary at or before 77
+        let end = shortened
+            .char_indices()
+            .take_while(|&(i, _)| i <= 77)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
+        format!("{}...", &shortened[..end])
     } else {
         shortened
     };
@@ -341,7 +348,13 @@ fn format_parts_inner(
             .and_then(|v| v.as_str())
             .unwrap_or("...");
         let pattern_display = if pattern.len() > 40 {
-            format!("\"{}...\"", &pattern[..37])
+            let end = pattern
+                .char_indices()
+                .take_while(|&(i, _)| i <= 37)
+                .last()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            format!("\"{}...\"", &pattern[..end])
         } else {
             format!("\"{pattern}\"")
         };

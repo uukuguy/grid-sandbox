@@ -472,7 +472,14 @@ fn read_zip(path: &std::path::Path) -> Result<ToolOutput> {
                         "\n--- Preview: {} ---\n{}\n",
                         name,
                         if content.len() > 2000 {
-                            format!("{}...\n[truncated]", &content[..2000])
+                            // Find a valid UTF-8 char boundary at or before 2000
+                            let end = content
+                                .char_indices()
+                                .take_while(|&(i, _)| i <= 2000)
+                                .last()
+                                .map(|(i, _)| i)
+                                .unwrap_or(0);
+                            format!("{}...\n[truncated]", &content[..end])
                         } else {
                             content
                         }

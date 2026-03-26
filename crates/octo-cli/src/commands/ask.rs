@@ -125,7 +125,14 @@ async fn stream_text_output(
                 if !quiet {
                     let icon = if success { "+" } else { "!" };
                     let preview = if output.len() > 100 {
-                        format!("{}...", &output[..100])
+                        // Find a valid UTF-8 char boundary at or before 100
+                        let end = output
+                            .char_indices()
+                            .take_while(|&(i, _)| i <= 100)
+                            .last()
+                            .map(|(i, _)| i)
+                            .unwrap_or(0);
+                        format!("{}...", &output[..end])
                     } else {
                         output
                     };
