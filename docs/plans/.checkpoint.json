@@ -1,23 +1,28 @@
 {
   "plan_file": null,
-  "phase": "idle",
-  "created_at": "2026-03-25T15:30:00+08:00",
-  "updated_at": "2026-03-25T15:30:00+08:00",
-  "completed_tasks": [],
-  "current_task": null,
-  "total_tasks": 0,
-  "phase_name": null,
-  "status": "IDLE",
-  "execution_mode": null,
+  "phase": "execution",
+  "created_at": "2026-03-26T13:00:00+08:00",
+  "updated_at": "2026-03-26T14:00:00+08:00",
+  "completed_tasks": [
+    "MCP stderr fix: use TokioChildProcess::builder().stderr(null) instead of configure closure",
+    "TUI ESC cancel: add is_thinking check so Thinking spinner stops on ESC",
+    "TUI panic hook: restore terminal on panic to prevent garbled screen",
+    "TUI terminal restore: use let _ instead of ? to ensure all restore steps execute"
+  ],
+  "current_task": "Uncommitted — 4 files changed, ready for build verification and commit",
+  "total_tasks": 4,
+  "phase_name": "MCP Support + TUI Robustness Fixes",
+  "status": "IN_PROGRESS",
+  "execution_mode": "direct",
   "branch": "main",
   "baseline": {
     "tests": 2476,
-    "commit": "072c15b"
+    "commit": "7b4e678"
   },
   "previous_phase": {
     "name": "Post-AF Cleanup — Builtin Skills + Config Seeding + TUI Fix",
     "status": "COMPLETE",
     "commit": "072c15b"
   },
-  "notes": "No active phase. All sandbox deferred items resolved. Post-AF cleanup completed: builtin skills refactor (include_dir), config auto-seeding, TUI --project fix."
+  "notes": "Session focus: MCP reliability + TUI robustness. 3 bugs fixed (stderr leak root cause, ESC cancel thinking, Ctrl+C terminal restore). Previous commits in this session: 014482e (mcp_install/remove/list tools), 2755fb0 (panic catch in bridge), 0663ff6 (stderr suppress — ineffective), 7b4e678 (tracing to file in TUI mode). Current uncommitted changes fix the REAL stderr root cause and TUI exit issues."
 }

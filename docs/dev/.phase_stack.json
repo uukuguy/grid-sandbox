@@ -1,5 +1,14 @@
 {
-  "active_phases": [],
+  "active_phases": [
+    {
+      "name": "MCP Support + TUI Robustness Fixes",
+      "started_at": "2026-03-26T13:00:00+08:00",
+      "checkpoint": "docs/plans/.checkpoint.json",
+      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
+      "progress": "90%",
+      "last_updated": "2026-03-26T14:00:00+08:00"
+    }
+  ],
   "suspended_phases": [],
   "archived_phases": [
     {
@@ -115,134 +124,6 @@
       "tests": 2259,
       "commit": "74464b9",
       "tasks": "24/24"
-    },
-    {
-      "name": "CLI+Server Usability Fixes",
-      "completed_at": "2026-03-20T06:40:00+08:00",
-      "progress": "100%",
-      "tests": 2250,
-      "commit": "b4ebcbe",
-      "tasks": "13 fixes (7 CLI + 6 server)"
-    },
-    {
-      "name": "Phase S — Agent Capability Boost",
-      "completed_at": "2026-03-19T18:00:00+08:00",
-      "progress": "100%",
-      "tests": 2250,
-      "commit": "68ad13e",
-      "tasks": "13/13"
-    },
-    {
-      "name": "Phase R — GAIA Filtered Evaluation + Category Subsets",
-      "completed_at": "2026-03-18T02:30:00+08:00",
-      "progress": "100%",
-      "tests": 2210,
-      "commit": "50df5e6",
-      "tasks": "8/8"
-    },
-    {
-      "name": "Phase Q — GAIA & SWE-bench Standard Testing",
-      "completed_at": "2026-03-17T18:30:00+08:00",
-      "progress": "100%",
-      "tests": 2203,
-      "commit": "1ce10e5",
-      "tasks": "15/15"
-    },
-    {
-      "name": "Phase P — Baseline Evaluation Round 2",
-      "completed_at": "2026-03-16T17:00:00+08:00",
-      "progress": "100%",
-      "tests": 2189,
-      "commit": "b0ba059",
-      "tasks": "16/16"
-    },
-    {
-      "name": "Phase O — Deferred 暂缓项全解锁",
-      "completed_at": "2026-03-15T17:50:00+08:00",
-      "progress": "100%",
-      "tests": 2178,
-      "commit": "9da42de",
-      "tasks": "15/15"
-    },
-    {
-      "name": "Phase N — Agent Debug Panel",
-      "completed_at": "2026-03-15T17:00:00+08:00",
-      "progress": "100%",
-      "tests": 2126,
-      "commit": "3ba3351",
-      "tasks": "7/7"
-    },
-    {
-      "name": "Phase M-b — TUI Dual-View + Eval Panel",
-      "completed_at": "2026-03-15T16:30:00+08:00",
-      "progress": "100%",
-      "tests": 2096,
-      "commit": "76bc12e",
-      "tasks": "8/8"
-    },
-    {
-      "name": "Phase M-a — Eval Management CLI Unification",
-      "completed_at": "2026-03-15T16:00:00+08:00",
-      "progress": "100%",
-      "tests": 2058,
-      "commit": "e2b505b",
-      "tasks": "12/12"
-    },
-    {
-      "name": "Phase L — Eval Whitebox + Enterprise Dataset",
-      "completed_at": "2026-03-15T14:00:00+08:00",
-      "progress": "100%",
-      "tests": 2050,
-      "commit": "f28ad6c",
-      "tasks": "18/18"
-    },
-    {
-      "name": "Phase K — Model Benchmark Report",
-      "completed_at": "2026-03-15T12:00:00+08:00",
-      "progress": "100%",
-      "tests": 2021,
-      "commit": "07f7ae9",
-      "tasks": "11/12"
-    },
-    {
-      "name": "Phase J — Sandbox Security Architecture",
-      "completed_at": "2026-03-14T22:00:00+08:00",
-      "progress": "100%",
-      "tests": 2014,
-      "commit": "45a7342",
-      "tasks": "16/16"
-    },
-    {
-      "name": "Phase I — External Benchmark Adapters",
-      "completed_at": "2026-03-14T20:20:00+08:00",
-      "progress": "100%",
-      "tests": 1992,
-      "commit": "57ca310",
-      "tasks": "13/13"
-    },
-    {
-      "name": "Phase H — Eval Capstone",
-      "completed_at": "2026-03-14T18:20:00+08:00",
-      "progress": "100%",
-      "tests": 1979,
-      "commit": "37680ec",
-      "tasks": "10/10"
-    },
-    {
-      "name": "Agent Evaluation — Phase A-G + H-K Design",
-      "completed_at": "2026-03-14T17:30:00+08:00",
-      "progress": "100% design, Phase A-G implemented, Phase H-K planned",
-      "tests": 1962,
-      "commit": "ca5c898",
-      "tasks": "Phase A-G: 85/85 complete. Phase H-K: 40 tasks designed, awaiting execution."
-    },
-    {
-      "name": "Wave 7-10 — Competitive Enhancement + Integration Wiring",
-      "completed_at": "2026-03-12T21:00:00+08:00",
-      "progress": "100%",
-      "tests": 1774,
-      "commit": "675155d",
-      "tasks": "37/37"
     }
   ]
 }
