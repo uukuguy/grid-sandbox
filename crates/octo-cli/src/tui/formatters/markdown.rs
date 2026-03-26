@@ -336,7 +336,34 @@ fn is_separator_row(line: &str) -> bool {
 fn parse_table_cells(line: &str) -> Vec<String> {
     let trimmed = line.trim();
     let inner = &trimmed[1..trimmed.len() - 1]; // strip leading/trailing |
-    inner.split('|').map(|c| c.trim().to_string()).collect()
+    inner
+        .split('|')
+        .map(|c| {
+            let s = c.trim().to_string();
+            // Clean HTML tags commonly found in markdown tables (e.g. <br>, <br/>, <b>, etc.)
+            clean_html_tags(&s)
+        })
+        .collect()
+}
+
+/// Remove common HTML tags from cell content, replacing <br> with space.
+fn clean_html_tags(s: &str) -> String {
+    let mut result = s.to_string();
+    // Replace <br>, <br/>, <br /> with a space
+    for pat in &["<br>", "<br/>", "<br />", "<BR>", "<BR/>", "<BR />"] {
+        result = result.replace(pat, " ");
+    }
+    // Strip other simple HTML tags like <b>, </b>, <i>, </i>, <em>, </em>, <strong>, </strong>
+    let tag_re_simple = ["b", "i", "em", "strong", "code", "u", "s"];
+    for tag in &tag_re_simple {
+        result = result.replace(&format!("<{}>", tag), "");
+        result = result.replace(&format!("</{}>", tag), "");
+    }
+    // Collapse multiple spaces into one
+    while result.contains("  ") {
+        result = result.replace("  ", " ");
+    }
+    result.trim().to_string()
 }
 
 /// Render a group of consecutive table lines into styled `Line`s.
@@ -383,9 +410,35 @@ fn render_table(table_lines: &[&str], palette: &MdPalette, out: &mut Vec<Line<'s
         }
     }
 
-    // Cap column widths to prevent excessive width
-    for w in &mut col_widths {
-        *w = (*w).min(40);
+    // Fit column widths to terminal width.
+    // Each column uses: 1 border + 1 space + content + 1 space = content + 3 per column,
+    // plus 1 for the leading border.
+    let term_width = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(120);
+    let overhead = 1 + num_cols * 3; // leading │ + (space + content + space│) per col
+    let available = term_width.saturating_sub(overhead);
+
+    let total_natural: usize = col_widths.iter().sum();
+    if total_natural > available && available > 0 {
+        // Proportionally shrink columns, with a minimum of 6 per column
+        let min_col = 6usize;
+        let min_total = min_col * num_cols;
+        if available >= min_total {
+            for w in &mut col_widths {
+                let scaled = (*w as f64 / total_natural as f64 * available as f64) as usize;
+                *w = scaled.max(min_col);
+            }
+            // Adjust rounding error on the last column
+            let sum: usize = col_widths.iter().sum();
+            if sum > available {
+                let last = col_widths.last_mut().unwrap();
+                *last = last.saturating_sub(sum - available);
+            }
+        } else {
+            // Terminal too narrow — use min_col for all
+            for w in &mut col_widths {
+                *w = min_col;
+            }
+        }
     }
 
     let header_style = Style::default()
