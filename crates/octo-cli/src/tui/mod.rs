@@ -84,6 +84,11 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
         tui_state.approval_gate = Some(gate.clone());
     }
 
+    // Sync builtin commands to ~/.octo/commands/ (never overwrites existing)
+    if let Err(e) = octo_engine::commands::sync_builtin_commands(&state.octo_root.global_commands_dir()) {
+        tracing::warn!(error = %e, "Failed to sync builtin commands");
+    }
+
     // Load custom commands from ~/.octo/commands/ and .octo/commands/
     {
         let custom_cmds = octo_engine::commands::load_commands(&state.octo_root.commands_dirs());

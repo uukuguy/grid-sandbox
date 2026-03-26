@@ -1,0 +1,1 @@
+Review the current git changes (staged and unstaged) and create a well-structured commit message following conventional commits format. Include a concise summary and detailed body explaining what changed and why.

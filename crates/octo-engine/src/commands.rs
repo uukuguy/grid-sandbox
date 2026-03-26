@@ -7,12 +7,21 @@
 //!
 //! Subdirectories create namespaced commands: `commands/foo/bar.md` → `/foo:bar`.
 //!
-//! Project commands take priority over global commands with the same name.
+//! Builtin commands are compiled into the binary via `include_dir!` from
+//! `builtin/commands/`. They are synced to `~/.octo/commands/` on startup
+//! (never overwriting existing files) and loaded with lowest priority.
+//!
+//! Priority order: project commands > global commands > builtin commands.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use tracing::{debug, warn};
+use anyhow::Result;
+use include_dir::{include_dir, Dir};
+use tracing::{debug, info, warn};
+
+/// All builtin commands embedded at compile time from `builtin/commands/`.
+static BUILTIN_COMMANDS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/builtin/commands");
 
 /// A loaded custom command.
 #[derive(Debug, Clone)]
@@ -56,6 +65,58 @@ pub fn load_commands(dirs: &[PathBuf]) -> Vec<CustomCommand> {
 
     debug!(count = commands.len(), "Loaded custom commands");
     commands
+}
+
+/// Sync all builtin commands to the target directory (typically `~/.octo/commands/`).
+///
+/// For each `.md` file in the embedded tree:
+/// - If `<target_dir>/<name>.md` does NOT exist → write it
+/// - If it already exists → skip (never overwrite user customizations)
+///
+/// Returns the number of commands seeded.
+pub fn sync_builtin_commands(target_dir: &Path) -> Result<usize> {
+    std::fs::create_dir_all(target_dir)?;
+    let mut synced = 0;
+
+    for file in BUILTIN_COMMANDS_DIR.files() {
+        let file_name = match file.path().file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        let target_path = target_dir.join(file_name);
+        if target_path.exists() {
+            debug!(name = file_name, "Builtin command exists, skipping");
+            continue;
+        }
+
+        info!(name = file_name, "Seeding builtin command");
+        std::fs::write(&target_path, file.contents())?;
+        synced += 1;
+    }
+
+    if synced > 0 {
+        info!(count = synced, "Builtin commands seeded");
+    } else {
+        debug!("All builtin commands already present on disk");
+    }
+
+    Ok(synced)
+}
+
+/// Get the list of builtin command names (without `.md` extension).
+pub fn builtin_command_names() -> Vec<&'static str> {
+    BUILTIN_COMMANDS_DIR
+        .files()
+        .filter_map(|f| {
+            let name = f.path().file_stem().and_then(|n| n.to_str())?;
+            // Only include .md files
+            if f.path().extension().and_then(|e| e.to_str()) == Some("md") {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 /// Recursively load `.md` files from a directory tree.
@@ -274,6 +335,88 @@ mod tests {
     fn test_load_commands_nonexistent_dir() {
         let commands = load_commands(&[PathBuf::from("/nonexistent/path")]);
         assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn test_builtin_command_names() {
+        let names = builtin_command_names();
+        assert!(names.len() >= 10, "Expected at least 10 builtin commands, got {}", names.len());
+        for expected in &["review", "explain", "refactor", "test", "fix", "doc", "optimize", "commit"] {
+            assert!(names.contains(expected), "Missing builtin command: {}", expected);
+        }
+    }
+
+    #[test]
+    fn test_sync_builtin_commands_to_empty_dir() {
+        let dir = tempdir().unwrap();
+        let count = sync_builtin_commands(dir.path()).unwrap();
+        assert!(count >= 10, "Expected at least 10 commands synced, got {}", count);
+
+        // Verify key commands exist
+        for name in &["review.md", "explain.md", "test.md"] {
+            let path = dir.path().join(name);
+            assert!(path.exists(), "Missing builtin command: {}", name);
+        }
+    }
+
+    #[test]
+    fn test_sync_builtin_commands_idempotent() {
+        let dir = tempdir().unwrap();
+        let count1 = sync_builtin_commands(dir.path()).unwrap();
+        assert!(count1 >= 10);
+
+        let count2 = sync_builtin_commands(dir.path()).unwrap();
+        assert_eq!(count2, 0, "Second sync should be no-op");
+    }
+
+    #[test]
+    fn test_sync_builtin_commands_preserves_user_files() {
+        let dir = tempdir().unwrap();
+        sync_builtin_commands(dir.path()).unwrap();
+
+        // User modifies a command
+        let path = dir.path().join("review.md");
+        std::fs::write(&path, "my custom review prompt").unwrap();
+
+        // Re-sync should NOT overwrite
+        sync_builtin_commands(dir.path()).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(content, "my custom review prompt");
+    }
+
+    #[test]
+    fn test_builtin_commands_loaded_via_load_commands() {
+        let dir = tempdir().unwrap();
+        sync_builtin_commands(dir.path()).unwrap();
+
+        let commands = load_commands(&[dir.path().to_path_buf()]);
+        assert!(commands.len() >= 10);
+
+        let review = commands.iter().find(|c| c.name == "review").unwrap();
+        assert!(review.has_arguments);
+        assert!(review.template.contains("$ARGUMENTS"));
+    }
+
+    #[test]
+    fn test_user_commands_override_builtin() {
+        let dir = tempdir().unwrap();
+
+        // Sync builtins
+        let global_dir = dir.path().join("global");
+        sync_builtin_commands(&global_dir).unwrap();
+
+        // Create project command with same name
+        let project_dir = dir.path().join("project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::write(project_dir.join("review.md"), "My custom review: $ARGUMENTS").unwrap();
+
+        let commands = load_commands(&[project_dir, global_dir]);
+
+        // Only one "review" command — the project one
+        let reviews: Vec<_> = commands.iter().filter(|c| c.name == "review").collect();
+        assert_eq!(reviews.len(), 1);
+        assert!(reviews[0].is_project);
+        assert!(reviews[0].template.contains("My custom review"));
     }
 
     #[test]
