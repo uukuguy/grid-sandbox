@@ -35,6 +35,16 @@ use crate::commands::AppState;
 pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     use octo_types::{SandboxId, UserId};
 
+    // Install a panic hook that restores the terminal before printing the panic.
+    // Without this, a panic leaves the terminal in raw/alternate-screen mode,
+    // producing garbled output (as seen when Ctrl+C races with rendering).
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        original_hook(info);
+    }));
+
     // Setup terminal FIRST so user sees the TUI immediately
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -104,10 +114,11 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     // Main event loop
     let result = run_conversation_loop(&mut terminal, &mut tui_state, &mut event_handler).await;
 
-    // Restore terminal (always, even on error)
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
-    terminal.show_cursor()?;
+    // Restore terminal (always, even on error).
+    // Use let _ to ignore errors — each step must run regardless of prior failures.
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture);
+    let _ = terminal.show_cursor();
 
     result
 }

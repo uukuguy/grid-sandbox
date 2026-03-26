@@ -549,13 +549,15 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                 state.autocomplete.dismiss();
                 return;
             }
-            if state.is_streaming || !state.active_tools.is_empty() {
+            if state.is_streaming || state.is_thinking || !state.active_tools.is_empty() {
                 // Cancel current agent operation — highest priority
                 let _ = state
                     .handle
                     .send(AgentMessage::Cancel)
                     .await;
                 state.is_streaming = false;
+                state.is_thinking = false;
+                state.thinking_text.clear();
                 state.active_tools.clear();
                 // Preserve partial streaming text as a message before clearing
                 if !state.streaming_text.is_empty() {
