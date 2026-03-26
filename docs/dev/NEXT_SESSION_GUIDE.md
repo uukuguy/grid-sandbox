@@ -1,23 +1,24 @@
 # octo-sandbox 下一会话指南
 
-**最后更新**: 2026-03-25 15:30 GMT+8
+**最后更新**: 2026-03-26 17:30 GMT+8
 **当前分支**: `main`
-**当前状态**: Phase AF + Post-AF 清理完成，无活跃阶段
+**当前状态**: MCP/TUI 健壮性 + 自定义命令完成，无活跃阶段
 
 ---
 
 ## 项目状态
 
 ```
-Post-AF: Builtin Skills + Config + TUI Fix  → COMPLETE @ 072c15b
-Phase AF: SSM Wiring + Deferred Batch (3+4) → COMPLETE @ 976e813
-Phase AE: Agent Workspace Architecture (7/7)→ COMPLETE @ ee4986f
-Phase AD: Container Image Enhancement (5/5) → COMPLETE @ 73295f5
-Phase AC: Sandbox Container (9/9)           → COMPLETE @ 184b1ab
-Phase AB: 智能体工具执行环境 (10/10)         → COMPLETE @ 282d3f6
-Phase AA: Octo 部署配置架构 (6/6+D2)        → COMPLETE @ 4fbc30d
-Phase Z-A: Core Engine + CLI + Eval         → ALL COMPLETE
-Wave 1-10: Foundation                       → COMPLETE @ 675155d
+Custom Commands + TUI Fixes               → COMPLETE @ 263eeb2
+Post-AF: Builtin Skills + Config + TUI Fix → COMPLETE @ 072c15b
+Phase AF: SSM Wiring + Deferred Batch     → COMPLETE @ 976e813
+Phase AE: Agent Workspace Architecture    → COMPLETE @ ee4986f
+Phase AD: Container Image Enhancement     → COMPLETE @ 73295f5
+Phase AC: Sandbox Container               → COMPLETE @ 184b1ab
+Phase AB: 智能体工具执行环境               → COMPLETE @ 282d3f6
+Phase AA: Octo 部署配置架构               → COMPLETE @ 4fbc30d
+Phase Z-A: Core Engine + CLI + Eval       → ALL COMPLETE
+Wave 1-10: Foundation                     → COMPLETE @ 675155d
 ```
 
 ### 基线数据
@@ -29,9 +30,12 @@ Wave 1-10: Foundation                       → COMPLETE @ 675155d
 
 ## 本次会话完成摘要
 
-1. **Builtin Skills 架构重构**: 10 个 skills 编译进二进制 (include_dir!)，sync 到 ~/.octo/skills/
-2. **Config Auto-Seeding**: config.default.yaml 全量注释，首次启动 seed 到 ~/.octo/ 和 $PROJECT/.octo/
-3. **TUI --project 修复**: 状态栏路径和自动补全使用正确的 project working dir
+1. **TUI stdin 隔离**: 8 个子进程创建点加 `Stdio::null()`，防止 ANSI escape 泄漏到输入区
+2. **UTF-8 安全截断**: 4 处字符串截断改用 `safe_truncate_utf8()`
+3. **表格渲染**: 自适应终端宽度 + HTML 标签清理
+4. **Qwen XML 工具调用恢复**: 支持非标准 LLM 的 XML 风格工具调用
+5. **自定义斜杠命令**: `.octo/commands/*.md` → TUI `/命令名` + 自动补全 + 参数展开
+6. **10 个内置命令**: review, explain, refactor, test, fix, doc, optimize, summarize, translate, commit
 
 ---
 
@@ -65,12 +69,15 @@ Wave 1-10: Foundation                       → COMPLETE @ 675155d
 
 | 文件 | 作用 |
 |------|------|
+| `crates/octo-engine/src/commands.rs` | 自定义命令加载器 + builtin sync |
+| `crates/octo-engine/builtin/commands/` | 10 个内置命令模板 |
 | `crates/octo-engine/builtin/skills/` | 内置 skills 源目录（编译进二进制） |
 | `crates/octo-engine/src/skills/initializer.rs` | include_dir! 嵌入 + sync_builtin_skills() |
-| `crates/octo-engine/src/root.rs` | OctoRoot + seed_default_config() |
+| `crates/octo-engine/src/root.rs` | OctoRoot + commands_dirs() + seed_default_config() |
 | `crates/octo-engine/src/sandbox/` | SandboxProfile, SSM, Docker, 路由 |
 | `crates/octo-engine/src/agent/runtime.rs` | AgentRuntime SSM 集成 + skills sync |
-| `crates/octo-cli/src/tui/app_state.rs` | TuiState + set_working_dir() |
+| `crates/octo-cli/src/tui/key_handler.rs` | async execute_slash_command + 自定义命令分发 |
+| `crates/octo-cli/src/tui/mod.rs` | TUI 启动 sync + 命令加载 + 自动补全注册 |
 | `config.default.yaml` | 全量配置参考（编译时嵌入） |
 
 ---

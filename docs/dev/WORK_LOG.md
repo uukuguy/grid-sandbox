@@ -1,5 +1,65 @@
 # octo-sandbox 工作日志
 
+## MCP Support + TUI Robustness + Custom Commands (2026-03-26)
+
+### 完成内容
+
+本次会话完成 11 项任务，涵盖 3 大领域：MCP/TUI 健壮性修复、UTF-8 安全性、自定义斜杠命令。
+
+**1. TUI 输入修复 — stdin 隔离 (7bb3757)**
+- 根因：`tokio::process::Command` 默认 `stdin=Stdio::inherit()`，子进程（bash, grep, find, python, nodejs, shell, sandbox）竞争读取终端 stdin
+- crossterm EventStream 的 ANSI escape 序列被子进程截断，导致输入区出现 `[C[[5~[<35;79;27M` 乱码
+- 修复：8 个子进程创建点全部加 `stdin(Stdio::null())`
+- 防御：agent Completed/Done/Error 事件处理中追加 `enable_raw_mode()` 恢复
+
+**2. UTF-8 安全截断 (556aa34)**
+- web_search、file_read、CLI preview、TUI tool display 中 4 处字符串截断可能切断多字节字符
+- 新增 `safe_truncate_utf8()` 工具函数，所有截断改用安全版本
+
+**3. 表格渲染修复 (c8c267d)**
+- Markdown 表格列宽自适应终端宽度
+- 清理表格单元格中的 HTML 标签（防止渲染错误）
+
+**4. Qwen XML 工具调用恢复 (93d2efd)**
+- 解析非标准 LLM 输出中 XML 风格的工具调用（`<tool_call>...</tool_call>`）
+- 支持 Qwen 系列模型的工具调用格式
+
+**5. 自定义斜杠命令 (c1e99ca)**
+- 新增 `crates/octo-engine/src/commands.rs` — 命令加载器
+- `.octo/commands/` 下 `.md` 文件成为 `/命令名`，支持 `$ARGUMENTS` 参数替换
+- 子目录命名空间：`review/pr.md` → `/review:pr`
+- TUI 自动补全集成，`/help` 动态列出自定义命令
+- 优先级：项目级 > 全局级 > 内置
+
+**6. 内置命令 (263eeb2)**
+- 10 个内置命令通过 `include_dir!` 编译进二进制
+- 启动时 sync 到 `~/.octo/commands/`（不覆盖已有文件）
+- 命令列表：review, explain, refactor, test, fix, doc, optimize, summarize, translate, commit
+
+### 技术变更
+- `crates/octo-engine/src/commands.rs` — 全新模块（CustomCommand, load_commands, sync_builtin_commands）
+- `crates/octo-engine/builtin/commands/` — 10 个 `.md` 模板文件
+- `crates/octo-engine/src/root.rs` — 新增 commands_dirs() + ensure_dirs 创建 commands 目录
+- `crates/octo-cli/src/tui/key_handler.rs` — execute_slash_command 改为 async，支持自定义命令分发
+- `crates/octo-cli/src/tui/mod.rs` — TUI 启动时 sync builtin + 加载命令 + 注册自动补全
+- `crates/octo-engine/src/tools/bash.rs` — stdin(Stdio::null())
+- `crates/octo-engine/src/tools/grep.rs` — stdin(Stdio::null())
+- `crates/octo-engine/src/tools/find.rs` — stdin(Stdio::null())
+- `crates/octo-sandbox/src/native.rs` — stdin(Stdio::null())
+- `crates/octo-engine/src/agent/harness.rs` — Qwen XML tool call recovery
+
+### 测试结果
+- commands 模块：17 tests passed（11 原有 + 6 新 builtin 测试）
+- key_handler：44 tests passed（9 个 slash command 测试改为 async）
+- 全量测试基线：2476 passing
+
+### 下一步建议
+- 测试 TUI 中自定义命令的实际使用体验
+- 考虑增加更多内置命令（如 `/search`、`/plan`）
+- 考虑命令参数自动补全（目前只补全命令名）
+
+---
+
 ## Post-AF Cleanup — Builtin Skills + Config Seeding + TUI Fix (2026-03-25)
 
 ### 完成内容
