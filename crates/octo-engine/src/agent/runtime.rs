@@ -194,6 +194,13 @@ impl AgentRuntime {
             .api_key
             .clone()
             .unwrap_or_else(|| std::env::var("ANTHROPIC_API_KEY").unwrap_or_default());
+        tracing::info!(
+            provider = %config.provider.name,
+            base_url = ?config.provider.base_url,
+            model = ?config.provider.model,
+            api_key_len = api_key.len(),
+            "Creating LLM provider"
+        );
         let provider: Arc<dyn Provider> = Arc::from(create_provider(
             &config.provider.name,
             api_key,

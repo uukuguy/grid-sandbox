@@ -30,12 +30,6 @@ impl OpenAIProvider {
     }
 
     pub fn with_base_url(api_key: String, base_url: String) -> Self {
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(120))
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .build()
-            .expect("failed to build HTTP client");
-
         // Normalize: strip trailing slash, then strip /v1 suffix if present
         // so we always store the root URL without /v1
         let base_url = base_url.trim_end_matches('/').to_string();
@@ -44,6 +38,17 @@ impl OpenAIProvider {
         } else {
             base_url
         };
+
+        // Bypass system proxy for local endpoints (localhost, 127.0.0.1)
+        // to avoid 502 errors from proxy servers that mishandle local traffic.
+        let is_local = base_url.contains("localhost") || base_url.contains("127.0.0.1");
+        let mut builder = Client::builder()
+            .timeout(std::time::Duration::from_secs(120))
+            .connect_timeout(std::time::Duration::from_secs(10));
+        if is_local {
+            builder = builder.no_proxy();
+        }
+        let client = builder.build().expect("failed to build HTTP client");
 
         Self {
             api_key,
