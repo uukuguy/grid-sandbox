@@ -170,8 +170,13 @@ async fn execute_slash_command(state: &mut TuiState, input: &str) {
                 // Expand template with arguments
                 let expanded = custom.expand(_args);
 
-                // Show the expanded prompt as a user message
-                state.messages.push(ChatMessage::user(&expanded));
+                // Show a concise command summary (not the full expanded prompt)
+                let display = if _args.is_empty() {
+                    format!("/{}", custom.name)
+                } else {
+                    format!("/{} {}", custom.name, _args)
+                };
+                state.messages.push(ChatMessage::user(&display));
                 state.invalidate_cache();
                 state.auto_scroll();
 

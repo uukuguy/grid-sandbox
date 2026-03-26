@@ -341,7 +341,7 @@ mod tests {
     fn test_builtin_command_names() {
         let names = builtin_command_names();
         assert!(names.len() >= 10, "Expected at least 10 builtin commands, got {}", names.len());
-        for expected in &["review", "explain", "refactor", "test", "fix", "doc", "optimize", "commit"] {
+        for expected in &["review", "test", "fix", "refactor", "doc", "commit", "security", "plan", "audit", "bootstrap"] {
             assert!(names.contains(expected), "Missing builtin command: {}", expected);
         }
     }
@@ -353,7 +353,7 @@ mod tests {
         assert!(count >= 10, "Expected at least 10 commands synced, got {}", count);
 
         // Verify key commands exist
-        for name in &["review.md", "explain.md", "test.md"] {
+        for name in &["review.md", "security.md", "test.md"] {
             let path = dir.path().join(name);
             assert!(path.exists(), "Missing builtin command: {}", name);
         }
