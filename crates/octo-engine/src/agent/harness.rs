@@ -1629,7 +1629,7 @@ fn parse_tool_calls_from_text(text: &str) -> Vec<PendingToolUse> {
         }
     }
 
-    // --- Strategy 2: XML format ---
+    // --- Strategy 2: XML format (simple: <tool_name>{json}</tool_name>) ---
     if results.is_empty() {
         static RE_XML: OnceLock<Regex> = OnceLock::new();
         let re_xml = RE_XML.get_or_init(|| {
@@ -1652,6 +1652,42 @@ fn parse_tool_calls_from_text(text: &str) -> Vec<PendingToolUse> {
                             input_json: args.to_string(),
                         });
                     }
+                }
+            }
+        }
+    }
+
+    // --- Strategy 3: Qwen-style XML (<tool_call><function=name><parameter=key>value</parameter></function></tool_call>) ---
+    if results.is_empty() {
+        static RE_QWEN: OnceLock<Regex> = OnceLock::new();
+        let re_qwen = RE_QWEN.get_or_init(|| {
+            Regex::new(r"(?s)<tool_call>\s*<function=([a-zA-Z_][a-zA-Z0-9_-]*)>(.*?)</function>\s*</tool_call>")
+                .expect("valid regex")
+        });
+        static RE_PARAM: OnceLock<Regex> = OnceLock::new();
+        let re_param = RE_PARAM.get_or_init(|| {
+            Regex::new(r"(?s)<parameter=([a-zA-Z_][a-zA-Z0-9_-]*)>(.*?)</parameter>")
+                .expect("valid regex")
+        });
+
+        for cap in re_qwen.captures_iter(text) {
+            if let (Some(func_name), Some(body)) = (cap.get(1), cap.get(2)) {
+                let name = func_name.as_str().to_string();
+                let mut args = serde_json::Map::new();
+                for param_cap in re_param.captures_iter(body.as_str()) {
+                    if let (Some(key), Some(val)) = (param_cap.get(1), param_cap.get(2)) {
+                        args.insert(
+                            key.as_str().to_string(),
+                            serde_json::Value::String(val.as_str().trim().to_string()),
+                        );
+                    }
+                }
+                if !args.is_empty() {
+                    results.push(PendingToolUse {
+                        id: format!("text-recovery-{}", uuid::Uuid::new_v4()),
+                        name,
+                        input_json: serde_json::Value::Object(args).to_string(),
+                    });
                 }
             }
         }
@@ -1714,6 +1750,37 @@ mod tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].name, "bash");
         assert_eq!(calls[1].name, "file_read");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_qwen_xml_format() {
+        let text = r#"Let me run that.
+<tool_call>
+<function=bash>
+<parameter=command>python3 -c "print('hello')"</parameter>
+</function>
+</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "bash");
+        let args: serde_json::Value = serde_json::from_str(&calls[0].input_json).unwrap();
+        assert_eq!(args["command"], "python3 -c \"print('hello')\"");
+    }
+
+    #[test]
+    fn test_parse_tool_calls_qwen_multiple_params() {
+        let text = r#"<tool_call>
+<function=file_write>
+<parameter=path>/tmp/test.txt</parameter>
+<parameter=content>Hello World</parameter>
+</function>
+</tool_call>"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "file_write");
+        let args: serde_json::Value = serde_json::from_str(&calls[0].input_json).unwrap();
+        assert_eq!(args["path"], "/tmp/test.txt");
+        assert_eq!(args["content"], "Hello World");
     }
 
     // --- W8-T8: Dynamic tool result budget tests ---
