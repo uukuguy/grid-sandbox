@@ -48,7 +48,11 @@ impl McpClient for StdioMcpClient {
         let env = config.env.clone();
         let args = config.args.clone();
 
-        let transport = TokioChildProcess::new(
+        // Use builder API to set stderr AFTER TokioChildProcessBuilder construction.
+        // IMPORTANT: TokioChildProcessBuilder::new() defaults stderr to Stdio::inherit(),
+        // and its spawn() overwrites any stderr set via configure(). We must use the
+        // builder's .stderr() method so it takes effect.
+        let (transport, _stderr) = TokioChildProcess::builder(
             tokio::process::Command::new(&config.command).configure(move |c| {
                 for arg in &args {
                     c.arg(arg);
@@ -56,12 +60,10 @@ impl McpClient for StdioMcpClient {
                 for (k, v) in &env {
                     c.env(k, v);
                 }
-                // Suppress stderr from leaking into the terminal.
-                // Without this, MCP server startup messages (e.g. "Context7 ... running on stdio")
-                // corrupt the TUI screen by writing directly to the terminal's alternate buffer.
-                c.stderr(std::process::Stdio::null());
             }),
         )
+        .stderr(std::process::Stdio::null())
+        .spawn()
         .context("Failed to spawn MCP server process")?;
 
         let service = ()
