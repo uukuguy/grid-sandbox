@@ -192,7 +192,7 @@ impl AgentRuntime {
         // 5. Create ToolExecutionRecorder
         let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
 
-        // 5b. CredentialResolver (Vault > env > .env)
+        // 5b. CredentialResolver (Vault > env > credentials.yaml > .env)
         let credential_resolver = {
             let mut resolver = crate::secret::CredentialResolver::new();
             if let Ok(password) = std::env::var("OCTO_VAULT_PASSWORD") {
@@ -204,6 +204,14 @@ impl AgentRuntime {
                     Err(e) => {
                         tracing::warn!(error = %e, "Failed to init CredentialVault, using env-only resolver");
                     }
+                }
+            }
+            // Wire credentials.yaml from OctoRoot (populated by `octo auth login`)
+            if let Some(ref root) = config.octo_root {
+                let creds = root.credentials_path();
+                if creds.exists() {
+                    tracing::debug!(path = %creds.display(), "Loading credentials.yaml");
+                    resolver = resolver.with_credentials(creds);
                 }
             }
             Arc::new(resolver)

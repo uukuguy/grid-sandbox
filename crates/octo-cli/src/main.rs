@@ -152,6 +152,7 @@ async fn main() -> Result<()> {
         Commands::Tool { action } => handle_tools(action, &state).await?,
         Commands::Mcp { action } => handle_mcp(action, &state).await?,
         Commands::Config { action } => handle_config(action, &state).await?,
+        Commands::Auth { action } => commands::handle_auth(action, &state).await?,
         Commands::Tui { theme: _ } => {
             tui::run_tui_conversation(&state).await?;
         }

@@ -6,8 +6,8 @@
 use clap::Parser;
 
 use commands::{
-    AgentCommands, CompletionsCommands, ConfigCommands, EvalCommands, McpCommands, MemoryCommands,
-    RootCommands, SandboxCommands, SessionCommands, SkillCommands, ToolsCommands,
+    AgentCommands, AuthCommands, CompletionsCommands, ConfigCommands, EvalCommands, McpCommands,
+    MemoryCommands, RootCommands, SandboxCommands, SessionCommands, SkillCommands, ToolsCommands,
 };
 
 pub mod commands;
@@ -128,6 +128,12 @@ pub enum Commands {
     Config {
         #[command(subcommand)]
         action: ConfigCommands,
+    },
+
+    /// Manage API credentials (login/status/logout)
+    Auth {
+        #[command(subcommand)]
+        action: AuthCommands,
     },
 
     /// Manage skills

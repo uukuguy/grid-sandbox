@@ -13,6 +13,8 @@ use zeroize::Zeroizing;
 pub struct CredentialResolver {
     /// Vault for secure credential storage
     vault: Option<CredentialVault>,
+    /// Path to credentials.yaml (YAML key-value pairs)
+    credentials_path: Option<PathBuf>,
     /// Path to .env file
     dotenv_path: Option<PathBuf>,
 }
@@ -22,6 +24,7 @@ impl CredentialResolver {
     pub fn new() -> Self {
         Self {
             vault: None,
+            credentials_path: None,
             dotenv_path: None,
         }
     }
@@ -29,6 +32,12 @@ impl CredentialResolver {
     /// Set vault for resolution
     pub fn with_vault(mut self, vault: CredentialVault) -> Self {
         self.vault = Some(vault);
+        self
+    }
+
+    /// Set credentials.yaml path (YAML key-value pairs from `octo auth login`)
+    pub fn with_credentials(mut self, path: PathBuf) -> Self {
+        self.credentials_path = Some(path);
         self
     }
 
@@ -52,7 +61,14 @@ impl CredentialResolver {
             return Some(Zeroizing::new(val));
         }
 
-        // 3. .env file (lowest priority)
+        // 3. credentials.yaml (from `octo auth login`)
+        if let Some(ref path) = self.credentials_path {
+            if let Ok(val) = self.read_yaml_credential(path, key) {
+                return Some(Zeroizing::new(val));
+            }
+        }
+
+        // 4. .env file (lowest priority)
         if let Some(ref path) = self.dotenv_path {
             if let Ok(val) = self.read_dotenv(path, key) {
                 return Some(Zeroizing::new(val));
@@ -71,6 +87,15 @@ impl CredentialResolver {
             self.resolve(key).map(|v| v.to_string()).unwrap_or_default()
         })
         .to_string()
+    }
+
+    /// Read a key from a YAML credentials file (simple key: value pairs)
+    fn read_yaml_credential(&self, path: &PathBuf, key: &str) -> Result<String, std::env::VarError> {
+        use std::fs;
+        let content = fs::read_to_string(path).map_err(|_| std::env::VarError::NotPresent)?;
+        let map: HashMap<String, String> =
+            serde_yaml::from_str(&content).map_err(|_| std::env::VarError::NotPresent)?;
+        map.get(key).cloned().ok_or(std::env::VarError::NotPresent)
     }
 
     /// Read and parse a .env file to get a specific key

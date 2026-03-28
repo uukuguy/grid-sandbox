@@ -2,6 +2,7 @@
 
 pub mod agent;
 pub mod ask;
+pub mod auth;
 pub mod completions;
 pub mod config;
 pub mod dashboard;
@@ -24,13 +25,14 @@ pub mod types;
 
 // Re-export types for external use
 pub use types::{
-    AgentCommands, CompletionsCommands, ConfigCommands, EvalCommands, McpCommands, MemoryCommands,
-    RootCommands, SandboxCommands, SessionCommands, SkillCommands, ToolsCommands,
+    AgentCommands, AuthCommands, CompletionsCommands, ConfigCommands, EvalCommands, McpCommands,
+    MemoryCommands, RootCommands, SandboxCommands, SessionCommands, SkillCommands, ToolsCommands,
 };
 
 // Re-export handler functions
 pub use agent::handle_agent;
 pub use ask::execute_ask;
+pub use auth::handle_auth;
 pub use completions::generate_completions;
 pub use config::handle_config;
 pub use doctor::run_doctor;

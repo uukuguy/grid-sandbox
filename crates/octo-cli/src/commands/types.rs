@@ -294,6 +294,28 @@ pub enum SandboxCommands {
     },
 }
 
+/// Authentication and credential management subcommands
+#[derive(Subcommand)]
+pub enum AuthCommands {
+    /// Store an API key credential
+    Login {
+        /// Provider name (e.g. anthropic, openai, openrouter)
+        #[arg(long)]
+        provider: String,
+        /// API key value (omit to read from stdin)
+        #[arg(long)]
+        key: Option<String>,
+    },
+    /// Show configured credentials (keys are masked)
+    Status,
+    /// Remove a stored credential
+    Logout {
+        /// Provider name to remove
+        #[arg(long)]
+        provider: String,
+    },
+}
+
 /// Root path management subcommands
 #[derive(Subcommand)]
 pub enum RootCommands {
