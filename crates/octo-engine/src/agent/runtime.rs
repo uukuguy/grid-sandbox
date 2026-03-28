@@ -20,7 +20,9 @@ use crate::memory::store_traits::MemoryStore;
 use crate::memory::{InMemoryWorkingMemory, SqliteMemoryStore, SqliteWorkingMemory, WorkingMemory};
 use crate::metering::Metering;
 use crate::providers::ProviderConfig;
-use crate::providers::{create_provider, Provider, ProviderChain, ProviderChainConfig};
+use crate::providers::{
+    create_provider, defaults::resolve_api_key_env, Provider, ProviderChain, ProviderChainConfig,
+};
 use crate::sandbox::{DockerAdapter, OctoRunMode, SandboxProfile, SessionSandboxConfig, SessionSandboxManager};
 use crate::security::SecurityPolicy;
 use crate::session::{SessionStore, SqliteSessionStore};
@@ -190,12 +192,36 @@ impl AgentRuntime {
         // 5. Create ToolExecutionRecorder
         let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
 
-        // 6. Create Provider
+        // 5b. CredentialResolver (Vault > env > .env)
+        let credential_resolver = {
+            let mut resolver = crate::secret::CredentialResolver::new();
+            if let Ok(password) = std::env::var("OCTO_VAULT_PASSWORD") {
+                match crate::secret::CredentialVault::new(password) {
+                    Ok(vault) => {
+                        tracing::info!("CredentialVault initialized (AES-GCM encrypted)");
+                        resolver = resolver.with_vault(vault);
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to init CredentialVault, using env-only resolver");
+                    }
+                }
+            }
+            Arc::new(resolver)
+        };
+
+        // 6. Create Provider (resolve API key via CredentialResolver priority chain)
         let api_key = config
             .provider
             .api_key
             .clone()
-            .unwrap_or_else(|| std::env::var("ANTHROPIC_API_KEY").unwrap_or_default());
+            .unwrap_or_else(|| {
+                let env_key = resolve_api_key_env(&config.provider.name)
+                    .unwrap_or("ANTHROPIC_API_KEY");
+                credential_resolver
+                    .resolve(env_key)
+                    .map(|s| s.to_string())
+                    .unwrap_or_default()
+            });
         tracing::info!(
             provider = %config.provider.name,
             base_url = ?config.provider.base_url,
@@ -413,22 +439,7 @@ impl AgentRuntime {
         // 17. Shared ApprovalGate for interactive tool approval (T7)
         let approval_gate = crate::tools::approval::ApprovalGate::new();
 
-        // 18. CredentialResolver with optional Vault
-        let credential_resolver = {
-            let mut resolver = crate::secret::CredentialResolver::new();
-            if let Ok(password) = std::env::var("OCTO_VAULT_PASSWORD") {
-                match crate::secret::CredentialVault::new(password) {
-                    Ok(vault) => {
-                        tracing::info!("CredentialVault initialized (AES-GCM encrypted)");
-                        resolver = resolver.with_vault(vault);
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Failed to init CredentialVault, using env-only resolver");
-                    }
-                }
-            }
-            Arc::new(resolver)
-        };
+        // 18. (CredentialResolver moved to step 5b — before provider creation)
 
         // 19. SessionSandboxManager (SSM) — conditional on run mode + profile
         let session_sandbox: Option<Arc<SessionSandboxManager>> = {
