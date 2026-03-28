@@ -37,10 +37,15 @@ install_from_tarball() {
   echo "  OK: $(${INSTALL_DIR}/${name} --version 2>&1 | head -1)"
 }
 
-# --- ripgrep (gnu only for arm64) ---
+# --- ripgrep (musl for amd64, gnu for arm64 — 15.1.0 dropped x86_64-gnu) ---
+if [ "${ARCH}" = "amd64" ]; then
+  RG_LIBC="musl"
+else
+  RG_LIBC="gnu"
+fi
 install_from_tarball "rg" \
-  "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${RUST_ARCH}-unknown-linux-gnu.tar.gz" \
-  "ripgrep-${RIPGREP_VERSION}-${RUST_ARCH}-unknown-linux-gnu/rg"
+  "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${RUST_ARCH}-unknown-linux-${RG_LIBC}.tar.gz" \
+  "ripgrep-${RIPGREP_VERSION}-${RUST_ARCH}-unknown-linux-${RG_LIBC}/rg"
 
 # --- fd (gnu) ---
 install_from_tarball "fd" \
