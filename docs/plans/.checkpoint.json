@@ -1,13 +1,17 @@
 {
   "plan_file": "docs/plans/2026-03-29-phase-ag-memory-context-enhancement.md",
-  "phase": "planning",
+  "phase": "execution",
   "created_at": "2026-03-29T00:00:00+08:00",
-  "updated_at": "2026-03-29T00:30:00+08:00",
-  "completed_tasks": [],
-  "current_task": "Task 1: 类型系统扩展 (octo-types)",
+  "updated_at": "2026-03-29T02:00:00+08:00",
+  "completed_tasks": [
+    "Task 1: 类型系统扩展 (octo-types) — MemoryType, EventData, SortField + MemoryEntry/SearchOptions/MemoryFilter 新增字段",
+    "Task 2: DB Migration v12 + SqliteMemoryStore 扩展 — memories +3 columns, session_summaries table, SessionSummaryStore (4 tests)",
+    "Task 3: 接线 SessionEndMemoryHook + MemoryInjector — AgentExecutor session-end hook + harness Zone B+ injection"
+  ],
+  "current_task": "Task 4: EventExtractor — 事件提取器",
   "total_tasks": 11,
   "phase_name": "Phase AG — 记忆和上下文机制增强",
-  "status": "PLANNED",
+  "status": "IN_PROGRESS",
   "execution_mode": "direct",
   "branch": "main",
   "baseline": {
@@ -15,10 +19,15 @@
     "commit": "df54865",
     "db_version": 11
   },
+  "current": {
+    "tests": "2476+ (959 lib + 4 new SessionSummaryStore)",
+    "commit": "5fd622e",
+    "db_version": 12
+  },
   "previous_phase": {
     "name": "Builtin Commands Redesign",
     "status": "COMPLETE",
     "commit": "1916320"
   },
-  "notes": "Phase AG: 记忆和上下文机制增强。G1(3 tasks): 接线修复+基础设施。G2(4 tasks): 情景记忆系统。G3(3 tasks): Agent主动记忆管理。G4(1 task): 上下文工程增强。设计文档: docs/design/MEMORY_CONTEXT_ENHANCEMENT_DESIGN.md。参考: Letta/MemGPT, ChatGPT Memory, Mem0, A-Mem。8 deferred items (AG-D1~D8)。"
+  "notes": "G1 COMPLETE (3/3 tasks). Commits: 9891821 (types), f9c80ed (DB+store), 5fd622e (wiring). Critical断裂点 #1 (session end不提取) and #2 (new session不注入) fixed. Next: G2 Task 4-7 情景记忆系统."
 }

@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-03-29 02:00 | Phase AG G1 COMPLETE (3/3 tasks). Types扩展 + DB v12 + SessionSummaryStore + 接线 SessionEndMemoryHook + MemoryInjector. 断裂点#1#2修复. Commits: 9891821, f9c80ed, 5fd622e. Next: G2 情景记忆.
 - 2026-03-29 00:30 | Phase AG plan + design COMPLETE (11 tasks, 4 groups). 记忆和上下文机制增强. 5 断裂点修复 + 情景记忆 + Agent 主动管理 + ObservationMasker. 参考: Letta/MemGPT, ChatGPT Memory, Mem0, A-Mem. Ready to execute.
 - 2026-03-23 21:45 | Phase AE plan written (7 tasks, 4 groups). Ready to execute.
   - G1: --project CLI + OctoRoot::with_project_dir()
