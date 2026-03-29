@@ -231,6 +231,28 @@ async fn run_agent_loop_inner(
         debug!("Zone B injected: working memory {} chars", memory_xml.len());
     }
 
+    // --- Zone B+: Cross-session memory injection (Phase AG) ---
+    if let Some(ref store) = config.memory_store {
+        let first_user_query = messages
+            .iter()
+            .find(|m| m.role == octo_types::MessageRole::User)
+            .map(|m| m.text_content())
+            .unwrap_or_default();
+        if !first_user_query.is_empty() {
+            let injector = crate::memory::MemoryInjector::with_defaults();
+            let cross_session = injector
+                .build_memory_context(store.as_ref(), config.user_id.as_str(), &first_user_query)
+                .await;
+            if !cross_session.is_empty() {
+                loop_steps::inject_zone_b(&mut messages, &cross_session);
+                debug!(
+                    "Zone B+ injected: cross-session memory {} chars",
+                    cross_session.len()
+                );
+            }
+        }
+    }
+
     // --- Compute tool specs ---
     let tool_specs = tools.specs();
 

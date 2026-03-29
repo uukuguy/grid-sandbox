@@ -352,10 +352,40 @@ impl AgentExecutor {
             }
         }
 
+        // Session-end memory extraction (Phase AG)
+        self.run_session_end_hooks().await;
+
         // Release session sandbox container before stopping (AC-T7)
         self.shutdown_sandbox().await;
 
         info!(session_id = %self.session_id.as_str(), "AgentExecutor stopped (channel closed)");
+    }
+
+    /// Run session-end memory extraction hooks.
+    ///
+    /// Extracts key information from the conversation history and persists
+    /// it to L2 memory store for cross-session recall. Non-blocking: errors
+    /// are logged but do not prevent executor shutdown.
+    async fn run_session_end_hooks(&self) {
+        if self.history.is_empty() {
+            return;
+        }
+        let Some(ref store) = self.memory_store else {
+            return;
+        };
+
+        let hook = crate::memory::SessionEndMemoryHook::with_defaults();
+        let count = hook
+            .on_session_end(&self.history, store.as_ref(), self.user_id.as_str())
+            .await;
+
+        if count > 0 {
+            info!(
+                session_id = %self.session_id.as_str(),
+                extracted = count,
+                "Session-end memory extraction complete"
+            );
+        }
     }
 
     /// Release the session sandbox container, if any.
