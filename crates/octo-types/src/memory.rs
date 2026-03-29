@@ -1,6 +1,117 @@
 use serde::{Deserialize, Serialize};
 
 // ============================================================
+// Memory Type (Cognitive 3-layer model)
+// ============================================================
+
+/// Memory type based on cognitive science's three-layer memory model.
+///
+/// - Semantic: facts, preferences, knowledge ("what I know")
+/// - Episodic: events, conversation summaries, timelines ("what I experienced")
+/// - Procedural: workflow patterns, best practices ("how I do things")
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryType {
+    Semantic,
+    Episodic,
+    Procedural,
+}
+
+impl Default for MemoryType {
+    fn default() -> Self {
+        Self::Semantic
+    }
+}
+
+impl MemoryType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Semantic => "semantic",
+            Self::Episodic => "episodic",
+            Self::Procedural => "procedural",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "semantic" => Some(Self::Semantic),
+            "episodic" => Some(Self::Episodic),
+            "procedural" => Some(Self::Procedural),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for MemoryType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// ============================================================
+// Event Data (structured event from tool call chains)
+// ============================================================
+
+/// Structured event data extracted from tool call chains.
+///
+/// Captures the key elements of an action: what happened, to what,
+/// with what result, and what artifacts were produced.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventData {
+    /// Event type: register, create, delete, deploy, configure, etc.
+    pub event_type: String,
+    /// Event target: "MoltBook website", "database schema", etc.
+    pub target: String,
+    /// Outcome: success, failure, partial
+    pub outcome: String,
+    /// Key artifacts: {"username": "octo-agent", "email": "..."}
+    pub artifacts: serde_json::Value,
+    /// Tool chain used to accomplish this event
+    pub tool_chain: Vec<String>,
+}
+
+impl EventData {
+    pub fn new(
+        event_type: impl Into<String>,
+        target: impl Into<String>,
+        outcome: impl Into<String>,
+    ) -> Self {
+        Self {
+            event_type: event_type.into(),
+            target: target.into(),
+            outcome: outcome.into(),
+            artifacts: serde_json::json!({}),
+            tool_chain: Vec::new(),
+        }
+    }
+
+    pub fn with_artifacts(mut self, artifacts: serde_json::Value) -> Self {
+        self.artifacts = artifacts;
+        self
+    }
+
+    pub fn with_tool_chain(mut self, tools: Vec<String>) -> Self {
+        self.tool_chain = tools;
+        self
+    }
+}
+
+// ============================================================
+// Sort Field (for memory queries)
+// ============================================================
+
+/// Sort field for memory search/list queries.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SortField {
+    #[default]
+    Relevance,
+    CreatedAt,
+    UpdatedAt,
+    Importance,
+}
+
+// ============================================================
 // Working Memory (Layer 0)
 // ============================================================
 
@@ -240,6 +351,12 @@ pub struct MemoryEntry {
     pub source_ref: String,
     pub ttl: Option<i64>,
     pub timestamps: MemoryTimestamps,
+    /// Memory type (semantic/episodic/procedural)
+    pub memory_type: MemoryType,
+    /// Source session ID (for episodic tracing)
+    pub session_id: Option<String>,
+    /// Structured event data (for episodic events)
+    pub event_data: Option<EventData>,
 }
 
 impl MemoryEntry {
@@ -262,6 +379,39 @@ impl MemoryEntry {
             source_ref: String::new(),
             ttl: None,
             timestamps: MemoryTimestamps::default(),
+            memory_type: MemoryType::default(),
+            session_id: None,
+            event_data: None,
+        }
+    }
+
+    /// Create an episodic memory entry from event data.
+    pub fn new_episodic(
+        user_id: impl Into<String>,
+        event: &EventData,
+        session_id: impl Into<String>,
+    ) -> Self {
+        let content = format!("{}: {} — {}", event.event_type, event.target, event.outcome);
+        Self {
+            id: MemoryId::new(),
+            user_id: user_id.into(),
+            sandbox_id: String::new(),
+            category: MemoryCategory::Profile,
+            content,
+            metadata: serde_json::json!({
+                "event_type": event.event_type,
+                "target": event.target,
+            }),
+            embedding: None,
+            importance: 0.7,
+            access_count: 0,
+            source_type: MemorySource::Extracted,
+            source_ref: format!("event:{}", event.event_type),
+            ttl: None,
+            timestamps: MemoryTimestamps::default(),
+            memory_type: MemoryType::Episodic,
+            session_id: Some(session_id.into()),
+            event_data: Some(event.clone()),
         }
     }
 }
@@ -276,6 +426,14 @@ pub struct SearchOptions {
     pub min_score: Option<f32>,
     pub time_decay: bool,
     pub query_embedding: Option<Vec<f32>>,
+    /// Time range filter (start_timestamp, end_timestamp)
+    pub time_range: Option<(i64, i64)>,
+    /// Filter by source session
+    pub session_id: Option<String>,
+    /// Filter by memory types
+    pub memory_types: Option<Vec<MemoryType>>,
+    /// Sort field (default: Relevance)
+    pub sort_by: SortField,
 }
 
 impl Default for SearchOptions {
@@ -289,6 +447,10 @@ impl Default for SearchOptions {
             min_score: None,
             time_decay: true,
             query_embedding: None,
+            time_range: None,
+            session_id: None,
+            memory_types: None,
+            sort_by: SortField::default(),
         }
     }
 }
@@ -307,6 +469,12 @@ pub struct MemoryFilter {
     pub categories: Option<Vec<MemoryCategory>>,
     pub source_types: Option<Vec<MemorySource>>,
     pub limit: usize,
+    /// Time range filter (start_timestamp, end_timestamp)
+    pub time_range: Option<(i64, i64)>,
+    /// Filter by source session
+    pub session_id: Option<String>,
+    /// Filter by memory types
+    pub memory_types: Option<Vec<MemoryType>>,
 }
 
 impl Default for MemoryFilter {
@@ -317,6 +485,9 @@ impl Default for MemoryFilter {
             categories: None,
             source_types: None,
             limit: 50,
+            time_range: None,
+            session_id: None,
+            memory_types: None,
         }
     }
 }

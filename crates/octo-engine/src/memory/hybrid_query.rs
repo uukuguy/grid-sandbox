@@ -320,6 +320,9 @@ fn hybrid_result_to_memory_entry(r: &HybridSearchResult) -> octo_types::memory::
             updated_at: 0,
             accessed_at: 0,
         },
+        memory_type: octo_types::memory::MemoryType::default(),
+        session_id: None,
+        event_data: None,
     }
 }
 

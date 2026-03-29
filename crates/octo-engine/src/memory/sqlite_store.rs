@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use octo_types::{
-    MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, MemoryResult, MemorySource,
-    MemoryTimestamps, SearchOptions,
+    EventData, MemoryCategory, MemoryEntry, MemoryFilter, MemoryId, MemoryResult, MemorySource,
+    MemoryTimestamps, MemoryType, SearchOptions,
 };
 use tracing::debug;
 
@@ -523,6 +523,13 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
     let metadata: serde_json::Value =
         serde_json::from_str(&metadata_str).unwrap_or(serde_json::json!({}));
 
+    // Parse new fields (backward compatible — columns may not exist in old DBs)
+    let memory_type_str: String = row.get::<_, String>("memory_type").unwrap_or_else(|_| "semantic".to_string());
+    let memory_type = MemoryType::parse(&memory_type_str).unwrap_or_default();
+    let session_id: Option<String> = row.get::<_, Option<String>>("session_id").unwrap_or(None);
+    let event_data_str: Option<String> = row.get::<_, Option<String>>("event_data").unwrap_or(None);
+    let event_data: Option<EventData> = event_data_str.and_then(|s| serde_json::from_str(&s).ok());
+
     Ok(MemoryEntry {
         id: MemoryId::from_string(id),
         user_id,
@@ -541,6 +548,9 @@ fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryEntry> {
             updated_at,
             accessed_at,
         },
+        memory_type,
+        session_id,
+        event_data,
     })
 }
 
@@ -630,6 +640,9 @@ mod tests {
                 updated_at: created_at,
                 accessed_at: created_at,
             },
+            memory_type: MemoryType::default(),
+            session_id: None,
+            event_data: None,
         }
     }
 
