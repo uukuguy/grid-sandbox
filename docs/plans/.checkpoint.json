@@ -1,21 +1,25 @@
 {
   "plan_file": "docs/plans/2026-03-29-phase-ag-memory-context-enhancement.md",
-  "phase": "execution",
+  "phase": "complete",
   "created_at": "2026-03-29T00:00:00+08:00",
-  "updated_at": "2026-03-29T19:30:00+08:00",
+  "updated_at": "2026-03-29T20:30:00+08:00",
   "completed_tasks": [
-    "Task 1: 类型系统扩展 (octo-types) — MemoryType, EventData, SortField + MemoryEntry/SearchOptions/MemoryFilter 新增字段",
-    "Task 2: DB Migration v12 + SqliteMemoryStore 扩展 — memories +3 columns, session_summaries table, SessionSummaryStore (4 tests)",
-    "Task 3: 接线 SessionEndMemoryHook + MemoryInjector — AgentExecutor session-end hook + harness Zone B+ injection",
+    "Task 1: 类型系统扩展 (octo-types)",
+    "Task 2: DB Migration v12 + SqliteMemoryStore 扩展",
+    "Task 3: 接线 SessionEndMemoryHook + MemoryInjector",
     "Task 4: EventExtractor — 事件提取器 (9 tests)",
     "Task 5: SessionSummarizer — 会话摘要生成 (8 tests)",
-    "Task 6: Session End 完整流程接线 — 3-step pipeline (hook → event extraction → summary)",
-    "Task 7: memory_timeline 工具 — 时间线查询 (11 tests)"
+    "Task 6: Session End 完整流程接线 — 3-step pipeline",
+    "Task 7: memory_timeline 工具 (11 tests)",
+    "Task 8: memory_edit 工具 (6 tests)",
+    "Task 9: Session Summaries 注入 Zone B++",
+    "Task 10: System Prompt 记忆管理指令 + Zone B 周期刷新",
+    "Task 11: ObservationMasker 条件激活 (>50% budget)"
   ],
-  "current_task": "Task 8: memory_edit 工具",
+  "current_task": null,
   "total_tasks": 11,
   "phase_name": "Phase AG — 记忆和上下文机制增强",
-  "status": "IN_PROGRESS",
+  "status": "COMPLETE",
   "execution_mode": "direct",
   "branch": "main",
   "baseline": {
@@ -24,14 +28,9 @@
     "db_version": 11
   },
   "current": {
-    "tests": "2476+ (976 lib + 28 new G2 tests)",
-    "commit": "a7586ad",
+    "tests": "2476+ (987 lib + 34 new tests)",
+    "commit": "47f39f2",
     "db_version": 12
   },
-  "previous_phase": {
-    "name": "Builtin Commands Redesign",
-    "status": "COMPLETE",
-    "commit": "1916320"
-  },
-  "notes": "G1 COMPLETE (3/3). G2 COMPLETE (4/4). Commits: 0f5d04e (EventExtractor+SessionSummarizer), d35ecc4 (session end 3-step pipeline), a7586ad (memory_timeline tool). New components: EventExtractor (LLM event extraction), SessionSummarizer (LLM session summary), MemoryTimelineTool (temporal queries). AgentExecutor now has session_summary_store field. Next: G3 Tasks 8-10 Agent主动记忆管理."
+  "notes": "Phase AG COMPLETE. All 11 tasks across 4 groups done. G1: type system + DB migration + hook wiring. G2: EventExtractor + SessionSummarizer + session end 3-step pipeline + memory_timeline tool. G3: memory_edit tool + session summaries Zone B++ injection + system prompt memory instructions + Zone B periodic refresh. G4: conditional ObservationMasker (>50% budget). Deferred: AG-D1~D8 (procedural memory, consolidation, intelligent forgetting, conflict resolution, HybridQueryEngine, KG semantic search, summarize compression, frontend)."
 }
