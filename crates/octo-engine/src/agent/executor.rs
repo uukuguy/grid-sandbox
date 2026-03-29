@@ -11,7 +11,7 @@ use crate::agent::{AgentConfig, AgentEvent, AgentLoopConfig};
 use crate::context::{ContextBudgetManager, ContextPruner};
 use crate::agent::subagent::SubAgentManager;
 use crate::memory::store_traits::MemoryStore;
-use crate::memory::WorkingMemory;
+use crate::memory::{EventExtractor, SessionSummarizer, SessionSummaryStore, WorkingMemory};
 use crate::providers::Provider;
 use crate::sandbox::{
     DockerAdapter, OctoRunMode, SandboxProfile, SandboxRouter,
@@ -115,6 +115,8 @@ pub struct AgentExecutor {
     recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
     // Session-scoped sandbox container manager (AC-T7)
     session_sandbox: Option<Arc<SessionSandboxManager>>,
+    // Session summary store for episodic memory (Phase AG)
+    session_summary_store: Option<Arc<SessionSummaryStore>>,
 }
 
 impl AgentExecutor {
@@ -144,6 +146,7 @@ impl AgentExecutor {
         skill_registry: Option<Arc<SkillRegistry>>,
         recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
         session_sandbox: Option<Arc<SessionSandboxManager>>,
+        session_summary_store: Option<Arc<SessionSummaryStore>>,
     ) -> Self {
         Self {
             session_id,
@@ -172,6 +175,7 @@ impl AgentExecutor {
             skill_registry,
             recorder,
             session_sandbox,
+            session_summary_store,
         }
     }
 
@@ -363,9 +367,11 @@ impl AgentExecutor {
 
     /// Run session-end memory extraction hooks.
     ///
-    /// Extracts key information from the conversation history and persists
-    /// it to L2 memory store for cross-session recall. Non-blocking: errors
-    /// are logged but do not prevent executor shutdown.
+    /// Three-step async pipeline (each step independent — failure in one
+    /// does not block others):
+    ///   1. Rule-based extraction (SessionEndMemoryHook) → L2 semantic memories
+    ///   2. LLM event extraction (EventExtractor) → L2 episodic memories
+    ///   3. LLM session summary (SessionSummarizer) → session_summaries table
     async fn run_session_end_hooks(&self) {
         if self.history.is_empty() {
             return;
@@ -374,17 +380,100 @@ impl AgentExecutor {
             return;
         };
 
+        let model = self
+            .model
+            .clone()
+            .unwrap_or_else(|| "claude-sonnet-4-6".to_string());
+
+        // Step 1: Rule-based extraction (existing)
         let hook = crate::memory::SessionEndMemoryHook::with_defaults();
         let count = hook
             .on_session_end(&self.history, store.as_ref(), self.user_id.as_str())
             .await;
-
         if count > 0 {
             info!(
                 session_id = %self.session_id.as_str(),
                 extracted = count,
-                "Session-end memory extraction complete"
+                "Step 1: Rule-based memory extraction complete"
             );
+        }
+
+        // Step 2: LLM event extraction → episodic memories
+        match EventExtractor::extract_events(self.provider.as_ref(), &self.history, &model).await {
+            Ok(events) if !events.is_empty() => {
+                let mut event_stored = 0;
+                for event in &events {
+                    let entry = octo_types::MemoryEntry::new_episodic(
+                        self.user_id.as_str(),
+                        event,
+                        self.session_id.as_str(),
+                    );
+                    if store.store(entry).await.is_ok() {
+                        event_stored += 1;
+                    }
+                }
+                info!(
+                    session_id = %self.session_id.as_str(),
+                    events = event_stored,
+                    "Step 2: Event extraction complete"
+                );
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    session_id = %self.session_id.as_str(),
+                    "Step 2: No events extracted"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    session_id = %self.session_id.as_str(),
+                    error = %e,
+                    "Step 2: Event extraction failed"
+                );
+            }
+        }
+
+        // Step 3: Session summary → session_summaries table
+        if let Some(ref summary_store) = self.session_summary_store {
+            match SessionSummarizer::summarize(self.provider.as_ref(), &self.history, &model).await {
+                Ok(summary) if !summary.text.is_empty() => {
+                    if let Err(e) = summary_store
+                        .save(
+                            self.session_id.as_str(),
+                            &summary.text,
+                            summary.event_count,
+                            &summary.key_topics,
+                            count, // memory_count from step 1
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            session_id = %self.session_id.as_str(),
+                            error = %e,
+                            "Step 3: Failed to save session summary"
+                        );
+                    } else {
+                        info!(
+                            session_id = %self.session_id.as_str(),
+                            topics = ?summary.key_topics,
+                            "Step 3: Session summary saved"
+                        );
+                    }
+                }
+                Ok(_) => {
+                    tracing::debug!(
+                        session_id = %self.session_id.as_str(),
+                        "Step 3: Empty summary, skipped"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        session_id = %self.session_id.as_str(),
+                        error = %e,
+                        "Step 3: Session summarization failed"
+                    );
+                }
+            }
         }
     }
 

@@ -141,6 +141,8 @@ pub struct AgentRuntime {
     pub(crate) credential_resolver: Arc<crate::secret::CredentialResolver>,
     // Session-scoped sandbox container manager (Phase AF)
     pub(crate) session_sandbox: Option<Arc<SessionSandboxManager>>,
+    // Session summary store for episodic memory (Phase AG)
+    pub(crate) session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
 }
 
 impl AgentRuntime {
@@ -188,6 +190,11 @@ impl AgentRuntime {
 
         // 4. Create MemoryStore (Layer 2)
         let memory_store: Arc<dyn MemoryStore> = Arc::new(SqliteMemoryStore::new(conn.clone()));
+
+        // 4b. Create SessionSummaryStore (Phase AG — episodic memory)
+        let session_summary_store = Some(Arc::new(
+            crate::memory::SessionSummaryStore::new(conn.clone()),
+        ));
 
         // 5. Create ToolExecutionRecorder
         let recorder = Arc::new(ToolExecutionRecorder::new(conn.clone()));
@@ -509,6 +516,7 @@ impl AgentRuntime {
             knowledge_graph,
             credential_resolver,
             session_sandbox,
+            session_summary_store,
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -789,6 +797,7 @@ impl AgentRuntime {
             self.skill_registry.clone(),
             Some(self.recorder.clone()),
             self.session_sandbox.clone(), // AF-T1: SSM wired from AgentRuntime
+            self.session_summary_store.clone(), // Phase AG: SessionSummaryStore
         );
 
         // Spawn 持久化主循环
