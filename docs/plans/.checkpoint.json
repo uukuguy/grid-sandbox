@@ -2,13 +2,17 @@
   "plan_file": "docs/plans/2026-03-29-phase-ag-memory-context-enhancement.md",
   "phase": "execution",
   "created_at": "2026-03-29T00:00:00+08:00",
-  "updated_at": "2026-03-29T02:00:00+08:00",
+  "updated_at": "2026-03-29T19:30:00+08:00",
   "completed_tasks": [
     "Task 1: 类型系统扩展 (octo-types) — MemoryType, EventData, SortField + MemoryEntry/SearchOptions/MemoryFilter 新增字段",
     "Task 2: DB Migration v12 + SqliteMemoryStore 扩展 — memories +3 columns, session_summaries table, SessionSummaryStore (4 tests)",
-    "Task 3: 接线 SessionEndMemoryHook + MemoryInjector — AgentExecutor session-end hook + harness Zone B+ injection"
+    "Task 3: 接线 SessionEndMemoryHook + MemoryInjector — AgentExecutor session-end hook + harness Zone B+ injection",
+    "Task 4: EventExtractor — 事件提取器 (9 tests)",
+    "Task 5: SessionSummarizer — 会话摘要生成 (8 tests)",
+    "Task 6: Session End 完整流程接线 — 3-step pipeline (hook → event extraction → summary)",
+    "Task 7: memory_timeline 工具 — 时间线查询 (11 tests)"
   ],
-  "current_task": "Task 4: EventExtractor — 事件提取器",
+  "current_task": "Task 8: memory_edit 工具",
   "total_tasks": 11,
   "phase_name": "Phase AG — 记忆和上下文机制增强",
   "status": "IN_PROGRESS",
@@ -20,8 +24,8 @@
     "db_version": 11
   },
   "current": {
-    "tests": "2476+ (959 lib + 4 new SessionSummaryStore)",
-    "commit": "5fd622e",
+    "tests": "2476+ (976 lib + 28 new G2 tests)",
+    "commit": "a7586ad",
     "db_version": 12
   },
   "previous_phase": {
@@ -29,5 +33,5 @@
     "status": "COMPLETE",
     "commit": "1916320"
   },
-  "notes": "G1 COMPLETE (3/3 tasks). Commits: 9891821 (types), f9c80ed (DB+store), 5fd622e (wiring). Critical断裂点 #1 (session end不提取) and #2 (new session不注入) fixed. Next: G2 Task 4-7 情景记忆系统."
+  "notes": "G1 COMPLETE (3/3). G2 COMPLETE (4/4). Commits: 0f5d04e (EventExtractor+SessionSummarizer), d35ecc4 (session end 3-step pipeline), a7586ad (memory_timeline tool). New components: EventExtractor (LLM event extraction), SessionSummarizer (LLM session summary), MemoryTimelineTool (temporal queries). AgentExecutor now has session_summary_store field. Next: G3 Tasks 8-10 Agent主动记忆管理."
 }
