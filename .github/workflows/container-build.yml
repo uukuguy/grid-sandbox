@@ -93,16 +93,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build base image locally first (dev depends on it)
-      - name: Build base image (local)
-        uses: docker/build-push-action@v6
-        with:
-          context: container/
-          file: container/Dockerfile
-          load: true
-          tags: octo-sandbox:base
-          cache-from: type=gha
-
       - name: Docker meta (dev)
         id: meta
         uses: docker/metadata-action@v5
@@ -117,6 +107,8 @@ jobs:
         with:
           context: container/
           file: container/Dockerfile.dev
+          build-args: |
+            BASE_IMAGE=${{ env.IMAGE_BASE }}:base
           platforms: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push == true)) && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push == true) }}
           tags: ${{ steps.meta.outputs.tags }}
