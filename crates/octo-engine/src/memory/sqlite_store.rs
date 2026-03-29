@@ -30,9 +30,13 @@ impl MemoryStore for SqliteMemoryStore {
 
         self.conn
             .call(move |conn| {
+                let event_data_json: Option<String> = entry
+                    .event_data
+                    .as_ref()
+                    .and_then(|e| serde_json::to_string(e).ok());
                 conn.execute(
-                    "INSERT INTO memories (id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                    "INSERT INTO memories (id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at, memory_type, session_id, event_data)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                     rusqlite::params![
                         entry.id.as_str(),
                         entry.user_id,
@@ -49,6 +53,9 @@ impl MemoryStore for SqliteMemoryStore {
                         entry.ttl,
                         entry.timestamps.created_at,
                         entry.timestamps.updated_at,
+                        entry.memory_type.as_str(),
+                        entry.session_id,
+                        event_data_json,
                     ],
                 )?;
                 Ok(())
@@ -65,7 +72,7 @@ impl MemoryStore for SqliteMemoryStore {
             .conn
             .call(move |conn| {
                 let mut stmt = conn.prepare(
-                    "SELECT id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at
+                    "SELECT id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at, memory_type, session_id, event_data
                      FROM memories WHERE id = ?1",
                 )?;
                 let entry = stmt
@@ -176,7 +183,7 @@ impl MemoryStore for SqliteMemoryStore {
             .conn
             .call(move |conn| {
                 let mut sql = String::from(
-                    "SELECT id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at
+                    "SELECT id, user_id, sandbox_id, category, content, metadata, embedding, importance, access_count, accessed_at, source_type, source_ref, ttl, created_at, updated_at, memory_type, session_id, event_data
                      FROM memories WHERE user_id = ?",
                 );
                 let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
@@ -215,6 +222,36 @@ impl MemoryStore for SqliteMemoryStore {
                         for src in sources {
                             params.push(Box::new(src.as_str().to_string()));
                         }
+                        param_idx += sources.len();
+                    }
+                }
+
+                if let Some((start, end)) = filter.time_range {
+                    sql.push_str(&format!(" AND created_at >= ?{param_idx} AND created_at <= ?{}", param_idx + 1));
+                    params.push(Box::new(start));
+                    params.push(Box::new(end));
+                    param_idx += 2;
+                }
+
+                if let Some(ref sid) = filter.session_id {
+                    sql.push_str(&format!(" AND session_id = ?{param_idx}"));
+                    params.push(Box::new(sid.clone()));
+                    param_idx += 1;
+                }
+
+                if let Some(ref types) = filter.memory_types {
+                    if !types.is_empty() {
+                        let placeholders: Vec<String> = types
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| format!("?{}", param_idx + i))
+                            .collect();
+                        sql.push_str(&format!(" AND memory_type IN ({})", placeholders.join(",")));
+                        for t in types {
+                            params.push(Box::new(t.as_str().to_string()));
+                        }
+                        #[allow(unused_assignments)]
+                        { param_idx += types.len(); }
                     }
                 }
 
@@ -445,7 +482,7 @@ fn fts_search(
     let mut stmt = conn.prepare(
         "SELECT m.id, m.user_id, m.sandbox_id, m.category, m.content, m.metadata, m.embedding,
                 m.importance, m.access_count, m.accessed_at, m.source_type, m.source_ref,
-                m.ttl, m.created_at, m.updated_at,
+                m.ttl, m.created_at, m.updated_at, m.memory_type, m.session_id, m.event_data,
                 -rank as score
          FROM memories_fts fts
          JOIN memories m ON m.rowid = fts.rowid
@@ -456,7 +493,7 @@ fn fts_search(
 
     let rows = stmt.query_map(rusqlite::params![fts_query, user_id, limit as i64], |row| {
         let entry = row_to_entry(row)?;
-        let score: f32 = row.get(15)?;
+        let score: f32 = row.get(18)?;
         Ok((entry, score))
     })?;
 
@@ -477,7 +514,7 @@ fn vector_search(
     let mut stmt = conn.prepare(
         "SELECT id, user_id, sandbox_id, category, content, metadata, embedding,
                 importance, access_count, accessed_at, source_type, source_ref,
-                ttl, created_at, updated_at
+                ttl, created_at, updated_at, memory_type, session_id, event_data
          FROM memories
          WHERE user_id = ?1 AND embedding IS NOT NULL",
     )?;

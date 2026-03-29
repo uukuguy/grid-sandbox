@@ -6,7 +6,7 @@ pub use connection::Database;
 use rusqlite::Connection;
 use tracing::info;
 
-const CURRENT_VERSION: u32 = 11;
+const CURRENT_VERSION: u32 = 12;
 
 pub fn get_migrations() -> Vec<migrations::Migration> {
     vec![
@@ -21,6 +21,7 @@ pub fn get_migrations() -> Vec<migrations::Migration> {
         migrations::migration_v9(),
         migrations::migration_v10(),
         migrations::migration_v11(),
+        migrations::migration_v12(),
     ]
 }
 

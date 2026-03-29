@@ -481,3 +481,31 @@ pub fn migration_v11() -> Migration {
         "#,
     )
 }
+
+/// Migration v12: Memory enhancement — add memory_type, session_id, event_data
+/// columns to memories table; create session_summaries table.
+pub fn migration_v12() -> Migration {
+    Migration::new(
+        12,
+        "memory_enhancement",
+        r#"
+        ALTER TABLE memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'semantic';
+        ALTER TABLE memories ADD COLUMN session_id TEXT;
+        ALTER TABLE memories ADD COLUMN event_data TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_memories_session_id ON memories(session_id);
+        CREATE INDEX IF NOT EXISTS idx_memories_memory_type ON memories(memory_type);
+
+        CREATE TABLE IF NOT EXISTS session_summaries (
+            session_id  TEXT PRIMARY KEY,
+            summary     TEXT NOT NULL,
+            event_count INTEGER NOT NULL DEFAULT 0,
+            key_topics  TEXT,
+            memory_count INTEGER NOT NULL DEFAULT 0,
+            created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at  INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_summaries_created ON session_summaries(created_at);
+        "#,
+    )
+}
