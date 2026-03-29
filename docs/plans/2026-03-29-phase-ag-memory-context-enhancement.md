@@ -251,16 +251,16 @@ G4 (Task 11): 上下文工程增强
 
 ## Deferred Items
 
-| ID | 内容 | 前置条件 |
-|----|------|---------|
-| AG-D1 | 程序记忆提取（工作流模式学习） | AG 完成 |
-| AG-D2 | 情景→语义巩固 | AG 完成 + 足够 episodic 数据 |
-| AG-D3 | 智能遗忘 | AG 完成 |
-| AG-D4 | 记忆冲突解决 | AG 完成 |
-| AG-D5 | HybridQueryEngine 接入 memory tools | AG 完成 |
-| AG-D6 | KG 语义搜索 | AG 完成 + Embedding 稳定 |
-| AG-D7 | Summarize 压缩策略 | AG 完成 |
-| AG-D8 | Memory Explorer 前端增强 | AG 完成 |
+| ID | 内容 | 前置条件 | 状态 |
+|----|------|---------|------|
+| AG-D1 | 程序记忆提取（工作流模式学习） | AG 完成 | ✅ 已补 @ b4decbe |
+| AG-D2 | 情景→语义巩固 | AG 完成 + 足够 episodic 数据 | ⏳ |
+| AG-D3 | 智能遗忘（可配置策略 + dry_run） | AG 完成 | ✅ 已补 @ b4decbe |
+| AG-D4 | 记忆冲突解决（replace/skip/force） | AG 完成 | ✅ 已补 @ b4decbe |
+| AG-D5 | HybridQueryEngine 接入 memory_search | AG 完成 | ✅ 已补 @ b4decbe |
+| AG-D6 | KG 语义搜索 | AG 完成 + Embedding 稳定 | ⏳ |
+| AG-D7 | memory_compress 压缩工具 | AG 完成 | ✅ 已补 @ b4decbe |
+| AG-D8 | Memory Explorer 前端增强 | AG 完成 | ⏳ |
 
 ## 测试策略
 

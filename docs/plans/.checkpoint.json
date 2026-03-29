@@ -2,7 +2,7 @@
   "plan_file": "docs/plans/2026-03-29-phase-ag-memory-context-enhancement.md",
   "phase": "complete",
   "created_at": "2026-03-29T00:00:00+08:00",
-  "updated_at": "2026-03-29T20:30:00+08:00",
+  "updated_at": "2026-03-29T21:30:00+08:00",
   "completed_tasks": [
     "Task 1: 类型系统扩展 (octo-types)",
     "Task 2: DB Migration v12 + SqliteMemoryStore 扩展",
@@ -14,10 +14,15 @@
     "Task 8: memory_edit 工具 (6 tests)",
     "Task 9: Session Summaries 注入 Zone B++",
     "Task 10: System Prompt 记忆管理指令 + Zone B 周期刷新",
-    "Task 11: ObservationMasker 条件激活 (>50% budget)"
+    "Task 11: ObservationMasker 条件激活 (>50% budget)",
+    "AG-D5: HybridQueryEngine 接入 memory_search",
+    "AG-D3: 智能遗忘 (configurable strategy + dry_run)",
+    "AG-D4: 记忆冲突解决 (replace/skip/force)",
+    "AG-D7: memory_compress 压缩工具",
+    "AG-D1: ProceduralExtractor 程序记忆提取 (6 tests)"
   ],
   "current_task": null,
-  "total_tasks": 11,
+  "total_tasks": 16,
   "phase_name": "Phase AG — 记忆和上下文机制增强",
   "status": "COMPLETE",
   "execution_mode": "direct",
@@ -28,9 +33,9 @@
     "db_version": 11
   },
   "current": {
-    "tests": "2476+ (987 lib + 34 new tests)",
-    "commit": "47f39f2",
+    "tests": "2476+ (993 lib + 40 new tests)",
+    "commit": "b4decbe",
     "db_version": 12
   },
-  "notes": "Phase AG COMPLETE. All 11 tasks across 4 groups done. G1: type system + DB migration + hook wiring. G2: EventExtractor + SessionSummarizer + session end 3-step pipeline + memory_timeline tool. G3: memory_edit tool + session summaries Zone B++ injection + system prompt memory instructions + Zone B periodic refresh. G4: conditional ObservationMasker (>50% budget). Deferred: AG-D1~D8 (procedural memory, consolidation, intelligent forgetting, conflict resolution, HybridQueryEngine, KG semantic search, summarize compression, frontend)."
+  "notes": "Phase AG COMPLETE + 5 deferred items resolved. All 11 original tasks + AG-D1/D3/D4/D5/D7. New components: ProceduralExtractor (6 tests) as session-end Step 4, MemoryCompressTool (LLM summary), MemorySearchTool HybridQueryEngine integration, smart forgetting (MemoryFilter max_importance/older_than_secs/max_access_count + dry_run), conflict resolution (on_conflict=replace/skip/force). Remaining deferred: AG-D2 (episodic→semantic consolidation, needs data), AG-D6 (KG semantic search, needs embedding), AG-D8 (frontend Memory Explorer)."
 }
