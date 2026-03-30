@@ -1,16 +1,22 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase AG — 记忆和上下文机制增强",
-      "started_at": "2026-03-28T16:00:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "progress": "27%",
-      "last_updated": "2026-03-29T02:00:00+08:00"
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
+    {
+      "name": "Phase AH — Hook 系统增强：三层混合架构",
+      "completed_at": "2026-03-30T07:30:00+08:00",
+      "progress": "100%",
+      "commit": "4ebc7fa",
+      "tasks": "15/15 + 3 deferred resolved (D1/D7/D8)",
+      "tests": 104
+    },
+    {
+      "name": "Phase AG — 记忆和上下文机制增强",
+      "completed_at": "2026-03-29T21:30:00+08:00",
+      "progress": "100%",
+      "commit": "e088279",
+      "tasks": "11/11 + 5 deferred resolved"
+    },
     {
       "name": "SubAgent Streaming Events",
       "completed_at": "2026-03-28T10:30:00+08:00",
