@@ -1,39 +1,35 @@
 {
-  "plan_file": "docs/plans/2026-03-30-phase-ah-hook-system-enhancement.md",
+  "plan_file": "docs/plans/2026-03-30-phase-ai-wasm-hook-plugin.md",
   "phase": "planned",
-  "created_at": "2026-03-30T03:30:00+08:00",
-  "updated_at": "2026-03-30T03:30:00+08:00",
+  "created_at": "2026-03-30T08:00:00+08:00",
+  "updated_at": "2026-03-30T08:00:00+08:00",
   "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 15,
-  "phase_name": "Phase AH — Hook 系统增强：三层混合架构",
+  "total_tasks": 11,
+  "phase_name": "Phase AI — WASM Component Model Hook 插件生态",
   "status": "PLANNED — READY FOR EXECUTION",
-  "execution_mode": "direct",
+  "execution_mode": null,
   "branch": "main",
   "baseline": {
     "tests": 2476,
-    "commit": "727499d",
-    "db_version": 12
-  },
-  "current": {
-    "tests": 2476,
-    "commit": "727499d",
+    "hook_tests": 104,
+    "commit": "6db85a5",
     "db_version": 12
   },
   "groups": {
-    "G1": { "name": "HookContext 增强", "tasks": 3, "status": "pending", "priority": "P0" },
-    "G2": { "name": "内置 Handler 注册", "tasks": 3, "status": "pending", "priority": "P0" },
-    "G3": { "name": "声明式加载与 Command 执行", "tasks": 4, "status": "pending", "priority": "P1" },
-    "G4": { "name": "Prompt 类型 LLM 评估", "tasks": 2, "status": "pending", "priority": "P2" },
-    "G5": { "name": "策略引擎", "tasks": 3, "status": "pending", "priority": "P3" }
+    "G1": { "name": "Wasmtime 升级", "tasks": 2, "status": "pending", "priority": "P0" },
+    "G2": { "name": "WIT 定义与绑定", "tasks": 2, "status": "pending", "priority": "P0" },
+    "G3": { "name": "WASM Hook 宿主", "tasks": 3, "status": "pending", "priority": "P0" },
+    "G4": { "name": "声明式集成", "tasks": 2, "status": "pending", "priority": "P1" },
+    "G5": { "name": "示例与测试", "tasks": 2, "status": "pending", "priority": "P1" }
   },
   "deferred": [
-    "AH-D1: Webhook 类型执行器 (P4)",
-    "AH-D2: WASM 插件 hook (P5/未来)",
-    "AH-D3: 平台租户策略合并 (P4)",
-    "AH-D4: TUI hook 状态面板 (P4)",
-    "AH-D5: Stop/SubagentStop 声明式支持 (P3)",
-    "AH-D6: ask 决策→ApprovalGate 集成 (P3)"
+    "AI-D1: 插件热重载 (P3)",
+    "AI-D2: 插件市场/注册表 (P4)",
+    "AI-D3: 插件间通信 (P5)",
+    "AI-D4: WASM 组件缓存 AOT (P3)",
+    "AI-D5: 多语言示例插件 (P3)",
+    "AI-D6: 插件沙箱资源限制 (P2)"
   ],
-  "notes": "Phase AH plan created. Three-layer hybrid architecture: L1 programmatic (Rust trait) + L2 policy engine (rules YAML) + L3 declarative (hooks.yaml with prompt/command/webhook). Informed by CC hooks, NVIDIA OpenShell, K8s Admission Webhooks patterns. Previous session also committed malformed tool call retry mechanism (727499d)."
+  "notes": "Phase AI plan created. WASM Component Model hook plugin ecosystem with rich host imports (log, secret, http), manifest-based plugin packages, and hooks.yaml type:wasm integration. Reference implementations: Moltis, Pi Agent, Zeroclaw."
 }
