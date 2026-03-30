@@ -552,13 +552,63 @@ impl AgentRuntime {
                         // Layer 3: Declarative hooks (hooks.yaml)
                         if let Some(hooks_config) = crate::hooks::declarative::loader::load_hooks_config_auto(Some(&wd)) {
                             let hc = Arc::new(hooks_config);
+
+                            // Discover WASM plugins from global + project directories
+                            #[cfg(feature = "sandbox-wasm")]
+                            let wasm_handlers = {
+                                let mut plugin_dirs = Vec::new();
+                                // Global: ~/.octo/plugins/
+                                if let Some(home) = dirs::home_dir() {
+                                    plugin_dirs.push(home.join(".octo").join("plugins"));
+                                }
+                                // Project: $WORKING_DIR/.octo/plugins/
+                                plugin_dirs.push(wd.join(".octo").join("plugins"));
+
+                                let discovered = crate::hooks::wasm::loader::discover_plugins(&plugin_dirs);
+                                let engine = crate::hooks::wasm::handler::WasmHookHandler::create_engine()
+                                    .unwrap_or_else(|e| {
+                                        tracing::warn!(error = %e, "Failed to create WASM engine with fuel, using default");
+                                        wasmtime::Engine::default()
+                                    });
+                                let mut handlers = std::collections::HashMap::new();
+                                for plugin in discovered {
+                                    match crate::hooks::wasm::handler::WasmHookHandler::load(
+                                        &engine,
+                                        plugin.manifest.clone(),
+                                        &plugin.wasm_path,
+                                    ) {
+                                        Ok(handler) => {
+                                            let name = plugin.manifest.name.clone();
+                                            tracing::info!(plugin = %name, "Loaded WASM hook plugin");
+                                            handlers.insert(name, std::sync::Arc::new(handler));
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!(
+                                                plugin = %plugin.manifest.name,
+                                                error = %e,
+                                                "Failed to load WASM hook plugin"
+                                            );
+                                        }
+                                    }
+                                }
+                                handlers
+                            };
+
                             // Register DeclarativeHookBridge for each configured hook point
                             let hook_points = collect_declarative_hook_points(&hc);
                             for hp in hook_points {
-                                r.register(
-                                    hp,
-                                    Arc::new(crate::hooks::declarative::DeclarativeHookBridge::new(hc.clone(), hp)),
-                                ).await;
+                                let mut bridge = crate::hooks::declarative::DeclarativeHookBridge::new(hc.clone(), hp);
+                                // Wire WASM handlers into bridge
+                                #[cfg(feature = "sandbox-wasm")]
+                                for (name, handler) in &wasm_handlers {
+                                    bridge.register_wasm_handler(name.clone(), handler.clone());
+                                }
+                                r.register(hp, Arc::new(bridge)).await;
+                            }
+
+                            #[cfg(feature = "sandbox-wasm")]
+                            if !wasm_handlers.is_empty() {
+                                tracing::info!(count = wasm_handlers.len(), "WASM hook plugins registered");
                             }
                             tracing::info!("Layer 3: declarative hooks loaded");
                         }

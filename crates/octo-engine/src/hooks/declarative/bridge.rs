@@ -79,6 +79,8 @@ impl DeclarativeHookBridge {
             HookPoint::SkillDeactivated => "SkillDeactivated",
             HookPoint::SkillScriptStarted => "SkillScriptStarted",
             HookPoint::ToolConstraintViolated => "ToolConstraintViolated",
+            HookPoint::Stop => "Stop",
+            HookPoint::SubagentStop => "SubagentStop",
         }
     }
 

@@ -1001,7 +1001,7 @@ impl HookHandler for DeclarativeHookBridge {
 | ID | 内容 | 前置条件 | 优先级 | 状态 |
 |----|------|---------|--------|------|
 | AH-D1 | Webhook 类型执行器 (HTTP POST body JSON) | G3 完成 ✅ | P4 | ✅ 已补 @ 4ebc7fa |
-| AH-D2 | WASM 插件 hook (Wasmtime WIT 接口) | octo-sandbox WASM 基础 | P5/未来 | ⏳ |
+| AH-D2 | WASM 插件 hook (Wasmtime WIT 接口) | octo-sandbox WASM 基础 | P5/未来 | ✅ 已补 (Phase AI @ ef54b2f) |
 | AH-D3 | 平台租户策略合并逻辑 | octo-platform-server 推进 | P4 | ⏳ |
 | AH-D4 | TUI hook 状态面板（显示已注册 hooks、执行统计） | G2 完成 ✅ | P4 | ⏳ |
 | AH-D5 | Stop / SubagentStop 事件声明式支持 | G3 完成 ✅ | P3 | ⏳ |

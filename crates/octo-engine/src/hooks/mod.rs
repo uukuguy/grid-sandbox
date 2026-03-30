@@ -46,4 +46,8 @@ pub enum HookPoint {
     SkillScriptStarted,
     /// A tool constraint was violated
     ToolConstraintViolated,
+    /// Agent is stopping (natural end or cancellation)
+    Stop,
+    /// Sub-agent execution completed
+    SubagentStop,
 }

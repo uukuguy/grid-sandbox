@@ -12,10 +12,15 @@ use super::host_impl::HookHostState;
 use super::manifest::PluginManifest;
 use crate::hooks::{HookAction, HookContext, HookFailureMode, HookHandler};
 
+/// Maximum fuel (computation steps) for a single plugin execution.
+/// 10M instructions is generous for a hook that should return quickly.
+#[cfg(feature = "sandbox-wasm")]
+const WASM_HOOK_MAX_FUEL: u64 = 10_000_000;
+
 /// A hook handler backed by a WASM component plugin.
 #[cfg(feature = "sandbox-wasm")]
 pub struct WasmHookHandler {
-    /// Wasmtime engine (shared across all plugins).
+    /// Wasmtime engine (shared across all plugins, configured with fuel).
     engine: wasmtime::Engine,
     /// Pre-compiled WASM component.
     component: wasmtime::component::Component,
@@ -36,6 +41,14 @@ impl WasmHookHandler {
             component,
             manifest: Arc::new(manifest),
         }
+    }
+
+    /// Create a wasmtime Engine configured with fuel metering for resource limits.
+    pub fn create_engine() -> anyhow::Result<wasmtime::Engine> {
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+        config.consume_fuel(true);
+        wasmtime::Engine::new(&config).map_err(Into::into)
     }
 
     /// Load a plugin from its manifest and wasm file path.
@@ -100,6 +113,9 @@ impl HookHandler for WasmHookHandler {
         );
 
         let mut store = wasmtime::Store::new(&self.engine, host_state);
+
+        // Resource limits: fuel prevents infinite loops / CPU exhaustion
+        store.set_fuel(WASM_HOOK_MAX_FUEL)?;
 
         let mut linker = wasmtime::component::Linker::new(&self.engine);
         super::bindings::OctoHookPlugin::add_to_linker::<
