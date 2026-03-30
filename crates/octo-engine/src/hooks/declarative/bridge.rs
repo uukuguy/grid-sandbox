@@ -3,6 +3,7 @@
 //! Registered once per HookPoint, examines the matching entries in `HooksConfig`
 //! and executes the configured actions (command, prompt, webhook).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -23,6 +24,9 @@ pub struct DeclarativeHookBridge {
     provider: Option<Arc<dyn Provider>>,
     /// Model name for prompt-type actions.
     model: Option<String>,
+    /// Loaded WASM hook handlers keyed by plugin name.
+    #[cfg(feature = "sandbox-wasm")]
+    wasm_handlers: HashMap<String, Arc<crate::hooks::wasm::handler::WasmHookHandler>>,
 }
 
 impl DeclarativeHookBridge {
@@ -32,7 +36,19 @@ impl DeclarativeHookBridge {
             hook_point,
             provider: None,
             model: None,
+            #[cfg(feature = "sandbox-wasm")]
+            wasm_handlers: HashMap::new(),
         }
+    }
+
+    /// Register a WASM hook handler by plugin name.
+    #[cfg(feature = "sandbox-wasm")]
+    pub fn register_wasm_handler(
+        &mut self,
+        name: String,
+        handler: Arc<crate::hooks::wasm::handler::WasmHookHandler>,
+    ) {
+        self.wasm_handlers.insert(name, handler);
     }
 
     /// Create a bridge with LLM provider for prompt-type actions.
@@ -229,6 +245,60 @@ impl HookHandler for DeclarativeHookBridge {
                                 }
                                 // FailOpen: log and continue
                             }
+                        }
+                    }
+                    HookActionConfig::Wasm {
+                        plugin,
+                        failure_mode,
+                    } => {
+                        #[cfg(feature = "sandbox-wasm")]
+                        {
+                            debug!(
+                                hook = event_name,
+                                plugin = %plugin,
+                                "Executing declarative WASM hook"
+                            );
+                            if let Some(handler) = self.wasm_handlers.get(plugin.as_str()) {
+                                match handler.execute(ctx).await {
+                                    Ok(action) => {
+                                        match &action {
+                                            HookAction::Abort(_) | HookAction::Block(_) => {
+                                                return Ok(action);
+                                            }
+                                            _ => { /* Continue to next action */ }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            hook = event_name,
+                                            plugin = %plugin,
+                                            error = %e,
+                                            "WASM hook plugin failed"
+                                        );
+                                        if *failure_mode == FailureMode::FailClosed {
+                                            return Err(e);
+                                        }
+                                        // FailOpen: log and continue
+                                    }
+                                }
+                            } else {
+                                warn!(
+                                    hook = event_name,
+                                    plugin = %plugin,
+                                    "WASM plugin not found"
+                                );
+                                if *failure_mode == FailureMode::FailClosed {
+                                    anyhow::bail!("WASM plugin '{}' not found", plugin);
+                                }
+                            }
+                        }
+                        #[cfg(not(feature = "sandbox-wasm"))]
+                        {
+                            let _ = (plugin, failure_mode);
+                            warn!(
+                                hook = event_name,
+                                "WASM hooks not available (sandbox-wasm feature disabled)"
+                            );
                         }
                     }
                 }

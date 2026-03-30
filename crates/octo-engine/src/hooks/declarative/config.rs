@@ -71,6 +71,14 @@ pub enum HookActionConfig {
         #[serde(default)]
         failure_mode: FailureMode,
     },
+    /// WASM component plugin execution.
+    #[serde(rename = "wasm")]
+    Wasm {
+        /// Plugin name (must match an installed plugin's manifest.name).
+        plugin: String,
+        #[serde(default)]
+        failure_mode: FailureMode,
+    },
 }
 
 #[cfg(test)]
@@ -168,6 +176,51 @@ hooks: {}
     #[test]
     fn test_default_failure_mode() {
         assert_eq!(FailureMode::default(), FailureMode::FailOpen);
+    }
+
+    #[test]
+    fn test_parse_wasm_action() {
+        let yaml = r#"
+version: 1
+hooks:
+  PreToolUse:
+    - matcher: "bash"
+      actions:
+        - type: wasm
+          plugin: "my-security-hook"
+          failure_mode: fail_closed
+"#;
+        let config: HooksConfig = serde_yaml::from_str(yaml).unwrap();
+        let pre = &config.hooks["PreToolUse"];
+        match &pre[0].actions[0] {
+            HookActionConfig::Wasm { plugin, failure_mode } => {
+                assert_eq!(plugin, "my-security-hook");
+                assert_eq!(*failure_mode, FailureMode::FailClosed);
+            }
+            _ => panic!("Expected Wasm action"),
+        }
+    }
+
+    #[test]
+    fn test_parse_wasm_action_default_failure() {
+        let yaml = r#"
+version: 1
+hooks:
+  PreToolUse:
+    - matcher: "*"
+      actions:
+        - type: wasm
+          plugin: "audit-logger"
+"#;
+        let config: HooksConfig = serde_yaml::from_str(yaml).unwrap();
+        let pre = &config.hooks["PreToolUse"];
+        match &pre[0].actions[0] {
+            HookActionConfig::Wasm { plugin, failure_mode } => {
+                assert_eq!(plugin, "audit-logger");
+                assert_eq!(*failure_mode, FailureMode::FailOpen);
+            }
+            _ => panic!("Expected Wasm action"),
+        }
     }
 
     #[test]
