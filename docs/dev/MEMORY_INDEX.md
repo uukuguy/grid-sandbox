@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-03-30 08:00 | Phase AI checkpoint saved — WASM Hook Plugin 计划就绪 (11 tasks), 待 /clear 后 /resume-plan 实施
 - 2026-03-30 07:30 | Phase AH Deferred D1/D7/D8 已补 — runtime 接线 + webhook + prompt 执行 @ 4ebc7fa. 104 tests. 剩余: D2/D3/D4/D5/D6.
 - 2026-03-30 07:00 | **Phase AH COMPLETE** — 三层混合 Hook 架构 (15/15 tasks, 92 tests, 4 commits) @ 4e890bc. L1编程式+L2策略+L3声明式. 6 deferred.
 - 2026-03-30 06:30 | Phase AH G3 COMPLETE — 声明式 hook 系统 (config+executor+bridge+loader, 34 tests) @ 41dd651. Next: G4/G5.
