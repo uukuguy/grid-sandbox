@@ -67,11 +67,12 @@ tiktoken = ["dep:tiktoken-rs"]
 tls = ["dep:rcgen"]
 
 [dependencies.wasmtime]
-version = "25"
+version = "36"
 optional = true
+features = ["component-model"]
 
 [dependencies.wasmtime-wasi]
-version = "25"
+version = "36"
 optional = true
 
 [dependencies.bollard]

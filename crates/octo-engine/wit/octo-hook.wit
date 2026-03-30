@@ -1,0 +1,45 @@
+package octo:hook@1.0.0;
+
+/// Host capabilities imported by hook plugins.
+interface host {
+    /// Emit a log message at the specified level.
+    /// Level: "trace", "debug", "info", "warn", "error".
+    log: func(level: string, message: string);
+
+    /// Get the full HookContext as JSON string.
+    get-context: func() -> string;
+
+    /// Retrieve a secret by key. Returns error if not found or not permitted.
+    get-secret: func(key: string) -> result<string, string>;
+
+    /// Make an HTTP request. Returns response body or error.
+    /// Method: GET, POST, PUT, DELETE.
+    /// headers-json: JSON object of header key-value pairs.
+    /// Timeout: 5 seconds, max response body 1MB.
+    http-request: func(method: string, url: string, headers-json: string, body: string) -> result<string, string>;
+
+    /// Get current timestamp (milliseconds since epoch).
+    now-millis: func() -> u64;
+}
+
+/// Hook handler interface exported by plugins.
+interface hook-handler {
+    /// Human-readable hook name.
+    name: func() -> string;
+
+    /// Execution priority (lower = runs first).
+    priority: func() -> u32;
+
+    /// Supported hook events (comma-separated: "PreToolUse,PostToolUse").
+    supported-events: func() -> string;
+
+    /// Execute the hook. Input: HookContext JSON. Output: HookDecision JSON.
+    /// HookDecision: {"decision": "allow|deny|ask", "reason": "...", "updatedInput": {...}}
+    execute: func(context-json: string) -> result<string, string>;
+}
+
+/// Plugin world combining host imports and handler exports.
+world octo-hook-plugin {
+    import host;
+    export hook-handler;
+}

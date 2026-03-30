@@ -195,7 +195,7 @@ impl WasmAdapter {
         args: &[String],
         stdin_data: Option<&str>,
     ) -> Result<ExecResult, SandboxError> {
-        use wasmtime_wasi::pipe::{MemoryInputPipe, MemoryOutputPipe};
+        use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
 
         // Validate sandbox exists
         let instances = self.instances.read().await;
