@@ -1,8 +1,8 @@
 {
   "plan_file": "docs/plans/2026-03-30-phase-ai-wasm-hook-plugin.md",
-  "phase": "execution",
+  "phase": "complete",
   "created_at": "2026-03-30T08:00:00+08:00",
-  "updated_at": "2026-03-30T14:30:00+08:00",
+  "updated_at": "2026-03-31T01:15:00+08:00",
   "completed_tasks": [
     "T1: 升级 wasmtime 25→36 + component-model",
     "T2: 验证现有 WASM 测试通过 (9/9)",
@@ -19,7 +19,7 @@
   "current_task": null,
   "total_tasks": 11,
   "phase_name": "Phase AI — WASM Component Model Hook 插件生态",
-  "status": "EXECUTION COMPLETE — AWAITING FULL TEST VALIDATION",
+  "status": "COMPLETE — all tasks + 4 deferred resolved",
   "execution_mode": "subagent-driven-development",
   "branch": "main",
   "baseline": {
@@ -39,16 +39,28 @@
     "8ea8933 feat(hooks): upgrade wasmtime 25→36 with component-model + add WIT interface",
     "1c2048a feat(hooks): implement WASM hook plugin system — bindgen, host imports, handler, manifest, loader",
     "1e7f9a9 feat(hooks): integrate WASM action type into declarative hooks.yaml + bridge",
-    "ef54b2f feat(hooks): add example WASM hook plugin + 16 end-to-end tests"
+    "ef54b2f feat(hooks): add example WASM hook plugin + 16 end-to-end tests",
+    "3fa909d checkpoint: Phase AI complete",
+    "c68c373 feat(hooks): resolve deferred items — runtime wiring, fuel limits, Stop events",
+    "6ccb947 docs: update deferred items status",
+    "9c61391 docs: update MEMORY_INDEX"
   ],
   "new_tests": 33,
-  "deferred": [
+  "deferred_resolved": [
+    "AI-D6 ✅: 插件沙箱资源限制 (fuel 10M) @ c68c373",
+    "AI-D7 ✅: AgentRuntime 自动发现加载 WASM 插件 @ c68c373",
+    "AH-D2 ✅: WASM 插件 hook (Phase AI 覆盖)",
+    "AH-D5 ✅: Stop/SubagentStop 事件 @ c68c373"
+  ],
+  "deferred_remaining": [
     "AI-D1: 插件热重载 (P3)",
     "AI-D2: 插件市场/注册表 (P4)",
     "AI-D3: 插件间通信 (P5)",
     "AI-D4: WASM 组件缓存 AOT (P3)",
     "AI-D5: 多语言示例插件 (P3)",
-    "AI-D6: 插件沙箱资源限制 (P2)"
+    "AH-D3: 平台租户策略合并 (blocked)",
+    "AH-D4: TUI hook 状态面板 (P4)",
+    "AH-D6: ask→ApprovalGate (blocked)"
   ],
-  "notes": "All 11 tasks complete. WASM Component Model hook plugin system fully implemented with WIT interface, bindgen bindings, 5 host imports (log, get-context, get-secret, http-request, now-millis), capability gating, SSRF protection, manifest-based plugin discovery, hooks.yaml type:wasm integration, and example plugin."
+  "notes": "Phase AI fully complete with all 11 tasks + 4 deferred items resolved. WASM hook plugin system: WIT interface, bindgen, 5 host imports with capability gating, SSRF protection, manifest discovery, hooks.yaml type:wasm, runtime auto-loading, fuel resource limits, Stop/SubagentStop events. 121 hooks tests, workspace clean."
 }

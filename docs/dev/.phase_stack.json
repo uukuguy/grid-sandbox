@@ -3,6 +3,14 @@
   "suspended_phases": [],
   "archived_phases": [
     {
+      "name": "Phase AI — WASM Component Model Hook 插件生态",
+      "completed_at": "2026-03-31T01:15:00+08:00",
+      "progress": "100%",
+      "commit": "9c61391",
+      "tasks": "11/11 + 4 deferred resolved (AI-D6/D7, AH-D2/D5)",
+      "tests": 121
+    },
+    {
       "name": "Phase AH — Hook 系统增强：三层混合架构",
       "completed_at": "2026-03-30T07:30:00+08:00",
       "progress": "100%",
