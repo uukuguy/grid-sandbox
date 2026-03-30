@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-03-31 01:00 | Deferred batch resolved: AI-D7 (runtime 自动加载 WASM 插件), AI-D6 (fuel 资源限制 10M), AH-D5 (Stop/SubagentStop events), AH-D2 (标记已补). Remaining: AH-D3/D4/D6 + AI-D1~D5.
 - 2026-03-30 14:30 | **Phase AI COMPLETE** — WASM Component Model Hook 插件系统 (11/11 tasks, 4 commits, 33 new tests). Wasmtime 25→36, WIT 接口, bindgen 绑定, 5 host imports (能力门控+SSRF), 插件发现, hooks.yaml type:wasm, 示例插件. 6 deferred (D1-D6).
 - 2026-03-30 08:00 | Phase AI checkpoint saved — WASM Hook Plugin 计划就绪 (11 tasks), 待 /clear 后 /resume-plan 实施
 - 2026-03-30 07:30 | Phase AH Deferred D1/D7/D8 已补 — runtime 接线 + webhook + prompt 执行 @ 4ebc7fa. 104 tests. 剩余: D2/D3/D4/D5/D6.
