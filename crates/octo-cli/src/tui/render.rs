@@ -152,7 +152,8 @@ fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
         state.input_cursor,
         "NORMAL",
         0, // pending_count — future: message queue
-    );
+    )
+    .has_focus(state.has_focus);
     let result = input_widget.render_with_cursor(area, frame.buffer_mut());
 
     // Set terminal cursor position for IME (Chinese input method) placement

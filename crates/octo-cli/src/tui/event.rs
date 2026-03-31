@@ -22,6 +22,12 @@ pub enum AppEvent {
     /// User submitted input text
     UserSubmit(String),
 
+    // ── Focus events ──
+    /// Terminal window gained focus
+    FocusGained,
+    /// Terminal window lost focus
+    FocusLost,
+
     // ── Application control ──
     /// Quit the application
     Quit,

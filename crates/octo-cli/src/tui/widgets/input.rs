@@ -21,6 +21,7 @@ pub struct InputWidget<'a> {
     cursor: usize,
     mode: &'a str,
     pending_count: usize,
+    has_focus: bool,
 }
 
 /// Result of rendering the input widget, including cursor position for IME.
@@ -36,7 +37,13 @@ impl<'a> InputWidget<'a> {
             cursor,
             mode,
             pending_count,
+            has_focus: true,
         }
+    }
+
+    pub fn has_focus(mut self, focused: bool) -> Self {
+        self.has_focus = focused;
+        self
     }
 
     /// Render the widget and return cursor position for IME.
@@ -52,7 +59,7 @@ impl<'a> InputWidget<'a> {
     ///
     /// Uses display width (not byte length) for correct positioning with CJK text.
     fn compute_cursor_position(&self, area: Rect) -> Option<(u16, u16)> {
-        if area.height < 2 {
+        if !self.has_focus || area.height < 2 {
             return None;
         }
         let text_y = area.y + 1; // below separator
@@ -172,17 +179,25 @@ impl Widget for InputWidget<'_> {
             Color::Reset // default terminal color
         };
 
+        // Cursor style: solid block when focused, dim outline when unfocused
+        let cursor_style = if self.has_focus {
+            Style::default().fg(Color::Black).bg(Color::White)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
         if self.buffer.is_empty() {
-            // Empty: show prompt with block cursor
+            // Empty: show prompt with block cursor (or dim placeholder when unfocused)
             let prefix = Span::styled(
                 "\u{276f} ".to_string(),
                 Style::default().fg(accent).add_modifier(Modifier::BOLD),
             );
-            let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
-            let content = vec![
-                prefix,
-                Span::styled(" ", cursor_style), // block cursor
-            ];
+            let cursor_span = if self.has_focus {
+                Span::styled(" ", cursor_style) // block cursor
+            } else {
+                Span::styled("\u{2502}", cursor_style) // thin line cursor when unfocused
+            };
+            let content = vec![prefix, cursor_span];
             Paragraph::new(Line::from(content)).render(text_area, buf);
         } else {
             let input_lines: Vec<&str> = self.buffer.split('\n').collect();
@@ -205,7 +220,6 @@ impl Widget for InputWidget<'_> {
             }
 
             let prefix_style = Style::default().fg(accent).add_modifier(Modifier::BOLD);
-            let cursor_style = Style::default().fg(Color::Black).bg(Color::White);
 
             for (i, line_text) in input_lines.iter().enumerate() {
                 if i as u16 >= text_height {
@@ -220,8 +234,10 @@ impl Widget for InputWidget<'_> {
                         let ch = line_text[cursor_col..].chars().next().unwrap();
                         let end = cursor_col + ch.len_utf8();
                         (&line_text[cursor_col..end], &line_text[end..])
-                    } else {
+                    } else if self.has_focus {
                         (" ", "")
+                    } else {
+                        ("\u{2502}", "") // thin line when unfocused at end of line
                     };
                     let spans = Line::from(vec![
                         Span::styled(pfx, prefix_style),

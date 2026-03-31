@@ -117,6 +117,8 @@ pub struct TuiState {
     pub terminal_width: u16,
     /// Current terminal height.
     pub terminal_height: u16,
+    /// Whether the terminal window currently has focus.
+    pub has_focus: bool,
 
     // ── Managers ──
     /// Ctrl+C interrupt manager.
@@ -290,6 +292,7 @@ impl TuiState {
             model_name,
             terminal_width: 80,
             terminal_height: 24,
+            has_focus: true,
             interrupt_manager: interrupt,
             spinner_service: SpinnerService::new(),
             message_history,

@@ -51,6 +51,8 @@ impl EventHandler {
                         }
                     }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
+                    CEvent::FocusGained => Some(AppEvent::FocusGained),
+                    CEvent::FocusLost => Some(AppEvent::FocusLost),
                     _ => None,
                 };
                 if let Some(evt) = app_event {
@@ -111,6 +113,8 @@ impl EventHandler {
                         }
                     }
                     CEvent::Resize(w, h) => Some(AppEvent::Resize(w, h)),
+                    CEvent::FocusGained => Some(AppEvent::FocusGained),
+                    CEvent::FocusLost => Some(AppEvent::FocusLost),
                     _ => None,
                 };
                 if let Some(evt) = app_event {

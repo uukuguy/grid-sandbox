@@ -19,7 +19,7 @@ use std::io;
 
 use anyhow::Result;
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::{DisableMouseCapture, EnableMouseCapture, DisableFocusChange, EnableFocusChange},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -41,14 +41,14 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, DisableFocusChange);
         original_hook(info);
     }));
 
     // Setup terminal FIRST so user sees the TUI immediately
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture, EnableFocusChange)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -138,7 +138,7 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
     // Restore terminal (always, even on error).
     // Use let _ to ignore errors — each step must run regardless of prior failures.
     let _ = disable_raw_mode();
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture);
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture, DisableFocusChange);
     let _ = terminal.show_cursor();
 
     result
@@ -186,6 +186,12 @@ async fn run_conversation_loop(
                     state.terminal_height = h;
                     state.invalidate_cache(); // width change affects wrapping
                 }
+                event::AppEvent::FocusGained => {
+                    state.has_focus = true;
+                }
+                event::AppEvent::FocusLost => {
+                    state.has_focus = false;
+                }
                 event::AppEvent::Tick => {
                     state.spinner_service.stop(); // tick — just mark dirty for animation
                     // Drive welcome panel breathing animation when conversation is empty
@@ -231,6 +237,12 @@ async fn run_conversation_loop(
                 event::AppEvent::Resize(w, h) => {
                     state.terminal_width = w;
                     state.terminal_height = h;
+                }
+                event::AppEvent::FocusGained => {
+                    state.has_focus = true;
+                }
+                event::AppEvent::FocusLost => {
+                    state.has_focus = false;
                 }
                 event::AppEvent::Agent(agent_event) => {
                     handle_agent_event(state, agent_event);
