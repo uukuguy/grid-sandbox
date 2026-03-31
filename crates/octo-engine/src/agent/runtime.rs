@@ -985,6 +985,29 @@ impl AgentRuntime {
             session_id: session_id.clone(),
         };
 
+        // Phase AJ-T1: 创建 session 级 ToolRegistry 快照（隔离：session A 的 MCP 安装不影响 session B）
+        // 1. 从全局基线做快照
+        // 2. 替换 mcp_install/mcp_remove/mcp_list 指向 session 级 registry
+        let session_tools = {
+            let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
+            let session_reg = Arc::new(StdMutex::new(guard.snapshot()));
+
+            // 重建 MCP 管理工具，指向 session 级 registry（而非全局）
+            let mcp_config_path = self.working_dir.join(".octo/mcp.json");
+            let session_mcp_handle = crate::tools::mcp_manage::McpManageHandle {
+                mcp_manager: self.mcp_manager.clone(),
+                tools: session_reg.clone(),
+                config_path: mcp_config_path,
+            };
+            {
+                let mut reg = session_reg.lock().unwrap_or_else(|e| e.into_inner());
+                reg.register(crate::tools::mcp_manage::McpInstallTool::new(session_mcp_handle.clone()));
+                reg.register(crate::tools::mcp_manage::McpRemoveTool::new(session_mcp_handle.clone()));
+                reg.register(crate::tools::mcp_manage::McpListTool::new(session_mcp_handle));
+            }
+            session_reg
+        };
+
         let runtime = AgentExecutor::new(
             session_id.clone(),
             user_id,
@@ -993,7 +1016,7 @@ impl AgentRuntime {
             rx,
             broadcast_tx,
             self.provider.clone(),
-            Arc::clone(&self.tools), // 共享引用，支持 MCP 热插拔
+            session_tools, // AJ-T1: session 级快照，替代全局共享引用
             Arc::new(InMemoryWorkingMemory::new()), // 每 session 独立实例，防止数据污染
             Some(self.memory_store.clone()),
             Some(model),
