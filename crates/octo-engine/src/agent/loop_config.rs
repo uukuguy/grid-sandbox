@@ -6,6 +6,7 @@ use octo_types::{SandboxId, SessionId, ToolContext, UserId};
 use crate::context::{CompactionPipeline, ContextBudgetManager, ContextPruner};
 use crate::event::TelemetryBus;
 use crate::hooks::HookRegistry;
+use crate::memory::round_memory::RoundMemoryConfig;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
@@ -144,6 +145,12 @@ pub struct AgentLoopConfig {
     // === Autonomous Mode (Phase AP-T14) ===
     /// Autonomous running mode configuration.
     pub autonomous: Option<AutonomousConfig>,
+
+    // === Per-Round Memory Extraction (Phase AP-D5) ===
+    /// Configuration for incremental per-round memory extraction.
+    /// When enabled, memories are captured after each tool-call round
+    /// instead of only at session end.
+    pub round_memory_config: Option<RoundMemoryConfig>,
 }
 
 impl Default for AgentLoopConfig {
@@ -191,6 +198,7 @@ impl Default for AgentLoopConfig {
             session_summary_store: None,
             cost_tracker: None,
             autonomous: None,
+            round_memory_config: None,
         }
     }
 }
@@ -432,6 +440,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn autonomous(mut self, v: AutonomousConfig) -> Self {
         self.config.autonomous = Some(v);
+        self
+    }
+
+    pub fn round_memory_config(mut self, v: RoundMemoryConfig) -> Self {
+        self.config.round_memory_config = Some(v);
         self
     }
 

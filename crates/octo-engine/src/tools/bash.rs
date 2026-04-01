@@ -8,6 +8,7 @@ use tracing::debug;
 
 use octo_types::{ApprovalRequirement, RiskLevel, ToolContext, ToolOutput, ToolSource};
 
+use super::bash_classifier::{classify_command, CommandRisk};
 use super::traits::Tool;
 
 use crate::sandbox::{
@@ -336,6 +337,26 @@ impl Tool for BashTool {
 
     fn approval(&self) -> ApprovalRequirement {
         ApprovalRequirement::Always
+    }
+
+    async fn validate_input(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<()> {
+        let command = params
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let classification = classify_command(command);
+
+        if classification.risk == CommandRisk::Dangerous {
+            anyhow::bail!(
+                "Command blocked: {} (risk: dangerous, reason: {}). \
+                 Consider a safer alternative.",
+                command.chars().take(100).collect::<String>(),
+                classification.reason
+            );
+        }
+
+        Ok(())
     }
 
     fn is_concurrency_safe(&self) -> bool {

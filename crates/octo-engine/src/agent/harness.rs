@@ -168,6 +168,13 @@ async fn run_agent_loop_inner(
     // Per-tool rate limiter (sliding 60-second window).
     let mut rate_limiter = ToolRateLimiter::new();
 
+    // Per-round memory extractor (AP-D5): incrementally captures memories after each tool round.
+    let mut round_memory_extractor = config
+        .round_memory_config
+        .as_ref()
+        .filter(|c| c.enabled)
+        .map(|c| crate::memory::round_memory::RoundMemoryExtractor::new(c.clone()));
+
     // --- SkillSelector: auto-select skill from user message ---
     if config.active_skill.is_none() {
         if let Some(ref skills) = config.skills {
@@ -1519,6 +1526,22 @@ async fn run_agent_loop_inner(
             role: MessageRole::User,
             content: tool_results,
         });
+
+        // --- Per-round memory extraction (AP-D5) ---
+        if let (Some(ref mut extractor), Some(ref store)) =
+            (&mut round_memory_extractor, &config.memory_store)
+        {
+            let stored = extractor
+                .extract_round(&messages, store.as_ref(), config.user_id.as_str(), round)
+                .await;
+            if stored > 0 {
+                let _ = tx
+                    .send(AgentEvent::MemoryFlushed {
+                        facts_count: stored,
+                    })
+                    .await;
+            }
+        }
 
         // --- IterationEnd + LoopTurnEnd hook ---
         let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
