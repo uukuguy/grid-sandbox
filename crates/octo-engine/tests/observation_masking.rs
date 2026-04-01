@@ -159,6 +159,7 @@ fn test_custom_placeholder() {
         keep_recent_turns: 1,
         min_mask_length: 10,
         placeholder_template: "[MASKED: {chars} characters]".to_string(),
+        ..Default::default()
     });
 
     let msgs = vec![

@@ -1,6 +1,12 @@
 use octo_types::{ChatMessage, ContentBlock, MessageRole};
 use tracing::debug;
 
+/// Tools whose output can be safely compressed (large, repetitive results).
+pub const DEFAULT_COMPACTABLE_TOOLS: &[&str] = &[
+    "bash", "file_read", "file_write", "file_edit",
+    "grep", "glob", "find", "web_fetch", "web_search",
+];
+
 /// Configuration for observation masking
 #[derive(Debug, Clone)]
 pub struct ObservationMaskConfig {
@@ -10,6 +16,10 @@ pub struct ObservationMaskConfig {
     pub placeholder_template: String,
     /// Minimum output length to consider for masking (shorter outputs are kept)
     pub min_mask_length: usize,
+    /// Time-based trigger: mask if no assistant message for N minutes
+    pub time_trigger_minutes: Option<u64>,
+    /// Only mask output from these tools (None = mask all eligible tools)
+    pub compactable_tools: Option<std::collections::HashSet<String>>,
 }
 
 impl Default for ObservationMaskConfig {
@@ -18,6 +28,8 @@ impl Default for ObservationMaskConfig {
             keep_recent_turns: 3,
             placeholder_template: "[output hidden - {chars} chars]".to_string(),
             min_mask_length: 100,
+            time_trigger_minutes: None,
+            compactable_tools: None,
         }
     }
 }
@@ -43,6 +55,20 @@ impl ObservationMasker {
 
     pub fn with_defaults() -> Self {
         Self::new(ObservationMaskConfig::default())
+    }
+
+    /// Check if time-based micro-compaction should trigger.
+    pub fn should_time_trigger(
+        &self,
+        elapsed_since_last_assistant: Option<std::time::Duration>,
+    ) -> bool {
+        if let (Some(threshold), Some(elapsed)) = (
+            self.config.time_trigger_minutes,
+            elapsed_since_last_assistant,
+        ) {
+            return elapsed.as_secs() / 60 >= threshold;
+        }
+        false
     }
 
     /// Apply observation masking to a conversation history.
@@ -75,9 +101,21 @@ impl ObservationMasker {
         let mut result = Vec::with_capacity(messages.len());
         let mut masked_count = 0;
 
+        let tool_name_map: std::collections::HashMap<String, String> = messages
+            .iter()
+            .flat_map(|m| &m.content)
+            .filter_map(|block| {
+                if let ContentBlock::ToolUse { id, name, .. } = block {
+                    Some((id.clone(), name.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         for (i, msg) in messages.iter().enumerate() {
             if i < mask_before_index {
-                let (masked_msg, did_mask) = self.mask_message(msg);
+                let (masked_msg, did_mask) = self.mask_message(msg, &tool_name_map);
                 if did_mask {
                     masked_count += 1;
                 }
@@ -99,7 +137,11 @@ impl ObservationMasker {
 
     /// Create a masked version of a message, replacing eligible ToolResult blocks.
     /// Returns (message, whether_any_block_was_masked).
-    fn mask_message(&self, msg: &ChatMessage) -> (ChatMessage, bool) {
+    fn mask_message(
+        &self,
+        msg: &ChatMessage,
+        tool_name_map: &std::collections::HashMap<String, String>,
+    ) -> (ChatMessage, bool) {
         let mut any_masked = false;
         let new_content: Vec<ContentBlock> = msg
             .content
@@ -109,16 +151,29 @@ impl ObservationMasker {
                     tool_use_id,
                     content,
                     is_error,
-                } if content.len() >= self.config.min_mask_length => {
-                    any_masked = true;
-                    let placeholder = self
-                        .config
-                        .placeholder_template
-                        .replace("{chars}", &content.len().to_string());
-                    ContentBlock::ToolResult {
-                        tool_use_id: tool_use_id.clone(),
-                        content: placeholder,
-                        is_error: *is_error,
+                } => {
+                    // Check tool whitelist
+                    if let Some(ref whitelist) = self.config.compactable_tools {
+                        if let Some(tool_name) = tool_name_map.get(tool_use_id) {
+                            if !whitelist.contains(tool_name) {
+                                return block.clone();
+                            }
+                        }
+                    }
+                    // Check minimum length
+                    if content.len() >= self.config.min_mask_length {
+                        any_masked = true;
+                        let placeholder = self
+                            .config
+                            .placeholder_template
+                            .replace("{chars}", &content.len().to_string());
+                        ContentBlock::ToolResult {
+                            tool_use_id: tool_use_id.clone(),
+                            content: placeholder,
+                            is_error: *is_error,
+                        }
+                    } else {
+                        block.clone()
                     }
                 }
                 other => other.clone(),
@@ -160,6 +215,98 @@ impl ObservationMasker {
             ContentBlock::ToolResult { content, .. } => content.len(),
             ContentBlock::Image { data, .. } => data.len(),
             ContentBlock::Document { data, .. } => data.len(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_compactable_tools_list() {
+        assert!(DEFAULT_COMPACTABLE_TOOLS.contains(&"bash"));
+        assert!(DEFAULT_COMPACTABLE_TOOLS.contains(&"file_read"));
+        assert!(!DEFAULT_COMPACTABLE_TOOLS.contains(&"memory_store"));
+    }
+
+    #[test]
+    fn test_should_time_trigger_none() {
+        let masker = ObservationMasker::with_defaults();
+        assert!(!masker.should_time_trigger(None));
+        assert!(!masker.should_time_trigger(Some(std::time::Duration::from_secs(600))));
+    }
+
+    #[test]
+    fn test_should_time_trigger_configured() {
+        let config = ObservationMaskConfig {
+            time_trigger_minutes: Some(5),
+            ..Default::default()
+        };
+        let masker = ObservationMasker::new(config);
+        assert!(!masker.should_time_trigger(Some(std::time::Duration::from_secs(180))));
+        assert!(masker.should_time_trigger(Some(std::time::Duration::from_secs(300))));
+        assert!(masker.should_time_trigger(Some(std::time::Duration::from_secs(600))));
+    }
+
+    #[test]
+    fn test_whitelist_filtering() {
+        let mut whitelist = std::collections::HashSet::new();
+        whitelist.insert("bash".to_string());
+
+        let config = ObservationMaskConfig {
+            compactable_tools: Some(whitelist),
+            min_mask_length: 10,
+            keep_recent_turns: 1,
+            ..Default::default()
+        };
+        let masker = ObservationMasker::new(config);
+
+        let messages = vec![
+            ChatMessage {
+                role: MessageRole::Assistant,
+                content: vec![
+                    ContentBlock::ToolUse {
+                        id: "call_1".to_string(),
+                        name: "bash".to_string(),
+                        input: serde_json::json!({}),
+                    },
+                    ContentBlock::ToolUse {
+                        id: "call_2".to_string(),
+                        name: "memory_store".to_string(),
+                        input: serde_json::json!({}),
+                    },
+                ],
+            },
+            ChatMessage {
+                role: MessageRole::User,
+                content: vec![
+                    ContentBlock::ToolResult {
+                        tool_use_id: "call_1".to_string(),
+                        content: "x".repeat(200),
+                        is_error: false,
+                    },
+                    ContentBlock::ToolResult {
+                        tool_use_id: "call_2".to_string(),
+                        content: "y".repeat(200),
+                        is_error: false,
+                    },
+                ],
+            },
+            ChatMessage {
+                role: MessageRole::Assistant,
+                content: vec![ContentBlock::Text { text: "done".to_string() }],
+            },
+        ];
+
+        let masked = masker.mask(&messages);
+        let user_msg = &masked[1];
+
+        if let ContentBlock::ToolResult { content, .. } = &user_msg.content[0] {
+            assert!(content.contains("hidden"), "bash result should be masked");
+        }
+        if let ContentBlock::ToolResult { content, .. } = &user_msg.content[1] {
+            assert_eq!(content.len(), 200, "memory_store should not be masked");
         }
     }
 }
