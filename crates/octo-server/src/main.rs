@@ -287,6 +287,31 @@ async fn main() -> Result<()> {
         });
     }
 
+    // Spawn session idle timeout cleanup task (AJ-D4)
+    {
+        let idle_timeout_secs = cfg.sessions.idle_timeout_secs;
+        if idle_timeout_secs > 0 {
+            let runtime_for_idle = state.agent_supervisor.clone();
+            let timeout = std::time::Duration::from_secs(idle_timeout_secs);
+            // Check every 60 seconds (or half the timeout if shorter)
+            let check_interval = std::time::Duration::from_secs((idle_timeout_secs / 2).max(60).min(300));
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(check_interval);
+                loop {
+                    interval.tick().await;
+                    let recycled = runtime_for_idle.cleanup_idle_sessions(timeout).await;
+                    if recycled > 0 {
+                        tracing::info!(recycled, "Session idle timeout: recycled idle sessions");
+                    }
+                }
+            });
+            tracing::info!(
+                idle_timeout_secs,
+                "Session idle timeout cleanup enabled"
+            );
+        }
+    }
+
     let app = router::build_router(state.clone());
 
     #[cfg(feature = "tls")]

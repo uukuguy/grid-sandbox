@@ -201,6 +201,9 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExe
             _ => continue,
         };
 
+        // Touch session to reset idle timeout (AJ-D4)
+        state.agent_supervisor.touch_session(&handle.session_id);
+
         let client_msg: ClientMessage = match serde_json::from_str(&msg) {
             Ok(m) => m,
             Err(e) => {

@@ -223,3 +223,71 @@ async fn test_duplicate_session_id_returns_existing() {
     // Both handles should point to the same session
     assert_eq!(handle1.session_id, handle2.session_id);
 }
+
+// ---------------------------------------------------------------------------
+// 6. Idle timeout cleanup (AJ-D4)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_idle_timeout_cleanup() {
+    let runtime = create_test_runtime_with_limit(None).await;
+
+    let user = UserId::from_string("user-idle");
+
+    // Start primary (should survive cleanup)
+    let primary_sid = SessionId::from_string("primary-idle");
+    runtime
+        .start_primary(primary_sid.clone(), user.clone(), SandboxId::new(), vec![], None)
+        .await;
+
+    // Start a non-primary session
+    let idle_sid = SessionId::from_string("idle-session");
+    runtime
+        .start_session(idle_sid.clone(), user.clone(), SandboxId::new(), vec![], None)
+        .await
+        .expect("start idle session");
+
+    assert_eq!(runtime.active_session_count(), 2);
+
+    // Cleanup with zero timeout → should recycle non-primary sessions immediately
+    let recycled = runtime
+        .cleanup_idle_sessions(std::time::Duration::from_secs(0))
+        .await;
+    assert_eq!(recycled, 1, "should recycle exactly the non-primary session");
+    assert_eq!(runtime.active_session_count(), 1);
+    assert!(
+        runtime.get_session_handle(&primary_sid).is_some(),
+        "primary session should survive cleanup"
+    );
+    assert!(
+        runtime.get_session_handle(&idle_sid).is_none(),
+        "idle session should be recycled"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 7. Touch session resets idle timer (AJ-D4)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_touch_session_resets_idle() {
+    let runtime = create_test_runtime_with_limit(None).await;
+
+    let user = UserId::from_string("user-touch");
+    let sid = SessionId::from_string("touch-session");
+
+    runtime
+        .start_session(sid.clone(), user, SandboxId::new(), vec![], None)
+        .await
+        .expect("start session");
+
+    // Touch the session (simulates activity)
+    runtime.touch_session(&sid);
+
+    // Cleanup with a very large timeout → nothing should be recycled
+    let recycled = runtime
+        .cleanup_idle_sessions(std::time::Duration::from_secs(999_999))
+        .await;
+    assert_eq!(recycled, 0, "recently touched session should not be recycled");
+    assert!(runtime.get_session_handle(&sid).is_some());
+}

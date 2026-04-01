@@ -110,6 +110,8 @@ pub struct SessionEntry {
     pub created_at: Instant,
     /// Session-level tool registry (isolated from other sessions)
     pub tools: Arc<StdMutex<ToolRegistry>>,
+    /// Last activity timestamp for idle timeout detection (AJ-D4)
+    pub last_activity: Arc<StdMutex<Instant>>,
 }
 
 /// Session → AgentExecutorHandle 的注册表，同时持有所有共享运行时依赖
@@ -993,6 +995,44 @@ impl AgentRuntime {
         self.max_concurrent_sessions
     }
 
+    /// Update last_activity timestamp for a session (AJ-D4).
+    /// Called by WS handler on each incoming message to track activity.
+    pub fn touch_session(&self, session_id: &SessionId) {
+        if let Some(entry) = self.sessions.get(session_id) {
+            let mut guard = entry.last_activity.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = Instant::now();
+        }
+    }
+
+    /// Clean up sessions that have been idle longer than `timeout`.
+    /// Returns the number of sessions recycled. Skips the primary session.
+    pub async fn cleanup_idle_sessions(&self, timeout: std::time::Duration) -> usize {
+        let primary_sid = self.primary_session_id.lock().await.clone();
+        let now = Instant::now();
+
+        // Collect expired (non-primary) session IDs
+        let expired: Vec<SessionId> = self
+            .sessions
+            .iter()
+            .filter(|entry| {
+                // Never recycle primary session
+                if primary_sid.as_ref() == Some(entry.key()) {
+                    return false;
+                }
+                let last = entry.last_activity.lock().unwrap_or_else(|e| e.into_inner());
+                now.duration_since(*last) > timeout
+            })
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        let count = expired.len();
+        for sid in expired {
+            info!(session_id = %sid.as_str(), "Recycling idle session (timeout exceeded)");
+            self.stop_session(&sid).await;
+        }
+        count
+    }
+
     /// Get primary session ID (if set)
     pub async fn primary_session_id(&self) -> Option<SessionId> {
         self.primary_session_id.lock().await.clone()
@@ -1130,13 +1170,15 @@ impl AgentRuntime {
         }
 
         // Register in session registry
+        let now = Instant::now();
         self.sessions.insert(
             session_id.clone(),
             SessionEntry {
                 handle: handle.clone(),
                 user_id,
-                created_at: Instant::now(),
+                created_at: now,
                 tools: session_tools,
+                last_activity: Arc::new(StdMutex::new(now)),
             },
         );
 
