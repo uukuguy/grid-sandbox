@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-02 05:10 | **Phase AQ checkpoint** — Design complete (6 tasks, 4 waves, ~980 lines). ask_user+tool_search+BlobStore+autonomous tick/pause/audit. Plan @ 1a00420. Ready for execution.
 - 2026-04-02 04:30 | **PHASE AP COMPLETE (18/18 tasks + 4 deferred)** — TUI Wave done. T16: figures.rs+symbols+shimmer. T17: Ctrl+R history, Shift+Tab permissions, external editor, approval UI. T18: vim mode, Meta+P model selector, spinner tree. 1530 lines added across TUI Wave. 315 TUI tests pass.
 - 2026-04-02 03:50 | **AP-T16 COMPLETE (TUI Wave 1)** — figures.rs with 30+ Unicode symbols, spinner verbs (40 rotating), stalled detection (10s/30s), shimmer color, middot hotkey hints, effort indicator (○◐●◉), reduced motion config, sub-second time format. 498 lines, 8 tests, commit a780041. Next: T17 TUI Phase 2.
 - 2026-04-01 22:50 | **AP-T6 COMPLETE (Wave 3)** — CompactionPipeline LLM-based context summarization @ b8bdebb. 3-tier reactive compact (LLM summary → truncate fallback). State rebuild (Zone B/B+/B++, skill, hooks). 15 tests (7 unit + 8 integration). 6/18 tasks (33%). Next: Wave 4 (T8+T9+T10+T11).
