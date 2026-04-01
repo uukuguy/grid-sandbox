@@ -509,3 +509,22 @@ pub fn migration_v12() -> Migration {
         "#,
     )
 }
+
+/// Migration v13: Session registry for crash recovery (AM-T5 / AJ-D2)
+pub fn migration_v13() -> Migration {
+    Migration::new(
+        13,
+        "session_registry",
+        r#"
+        CREATE TABLE IF NOT EXISTS session_registry (
+            session_id  TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            agent_id    TEXT,
+            created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            status      TEXT NOT NULL DEFAULT 'running',
+            sandbox_id  TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_registry_status ON session_registry(status);
+        "#,
+    )
+}

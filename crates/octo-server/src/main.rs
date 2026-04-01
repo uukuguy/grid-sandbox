@@ -202,6 +202,12 @@ async fn main() -> Result<()> {
         AgentRuntime::new(agent_catalog.clone(), runtime_config, Some(tenant_context)).await?,
     );
 
+    // AM-T5: Detect crashed sessions from previous run
+    let crashed_count = agent_runtime.restore_sessions().await;
+    if crashed_count > 0 {
+        tracing::warn!(crashed_count, "Detected crashed sessions from previous run (marked in registry)");
+    }
+
     // Get session store from AgentRuntime for creating primary session
     let session_store = agent_runtime.session_store();
 
@@ -367,7 +373,10 @@ async fn main() -> Result<()> {
             .await?;
     }
 
-    // Graceful shutdown: stop sessions, then MCP servers
+    // Graceful shutdown: persist session state, stop sessions, then MCP servers
+    tracing::info!("Saving session state before shutdown...");
+    state.agent_supervisor.save_session_state().await;
+
     tracing::info!("Stopping all active sessions...");
     let session_cleanup = state.agent_supervisor.cleanup_idle_sessions(
         std::time::Duration::from_secs(0), // 0 = stop all sessions regardless of activity

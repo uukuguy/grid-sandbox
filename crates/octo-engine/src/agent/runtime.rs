@@ -200,6 +200,8 @@ pub struct AgentRuntime {
     pub(crate) session_sandbox: Option<Arc<SessionSandboxManager>>,
     // Session summary store for episodic memory (Phase AG)
     pub(crate) session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
+    // Database connection for session registry persistence (AM-T5)
+    pub(crate) db_conn: tokio_rusqlite::Connection,
 }
 
 impl AgentRuntime {
@@ -320,7 +322,7 @@ impl AgentRuntime {
 
         // 7c. Create SchedulerStorage and register scheduler tools
         let scheduler_storage: Arc<dyn crate::scheduler::SchedulerStorage> = Arc::new(
-            crate::scheduler::SqliteSchedulerStorage::new(conn),
+            crate::scheduler::SqliteSchedulerStorage::new(conn.clone()),
         );
         register_scheduler_tools(&mut tools, scheduler_storage);
 
@@ -696,6 +698,7 @@ impl AgentRuntime {
             credential_resolver,
             session_sandbox,
             session_summary_store,
+            db_conn: conn,
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -1061,9 +1064,150 @@ impl AgentRuntime {
         let count = expired.len();
         for sid in expired {
             info!(session_id = %sid.as_str(), "Recycling idle session (timeout exceeded)");
-            self.stop_session(&sid).await;
+            // AM-T5: persist idle_recycled status before stopping
+            self.persist_session_stop(&sid, "idle_recycled").await;
+            // Remove from in-memory registry (skip the default 'stopped' persist in stop_session
+            // since we already set 'idle_recycled')
+            let removed = self.sessions.remove(&sid);
+            if removed.is_some() {
+                let mut primary_guard = self.primary_session_id.lock().await;
+                if primary_guard.as_ref() == Some(&sid) {
+                    *primary_guard = None;
+                    let mut handle_guard = self.primary_handle.lock().await;
+                    *handle_guard = None;
+                }
+                {
+                    let mut mcp_guard = self.mcp_manager.lock().await;
+                    mcp_guard.cleanup_session(sid.as_str());
+                }
+            }
         }
         count
+    }
+
+    // ── AM-T5: Session registry persistence (crash recovery) ────────────
+
+    /// Persist a session entry to the session_registry table.
+    async fn persist_session_start(
+        &self,
+        session_id: &SessionId,
+        user_id: &UserId,
+        agent_id: Option<&AgentId>,
+        sandbox_id: &SandboxId,
+    ) {
+        let sid = session_id.as_str().to_string();
+        let uid = user_id.as_str().to_string();
+        let aid = agent_id.map(|a| a.0.clone());
+        let sbid = sandbox_id.as_str().to_string();
+        if let Err(e) = self
+            .db_conn
+            .call(move |conn| {
+                conn.execute(
+                    "INSERT OR REPLACE INTO session_registry (session_id, user_id, agent_id, status, sandbox_id) \
+                     VALUES (?1, ?2, ?3, 'running', ?4)",
+                    rusqlite::params![sid, uid, aid, sbid],
+                )?;
+                Ok(())
+            })
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to persist session start to registry");
+        }
+    }
+
+    /// Update session_registry status for a stopped session.
+    async fn persist_session_stop(&self, session_id: &SessionId, status: &str) {
+        let sid = session_id.as_str().to_string();
+        let st = status.to_string();
+        if let Err(e) = self
+            .db_conn
+            .call(move |conn| {
+                conn.execute(
+                    "UPDATE session_registry SET status = ?1 WHERE session_id = ?2",
+                    rusqlite::params![st, sid],
+                )?;
+                Ok(())
+            })
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to persist session stop to registry");
+        }
+    }
+
+    /// Called on startup: detect sessions left in 'running' state from a previous run
+    /// and mark them as 'crashed'. Does NOT restore actual executors.
+    pub async fn restore_sessions(&self) -> usize {
+        let result = self
+            .db_conn
+            .call(|conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT session_id FROM session_registry WHERE status = 'running'",
+                )?;
+                let ids: Vec<String> = stmt
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .filter_map(|r| r.ok())
+                    .collect();
+
+                if !ids.is_empty() {
+                    conn.execute(
+                        "UPDATE session_registry SET status = 'crashed' WHERE status = 'running'",
+                        [],
+                    )?;
+                }
+                Ok(ids.len())
+            })
+            .await;
+
+        match result {
+            Ok(count) => {
+                if count > 0 {
+                    tracing::warn!(
+                        count,
+                        "Found {} session(s) from previous run marked as crashed",
+                        count
+                    );
+                }
+                count
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to restore sessions from registry");
+                0
+            }
+        }
+    }
+
+    /// Called on graceful shutdown: mark all currently running sessions as 'shutting_down'.
+    pub async fn save_session_state(&self) {
+        let active_ids: Vec<String> = self
+            .sessions
+            .iter()
+            .map(|e| e.key().as_str().to_string())
+            .collect();
+
+        if active_ids.is_empty() {
+            return;
+        }
+
+        let count = active_ids.len();
+        if let Err(e) = self
+            .db_conn
+            .call(move |conn| {
+                let tx = conn.transaction()?;
+                for sid in &active_ids {
+                    tx.execute(
+                        "UPDATE session_registry SET status = 'shutting_down' WHERE session_id = ?1",
+                        rusqlite::params![sid],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+        {
+            tracing::warn!(error = %e, "Failed to save session state on shutdown");
+        } else {
+            tracing::info!(count, "Session state saved (marked as shutting_down)");
+        }
     }
 
     /// Compute session monitoring metrics (AM-T3).
@@ -1247,6 +1391,9 @@ impl AgentRuntime {
             )));
         }
 
+        // AM-T5: capture sandbox_id for registry persistence before move
+        let sandbox_id_for_registry = sandbox_id.clone();
+
         let (handle, session_tools) = self.build_and_spawn_executor(
             session_id.clone(),
             user_id.clone(),
@@ -1260,6 +1407,9 @@ impl AgentRuntime {
             self.agent_handles.insert(id.clone(), cancel_token);
             self.catalog.update_state(id, AgentStatus::Running);
         }
+
+        // AM-T5: persist to session_registry for crash recovery
+        self.persist_session_start(&session_id, &user_id, agent_id, &sandbox_id_for_registry).await;
 
         // Register in session registry
         let now = Instant::now();
@@ -1299,6 +1449,9 @@ impl AgentRuntime {
                 let mut mcp_guard = self.mcp_manager.lock().await;
                 mcp_guard.cleanup_session(session_id.as_str());
             }
+
+            // AM-T5: persist stop status to session_registry
+            self.persist_session_stop(session_id, "stopped").await;
 
             info!(session_id = %session_id.as_str(), "Session stopped and cleaned up");
         }

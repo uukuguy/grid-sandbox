@@ -17,6 +17,8 @@ pub struct MemorySearchParams {
     pub q: Option<String>,
     #[serde(default = "default_limit")]
     pub limit: usize,
+    /// Filter by session ID
+    pub session_id: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -52,6 +54,7 @@ pub async fn search_memories(
         let filter = MemoryFilter {
             user_id,
             limit: params.limit.min(100),
+            session_id: params.session_id.clone(),
             ..Default::default()
         };
         return match mem_store.list(filter).await {
@@ -64,6 +67,7 @@ pub async fn search_memories(
     let opts = SearchOptions {
         user_id,
         limit: params.limit.min(100),
+        session_id: params.session_id.clone(),
         ..Default::default()
     };
 

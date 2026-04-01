@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { sessionIdAtom } from "@/atoms/session";
 
@@ -12,12 +12,21 @@ interface MemoryBlock {
   is_readonly: boolean;
 }
 
+interface MemoryTimestamps {
+  created_at: number;
+  updated_at: number;
+  accessed_at: number;
+}
+
 interface PersistentMemory {
   id: string;
   content: string;
   category: string;
   importance: number;
   created_at: string;
+  memory_type?: string;
+  session_id?: string;
+  timestamps?: MemoryTimestamps;
 }
 
 interface ChatMessage {
@@ -25,20 +34,29 @@ interface ChatMessage {
   content: Array<{ type: string; text?: string }>;
 }
 
-type MemoryType = "working" | "session" | "persistent";
+interface ActiveSessionsResponse {
+  sessions: string[];
+  count: number;
+  max: number;
+}
+
+type MemoryViewType = "working" | "session" | "persistent" | "timeline";
 
 export default function Memory() {
-  const [activeMemory, setActiveMemory] = useState<MemoryType>("working");
+  const [activeMemory, setActiveMemory] = useState<MemoryViewType>("working");
   const [workingMemory, setWorkingMemory] = useState<MemoryBlock[]>([]);
   const [persistentMemory, setPersistentMemory] = useState<PersistentMemory[]>([]);
   const [sessionMessages, setSessionMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [availableSessions, setAvailableSessions] = useState<string[]>([]);
+  const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>("");
   const sessionId = useAtomValue(sessionIdAtom);
 
   useEffect(() => {
     fetchWorkingMemory();
     fetchPersistentMemory();
+    fetchAvailableSessions();
   }, []);
 
   useEffect(() => {
@@ -46,6 +64,21 @@ export default function Memory() {
       fetchSessionMessages();
     }
   }, [activeMemory, sessionId]);
+
+  // Re-fetch persistent memory when session filter changes
+  useEffect(() => {
+    fetchPersistentMemory();
+  }, [selectedSessionFilter]);
+
+  const fetchAvailableSessions = async () => {
+    try {
+      const res = await fetch("/api/v1/sessions/active");
+      const data: ActiveSessionsResponse = await res.json();
+      setAvailableSessions(data.sessions || []);
+    } catch (error) {
+      console.error("Failed to fetch active sessions:", error);
+    }
+  };
 
   const fetchSessionMessages = async () => {
     if (!sessionId) return;
@@ -77,7 +110,10 @@ export default function Memory() {
   const fetchPersistentMemory = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/memories?limit=50`);
+      const sessionParam = selectedSessionFilter
+        ? `&session_id=${encodeURIComponent(selectedSessionFilter)}`
+        : "";
+      const res = await fetch(`/api/v1/memories?limit=100${sessionParam}`);
       const data = await res.json();
       setPersistentMemory(data.results || []);
     } catch (error) {
@@ -95,10 +131,25 @@ export default function Memory() {
     mem.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const memoryTypes: { id: MemoryType; label: string }[] = [
+  // Timeline entries: all persistent memories sorted by timestamp (newest first)
+  const timelineEntries = useMemo(() => {
+    const filtered = searchQuery
+      ? persistentMemory.filter((mem) =>
+          mem.content.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : persistentMemory;
+    return [...filtered].sort((a, b) => {
+      const tsA = a.timestamps?.created_at ?? 0;
+      const tsB = b.timestamps?.created_at ?? 0;
+      return tsB - tsA;
+    });
+  }, [persistentMemory, searchQuery]);
+
+  const memoryTypes: { id: MemoryViewType; label: string }[] = [
     { id: "working", label: "Working Memory" },
     { id: "session", label: "Session Memory" },
     { id: "persistent", label: "Persistent Memory" },
+    { id: "timeline", label: "Timeline" },
   ];
 
   return (
@@ -111,16 +162,32 @@ export default function Memory() {
             View and manage AI memory across different layers
           </p>
         </div>
-        <button
-          onClick={() => {
-            fetchWorkingMemory();
-            fetchPersistentMemory();
-            if (sessionId) fetchSessionMessages();
-          }}
-          className="text-xs px-2 py-1 rounded border border-border hover:bg-secondary/50"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Session filter dropdown */}
+          <select
+            value={selectedSessionFilter}
+            onChange={(e) => setSelectedSessionFilter(e.target.value)}
+            className="text-xs px-2 py-1 rounded border border-border bg-secondary focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">All sessions</option>
+            {availableSessions.map((sid) => (
+              <option key={sid} value={sid}>
+                {sid.length > 12 ? `${sid.slice(0, 12)}...` : sid}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              fetchWorkingMemory();
+              fetchPersistentMemory();
+              fetchAvailableSessions();
+              if (sessionId) fetchSessionMessages();
+            }}
+            className="text-xs px-2 py-1 rounded border border-border hover:bg-secondary/50"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Memory Type Tabs */}
@@ -161,6 +228,8 @@ export default function Memory() {
           <WorkingMemoryView blocks={filteredWorkingMemory} />
         ) : activeMemory === "session" ? (
           <SessionMemoryView messages={sessionMessages} />
+        ) : activeMemory === "timeline" ? (
+          <TimelineView entries={timelineEntries} />
         ) : (
           <PersistentMemoryView memories={filteredPersistentMemory} />
         )}
@@ -177,6 +246,11 @@ export default function Memory() {
         <span className="mr-4">
           Persistent: {persistentMemory.length} memories
         </span>
+        {selectedSessionFilter && (
+          <span className="mr-4 text-primary">
+            Filtered: {selectedSessionFilter.slice(0, 12)}...
+          </span>
+        )}
       </div>
     </div>
   );
@@ -327,6 +401,111 @@ function PersistentMemoryView({ memories }: { memories: PersistentMemory[] }) {
             <p className="text-sm line-clamp-3">{mem.content}</p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Format a unix timestamp (seconds) to a human-readable date/time string. */
+function formatTimestamp(ts: number): string {
+  if (!ts || ts === 0) return "Unknown";
+  const d = new Date(ts * 1000);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+/** Badge color mapping for memory types. */
+function memoryTypeBadgeClass(memType?: string): string {
+  switch (memType) {
+    case "semantic":
+      return "bg-blue-500/15 text-blue-400";
+    case "episodic":
+      return "bg-amber-500/15 text-amber-400";
+    case "procedural":
+      return "bg-emerald-500/15 text-emerald-400";
+    default:
+      return "bg-primary/10 text-muted-foreground";
+  }
+}
+
+function TimelineView({ entries }: { entries: PersistentMemory[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground py-8">
+        <p>No timeline entries</p>
+        <p className="text-sm mt-2">
+          Memory entries will appear here sorted by time
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium">Memory Timeline</h3>
+        <span className="text-sm text-muted-foreground">
+          {entries.length} entries
+        </span>
+      </div>
+
+      {/* Vertical timeline */}
+      <div className="relative pl-6">
+        {/* Connecting line */}
+        <div className="absolute left-2 top-2 bottom-2 w-px bg-border" />
+
+        <div className="space-y-4">
+          {entries.map((entry) => {
+            const ts = entry.timestamps?.created_at ?? 0;
+            return (
+              <div key={entry.id} className="relative">
+                {/* Timeline dot */}
+                <div className="absolute -left-6 top-3 w-4 h-4 rounded-full border-2 border-primary bg-card" />
+
+                {/* Entry card */}
+                <div className="p-3 bg-secondary rounded-lg border border-border hover:border-primary/50 transition-colors">
+                  {/* Top row: timestamp + badges */}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {formatTimestamp(ts)}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {entry.memory_type && (
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded ${memoryTypeBadgeClass(
+                            entry.memory_type
+                          )}`}
+                        >
+                          {entry.memory_type}
+                        </span>
+                      )}
+                      <span className="text-xs font-medium px-2 py-0.5 bg-primary/10 rounded">
+                        {entry.category}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content preview */}
+                  <p className="text-sm line-clamp-2">{entry.content}</p>
+
+                  {/* Session badge (if present) */}
+                  {entry.session_id && (
+                    <div className="mt-1.5">
+                      <span className="text-xs text-muted-foreground font-mono">
+                        session: {entry.session_id.slice(0, 12)}...
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

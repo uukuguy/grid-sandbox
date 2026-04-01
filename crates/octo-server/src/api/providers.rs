@@ -5,7 +5,8 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use octo_engine::providers::LlmInstance;
+use chrono::{DateTime, Utc};
+use octo_engine::providers::{AttemptResult, LlmInstance};
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -165,11 +166,121 @@ pub async fn delete_provider(
     Ok(Json(()))
 }
 
+// ── Provider status (rich monitoring) ──────────────────────────────────
+
+#[derive(Serialize)]
+pub struct ProviderStatusResponse {
+    pub policy: String,
+    pub current_instance_id: Option<String>,
+    pub instances: Vec<ProviderInstanceStatus>,
+    pub total_failovers: u64,
+    pub recent_traces: Vec<TraceEntry>,
+}
+
+#[derive(Serialize)]
+pub struct ProviderInstanceStatus {
+    pub id: String,
+    pub provider: String,
+    pub model: String,
+    pub priority: u8,
+    pub enabled: bool,
+    pub health: String,
+    pub latency_p50_ms: Option<u64>,
+    pub latency_p99_ms: Option<u64>,
+    pub request_count: u64,
+    pub error_count: u64,
+    pub failover_count: u64,
+}
+
+#[derive(Serialize)]
+pub struct TraceEntry {
+    pub timestamp: DateTime<Utc>,
+    pub instance_id: String,
+    pub success: bool,
+    pub duration_ms: u64,
+}
+
+/// GET /providers/status — detailed provider health and performance data
+pub async fn get_provider_status(
+    State(state): State<Arc<AppState>>,
+) -> Json<ProviderStatusResponse> {
+    let chain = state.agent_supervisor.provider_chain();
+
+    let Some(chain) = chain else {
+        // Single-provider mode — return minimal response
+        return Json(ProviderStatusResponse {
+            policy: "none".to_string(),
+            current_instance_id: None,
+            instances: vec![],
+            total_failovers: 0,
+            recent_traces: vec![],
+        });
+    };
+
+    let policy = format!("{:?}", chain.policy());
+    let current_instance_id = chain.get_current_selection().await;
+    let instance_list = chain.list_instances().await;
+    let all_health = chain.get_all_health().await;
+    let stats_map = chain.instance_stats().await;
+    let traces = chain.recent_traces(20).await;
+
+    // Build per-instance status
+    let instances: Vec<ProviderInstanceStatus> = instance_list
+        .iter()
+        .map(|inst| {
+            let health = all_health
+                .get(&inst.id)
+                .map(|h| format!("{:?}", h))
+                .unwrap_or_else(|| "Unknown".to_string());
+            let stats = stats_map.get(&inst.id);
+            ProviderInstanceStatus {
+                id: inst.id.clone(),
+                provider: inst.provider.clone(),
+                model: inst.model.clone(),
+                priority: inst.priority,
+                enabled: inst.enabled,
+                health,
+                latency_p50_ms: stats.and_then(|s| s.latency_p50_ms),
+                latency_p99_ms: stats.and_then(|s| s.latency_p99_ms),
+                request_count: stats.map_or(0, |s| s.request_count),
+                error_count: stats.map_or(0, |s| s.error_count),
+                failover_count: stats.map_or(0, |s| s.failover_count),
+            }
+        })
+        .collect();
+
+    // Compute total failovers (traces with >1 attempt)
+    let total_failovers = traces.iter().filter(|t| t.attempts.len() > 1).count() as u64;
+
+    // Flatten recent traces into per-attempt entries for debugging
+    let recent_traces: Vec<TraceEntry> = traces
+        .iter()
+        .flat_map(|t| {
+            t.attempts.iter().filter(|a| a.instance_id != "none").map(|a| TraceEntry {
+                timestamp: t.started_at,
+                instance_id: a.instance_id.clone(),
+                success: matches!(a.result, AttemptResult::Success),
+                duration_ms: a.duration_ms,
+            })
+        })
+        .take(20)
+        .collect();
+
+    Json(ProviderStatusResponse {
+        policy,
+        current_instance_id,
+        instances,
+        total_failovers,
+        recent_traces,
+    })
+}
+
 /// Register routes
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/providers", get(list_providers))
         .route("/providers", post(add_provider))
+        .route("/providers/status", get(get_provider_status))
         .route("/providers/{id}", delete(delete_provider))
         .route("/providers/{id}/select", post(select_provider))
         .route("/providers/{id}/reset", post(reset_provider))

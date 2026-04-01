@@ -88,6 +88,16 @@ pub struct FailoverTrace {
     pub total_duration_ms: u64,
 }
 
+/// Per-instance statistics computed from recent traces
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstanceStats {
+    pub latency_p50_ms: Option<u64>,
+    pub latency_p99_ms: Option<u64>,
+    pub request_count: u64,
+    pub error_count: u64,
+    pub failover_count: u64,
+}
+
 /// ProviderChain 管理多个 LLM 实例
 pub struct ProviderChain {
     instances: Arc<RwLock<Vec<LlmInstance>>>,
@@ -250,6 +260,85 @@ impl ProviderChain {
         let mut health = self.health.write().await;
         health.insert(instance_id.to_string(), InstanceHealth::Healthy);
         Ok(())
+    }
+
+    /// Get all health statuses
+    pub async fn get_all_health(&self) -> HashMap<String, InstanceHealth> {
+        self.health.read().await.clone()
+    }
+
+    /// Compute per-instance stats from recent traces
+    pub async fn instance_stats(&self) -> HashMap<String, InstanceStats> {
+        let traces = self.recent_traces.read().await;
+        let mut per_instance: HashMap<String, Vec<u64>> = HashMap::new();
+        let mut error_counts: HashMap<String, u64> = HashMap::new();
+        let mut request_counts: HashMap<String, u64> = HashMap::new();
+        let mut failover_counts: HashMap<String, u64> = HashMap::new();
+
+        for trace in traces.iter() {
+            let is_failover = trace.attempts.len() > 1;
+            for attempt in &trace.attempts {
+                if attempt.instance_id == "none" {
+                    continue;
+                }
+                *request_counts
+                    .entry(attempt.instance_id.clone())
+                    .or_default() += 1;
+                match &attempt.result {
+                    AttemptResult::Success => {
+                        per_instance
+                            .entry(attempt.instance_id.clone())
+                            .or_default()
+                            .push(attempt.duration_ms);
+                    }
+                    AttemptResult::Failed(_) => {
+                        *error_counts
+                            .entry(attempt.instance_id.clone())
+                            .or_default() += 1;
+                    }
+                    AttemptResult::NoInstance(_) => {}
+                }
+                if is_failover {
+                    *failover_counts
+                        .entry(attempt.instance_id.clone())
+                        .or_default() += 1;
+                }
+            }
+        }
+
+        let mut result = HashMap::new();
+        // Collect all instance IDs from requests and latencies
+        let all_ids: std::collections::HashSet<&String> = request_counts
+            .keys()
+            .chain(per_instance.keys())
+            .collect();
+
+        for id in all_ids {
+            let mut durations = per_instance.get(id).cloned().unwrap_or_default();
+            durations.sort_unstable();
+            let (p50, p99) = if durations.is_empty() {
+                (None, None)
+            } else {
+                let p50_idx = (durations.len() as f64 * 0.50).ceil() as usize;
+                let p99_idx = (durations.len() as f64 * 0.99).ceil() as usize;
+                (
+                    Some(durations[p50_idx.saturating_sub(1).min(durations.len() - 1)]),
+                    Some(durations[p99_idx.saturating_sub(1).min(durations.len() - 1)]),
+                )
+            };
+            result.insert(
+                id.clone(),
+                InstanceStats {
+                    latency_p50_ms: p50,
+                    latency_p99_ms: p99,
+                    request_count: *request_counts.get(id).unwrap_or(&0),
+                    error_count: *error_counts.get(id).unwrap_or(&0),
+                    failover_count: *failover_counts.get(id).unwrap_or(&0),
+                },
+            );
+        }
+
+        result
     }
 
     /// Get recent failover traces (last N, max 100)
