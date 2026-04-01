@@ -28,7 +28,7 @@ impl Tool for FileWriteTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::FILE_WRITE_DESCRIPTION
+        "Write content to a file. Creates the file if it doesn't exist, or overwrites it if it does. Creates parent directories as needed."
     }
 
     fn parameters(&self) -> Value {
@@ -103,5 +103,9 @@ impl Tool for FileWriteTool {
 
     fn approval(&self) -> ApprovalRequirement {
         ApprovalRequirement::AutoApprovable
+    }
+
+    fn is_concurrency_safe(&self) -> bool {
+        false
     }
 }

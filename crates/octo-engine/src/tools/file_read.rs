@@ -78,7 +78,9 @@ impl Tool for FileReadTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::FILE_READ_DESCRIPTION
+        "Read the contents of a file. Supports text files (with line numbers), CSV/TSV, \
+         Excel spreadsheets (xlsx/xls/ods), PDF documents, ZIP archives, and JSON/JSONL. \
+         For unsupported binary formats, returns file info and suggests alternative approaches."
     }
 
     fn parameters(&self) -> Value {
@@ -241,6 +243,10 @@ impl Tool for FileReadTool {
 
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
     }
 }
 

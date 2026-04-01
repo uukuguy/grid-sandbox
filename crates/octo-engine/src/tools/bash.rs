@@ -225,7 +225,7 @@ impl Tool for BashTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::BASH_DESCRIPTION
+        "Execute a bash command. Returns stdout, stderr, and exit code."
     }
 
     fn parameters(&self) -> Value {
@@ -336,6 +336,10 @@ impl Tool for BashTool {
 
     fn approval(&self) -> ApprovalRequirement {
         ApprovalRequirement::Always
+    }
+
+    fn is_concurrency_safe(&self) -> bool {
+        false
     }
 }
 

@@ -4,6 +4,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use octo_types::{ApprovalRequirement, RiskLevel, ToolContext, ToolOutput, ToolSource, ToolSpec};
 
+/// Callback for streaming tool progress during execution.
+pub type ProgressCallback = std::sync::Arc<dyn Fn(octo_types::ToolProgress) + Send + Sync>;
+
 #[async_trait]
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
@@ -51,6 +54,37 @@ pub trait Tool: Send + Sync {
     /// Category tag for grouping and permission control.
     fn category(&self) -> &str {
         "general"
+    }
+
+    /// Whether this tool only reads data (never modifies state).
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    /// Whether this tool can cause irreversible destruction.
+    fn is_destructive(&self) -> bool {
+        false
+    }
+
+    /// Whether this tool can safely run concurrently with others.
+    fn is_concurrency_safe(&self) -> bool {
+        true
+    }
+
+    /// Validate input parameters before execution.
+    /// Return Err to reject the call with an error message shown to the LLM.
+    async fn validate_input(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<()> {
+        Ok(())
+    }
+
+    /// Execute with progress callback. Default implementation ignores callback.
+    async fn execute_with_progress(
+        &self,
+        params: serde_json::Value,
+        ctx: &ToolContext,
+        _on_progress: Option<ProgressCallback>,
+    ) -> Result<ToolOutput> {
+        self.execute(params, ctx).await
     }
 }
 
@@ -107,5 +141,23 @@ mod tests {
     fn test_default_category() {
         let tool = MockTool;
         assert_eq!(tool.category(), "general");
+    }
+
+    #[test]
+    fn test_default_is_read_only() {
+        let tool = MockTool;
+        assert!(!tool.is_read_only());
+    }
+
+    #[test]
+    fn test_default_is_destructive() {
+        let tool = MockTool;
+        assert!(!tool.is_destructive());
+    }
+
+    #[test]
+    fn test_default_is_concurrency_safe() {
+        let tool = MockTool;
+        assert!(tool.is_concurrency_safe());
     }
 }

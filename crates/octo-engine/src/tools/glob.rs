@@ -30,7 +30,7 @@ impl Tool for GlobTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::GLOB_DESCRIPTION
+        "Find files matching a glob pattern. Returns file paths sorted by modification time (newest first). Useful for discovering files by name or extension."
     }
 
     fn parameters(&self) -> Value {
@@ -134,5 +134,9 @@ impl Tool for GlobTool {
 
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
     }
 }

@@ -35,7 +35,7 @@ impl Tool for WebFetchTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::WEB_FETCH_DESCRIPTION
+        "Fetch content from a URL. By default extracts readable text content from HTML pages, stripping scripts, styles, and navigation elements."
     }
 
     fn parameters(&self) -> Value {
@@ -168,6 +168,10 @@ impl Tool for WebFetchTool {
 
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
     }
 }
 

@@ -28,7 +28,7 @@ impl Tool for FileEditTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::FILE_EDIT_DESCRIPTION
+        "Edit a file by replacing an exact string match with new content. The old_string must appear exactly once in the file (unless replace_all is true)."
     }
 
     fn parameters(&self) -> Value {
@@ -145,5 +145,9 @@ impl Tool for FileEditTool {
 
     fn approval(&self) -> ApprovalRequirement {
         ApprovalRequirement::AutoApprovable
+    }
+
+    fn is_concurrency_safe(&self) -> bool {
+        false
     }
 }

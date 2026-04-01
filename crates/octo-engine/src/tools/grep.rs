@@ -30,7 +30,7 @@ impl Tool for GrepTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::GREP_DESCRIPTION
+        "Search for a pattern in files using regex. Returns matching lines with file paths and line numbers. Searches recursively in the working directory by default."
     }
 
     fn parameters(&self) -> Value {
@@ -118,5 +118,9 @@ impl Tool for GrepTool {
 
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
     }
 }

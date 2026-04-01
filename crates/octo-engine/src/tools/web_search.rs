@@ -94,7 +94,7 @@ impl Tool for WebSearchTool {
     }
 
     fn description(&self) -> &str {
-        super::prompts::WEB_SEARCH_DESCRIPTION
+        "Search the web for information. Returns search results with titles, URLs, and content snippets."
     }
 
     fn parameters(&self) -> Value {
@@ -174,6 +174,10 @@ impl Tool for WebSearchTool {
 
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
     }
 }
 

@@ -143,4 +143,8 @@ impl Tool for FindTool {
     fn risk_level(&self) -> RiskLevel {
         RiskLevel::ReadOnly
     }
+
+    fn is_read_only(&self) -> bool {
+        true
+    }
 }
