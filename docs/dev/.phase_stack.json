@@ -3,6 +3,14 @@
   "suspended_phases": [],
   "archived_phases": [
     {
+      "name": "Phase AK — Server 安全加固 + 生产就绪",
+      "completed_at": "2026-04-01T14:30:00+08:00",
+      "progress": "100%",
+      "commit": "be3f5f4",
+      "tasks": "7/7 (G1 安全头+CORS 2 + G2 API v1+健康检查 2 + G3 限制+关闭 2 + G4 测试 1)",
+      "tests": 9
+    },
+    {
       "name": "Phase AJ — 多会话复用（Multi-Session Multiplexing）",
       "completed_at": "2026-04-01T10:50:00+08:00",
       "progress": "100%",

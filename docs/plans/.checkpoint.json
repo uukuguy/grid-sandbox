@@ -1,13 +1,13 @@
 {
   "plan_file": "docs/plans/2026-04-01-octo-server-roadmap.md",
-  "phase": "design",
+  "phase": "complete",
   "created_at": "2026-04-01T12:00:00+08:00",
-  "updated_at": "2026-04-01T12:00:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-04-01T14:30:00+08:00",
+  "completed_tasks": ["AK-T1", "AK-T2", "AK-T3", "AK-T4", "AK-T5", "AK-T6", "AK-T7"],
   "current_task": null,
   "total_tasks": 7,
   "phase_name": "Phase AK — Server 安全加固 + 生产就绪",
-  "status": "设计完成，待执行",
+  "status": "ALL COMPLETE (7/7)",
   "execution_mode": "subagent-driven-development",
   "branch": "main",
   "baseline": {
@@ -16,12 +16,19 @@
     "db_version": 12
   },
   "groups": {
-    "G1": { "name": "安全响应头 + CORS 严格化", "tasks": 2, "status": "pending", "priority": "P1" },
-    "G2": { "name": "API 版本化 + 健康检查", "tasks": 2, "status": "pending", "priority": "P1" },
-    "G3": { "name": "请求安全 + 优雅关闭", "tasks": 2, "status": "pending", "priority": "P2" },
-    "G4": { "name": "测试", "tasks": 1, "status": "pending", "priority": "P1" }
+    "G1": { "name": "安全响应头 + CORS 严格化", "tasks": 2, "status": "complete", "priority": "P1" },
+    "G2": { "name": "API 版本化 + 健康检查", "tasks": 2, "status": "complete", "priority": "P1" },
+    "G3": { "name": "请求安全 + 优雅关闭", "tasks": 2, "status": "complete", "priority": "P2" },
+    "G4": { "name": "测试", "tasks": 1, "status": "complete", "priority": "P1" }
   },
-  "commits": [],
+  "commits": [
+    "be3f5f4 feat(server): Phase AK — API security hardening + production readiness (T1-T7)"
+  ],
+  "test_results": {
+    "octo_server": 54,
+    "new_tests": 9,
+    "test_file": "crates/octo-server/tests/api_security.rs"
+  },
   "deferred": [
     "AK-D1: Rate limiter 可配置化（每端点/每用户）",
     "AK-D2: WebSocket 认证增强（token 参数 vs header）",
@@ -30,7 +37,7 @@
   "roadmap": {
     "next_phases": ["Phase AL — Web 前端完善 + 多会话 UI", "Phase AM — 可观测性 + 运维工具"],
     "deferred_merged": {
-      "AJ-D3": "AK-T6 优雅关闭",
+      "AJ-D3": "AK-T6 优雅关闭 ✅",
       "AJ-D5": "AL-T1 多会话 Tab UI",
       "AJ-D6": "AM-T4 Event Bus 过滤",
       "AJ-D2": "AM-T5 崩溃恢复",
