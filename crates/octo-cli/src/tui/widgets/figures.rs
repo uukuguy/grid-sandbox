@@ -310,6 +310,183 @@ impl Default for ReducedMotion {
     }
 }
 
+/// Interpolate between two RGB colors.
+///
+/// `t` ranges from 0.0 (fully `c1`) to 1.0 (fully `c2`).
+pub fn interpolate_rgb(c1: (u8, u8, u8), c2: (u8, u8, u8), t: f64) -> (u8, u8, u8) {
+    let t = t.clamp(0.0, 1.0);
+    (
+        (c1.0 as f64 + (c2.0 as f64 - c1.0 as f64) * t) as u8,
+        (c1.1 as f64 + (c2.1 as f64 - c1.1 as f64) * t) as u8,
+        (c1.2 as f64 + (c2.2 as f64 - c1.2 as f64) * t) as u8,
+    )
+}
+
+/// Render a string with character-level shimmer (glimmer) effect.
+///
+/// A bright spot slides across the text, creating a wave-like glow.
+/// Returns `(char_index, intensity)` pairs where intensity is 0.0-1.0.
+///
+/// `tick` should increment each frame (~100ms). The wave slides at
+/// ~1 character per tick.
+pub fn shimmer_intensities(text_len: usize, tick: u64) -> Vec<f64> {
+    let cycle_len = text_len + 20; // extra gap between waves
+    let pos = (tick as usize) % cycle_len;
+
+    (0..text_len)
+        .map(|i| {
+            let dist = (i as isize - pos as isize).unsigned_abs();
+            if dist < 5 {
+                1.0 - (dist as f64 / 5.0)
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
+/// Permission mode for cycling via Shift+Tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionMode {
+    /// Read-only: no write/execute tools allowed
+    ReadOnly,
+    /// Supervised: ask for approval on risky actions
+    Supervised,
+    /// Full: all actions auto-approved
+    Full,
+}
+
+impl PermissionMode {
+    /// Cycle to the next permission mode.
+    pub fn next(self) -> Self {
+        match self {
+            Self::ReadOnly => Self::Supervised,
+            Self::Supervised => Self::Full,
+            Self::Full => Self::ReadOnly,
+        }
+    }
+
+    /// Display label for the status bar.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::ReadOnly => "ReadOnly",
+            Self::Supervised => "Supervised",
+            Self::Full => "Full",
+        }
+    }
+
+    /// Color hint for the permission mode.
+    pub fn color_rgb(&self) -> (u8, u8, u8) {
+        match self {
+            Self::ReadOnly => (137, 209, 133),   // green
+            Self::Supervised => (255, 215, 0),   // gold
+            Self::Full => (255, 140, 0),         // orange
+        }
+    }
+}
+
+impl Default for PermissionMode {
+    fn default() -> Self {
+        Self::Supervised
+    }
+}
+
+/// History search state for Ctrl+R reverse incremental search.
+#[derive(Debug, Clone)]
+pub struct HistorySearchState {
+    /// Whether search mode is active.
+    pub active: bool,
+    /// Current search query.
+    pub query: String,
+    /// Index of the matched entry (into the history list, from end).
+    pub match_index: usize,
+    /// The matched history entry text (if any).
+    pub matched_text: Option<String>,
+}
+
+impl HistorySearchState {
+    pub fn new() -> Self {
+        Self {
+            active: false,
+            query: String::new(),
+            match_index: 0,
+            matched_text: None,
+        }
+    }
+
+    /// Enter search mode.
+    pub fn activate(&mut self) {
+        self.active = true;
+        self.query.clear();
+        self.match_index = 0;
+        self.matched_text = None;
+    }
+
+    /// Exit search mode.
+    pub fn deactivate(&mut self) {
+        self.active = false;
+        self.query.clear();
+        self.match_index = 0;
+        self.matched_text = None;
+    }
+
+    /// Search history entries for the current query.
+    ///
+    /// `history` should be in chronological order (oldest first).
+    /// Returns true if a match was found.
+    pub fn search(&mut self, history: &[String]) -> bool {
+        if self.query.is_empty() {
+            self.matched_text = None;
+            return false;
+        }
+
+        let query_lower = self.query.to_lowercase();
+        let mut found_count = 0;
+
+        // Search from newest to oldest
+        for entry in history.iter().rev() {
+            if entry.to_lowercase().contains(&query_lower) {
+                if found_count == self.match_index {
+                    self.matched_text = Some(entry.clone());
+                    return true;
+                }
+                found_count += 1;
+            }
+        }
+
+        // Wrap around
+        if self.match_index > 0 && found_count > 0 {
+            self.match_index = 0;
+            return self.search(history);
+        }
+
+        self.matched_text = None;
+        false
+    }
+
+    /// Move to the next match (Ctrl+R pressed again while in search mode).
+    pub fn next_match(&mut self) {
+        self.match_index += 1;
+    }
+
+    /// Format the search prompt line.
+    pub fn prompt_line(&self) -> String {
+        if let Some(ref matched) = self.matched_text {
+            format!("(reverse-i-search)`{}': {}", self.query, matched)
+        } else if self.query.is_empty() {
+            "(reverse-i-search)`': ".to_string()
+        } else {
+            format!("(reverse-i-search)`{}': [no match]", self.query)
+        }
+    }
+}
+
+impl Default for HistorySearchState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,5 +564,86 @@ mod tests {
 
         let (h, _, _) = StalledState::Stalled.breathing_params();
         assert!(h < 1.0, "Stalled should use red hue");
+    }
+
+    #[test]
+    fn test_interpolate_rgb() {
+        let black = (0u8, 0u8, 0u8);
+        let white = (255u8, 255u8, 255u8);
+
+        let mid = interpolate_rgb(black, white, 0.5);
+        assert_eq!(mid, (127, 127, 127));
+
+        assert_eq!(interpolate_rgb(black, white, 0.0), black);
+        assert_eq!(interpolate_rgb(black, white, 1.0), white);
+    }
+
+    #[test]
+    fn test_shimmer_intensities() {
+        let intensities = shimmer_intensities(10, 3);
+        assert_eq!(intensities.len(), 10);
+        // Position 3 should have max intensity
+        assert!((intensities[3] - 1.0).abs() < 0.001);
+        // Far positions should be 0
+        assert!(intensities[9] < 0.001);
+    }
+
+    #[test]
+    fn test_permission_mode_cycling() {
+        let mode = PermissionMode::ReadOnly;
+        assert_eq!(mode.next(), PermissionMode::Supervised);
+        assert_eq!(mode.next().next(), PermissionMode::Full);
+        assert_eq!(mode.next().next().next(), PermissionMode::ReadOnly);
+    }
+
+    #[test]
+    fn test_permission_mode_label() {
+        assert_eq!(PermissionMode::ReadOnly.label(), "ReadOnly");
+        assert_eq!(PermissionMode::Supervised.label(), "Supervised");
+        assert_eq!(PermissionMode::Full.label(), "Full");
+    }
+
+    #[test]
+    fn test_history_search() {
+        let mut state = HistorySearchState::new();
+        state.activate();
+        assert!(state.active);
+
+        state.query = "git".to_string();
+        let history = vec![
+            "ls -la".to_string(),
+            "git status".to_string(),
+            "cargo build".to_string(),
+            "git diff".to_string(),
+        ];
+
+        assert!(state.search(&history));
+        assert_eq!(state.matched_text.as_deref(), Some("git diff"));
+
+        // Next match
+        state.next_match();
+        assert!(state.search(&history));
+        assert_eq!(state.matched_text.as_deref(), Some("git status"));
+    }
+
+    #[test]
+    fn test_history_search_no_match() {
+        let mut state = HistorySearchState::new();
+        state.activate();
+        state.query = "nonexistent".to_string();
+        let history = vec!["hello".to_string()];
+        assert!(!state.search(&history));
+        assert!(state.matched_text.is_none());
+    }
+
+    #[test]
+    fn test_history_search_prompt() {
+        let mut state = HistorySearchState::new();
+        state.activate();
+        assert!(state.prompt_line().contains("(reverse-i-search)"));
+
+        state.query = "git".to_string();
+        state.matched_text = Some("git status".to_string());
+        assert!(state.prompt_line().contains("git status"));
     }
 }

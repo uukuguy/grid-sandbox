@@ -224,6 +224,48 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
         return;
     }
 
+    // If history search is active, route keypresses to search handler
+    if state.history_search.active {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
+                // Next match
+                state.history_search.next_match();
+                let entries = state.message_history.entries();
+                state.history_search.search(&entries);
+                state.dirty = true;
+            }
+            (KeyModifiers::NONE, KeyCode::Esc) => {
+                // Cancel search
+                state.history_search.deactivate();
+                state.dirty = true;
+            }
+            (KeyModifiers::NONE, KeyCode::Enter) => {
+                // Accept match into input buffer
+                if let Some(ref matched) = state.history_search.matched_text {
+                    state.input_buffer = matched.clone();
+                    state.input_cursor = state.input_buffer.len();
+                }
+                state.history_search.deactivate();
+                state.dirty = true;
+            }
+            (KeyModifiers::NONE, KeyCode::Backspace) => {
+                state.history_search.query.pop();
+                let entries = state.message_history.entries();
+                state.history_search.search(&entries);
+                state.dirty = true;
+            }
+            (KeyModifiers::NONE, KeyCode::Char(c)) => {
+                state.history_search.query.push(c);
+                state.history_search.match_index = 0;
+                let entries = state.message_history.entries();
+                state.history_search.search(&entries);
+                state.dirty = true;
+            }
+            _ => {}
+        }
+        return;
+    }
+
     match (key.modifiers, key.code) {
         // ── Ctrl shortcuts ──
         (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
@@ -387,6 +429,40 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             if let Some(text) = state.last_assistant_response_text() {
                 if super::app_state::TuiState::copy_to_clipboard(&text) {
                     // Brief visual feedback — could add a toast/notification later
+                    state.dirty = true;
+                }
+            }
+        }
+
+        // ── Ctrl+R: reverse incremental history search ──
+        (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
+            if state.history_search.active {
+                // Already searching — advance to next match
+                state.history_search.next_match();
+                let entries = state.message_history.entries();
+                state.history_search.search(&entries);
+            } else {
+                // Enter search mode
+                state.history_search.activate();
+            }
+            state.dirty = true;
+        }
+
+        // ── Shift+Tab: cycle permission mode ──
+        (KeyModifiers::SHIFT, KeyCode::BackTab) => {
+            state.permission_mode = state.permission_mode.next();
+            state.dirty = true;
+        }
+
+        // ── Ctrl+X Ctrl+E: open external editor for input ──
+        // Note: This handles Ctrl+X only — a second Ctrl+E is needed.
+        // For simplicity, we handle Ctrl+X as the trigger when input is non-empty.
+        (KeyModifiers::CONTROL, KeyCode::Char('x')) => {
+            if !state.input_buffer.is_empty() || state.is_streaming {
+                // Open $EDITOR with current input content
+                if let Ok(edited) = open_external_editor(&state.input_buffer) {
+                    state.input_buffer = edited;
+                    state.input_cursor = state.input_buffer.len();
                     state.dirty = true;
                 }
             }
@@ -635,6 +711,56 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
 
         _ => {}
     }
+}
+
+/// Open an external editor ($EDITOR or vi) with the given text content.
+///
+/// Writes text to a temp file, opens the editor, waits for it to close,
+/// then reads back the edited content.
+fn open_external_editor(text: &str) -> Result<String, std::io::Error> {
+    use std::io::Write;
+
+    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join("octo_input.tmp");
+
+    // Write current text to temp file
+    {
+        let mut file = std::fs::File::create(&tmp_path)?;
+        file.write_all(text.as_bytes())?;
+    }
+
+    // Leave alternate screen and raw mode for the editor
+    let _ = crossterm::terminal::disable_raw_mode();
+    let _ = crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::LeaveAlternateScreen
+    );
+
+    // Open editor
+    let status = std::process::Command::new(&editor)
+        .arg(&tmp_path)
+        .status()?;
+
+    // Re-enter alternate screen and raw mode
+    let _ = crossterm::terminal::enable_raw_mode();
+    let _ = crossterm::execute!(
+        std::io::stdout(),
+        crossterm::terminal::EnterAlternateScreen
+    );
+
+    if !status.success() {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Editor exited with non-zero status",
+        ));
+    }
+
+    // Read back edited content
+    let result = std::fs::read_to_string(&tmp_path)?;
+    let _ = std::fs::remove_file(&tmp_path);
+    Ok(result.trim_end().to_string())
 }
 
 /// Handle keys when an overlay is active.

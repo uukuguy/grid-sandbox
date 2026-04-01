@@ -232,6 +232,14 @@ pub struct TuiState {
     pub reduced_motion: super::widgets::figures::ReducedMotion,
     /// Reasoning effort level (0=low, 1=med, 2=high, 3=max) for status bar display.
     pub effort_level: Option<u8>,
+
+    // ── History search (Ctrl+R) ──
+    /// Reverse incremental history search state.
+    pub history_search: super::widgets::figures::HistorySearchState,
+
+    // ── Permission mode (Shift+Tab) ──
+    /// Current permission mode for tool execution.
+    pub permission_mode: super::widgets::figures::PermissionMode,
 }
 
 impl TuiState {
@@ -345,6 +353,8 @@ impl TuiState {
             subagent_completed: None,
             reduced_motion: super::widgets::figures::ReducedMotion::default(),
             effort_level: None,
+            history_search: super::widgets::figures::HistorySearchState::default(),
+            permission_mode: super::widgets::figures::PermissionMode::default(),
         }
     }
 

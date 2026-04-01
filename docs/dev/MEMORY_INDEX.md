@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-02 03:50 | **AP-T16 COMPLETE (TUI Wave 1)** — figures.rs with 30+ Unicode symbols, spinner verbs (40 rotating), stalled detection (10s/30s), shimmer color, middot hotkey hints, effort indicator (○◐●◉), reduced motion config, sub-second time format. 498 lines, 8 tests, commit a780041. Next: T17 TUI Phase 2.
 - 2026-04-01 22:50 | **AP-T6 COMPLETE (Wave 3)** — CompactionPipeline LLM-based context summarization @ b8bdebb. 3-tier reactive compact (LLM summary → truncate fallback). State rebuild (Zone B/B+/B++, skill, hooks). 15 tests (7 unit + 8 integration). 6/18 tasks (33%). Next: Wave 4 (T8+T9+T10+T11).
 - 2026-04-01 22:00 | **Wave 1-2 COMPLETE** — 5/18 tasks done. T3 PTL recovery @ 044a3ec, T4 Tool trait @ 76573c7, T5 ObservationMasker @ f9b869b. Checkpoint updated. Wave 3 (T6 CompactionPipeline) next.
 - 2026-04-01 21:35 | **AP-T2 COMPLETE** — Tool descriptions upgraded to detailed usage manuals in tools/prompts.rs (9 tools) @ ab4a961. Wave 1 done. Wave 2 (T3+T4+T5) launched.

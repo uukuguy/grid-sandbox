@@ -94,6 +94,11 @@ impl MessageHistory {
         self.navigating
     }
 
+    /// Get all history entries as a cloned vector (for search).
+    pub fn entries(&self) -> Vec<String> {
+        self.history.clone()
+    }
+
     /// Load history from file (one entry per line, newlines escaped as \n).
     fn load_from_file(&mut self) {
         let path = match &self.file_path {

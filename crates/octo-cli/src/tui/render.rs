@@ -146,6 +146,24 @@ fn render_activity_indicator(state: &TuiState, frame: &mut Frame, area: Rect) {
 
 /// Render the input area using the ported OpenDev InputWidget.
 fn render_input(state: &TuiState, frame: &mut Frame, area: Rect) {
+    // If history search is active, show search prompt instead of normal input
+    if state.history_search.active {
+        let search_line = state.history_search.prompt_line();
+        let input_widget = super::widgets::input::InputWidget::new(
+            &search_line,
+            search_line.len(),
+            "NORMAL",
+            0,
+        )
+        .has_focus(state.has_focus)
+        .hint_context(false, false, false);
+        let result = input_widget.render_with_cursor(area, frame.buffer_mut());
+        if let Some((cx, cy)) = result.cursor_position {
+            frame.set_cursor_position((cx, cy));
+        }
+        return;
+    }
+
     // Input mode is always "NORMAL" — activity indicator is shown separately above
     let input_widget = super::widgets::input::InputWidget::new(
         &state.input_buffer,
@@ -260,39 +278,57 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
     }
 }
 
-/// Render the tool approval dialog as a centered popup.
+/// Render the tool approval dialog as a centered popup with enhanced risk UI.
 fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(60, 8, area);
+    let popup = centered_rect(65, 10, area);
     frame.render_widget(Clear, popup);
 
-    let risk_color = match approval.risk_level {
-        octo_types::tool::RiskLevel::ReadOnly => Color::Green,
-        octo_types::tool::RiskLevel::LowRisk => Color::Yellow,
-        octo_types::tool::RiskLevel::HighRisk => Color::Red,
-        octo_types::tool::RiskLevel::Destructive => Color::LightRed,
+    let (risk_color, risk_label) = match approval.risk_level {
+        octo_types::tool::RiskLevel::ReadOnly => (Color::Green, "Low Risk (Read-Only)"),
+        octo_types::tool::RiskLevel::LowRisk => (Color::Yellow, "Low Risk"),
+        octo_types::tool::RiskLevel::HighRisk => (Color::Red, "High Risk"),
+        octo_types::tool::RiskLevel::Destructive => (Color::LightRed, "Destructive"),
     };
 
+    // Risk-colored border with tool name
     let block = Block::default()
-        .title(format!(" Tool Approval: {} ", approval.tool_name))
+        .title(format!(" {} ", approval.tool_name))
+        .title_style(Style::default().fg(risk_color).add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(risk_color));
 
     let inner = block.inner(popup);
     frame.render_widget(block, popup);
 
+    // Risk badge with middot separator
+    let middot = super::widgets::figures::separator::MIDDOT;
     let text = vec![
-        Line::from(Span::styled(
-            format!("Risk: {:?}", approval.risk_level),
-            Style::default().fg(risk_color),
-        )),
+        Line::from(vec![
+            Span::styled(
+                format!("{} ", super::widgets::figures::status::WARNING),
+                Style::default().fg(risk_color),
+            ),
+            Span::styled(
+                risk_label.to_string(),
+                Style::default().fg(risk_color).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(format!(" {} ", middot), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("tool_id: {}", &approval.tool_id[..approval.tool_id.len().min(16)]),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
         Line::from(""),
+        // Keybinding hints (YNAD)
         Line::from(vec![
             Span::styled("[Y] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw("Approve  "),
+            Span::raw("Allow"),
+            Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
             Span::styled("[N] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::raw("Deny  "),
+            Span::raw("Deny"),
+            Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
             Span::styled("[A] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::raw("Always approve"),
+            Span::raw("Allow session"),
         ]),
     ];
     let para = Paragraph::new(text);
