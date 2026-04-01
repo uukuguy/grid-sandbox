@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-01 22:50 | **AP-T6 COMPLETE (Wave 3)** — CompactionPipeline LLM-based context summarization @ b8bdebb. 3-tier reactive compact (LLM summary → truncate fallback). State rebuild (Zone B/B+/B++, skill, hooks). 15 tests (7 unit + 8 integration). 6/18 tasks (33%). Next: Wave 4 (T8+T9+T10+T11).
 - 2026-04-01 22:00 | **Wave 1-2 COMPLETE** — 5/18 tasks done. T3 PTL recovery @ 044a3ec, T4 Tool trait @ 76573c7, T5 ObservationMasker @ f9b869b. Checkpoint updated. Wave 3 (T6 CompactionPipeline) next.
 - 2026-04-01 21:35 | **AP-T2 COMPLETE** — Tool descriptions upgraded to detailed usage manuals in tools/prompts.rs (9 tools) @ ab4a961. Wave 1 done. Wave 2 (T3+T4+T5) launched.
 - 2026-04-01 21:25 | **AP-T1 COMPLETE** — System prompt enhanced with 6 behavioral sections (System, Code Style, Actions, Using Tools, Output Efficiency, Output Format) + with_git_status() builder @ dca72da. 21 tests pass. Wave 1 T2 in progress.
