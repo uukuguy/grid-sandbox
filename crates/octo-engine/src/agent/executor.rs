@@ -305,6 +305,18 @@ impl AgentExecutor {
                     };
                     let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
 
+                    // --- AQ-T1: Create shared InteractionGate for this turn ---
+                    let interaction_gate = Arc::new(
+                        crate::tools::interaction::InteractionGate::new(),
+                    );
+
+                    // --- AQ-T3: Create BlobStore from working dir ---
+                    // Uses <working_dir>/.octo/blobs/ as the blob storage location.
+                    let blob_store = {
+                        let blobs_dir = self.working_dir.join(".octo").join("blobs");
+                        Arc::new(crate::storage::BlobStore::new(blobs_dir))
+                    };
+
                     // Build AgentLoopConfig directly (D5 Stage 3)
                     let loop_config = AgentLoopConfig {
                         max_iterations: if self.config.max_rounds == 0 {
@@ -334,6 +346,8 @@ impl AgentExecutor {
                         pruner: Some(ContextPruner::new()),
                         loop_guard: Some(super::loop_guard::LoopGuard::new()),
                         session_summary_store: self.session_summary_store.clone(),
+                        interaction_gate: Some(interaction_gate),
+                        blob_store: Some(blob_store),
                         ..AgentLoopConfig::default()
                     };
 

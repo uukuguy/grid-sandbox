@@ -168,6 +168,15 @@ async fn run_agent_loop_inner(
     // Per-tool rate limiter (sliding 60-second window).
     let mut rate_limiter = ToolRateLimiter::new();
 
+    // Autonomous mode state (AQ-T4): initialized from config, tracks tick rounds/budget.
+    let mut auto_state: Option<super::autonomous::AutonomousState> = config
+        .autonomous
+        .as_ref()
+        .filter(|c| c.enabled)
+        .map(|c| {
+            super::autonomous::AutonomousState::new(config.session_id.clone(), c.clone())
+        });
+
     // Per-round memory extractor (AP-D5): incrementally captures memories after each tool round.
     let mut round_memory_extractor = config
         .round_memory_config
@@ -990,6 +999,39 @@ async fn run_agent_loop_inner(
             fire_post_task_hooks(&config, &tx, round, turn_start.elapsed().as_millis() as u64, total_tool_calls, &recent_tools)
                 .await;
 
+            // --- Autonomous tick check (AQ-T4): instead of returning, enter tick sleep ---
+            if let Some(ref mut state) = auto_state {
+                // Budget check
+                let budget_reason = state.check_budget();
+                if let Some(reason) = budget_reason {
+                    let _ = tx.send(AgentEvent::AutonomousExhausted { reason }).await;
+                } else {
+                    // Record tick + sleep
+                    state.record_tick();
+                    let sleep_dur = state.effective_sleep_duration();
+                    let _ = tx.send(AgentEvent::AutonomousSleeping { duration_secs: sleep_dur }).await;
+
+                    // Interruptible sleep
+                    tokio::time::sleep(std::time::Duration::from_secs(sleep_dur)).await;
+
+                    // Check cancellation after sleep
+                    if config.cancel_token.is_cancelled() {
+                        info!(session = %config.session_id, "Autonomous: cancelled during sleep");
+                    } else {
+                        let _ = tx.send(AgentEvent::AutonomousTick { round: state.rounds_completed }).await;
+                        // Inject tick message and continue main loop
+                        let tick_msg = if state.user_online {
+                            "<tick> Autonomous check-in. User is online. Summarize progress briefly."
+                        } else {
+                            "<tick> Autonomous check-in. Continue working quietly."
+                        };
+                        messages.push(ChatMessage::user(tick_msg));
+                        let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
+                        continue; // Re-enter main loop for next LLM call
+                    }
+                }
+            }
+
             let _ = tx
                 .send(AgentEvent::Completed(AgentLoopResult {
                     rounds: round + 1,
@@ -1515,9 +1557,36 @@ async fn run_agent_loop_inner(
                 }
             }
 
+            // --- BlobStore: externalize large tool results (AQ-T3) ---
+            // Current round sees full output (trimmed_output). Blob reference replaces
+            // the content for future session reloads to save context tokens.
+            let stored_output = if let Some(ref blob_store) = config.blob_store {
+                if trimmed_output.len() > crate::storage::blob_store::BLOB_THRESHOLD_BYTES {
+                    match blob_store.store(trimmed_output.as_bytes()) {
+                        Ok(hash) => {
+                            debug!(
+                                tool = %tu.name,
+                                hash = %hash,
+                                original_size = trimmed_output.len(),
+                                "Tool output externalized to blob store"
+                            );
+                            crate::storage::blob_store::BlobStore::format_blob_ref(&hash)
+                        }
+                        Err(e) => {
+                            warn!(tool = %tu.name, error = %e, "Failed to store blob, keeping inline");
+                            trimmed_output
+                        }
+                    }
+                } else {
+                    trimmed_output
+                }
+            } else {
+                trimmed_output
+            };
+
             tool_results.push(ContentBlock::ToolResult {
                 tool_use_id: tu.id.clone(),
-                content: trimmed_output,
+                content: stored_output,
                 is_error: result.is_error,
             });
         }
