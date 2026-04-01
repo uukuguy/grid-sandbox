@@ -1,3 +1,4 @@
+pub mod autonomous;
 pub mod cancellation;
 pub mod capability;
 pub mod catalog;
@@ -33,6 +34,7 @@ pub mod tenant;
 pub mod turn_gate;
 pub mod yaml_def;
 
+pub use autonomous::{AutonomousConfig, AutonomousState, AutonomousStatus, AutonomousTrigger};
 pub use cancellation::{CancellationToken, ChildCancellationToken};
 pub use capability::AgentCapability;
 pub use catalog::AgentCatalog;

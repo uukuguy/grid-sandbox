@@ -7,6 +7,7 @@
 //! - [`pricing`] -- Model pricing table for cost estimation.
 //! - [`storage`] -- SQLite-backed persistent metering records.
 
+pub mod cost_tracker;
 pub mod pricing;
 pub mod storage;
 

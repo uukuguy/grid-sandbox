@@ -23,6 +23,7 @@ pub mod memory_update;
 pub mod rate_limiter;
 pub mod recorder;
 pub mod scheduler;
+pub mod sleep;
 pub mod subagent;
 pub mod task;
 pub mod team;
@@ -52,6 +53,7 @@ use self::memory_edit::MemoryEditTool;
 use self::memory_store::MemoryStoreTool;
 use self::memory_timeline::MemoryTimelineTool;
 use self::memory_update::MemoryUpdateTool;
+use self::sleep::SleepTool;
 use self::web_fetch::WebFetchTool;
 use self::web_search::WebSearchTool;
 use tokio::sync::RwLock;
@@ -151,6 +153,7 @@ pub fn default_tools_with_search_priority(search_priority: &[String]) -> ToolReg
         WebSearchTool::new().with_priority_strings(search_priority)
     };
     registry.register(search_tool);
+    registry.register(SleepTool);
     registry
 }
 

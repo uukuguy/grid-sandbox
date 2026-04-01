@@ -98,6 +98,29 @@ pub enum AgentEvent {
         /// The original event from the sub-agent.
         inner: Box<AgentEvent>,
     },
+    /// Cost update after LLM call.
+    CostUpdate {
+        model: String,
+        input_tokens: u64,
+        output_tokens: u64,
+        cache_read_tokens: u64,
+        cache_write_tokens: u64,
+        usd_cost: f64,
+    },
+    /// Autonomous mode: entering sleep
+    AutonomousSleeping {
+        duration_secs: u64,
+    },
+    /// Autonomous mode: tick wakeup
+    AutonomousTick {
+        round: u32,
+    },
+    /// Autonomous mode: user paused
+    AutonomousPaused,
+    /// Autonomous mode: budget/rounds exhausted
+    AutonomousExhausted {
+        reason: String,
+    },
     /// Context was compacted (compressed) to recover from overflow
     ContextCompacted {
         /// Strategy used: "truncate_ptl", "llm_summary", "truncate_fallback"

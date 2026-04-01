@@ -138,6 +138,29 @@ Focus text output on:
 If you can say it in one sentence, don't use three. This does not apply to code or tool calls.
 "#;
 
+const AUTONOMOUS_PROMPT: &str = r#"## Autonomous Running Mode
+
+You are running autonomously. You will receive `<tick>` prompts as heartbeats — treat them as "you're awake, check if there's work to do."
+
+### Rhythm Control
+- Use the sleep tool to control wait intervals
+- Short intervals when actively working (5-10 seconds), longer when waiting for slow operations (30-60 seconds)
+- When idle, you MUST call sleep — do not output "still waiting" messages
+
+### Behavior
+- Bias toward action: read files, search code, run tests, modify code — do it without asking
+- When uncertain, pick a reasonable approach and execute — you can course-correct later
+- Commit code at milestones
+
+### Output Style
+- Only report: decisions needing user input, key milestones, errors/blockers
+- Do not explain every step or list which files you read
+
+### User Presence
+- When user is online: more collaborative — confirm before major decisions
+- When user is offline: fully autonomous — decide, execute, commit
+"#;
+
 /// Bootstrap file that gets loaded into system prompt
 #[derive(Debug, Clone)]
 pub struct BootstrapFile {
@@ -204,6 +227,8 @@ pub struct SystemPromptBuilder {
     session_state: Option<String>,
     /// User-provided context injection (ad-hoc per request)
     user_context: Option<String>,
+    /// Whether autonomous mode prompt section should be included.
+    autonomous_mode: bool,
 }
 
 impl SystemPromptBuilder {
@@ -216,6 +241,7 @@ impl SystemPromptBuilder {
             output_guidelines: OUTPUT_FORMAT_SECTION.to_string(),
             skill_index_section: None,
             active_skill_section: None,
+            autonomous_mode: false,
             datetime: None,
             mcp_status: None,
             session_state: None,
@@ -320,6 +346,12 @@ impl SystemPromptBuilder {
             "{}## Active Skill: {}\n{}",
             marker, skill.name, skill.body
         ));
+        self
+    }
+
+    /// Enable the autonomous running mode prompt section.
+    pub fn with_autonomous_mode(mut self, enabled: bool) -> Self {
+        self.autonomous_mode = enabled;
         self
     }
 
@@ -460,6 +492,11 @@ impl SystemPromptBuilder {
         parts.push(ACTIONS_SECTION.to_string());
         parts.push(USING_TOOLS_SECTION.to_string());
         parts.push(OUTPUT_EFFICIENCY_SECTION.to_string());
+
+        // Autonomous mode section (appended when enabled)
+        if self.autonomous_mode {
+            parts.push(AUTONOMOUS_PROMPT.to_string());
+        }
 
         let mut output = parts.join("\n\n");
 

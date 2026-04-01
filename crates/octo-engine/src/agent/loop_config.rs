@@ -14,6 +14,7 @@ use crate::tools::approval::{ApprovalGate, ApprovalManager};
 use crate::tools::recorder::ToolExecutionRecorder;
 use crate::tools::ToolRegistry;
 
+use super::autonomous::AutonomousConfig;
 use super::config::AgentConfig;
 use super::entry::AgentManifest;
 use super::estop::EmergencyStop;
@@ -135,6 +136,14 @@ pub struct AgentLoopConfig {
     // === Session Summary Store (Phase AG) ===
     /// Session summary store for cross-session context injection.
     pub session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
+
+    // === Cost Tracking (Phase AP-T15) ===
+    /// Cumulative per-model cost tracker with cache token granularity.
+    pub cost_tracker: Option<crate::metering::cost_tracker::CostTracker>,
+
+    // === Autonomous Mode (Phase AP-T14) ===
+    /// Autonomous running mode configuration.
+    pub autonomous: Option<AutonomousConfig>,
 }
 
 impl Default for AgentLoopConfig {
@@ -180,6 +189,8 @@ impl Default for AgentLoopConfig {
             canary_guard: None,
             permission_engine: None,
             session_summary_store: None,
+            cost_tracker: None,
+            autonomous: None,
         }
     }
 }
@@ -411,6 +422,16 @@ impl AgentLoopConfigBuilder {
 
     pub fn permission_engine(mut self, v: Arc<PermissionEngine>) -> Self {
         self.config.permission_engine = Some(v);
+        self
+    }
+
+    pub fn cost_tracker(mut self, v: crate::metering::cost_tracker::CostTracker) -> Self {
+        self.config.cost_tracker = Some(v);
+        self
+    }
+
+    pub fn autonomous(mut self, v: AutonomousConfig) -> Self {
+        self.config.autonomous = Some(v);
         self
     }
 
