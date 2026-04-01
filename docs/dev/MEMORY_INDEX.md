@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-01 17:45 | **Phase AO 设计完成** — octo-server 功能完善 (10 tasks, 3 waves). 缺口分析: engine 有 7 个模块能力未暴露 API (metering, KG, hooks, security, secrets, sandbox, context). Wave1: Metering+KG(P1). Wave2: Hooks+Security+Secrets+Sandbox(P2). Wave3: Config热更+Audit导出+Context快照(P2-P3). Phase AN(平台版)暂缓. 文档: `docs/plans/2026-04-01-phase-ao-server-completeness.md`.
 - 2026-04-01 17:00 | **Phase AL + AM COMPLETE** — 前端完善 + 可观测性 (13/13 tasks, 4 commits, 并行执行). AL: SessionBar 多会话切换 + WS 连接状态 + Markdown 渲染(react-markdown+rehype-highlight) + 消息复制/折叠 + ErrorBoundary+Toast + MCP SSE 实时日志 + Memory 时间线视图. AM: Prometheus /metrics/prometheus + JSON 结构化日志(request_id) + Session 监控 /sessions/metrics + EventBus SSE /events/stream + 崩溃恢复(DB v13 session_registry) + Provider 监控 /providers/status(P50/P99). Deferred: AK-D1~D3, AL-D1~D4, AM-D1~D3.
 - 2026-04-01 14:30 | **Phase AK COMPLETE** — Server 安全加固 + 生产就绪 (7/7 tasks, 1 commit) @ be3f5f4. G1: 安全头中间件 + CORS strict mode. G2: 全端点统一 /api/v1/ (breaking) + liveness/readiness 双健康检查. G3: 请求体 10MB 限制 + 30s 超时 + 优雅关闭增强(session cleanup). G4: 9 新测试. 前端 10 文件 URL 更新, Makefile + 4 test 文件同步. 54 octo-server tests pass (+9).
 - 2026-04-01 12:00 | **Phase AK 设计完成** — octo-server 安全加固路线图 (7 tasks, 4 groups). 安全头 + CORS + API v1 统一 + 健康检查 + 请求限制 + 优雅关闭 + 测试. 路径: AK→AL(前端)+AM(可观测, 并行)→AN(平台). 文档: `docs/plans/2026-04-01-octo-server-roadmap.md`.

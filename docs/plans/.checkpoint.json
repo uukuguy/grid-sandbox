@@ -1,56 +1,47 @@
 {
-  "plan_file": "docs/plans/2026-04-01-octo-server-roadmap.md",
-  "phase": "complete",
-  "created_at": "2026-04-01T12:00:00+08:00",
-  "updated_at": "2026-04-01T17:30:00+08:00",
-  "completed_tasks": [
-    "AK-T1", "AK-T2", "AK-T3", "AK-T4", "AK-T5", "AK-T6", "AK-T7",
-    "AL-T1", "AL-T2", "AL-T3", "AL-T4", "AL-T5", "AL-T6", "AL-T7",
-    "AM-T1", "AM-T2", "AM-T3", "AM-T4", "AM-T5", "AM-T6"
-  ],
+  "plan_file": "docs/plans/2026-04-01-phase-ao-server-completeness.md",
+  "phase": "design",
+  "created_at": "2026-04-01T17:30:00+08:00",
+  "updated_at": "2026-04-01T17:45:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 20,
-  "phase_name": "Phase AK + AL + AM — Server 安全加固 + 前端完善 + 可观测性",
-  "status": "ALL COMPLETE (20/20)",
-  "execution_mode": "subagent-driven-development",
+  "total_tasks": 10,
+  "phase_name": "Phase AO — octo-server 功能完善",
+  "status": "design complete, ready for execution",
+  "execution_mode": null,
   "branch": "main",
   "baseline": {
     "tests": 2476,
-    "commit": "8c0fa9f",
-    "db_version": 12
+    "commit": "3948530",
+    "db_version": 13
   },
-  "phases_completed": {
-    "AK": {
-      "name": "Phase AK — Server 安全加固 + 生产就绪",
-      "tasks": "7/7",
-      "commit": "be3f5f4"
+  "waves": {
+    "wave1": {
+      "tasks": ["AO-T1", "AO-T2"],
+      "description": "P1: Metering API + Knowledge Graph API",
+      "status": "pending"
     },
-    "AL": {
-      "name": "Phase AL — Web 前端完善 + 多会话 UI",
-      "tasks": "7/7",
-      "commits": ["cfd4b50", "17b4d63", "9a78665"]
+    "wave2": {
+      "tasks": ["AO-T3", "AO-T4", "AO-T5", "AO-T6", "AO-T7"],
+      "description": "P2: Hooks + Security + Secrets + Sandbox",
+      "status": "pending"
     },
-    "AM": {
-      "name": "Phase AM — 可观测性 + 运维工具",
-      "tasks": "6/6",
-      "commits": ["e091341", "cfd4b50", "9a78665"]
+    "wave3": {
+      "tasks": ["AO-T8", "AO-T9", "AO-T10"],
+      "description": "P2-P3: Config update + Audit enhance + Context observability",
+      "status": "pending"
     }
   },
-  "commits": [
-    "be3f5f4 feat(server): Phase AK — API security hardening + production readiness (T1-T7)",
-    "e091341 feat(server+web): Phase AL/AM Wave 1 — ErrorBoundary + Prometheus + structured logging",
-    "cfd4b50 feat(server+web): Phase AL/AM Wave 2 — Session UI + monitoring + SSE events",
-    "17b4d63 feat(web): Phase AL Wave 3 — Markdown rendering + WS status + message interactions",
-    "9a78665 feat(server+web): Phase AL/AM Wave 4 — MCP/Memory enhance + crash recovery + provider monitor"
-  ],
-  "db_version": 13,
-  "deferred_resolved": ["AK-D2 WebSocket token auth", "AM-D1 Grafana Dashboard", "AM-D2 Prometheus alerts"],
-  "deferred_remaining": {
-    "AK": ["AK-D1 Rate limiter 可配置化", "AK-D3 API Key 轮换"],
-    "AL": ["AL-D1 KG 可视化", "AL-D2 主题切换", "AL-D3 移动端适配", "AL-D4 国际化"],
-    "AM": ["AM-D3 分布式追踪"]
+  "deferred": {
+    "phase_ao": ["AO-D1 metering WS stream", "AO-D2 KG graph algorithms", "AO-D3 hook online editor", "AO-D4 secret rotation"],
+    "previous": {
+      "AK": ["AK-D1 Rate limiter", "AK-D3 API Key rotation"],
+      "AL": ["AL-D1 KG visualization", "AL-D2 themes", "AL-D3 responsive", "AL-D4 i18n"],
+      "AM": ["AM-D3 OpenTelemetry"]
+    },
+    "phase_an": "octo-platform-server — 独立规划，暂缓"
   },
   "roadmap": {
-    "next_phase": "Phase AN — 平台版 (octo-platform-server), 独立规划"
+    "next_phase": "Execute AO Wave 1 → Wave 2 → Wave 3"
   }
 }
