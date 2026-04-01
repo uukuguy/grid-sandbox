@@ -104,7 +104,7 @@ G4 (T7)
 | ID | 描述 | 前置条件 | 状态 |
 |----|------|---------|------|
 | AK-D1 | Rate limiter 可配置化（每端点/每用户，非全局） | 有真实流量数据 | ⏳ |
-| AK-D2 | WebSocket 认证增强（token 参数 vs header） | 前端多会话 UI | ⏳ |
+| AK-D2 | WebSocket 认证增强（token 参数 vs header） | 前端多会话 UI | ✅ 已补 |
 | AK-D3 | API Key 轮换机制（热更新，不重启） | 生产部署需求 | ⏳ |
 
 ---
@@ -251,8 +251,8 @@ G3 (T5,T6) ← 较复杂
 
 | ID | 描述 | 前置条件 | 状态 |
 |----|------|---------|------|
-| AM-D1 | Grafana Dashboard 模板 | AM-T1 Prometheus 端点 | ⏳ |
-| AM-D2 | 告警规则（session 数异常、错误率飙升） | AM-T1 + 运维环境 | ⏳ |
+| AM-D1 | Grafana Dashboard 模板 | AM-T1 Prometheus 端点 | ✅ 已补 |
+| AM-D2 | 告警规则（session 数异常、错误率飙升） | AM-T1 + 运维环境 | ✅ 已补 |
 | AM-D3 | 分布式追踪（OpenTelemetry） | 多实例部署需求 | ⏳ |
 
 ---
