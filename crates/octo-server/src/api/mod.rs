@@ -23,7 +23,8 @@ pub mod user_context;
 
 use std::sync::Arc;
 
-use axum::{routing::get, Router};
+use axum::routing::{delete, get, post};
+use axum::Router;
 
 use crate::state::AppState;
 
@@ -48,7 +49,18 @@ impl PaginationParams {
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
-        // More specific routes first
+        // More specific routes first — multi-session lifecycle (AJ-T9)
+        .route("/sessions/start", post(sessions::start_session))
+        .route("/sessions/active", get(sessions::list_active_sessions))
+        .route(
+            "/sessions/{id}/stop",
+            delete(sessions::stop_session),
+        )
+        .route(
+            "/sessions/{id}/status",
+            get(sessions::get_session_status),
+        )
+        // Existing session routes
         .route(
             "/sessions/{id}/executions",
             get(executions::list_session_executions),

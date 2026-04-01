@@ -139,6 +139,10 @@ async fn main() -> Result<()> {
         cfg.enable_event_bus,
     )
     .with_octo_root(octo_root);
+    let runtime_config = AgentRuntimeConfig {
+        max_concurrent_sessions: Some(cfg.sessions.max_concurrent),
+        ..runtime_config
+    };
 
     // Initialize provider chain if configured (before creating AgentRuntime)
     // Note: instances need to be added separately after AgentRuntime creation

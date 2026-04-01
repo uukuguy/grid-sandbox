@@ -83,6 +83,9 @@ pub struct Config {
     /// Sync configuration (offline-first sync)
     #[serde(default)]
     pub sync: SyncConfig,
+    /// Multi-session configuration
+    #[serde(default)]
+    pub sessions: SessionsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +155,40 @@ pub struct ToolsConfig {
     /// Web search engine priority order (e.g., ["jina", "tavily", "ddg"])
     #[serde(default)]
     pub web_search_priority: Vec<String>,
+}
+
+/// Multi-session configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionsConfig {
+    /// Maximum concurrent sessions (default: 64)
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: usize,
+    /// Idle timeout in seconds (0 = no timeout, default: 3600)
+    #[serde(default = "default_idle_timeout")]
+    pub idle_timeout_secs: u64,
+    /// Memory isolation mode: "strict" (per-session) or "relaxed" (per-user)
+    #[serde(default = "default_memory_isolation")]
+    pub memory_isolation: String,
+}
+
+fn default_max_concurrent() -> usize {
+    64
+}
+fn default_idle_timeout() -> u64 {
+    3600
+}
+fn default_memory_isolation() -> String {
+    "strict".to_string()
+}
+
+impl Default for SessionsConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent: default_max_concurrent(),
+            idle_timeout_secs: default_idle_timeout(),
+            memory_isolation: default_memory_isolation(),
+        }
+    }
 }
 
 /// Credentials file structure (`~/.octo/credentials.yaml`)
@@ -420,6 +457,21 @@ impl Config {
             }
         }
 
+        // Sessions config
+        if let Ok(max) = std::env::var("OCTO_SESSIONS_MAX_CONCURRENT") {
+            if let Ok(n) = max.parse() {
+                config.sessions.max_concurrent = n;
+            }
+        }
+        if let Ok(timeout) = std::env::var("OCTO_SESSIONS_IDLE_TIMEOUT") {
+            if let Ok(n) = timeout.parse() {
+                config.sessions.idle_timeout_secs = n;
+            }
+        }
+        if let Ok(mode) = std::env::var("OCTO_SESSIONS_MEMORY_ISOLATION") {
+            config.sessions.memory_isolation = mode;
+        }
+
         config
     }
 
@@ -542,6 +594,22 @@ impl Config {
         output.push_str("#     - key: \"your-secret-key\"\n");
         output.push_str("#       user_id: \"dev\"\n");
         output.push_str("#       permissions: [\"read\", \"write\", \"admin\"]\n");
+
+        // Sessions
+        output.push_str("\n# Multi-session configuration\n");
+        output.push_str("# sessions:\n");
+        output.push_str(&format!(
+            "#   max_concurrent: {}    # Maximum concurrent sessions\n",
+            defaults.sessions.max_concurrent
+        ));
+        output.push_str(&format!(
+            "#   idle_timeout_secs: {} # Idle timeout (0 = no timeout)\n",
+            defaults.sessions.idle_timeout_secs
+        ));
+        output.push_str(&format!(
+            "#   memory_isolation: {}  # strict (per-session) or relaxed (per-user)\n",
+            defaults.sessions.memory_isolation
+        ));
 
         // Scheduler
         output.push_str("\n# Scheduler configuration\n");

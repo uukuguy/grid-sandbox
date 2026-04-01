@@ -4,15 +4,16 @@ use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Request, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use futures_util::{SinkExt, StreamExt};
+use octo_types::SessionId;
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-use octo_engine::{AgentEvent, AgentMessage};
+use octo_engine::{AgentEvent, AgentExecutorHandle, AgentMessage};
 
 use crate::state::AppState;
 
-// --- Client → Server messages ---
+// --- Client -> Server messages ---
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
@@ -28,7 +29,7 @@ enum ClientMessage {
     },
 }
 
-// --- Server → Client messages ---
+// --- Server -> Client messages ---
 
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
@@ -147,24 +148,54 @@ pub async fn ws_handler(
             })
             .into_response();
     }
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+
+    // Extract session_id from query string: /ws?session_id=xxx
+    let requested_sid = req.uri().query().and_then(|q| {
+        q.split('&')
+            .find_map(|pair| {
+                let (k, v) = pair.split_once('=')?;
+                if k == "session_id" { Some(v.to_string()) } else { None }
+            })
+    });
+
+    // Resolve the AgentExecutorHandle based on session_id query param.
+    // If session_id is provided, look it up in the session registry;
+    // if not found (or not provided), fall back to the primary session handle.
+    let handle = if let Some(ref sid) = requested_sid {
+        let session_id = SessionId::from_string(sid);
+        match state.agent_supervisor.get_session_handle(&session_id) {
+            Some(h) => {
+                info!(session_id = %sid, "WebSocket routed to existing session");
+                h
+            }
+            None => {
+                debug!(session_id = %sid, "Session not found, using primary session");
+                state.agent_handle.clone()
+            }
+        }
+    } else {
+        state.agent_handle.clone()
+    };
+
+    ws.on_upgrade(move |socket| handle_socket(socket, state, handle))
         .into_response()
 }
 
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExecutorHandle) {
     let (mut sender, mut receiver) = socket.split();
 
-    info!("WebSocket connected");
+    let sid_str = handle.session_id.as_str().to_string();
+    info!(session_id = %sid_str, "WebSocket connected");
 
     while let Some(msg) = receiver.next().await {
         let msg = match msg {
             Ok(Message::Text(t)) => t,
             Ok(Message::Close(_)) => {
-                info!("WebSocket closed by client");
+                info!(session_id = %sid_str, "WebSocket closed by client");
                 break;
             }
             Err(e) => {
-                warn!("WebSocket error: {e}");
+                warn!(session_id = %sid_str, "WebSocket error: {e}");
                 break;
             }
             _ => continue,
@@ -174,7 +205,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             Ok(m) => m,
             Err(e) => {
                 let err = ServerMessage::Error {
-                    session_id: String::new(),
+                    session_id: sid_str.clone(),
                     message: format!("Invalid message: {e}"),
                 };
                 if let Ok(text) = serde_json::to_string(&err) {
@@ -186,11 +217,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 
         match client_msg {
             ClientMessage::SendMessage { content } => {
-                // 直接使用注入的主 Handle，不持有 AgentRuntime
-                let handle = &state.agent_handle;
-                let sid_str = handle.session_id.as_str().to_string();
-
-                // 告知客户端 session_id（前端 UI 显示用）
+                // Tell client the session_id (for frontend UI display)
                 let created_msg = ServerMessage::SessionCreated {
                     session_id: sid_str.clone(),
                 };
@@ -198,7 +225,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     let _ = sender.send(Message::Text(text.into())).await;
                 }
 
-                // 先订阅，再发消息（避免丢失事件）
+                // Subscribe first, then send message (avoid missing events)
                 let mut rx = handle.subscribe();
 
                 // Forward user message to AgentExecutor
@@ -322,7 +349,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                     max_attempts,
                                     reason,
                                 },
-                                // IterationStart/IterationEnd are internal — skip
+                                // IterationStart/IterationEnd are internal -- skip
                                 _ => continue,
                             };
 
@@ -340,8 +367,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 }
             }
             ClientMessage::Cancel => {
-                let _ = state.agent_handle.send(AgentMessage::Cancel).await;
-                info!("Agent cancellation requested");
+                let _ = handle.send(AgentMessage::Cancel).await;
+                info!(session_id = %sid_str, "Agent cancellation requested");
             }
             ClientMessage::ApprovalResponse { tool_id, approved } => {
                 if let Some(ref gate) = state.approval_gate {
@@ -358,5 +385,5 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    info!("WebSocket disconnected");
+    info!(session_id = %sid_str, "WebSocket disconnected");
 }

@@ -5,6 +5,7 @@ use octo_engine::{
     auth::AuthConfig, mcp::McpStorage, metrics::MetricsRegistry, scheduler::Scheduler,
     tools::approval::ApprovalGate, AgentExecutorHandle, AgentRuntime,
 };
+use octo_types::SessionId;
 use tokio::sync::RwLock;
 
 use crate::config::Config;
@@ -67,5 +68,18 @@ impl AppState {
     /// Get audit storage on-demand (creates new connection each time)
     pub fn audit_storage(&self) -> Option<octo_engine::audit::AuditStorage> {
         octo_engine::audit::AuditStorage::new(&self.db_path).ok()
+    }
+
+    /// Resolve a session handle: if session_id is given, look up in agent_supervisor;
+    /// otherwise return the primary agent_handle.
+    #[allow(dead_code)]
+    pub fn resolve_session_handle(&self, session_id: Option<&str>) -> Option<AgentExecutorHandle> {
+        match session_id {
+            Some(id) => {
+                let sid = SessionId::from_string(id);
+                self.agent_supervisor.get_session_handle(&sid)
+            }
+            None => Some(self.agent_handle.clone()),
+        }
     }
 }

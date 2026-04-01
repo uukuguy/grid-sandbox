@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
 use axum::extract::{Extension, Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::Json;
+use octo_engine::agent::AgentId;
 use octo_engine::auth::UserContext;
-use octo_types::{SessionId, UserId};
+use octo_types::{SandboxId, SessionId, UserId};
+use serde::{Deserialize, Serialize};
 
 use super::user_context::get_user_id_from_context;
 use super::PaginationParams;
@@ -46,5 +50,115 @@ pub async fn get_session(
     Json(serde_json::json!({
         "id": id,
         "messages": messages.unwrap_or_default(),
+    }))
+}
+
+// ── Phase AJ-T9: Multi-session lifecycle REST endpoints ─────────────
+
+#[derive(Deserialize)]
+pub struct StartSessionRequest {
+    pub session_id: Option<String>,
+    pub agent_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct StartSessionResponse {
+    pub session_id: String,
+    pub status: String,
+}
+
+/// POST /api/sessions/start — Create and start a new agent session
+pub async fn start_session(
+    State(state): State<Arc<AppState>>,
+    Extension(ctx): Extension<UserContext>,
+    Json(req): Json<StartSessionRequest>,
+) -> impl IntoResponse {
+    let session_id_str = req
+        .session_id
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let session_id = SessionId::from_string(&session_id_str);
+    let user_id_str = get_user_id_from_context(Some(&ctx));
+    let user_id = UserId::from_string(&user_id_str);
+    let sandbox_id = SandboxId::new();
+    let agent_id = req.agent_id.map(|id| AgentId(id));
+
+    match state
+        .agent_supervisor
+        .start_session(
+            session_id,
+            user_id,
+            sandbox_id,
+            vec![],
+            agent_id.as_ref(),
+        )
+        .await
+    {
+        Ok(_handle) => {
+            let body = StartSessionResponse {
+                session_id: session_id_str,
+                status: "active".to_string(),
+            };
+            (StatusCode::CREATED, Json(serde_json::to_value(body).unwrap())).into_response()
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            if msg.contains("Maximum concurrent sessions reached") {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(serde_json::json!({"error": msg})),
+                )
+                    .into_response()
+            } else {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": msg})),
+                )
+                    .into_response()
+            }
+        }
+    }
+}
+
+/// DELETE /api/sessions/{id}/stop — Stop a session
+pub async fn stop_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let session_id = SessionId::from_string(&id);
+    state.agent_supervisor.stop_session(&session_id).await;
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"status": "stopped"})),
+    )
+}
+
+/// GET /api/sessions/active — List active (running) sessions
+pub async fn list_active_sessions(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    let sessions = state.agent_supervisor.active_sessions();
+    let count = state.agent_supervisor.active_session_count();
+    let max = state.agent_supervisor.max_concurrent_sessions();
+    let session_ids: Vec<&str> = sessions.iter().map(|s| s.as_str()).collect();
+    Json(serde_json::json!({
+        "sessions": session_ids,
+        "count": count,
+        "max": max,
+    }))
+}
+
+/// GET /api/sessions/{id}/status — Get session runtime status
+pub async fn get_session_status(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let session_id = SessionId::from_string(&id);
+    let active = state
+        .agent_supervisor
+        .get_session_handle(&session_id)
+        .is_some();
+    Json(serde_json::json!({
+        "session_id": id,
+        "active": active,
     }))
 }
