@@ -1004,6 +1004,172 @@ impl AgentRuntime {
         guard.clone()
     }
 
+    // ── Phase AJ-T6: Multi-session lifecycle API ───────────────────────
+
+    /// Build a session-scoped executor with isolated tools, KG, and memory,
+    /// spawn it as a Tokio task, and return its handle + session tools.
+    /// This is the shared builder used by both `start_session()` and `start_primary()`.
+    fn build_and_spawn_executor(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+    ) -> (AgentExecutorHandle, Arc<StdMutex<ToolRegistry>>) {
+        // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
+        let (_, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
+
+        let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
+        let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
+
+        let handle = AgentExecutorHandle {
+            tx,
+            broadcast_tx: broadcast_tx.clone(),
+            session_id: session_id.clone(),
+        };
+
+        // Phase AJ-T1: 创建 session 级 ToolRegistry 快照（隔离：session A 的 MCP 安装不影响 session B）
+        let session_tools = {
+            let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
+            let session_reg = Arc::new(StdMutex::new(guard.snapshot()));
+
+            // 重建 MCP 管理工具，指向 session 级 registry（而非全局）
+            let mcp_config_path = self.working_dir.join(".octo/mcp.json");
+            let session_mcp_handle = crate::tools::mcp_manage::McpManageHandle {
+                mcp_manager: self.mcp_manager.clone(),
+                tools: session_reg.clone(),
+                config_path: mcp_config_path,
+            };
+            // AJ-T2: 创建 session 级 KnowledgeGraph 实例
+            let session_kg = Arc::new(tokio::sync::RwLock::new(crate::memory::KnowledgeGraph::new()));
+
+            {
+                let mut reg = session_reg.lock().unwrap_or_else(|e| e.into_inner());
+                reg.register(crate::tools::mcp_manage::McpInstallTool::new(session_mcp_handle.clone()));
+                reg.register(crate::tools::mcp_manage::McpRemoveTool::new(session_mcp_handle.clone()));
+                reg.register(crate::tools::mcp_manage::McpListTool::new(session_mcp_handle));
+                register_kg_tools(&mut reg, session_kg.clone());
+            }
+            session_reg
+        };
+
+        let executor = AgentExecutor::new(
+            session_id.clone(),
+            user_id,
+            sandbox_id,
+            initial_history,
+            rx,
+            broadcast_tx,
+            self.provider.clone(),
+            session_tools.clone(),
+            Arc::new(InMemoryWorkingMemory::new()),
+            Some(self.memory_store.clone()),
+            Some(model),
+            Some(self.session_store.clone()),
+            system_prompt,
+            config,
+            self.working_dir.clone(),
+            self.event_bus.clone(),
+            Some(self.security_policy.clone() as Arc<dyn octo_types::PathValidator>),
+            Some(self.hook_registry.clone()),
+            self.safety_pipeline.clone(),
+            self.canary_token.clone(),
+            self.approval_gate.clone(),
+            self.skill_registry.clone(),
+            Some(self.recorder.clone()),
+            self.session_sandbox.clone(),
+            self.session_summary_store.clone(),
+        );
+
+        // Spawn 持久化主循环
+        tokio::spawn(async move {
+            executor.run().await;
+        });
+
+        (handle, session_tools)
+    }
+
+    /// 创建并启动新会话（Phase AJ-T6）
+    ///
+    /// 构建独立 executor（独立 channels、WorkingMemory、KG、session_tools），
+    /// 注册到 sessions DashMap，返回 handle。
+    pub async fn start_session(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+    ) -> Result<AgentExecutorHandle, AgentError> {
+        // Check if session already exists
+        if let Some(entry) = self.sessions.get(&session_id) {
+            return Ok(entry.handle.clone());
+        }
+
+        // Check concurrent session limit
+        if self.sessions.len() >= self.max_concurrent_sessions {
+            return Err(AgentError::Internal(format!(
+                "Maximum concurrent sessions reached ({})",
+                self.max_concurrent_sessions
+            )));
+        }
+
+        let (handle, session_tools) = self.build_and_spawn_executor(
+            session_id.clone(),
+            user_id.clone(),
+            sandbox_id,
+            initial_history,
+            agent_id,
+        );
+
+        if let Some(id) = agent_id {
+            let cancel_token = CancellationToken::new();
+            self.agent_handles.insert(id.clone(), cancel_token);
+            self.catalog.update_state(id, AgentStatus::Running);
+        }
+
+        // Register in session registry
+        self.sessions.insert(
+            session_id.clone(),
+            SessionEntry {
+                handle: handle.clone(),
+                user_id,
+                created_at: Instant::now(),
+                tools: session_tools,
+            },
+        );
+
+        info!(session_id = %session_id.as_str(), "Session started (registered in multi-session registry)");
+        Ok(handle)
+    }
+
+    /// 停止并清理会话（Phase AJ-T6）
+    ///
+    /// 从 sessions DashMap 移除 + drop handle → tx dropped → executor 自然退出。
+    /// 同时清理 MCP server 所有权。
+    pub async fn stop_session(&self, session_id: &SessionId) {
+        let removed = self.sessions.remove(session_id);
+        if removed.is_some() {
+            // Also clear primary_session_id if this was the primary
+            let mut primary_guard = self.primary_session_id.lock().await;
+            if primary_guard.as_ref() == Some(session_id) {
+                *primary_guard = None;
+                // Also clear legacy primary_handle
+                let mut handle_guard = self.primary_handle.lock().await;
+                *handle_guard = None;
+            }
+
+            // Clean up MCP server ownership for this session
+            {
+                let mut mcp_guard = self.mcp_manager.lock().await;
+                mcp_guard.cleanup_session(session_id.as_str());
+            }
+
+            info!(session_id = %session_id.as_str(), "Session stopped and cleaned up");
+        }
+    }
+
     /// 启动主 Runtime 并返回其 Handle。
     /// 由 main.rs 在 server 启动时调用一次。
     /// channels（ws.rs 等）通过持有返回的 Handle 与 Agent 通信，
@@ -1019,8 +1185,6 @@ impl AgentRuntime {
         agent_id: Option<&AgentId>,
     ) -> AgentExecutorHandle {
         // Hold the lock for the entire operation to prevent TOCTOU races.
-        // Two concurrent callers cannot both pass the "already started" check
-        // and each create a separate executor.
         let mut handle_guard = self.primary_handle.lock().await;
 
         // Return existing handle if already started
@@ -1028,101 +1192,63 @@ impl AgentRuntime {
             return handle.clone();
         }
 
-        // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
-        let (_, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
-
-        let (tx, rx) = mpsc::channel::<AgentMessage>(MPSC_CAPACITY);
-        let (broadcast_tx, _) = broadcast::channel::<AgentEvent>(BROADCAST_CAPACITY);
-
-        let handle = AgentExecutorHandle {
-            tx,
-            broadcast_tx: broadcast_tx.clone(),
-            session_id: session_id.clone(),
-        };
-
-        // Phase AJ-T1: 创建 session 级 ToolRegistry 快照（隔离：session A 的 MCP 安装不影响 session B）
-        // 1. 从全局基线做快照
-        // 2. 替换 mcp_install/mcp_remove/mcp_list 指向 session 级 registry
-        let session_tools = {
-            let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
-            let session_reg = Arc::new(StdMutex::new(guard.snapshot()));
-
-            // 重建 MCP 管理工具，指向 session 级 registry（而非全局）
-            let mcp_config_path = self.working_dir.join(".octo/mcp.json");
-            let session_mcp_handle = crate::tools::mcp_manage::McpManageHandle {
-                mcp_manager: self.mcp_manager.clone(),
-                tools: session_reg.clone(),
-                config_path: mcp_config_path,
-            };
-            // AJ-T2: 创建 session 级 KnowledgeGraph 实例（隔离：session A 的 KG 数据对 session B 不可见）
-            let session_kg = Arc::new(tokio::sync::RwLock::new(crate::memory::KnowledgeGraph::new()));
-
-            {
-                let mut reg = session_reg.lock().unwrap_or_else(|e| e.into_inner());
-                // AJ-T1: 重建 MCP 管理工具
-                reg.register(crate::tools::mcp_manage::McpInstallTool::new(session_mcp_handle.clone()));
-                reg.register(crate::tools::mcp_manage::McpRemoveTool::new(session_mcp_handle.clone()));
-                reg.register(crate::tools::mcp_manage::McpListTool::new(session_mcp_handle));
-                // AJ-T2: 重建 KG 工具，指向 session 级 KG
-                register_kg_tools(&mut reg, session_kg.clone());
+        // Use start_session internally (Phase AJ-T7: reuse)
+        let handle = match self
+            .start_session(
+                session_id.clone(),
+                user_id,
+                sandbox_id,
+                initial_history,
+                agent_id,
+            )
+            .await
+        {
+            Ok(h) => h,
+            Err(e) => {
+                // start_primary is infallible by contract — log and create minimal executor
+                tracing::error!(error = %e, "start_session failed in start_primary, this should not happen");
+                // Fallback: build directly (should never reach here in practice)
+                let (h, _) = self.build_and_spawn_executor(
+                    session_id.clone(),
+                    UserId::from_string("fallback"),
+                    SandboxId::from_string("default"),
+                    vec![],
+                    agent_id,
+                );
+                h
             }
-            session_reg
         };
 
-        let runtime = AgentExecutor::new(
-            session_id.clone(),
-            user_id,
-            sandbox_id,
-            initial_history,
-            rx,
-            broadcast_tx,
-            self.provider.clone(),
-            session_tools, // AJ-T1: session 级快照，替代全局共享引用
-            Arc::new(InMemoryWorkingMemory::new()), // 每 session 独立实例，防止数据污染
-            Some(self.memory_store.clone()),
-            Some(model),
-            Some(self.session_store.clone()),
-            system_prompt,
-            config,
-            self.working_dir.clone(),
-            self.event_bus.clone(),
-            Some(self.security_policy.clone() as Arc<dyn octo_types::PathValidator>),
-            Some(self.hook_registry.clone()),
-            self.safety_pipeline.clone(),
-            self.canary_token.clone(),
-            self.approval_gate.clone(),
-            self.skill_registry.clone(),
-            Some(self.recorder.clone()),
-            self.session_sandbox.clone(), // AF-T1: SSM wired from AgentRuntime
-            self.session_summary_store.clone(), // Phase AG: SessionSummaryStore
-        );
-
-        // Spawn 持久化主循环
-        tokio::spawn(async move {
-            runtime.run().await;
-        });
-
-        if let Some(id) = agent_id {
-            let cancel_token = CancellationToken::new();
-            self.agent_handles.insert(id.clone(), cancel_token);
-            self.catalog.update_state(id, AgentStatus::Running);
+        // Mark as primary
+        {
+            let mut primary_guard = self.primary_session_id.lock().await;
+            *primary_guard = Some(session_id.clone());
         }
 
         info!(session_id = %session_id.as_str(), "Primary AgentExecutor started");
 
-        // Store handle and return — all within the same lock scope
         *handle_guard = Some(handle.clone());
         handle
     }
 
     /// 停止主 Runtime
     pub async fn stop_primary(&self) {
+        // Get and clear primary session ID
+        let primary_sid = {
+            let mut guard = self.primary_session_id.lock().await;
+            guard.take()
+        };
+
+        // Remove from sessions registry
+        if let Some(sid) = &primary_sid {
+            self.sessions.remove(sid);
+        }
+
+        // Clear legacy primary_handle
         let _dropped_handle = {
             let mut guard = self.primary_handle.lock().await;
             guard.take()
         };
-        // AgentExecutorHandle is dropped here → tx is dropped → rx.recv() returns None
-        // → AgentExecutor while loop naturally exits → tokio task ends
         if _dropped_handle.is_some() {
             info!("Primary AgentExecutor stopped (tx dropped)");
         }

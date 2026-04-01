@@ -342,6 +342,23 @@ impl McpManager {
         self.server_owners.remove(server_name);
     }
 
+    /// AJ-T6: Clean up all MCP server ownership for a terminated session.
+    /// Removes ownership entries but keeps shared MCP connections alive
+    /// (other sessions may still reference the same server).
+    pub fn cleanup_session(&mut self, session_id: &str) {
+        let owned = self.servers_owned_by_session(session_id);
+        for server_name in &owned {
+            self.server_owners.remove(server_name.as_str());
+        }
+        if !owned.is_empty() {
+            tracing::debug!(
+                session_id,
+                count = owned.len(),
+                "Cleaned up MCP server ownership for terminated session"
+            );
+        }
+    }
+
     /// Add and connect a new MCP server, supporting both Stdio and SSE transports.
     pub async fn add_server_v2(&mut self, config: McpServerConfigV2) -> Result<Vec<McpToolInfo>> {
         let name = config.name.clone();
