@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-01 12:00 | **Phase AK 设计完成** — octo-server 安全加固路线图 (7 tasks, 4 groups). 安全头 + CORS + API v1 统一 + 健康检查 + 请求限制 + 优雅关闭 + 测试. 路径: AK→AL(前端)+AM(可观测, 并行)→AN(平台). 文档: `docs/plans/2026-04-01-octo-server-roadmap.md`.
 - 2026-04-01 11:30 | **AJ-D4 已补** — Session idle timeout auto-recycle @ 21a82fc. last_activity 字段 + touch_session + cleanup_idle_sessions + WS 接线 + main.rs 定时器 + 2 tests.
 - 2026-04-01 10:50 | **Phase AJ COMPLETE** — G4 测试 (T11/T12/T13, 14 tests all pass) @ 819973f. 隔离测试 4 + 生命周期 5 + REST API 5. 全部 13/13 tasks 完成, 6 commits.
 - 2026-04-01 09:30 | **Phase AJ G3 COMPLETE** — WS session_id 路由 + REST 会话端点 + SessionsConfig (T8/T9/T10, 3 tasks) @ 4dd05ed. G1+G2+G3 done (10/13), G4 tests remaining.
