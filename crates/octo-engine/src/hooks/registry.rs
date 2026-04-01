@@ -76,6 +76,31 @@ impl HookRegistry {
                     );
                     return HookAction::Block(reason);
                 }
+                // New AP-T11 actions: pass through immediately to caller
+                Ok(action @ HookAction::ModifyInput(_)) => {
+                    debug!(
+                        hook_point = ?point,
+                        handler = handler.name(),
+                        "Hook modified tool input"
+                    );
+                    return action;
+                }
+                Ok(action @ HookAction::InjectContext(_)) => {
+                    debug!(
+                        hook_point = ?point,
+                        handler = handler.name(),
+                        "Hook injecting context"
+                    );
+                    return action;
+                }
+                Ok(action @ HookAction::PermissionOverride(_)) => {
+                    debug!(
+                        hook_point = ?point,
+                        handler = handler.name(),
+                        "Hook overriding permission"
+                    );
+                    return action;
+                }
                 Ok(HookAction::Redirect(target)) => {
                     if !validate_redirect_target(&target) {
                         warn!(

@@ -83,6 +83,7 @@ async fn list_points() -> Json<HookPointsResponse> {
         "ToolConstraintViolated",
         "Stop",
         "SubagentStop",
+        "UserPromptSubmit",
     ];
     Json(HookPointsResponse {
         points: points.into_iter().map(String::from).collect(),

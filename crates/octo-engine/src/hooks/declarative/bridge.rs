@@ -81,6 +81,7 @@ impl DeclarativeHookBridge {
             HookPoint::ToolConstraintViolated => "ToolConstraintViolated",
             HookPoint::Stop => "Stop",
             HookPoint::SubagentStop => "SubagentStop",
+            HookPoint::UserPromptSubmit => "UserPromptSubmit",
         }
     }
 

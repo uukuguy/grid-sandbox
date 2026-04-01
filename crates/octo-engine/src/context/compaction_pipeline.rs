@@ -441,6 +441,77 @@ impl CompactionPipeline {
 }
 
 // ---------------------------------------------------------------------------
+// Snip Compact (AP-T10)
+// ---------------------------------------------------------------------------
+
+/// Marker that users can insert to request context truncation at that point.
+pub const SNIP_MARKER: &str = "[SNIP]";
+
+impl CompactionPipeline {
+    /// Detect and process a snip marker in the message history.
+    ///
+    /// If `[SNIP]` is found, messages before (and including) the marker are
+    /// either summarized (if a provider is available) or simply truncated.
+    ///
+    /// Returns the number of messages removed.
+    pub async fn snip_compact(
+        messages: &mut Vec<ChatMessage>,
+        provider: Option<&dyn Provider>,
+        model: &str,
+        pipeline: Option<&CompactionPipeline>,
+        context: Option<&CompactionContext>,
+    ) -> Result<usize> {
+        // Find the last SNIP marker
+        let pos = messages.iter().rposition(|m| {
+            m.content.iter().any(|b| {
+                if let ContentBlock::Text { text } = b {
+                    text.contains(SNIP_MARKER)
+                } else {
+                    false
+                }
+            })
+        });
+
+        let pos = match pos {
+            Some(p) => p,
+            None => return Ok(0),
+        };
+
+        info!(snip_position = pos, total = messages.len(), "Snip marker found");
+
+        // If we have a pipeline + provider, try to summarize before truncating
+        if let (Some(pipeline), Some(provider), Some(ctx)) = (pipeline, provider, context) {
+            let to_summarize = &messages[..pos];
+            if to_summarize.len() >= 2 {
+                match pipeline.compact(to_summarize, provider, model, ctx).await {
+                    Ok(result) => {
+                        let removed = pos + 1;
+                        messages.drain(..=pos);
+                        // Insert boundary marker + summary at the front
+                        messages.insert(0, result.boundary_marker);
+                        for (i, msg) in result.summary_messages.into_iter().enumerate() {
+                            messages.insert(1 + i, msg);
+                        }
+                        info!(removed, "Snip compact with summary");
+                        return Ok(removed);
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Snip summary failed, falling back to truncation");
+                        // Fall through to simple truncation
+                    }
+                }
+            }
+        }
+
+        // Simple truncation: remove everything up to and including the snip marker
+        let removed = pos + 1;
+        messages.drain(..=pos);
+        info!(removed, "Snip compact (truncation only)");
+        Ok(removed)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -529,6 +600,59 @@ mod tests {
         let result = CompactionPipeline::format_summary(raw);
         assert!(!result.contains("deep thoughts"));
         assert!(result.contains("Some remaining text"));
+    }
+
+    #[tokio::test]
+    async fn test_snip_compact_truncation() {
+        let mut messages = vec![
+            ChatMessage {
+                role: MessageRole::User,
+                content: vec![ContentBlock::Text {
+                    text: "old stuff".into(),
+                }],
+            },
+            ChatMessage {
+                role: MessageRole::Assistant,
+                content: vec![ContentBlock::Text {
+                    text: "old response".into(),
+                }],
+            },
+            ChatMessage {
+                role: MessageRole::User,
+                content: vec![ContentBlock::Text {
+                    text: "[SNIP]".into(),
+                }],
+            },
+            ChatMessage {
+                role: MessageRole::User,
+                content: vec![ContentBlock::Text {
+                    text: "new stuff".into(),
+                }],
+            },
+        ];
+
+        let removed = CompactionPipeline::snip_compact(&mut messages, None, "test", None, None)
+            .await
+            .unwrap();
+        assert_eq!(removed, 3, "Should remove everything up to and including SNIP");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].text_content(), "new stuff");
+    }
+
+    #[tokio::test]
+    async fn test_snip_compact_no_marker() {
+        let mut messages = vec![ChatMessage {
+            role: MessageRole::User,
+            content: vec![ContentBlock::Text {
+                text: "no snip here".into(),
+            }],
+        }];
+
+        let removed = CompactionPipeline::snip_compact(&mut messages, None, "test", None, None)
+            .await
+            .unwrap();
+        assert_eq!(removed, 0);
+        assert_eq!(messages.len(), 1);
     }
 
     #[test]

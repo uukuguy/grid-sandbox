@@ -12,7 +12,9 @@ mod handler;
 mod registry;
 
 pub use context::HookContext;
-pub use handler::{BoxHookHandler, HookAction, HookFailureMode, HookHandler};
+pub use handler::{
+    BoxHookHandler, HookAction, HookFailureMode, HookHandler, PermissionHookDecision,
+};
 pub use registry::HookRegistry;
 
 /// Hook points in the agent lifecycle
@@ -50,4 +52,6 @@ pub enum HookPoint {
     Stop,
     /// Sub-agent execution completed
     SubagentStop,
+    /// User prompt submitted (before first LLM call in a turn)
+    UserPromptSubmit,
 }

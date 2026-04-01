@@ -11,6 +11,17 @@ pub enum HookFailureMode {
     FailClosed,
 }
 
+/// Hook-returned permission decision (AP-T11).
+#[derive(Debug, Clone)]
+pub enum PermissionHookDecision {
+    /// Allow tool execution
+    Allow,
+    /// Deny execution with reason
+    Deny(String),
+    /// Require human confirmation
+    Ask,
+}
+
 /// Action returned by a hook handler
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
@@ -25,6 +36,12 @@ pub enum HookAction {
     Block(String),
     /// Redirect to another agent or tool
     Redirect(String),
+    /// Modify the tool input parameters (PreToolUse only)
+    ModifyInput(serde_json::Value),
+    /// Inject additional context into the next LLM call as `<system-reminder>`
+    InjectContext(String),
+    /// Override the permission decision for this tool call (PreToolUse only)
+    PermissionOverride(PermissionHookDecision),
 }
 
 /// Trait for hook handlers

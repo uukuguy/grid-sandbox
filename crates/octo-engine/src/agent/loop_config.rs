@@ -9,7 +9,7 @@ use crate::hooks::HookRegistry;
 use crate::memory::store_traits::MemoryStore;
 use crate::memory::WorkingMemory;
 use crate::providers::Provider;
-use crate::security::{AiDefence, CanaryGuardLayer, SafetyPipeline};
+use crate::security::{AiDefence, CanaryGuardLayer, PermissionEngine, SafetyPipeline};
 use crate::tools::approval::{ApprovalGate, ApprovalManager};
 use crate::tools::recorder::ToolExecutionRecorder;
 use crate::tools::ToolRegistry;
@@ -127,6 +127,11 @@ pub struct AgentLoopConfig {
     /// Optional canary guard layer for per-turn canary rotation.
     pub canary_guard: Option<CanaryGuardLayer>,
 
+    // === Permission Engine (Phase AP-T8) ===
+    /// 6-layer permission engine for tool call authorization.
+    /// Evaluated before ApprovalManager; Deny/Allow/Ask override tool defaults.
+    pub permission_engine: Option<Arc<PermissionEngine>>,
+
     // === Session Summary Store (Phase AG) ===
     /// Session summary store for cross-session context injection.
     pub session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
@@ -173,6 +178,7 @@ impl Default for AgentLoopConfig {
             estop: None,
             self_repair: None,
             canary_guard: None,
+            permission_engine: None,
             session_summary_store: None,
         }
     }
@@ -400,6 +406,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn with_canary_guard(mut self, cg: CanaryGuardLayer) -> Self {
         self.config.canary_guard = Some(cg);
+        self
+    }
+
+    pub fn permission_engine(mut self, v: Arc<PermissionEngine>) -> Self {
+        self.config.permission_engine = Some(v);
         self
     }
 
