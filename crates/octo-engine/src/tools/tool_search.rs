@@ -1,0 +1,226 @@
+//! ToolSearchTool — fuzzy search across registered tools.
+//!
+//! Provides an LLM-callable tool that searches the tool registry by name
+//! and description, returning ranked results.
+
+use std::sync::Arc;
+
+use anyhow::Result;
+use async_trait::async_trait;
+use octo_types::{ToolContext, ToolOutput, ToolSource};
+use serde::Serialize;
+use serde_json::{json, Value};
+use tokio::sync::RwLock;
+
+use super::traits::Tool;
+use super::ToolRegistry;
+
+/// Result of a tool search query.
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolSearchResult {
+    pub name: String,
+    pub description: String,
+    pub score: u32,
+}
+
+pub struct ToolSearchTool {
+    registry: Arc<RwLock<ToolRegistry>>,
+}
+
+impl ToolSearchTool {
+    pub fn new(registry: Arc<RwLock<ToolRegistry>>) -> Self {
+        Self { registry }
+    }
+}
+
+#[async_trait]
+impl Tool for ToolSearchTool {
+    fn name(&self) -> &str {
+        "tool_search"
+    }
+
+    fn description(&self) -> &str {
+        "Search for available tools by name or description. Returns ranked results with relevance scores.\n\
+         Use this when there are many tools available and you need to find the right one.\n\
+         More efficient than listing all tools when the registry has >50 tools.\n\
+         When NOT to use: when you already know the tool name."
+    }
+
+    fn parameters(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query (matched against tool names and descriptions)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (default: 10)"
+                }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+        let query = params
+            .get("query")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: query"))?;
+
+        let limit = params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10) as usize;
+
+        let registry = self.registry.read().await;
+        let results = search_tools(&registry, query, limit);
+
+        if results.is_empty() {
+            Ok(ToolOutput::success(format!(
+                "No tools found matching '{query}'"
+            )))
+        } else {
+            let output =
+                serde_json::to_string_pretty(&results).unwrap_or_else(|_| format!("{results:?}"));
+            Ok(ToolOutput::success(output))
+        }
+    }
+
+    fn source(&self) -> ToolSource {
+        ToolSource::BuiltIn
+    }
+
+    fn is_read_only(&self) -> bool {
+        true
+    }
+
+    fn category(&self) -> &str {
+        "discovery"
+    }
+}
+
+/// Search tools in a registry by query string.
+///
+/// Scoring:
+/// - Exact name match: 100
+/// - Name contains query: 80
+/// - Description contains query: 40
+/// - No match: 0 (filtered out)
+pub fn search_tools(registry: &ToolRegistry, query: &str, limit: usize) -> Vec<ToolSearchResult> {
+    let query_lower = query.to_lowercase();
+    let mut results: Vec<ToolSearchResult> = registry
+        .iter()
+        .filter_map(|(name, tool)| {
+            let spec = tool.spec();
+            let name_lower = name.to_lowercase();
+            let desc_lower = spec.description.to_lowercase();
+
+            let score = if name_lower == query_lower {
+                100
+            } else if name_lower.contains(&query_lower) {
+                80
+            } else if desc_lower.contains(&query_lower) {
+                40
+            } else {
+                return None;
+            };
+
+            Some(ToolSearchResult {
+                name: name.clone(),
+                description: spec.description.chars().take(100).collect(),
+                score,
+            })
+        })
+        .collect();
+
+    results.sort_by(|a, b| b.score.cmp(&a.score));
+    results.truncate(limit);
+    results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::ToolRegistry;
+
+    use crate::tools::bash::BashTool;
+    use crate::tools::file_read::FileReadTool;
+    use crate::tools::file_write::FileWriteTool;
+    use crate::tools::glob::GlobTool;
+    use crate::tools::grep::GrepTool;
+
+    fn test_registry() -> ToolRegistry {
+        let mut reg = ToolRegistry::new();
+        reg.register(BashTool::new());
+        reg.register(FileReadTool::new());
+        reg.register(FileWriteTool::new());
+        reg.register(GrepTool::new());
+        reg.register(GlobTool::new());
+        reg
+    }
+
+    #[test]
+    fn test_exact_name_match_score_100() {
+        let reg = test_registry();
+        let results = search_tools(&reg, "bash", 10);
+        assert!(!results.is_empty());
+        let bash = results.iter().find(|r| r.name == "bash").unwrap();
+        assert_eq!(bash.score, 100);
+    }
+
+    #[test]
+    fn test_name_contains_score_80() {
+        let reg = test_registry();
+        let results = search_tools(&reg, "file", 10);
+        // file_read and file_write should match with score 80
+        assert!(results.len() >= 2);
+        for r in &results {
+            if r.name.contains("file") {
+                assert_eq!(r.score, 80);
+            }
+        }
+    }
+
+    #[test]
+    fn test_description_contains_score_40() {
+        let reg = test_registry();
+        // "search" should match grep's description
+        let results = search_tools(&reg, "search", 10);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_no_match_returns_empty() {
+        let reg = test_registry();
+        let results = search_tools(&reg, "zzz_nonexistent_zzz", 10);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_limit_truncation() {
+        let reg = test_registry();
+        let results = search_tools(&reg, "file", 1);
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_results_sorted_by_score_desc() {
+        let reg = test_registry();
+        let results = search_tools(&reg, "bash", 10);
+        if results.len() > 1 {
+            for i in 0..results.len() - 1 {
+                assert!(results[i].score >= results[i + 1].score);
+            }
+        }
+    }
+
+    #[test]
+    fn test_case_insensitive() {
+        let reg = test_registry();
+        let results_lower = search_tools(&reg, "bash", 10);
+        let results_upper = search_tools(&reg, "BASH", 10);
+        assert_eq!(results_lower.len(), results_upper.len());
+    }
+}

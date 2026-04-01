@@ -107,6 +107,13 @@ pub enum AgentEvent {
         cache_write_tokens: u64,
         usd_cost: f64,
     },
+    /// Agent is requesting user interaction via InteractionGate.
+    InteractionRequested {
+        request_id: String,
+        request: crate::tools::interaction::InteractionRequest,
+    },
+    /// Autonomous mode: resumed after pause
+    AutonomousResumed,
     /// Autonomous mode: entering sleep
     AutonomousSleeping {
         duration_secs: u64,

@@ -151,6 +151,10 @@ pub struct AgentLoopConfig {
     /// When enabled, memories are captured after each tool-call round
     /// instead of only at session end.
     pub round_memory_config: Option<RoundMemoryConfig>,
+
+    // === Interaction Gate (Phase AQ-T1) ===
+    /// Async interaction gate for agent-to-user communication.
+    pub interaction_gate: Option<Arc<crate::tools::interaction::InteractionGate>>,
 }
 
 impl Default for AgentLoopConfig {
@@ -199,6 +203,7 @@ impl Default for AgentLoopConfig {
             cost_tracker: None,
             autonomous: None,
             round_memory_config: None,
+            interaction_gate: None,
         }
     }
 }
@@ -445,6 +450,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn round_memory_config(mut self, v: RoundMemoryConfig) -> Self {
         self.config.round_memory_config = Some(v);
+        self
+    }
+
+    pub fn interaction_gate(mut self, v: Arc<crate::tools::interaction::InteractionGate>) -> Self {
+        self.config.interaction_gate = Some(v);
         self
     }
 
