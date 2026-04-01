@@ -1,14 +1,17 @@
 import type { ClientMessage, ServerMessage } from "./types";
 import { isConfigReady, getWsUrl } from "../config";
+import type { ConnectionStatus } from "@/atoms/ui";
 
 type MessageHandler = (msg: ServerMessage) => void;
 type DisconnectHandler = () => void;
+type StatusChangeHandler = (status: ConnectionStatus, attempt?: number) => void;
 
 class WsManager {
   private ws: WebSocket | null = null;
   private url: string = '';
   private handler: MessageHandler | null = null;
   private disconnectHandler: DisconnectHandler | null = null;
+  private statusChangeHandler: StatusChangeHandler | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,6 +69,7 @@ class WsManager {
     this.ws.onopen = () => {
       console.log("[WS] Connected", this.currentSessionId ? `(session: ${this.currentSessionId})` : "");
       this.reconnectAttempts = 0;
+      this.statusChangeHandler?.("connected", 0);
     };
 
     this.ws.onmessage = (event) => {
@@ -81,6 +85,7 @@ class WsManager {
       console.log("[WS] Disconnected");
       if (!this.intentionalDisconnect) {
         this.disconnectHandler?.();
+        this.statusChangeHandler?.("disconnected", 0);
       }
       this.scheduleReconnect();
     };
@@ -122,6 +127,7 @@ class WsManager {
     this.intentionalDisconnect = true;
     this.ws?.close();
     this.ws = null;
+    this.statusChangeHandler?.("disconnected", 0);
   }
 
   send(msg: ClientMessage) {
@@ -140,6 +146,10 @@ class WsManager {
     this.disconnectHandler = handler;
   }
 
+  onStatusChange(handler: StatusChangeHandler) {
+    this.statusChangeHandler = handler;
+  }
+
   get connected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -154,6 +164,7 @@ class WsManager {
     this.reconnectAttempts++;
 
     console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    this.statusChangeHandler?.("reconnecting", this.reconnectAttempts);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 }

@@ -8,7 +8,11 @@ import { handleWsEvent } from "@/ws/events";
 import { sessionIdAtom } from "@/atoms/session";
 import { executionRecordsAtom } from "@/atoms/debug";
 import type { ToolExecutionRecord } from "@/atoms/debug";
-import { addToastAtom } from "@/atoms/ui";
+import {
+  addToastAtom,
+  connectionStatusAtom,
+  reconnectAttemptAtom,
+} from "@/atoms/ui";
 
 export default function Chat() {
   return (
@@ -56,6 +60,10 @@ function WsEventBridge() {
         title: "Connection Lost",
         message: "WebSocket disconnected. Attempting to reconnect...",
       });
+    });
+    wsManager.onStatusChange((status, attempt) => {
+      store.set(connectionStatusAtom, status);
+      store.set(reconnectAttemptAtom, attempt ?? 0);
     });
     return () => wsManager.disconnect();
   }, [store]);

@@ -10,6 +10,7 @@ import {
   type SessionInfo,
 } from "@/atoms/session";
 import { addToastAtom } from "@/atoms/ui";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { wsManager } from "@/ws/manager";
 import { useEffect, useCallback, useRef } from "react";
 
@@ -174,6 +175,8 @@ export function SessionBar() {
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
+      <div className="ml-auto" />
+      <ConnectionStatus />
     </div>
   );
 }
