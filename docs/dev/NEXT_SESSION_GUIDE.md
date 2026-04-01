@@ -1,8 +1,8 @@
 # octo-sandbox 下一会话指南
 
-**最后更新**: 2026-03-30 07:30 GMT+8
+**最后更新**: 2026-04-01 19:30 GMT+8
 **当前分支**: `main`
-**当前状态**: Phase AH 完成，无活跃 Phase
+**当前状态**: Phase AO 完成，无活跃 Phase
 
 ---
 
@@ -15,64 +15,70 @@
 - Phase T: TUI OpenDev 整合 (24 tasks)
 - Phase U: TUI Production Hardening (10 tasks)
 - Phase V: Agent Skills (11 tasks)
-- Phase W: OctoRoot 统一目录管理 (10 tasks)
-- Phase X: TUI 运行状态增强 (4 tasks)
-- Phase Y: Playbook Skill SubAgent (1 task)
-- Phase Z: Landmine Scan & Fix (2 tasks)
-- Phase AA: 部署配置架构 (6 tasks)
-- Phase AB: 智能体工具执行环境 (10 tasks)
-- Phase AC: 沙箱容器 (9 tasks)
-- Phase AD: 容器镜像增强 (5 tasks)
-- Phase AE: Agent Workspace Architecture (7 tasks)
-- Phase AF: SSM Wiring (3 tasks)
+- Phase W-Z: OctoRoot + TUI + Playbook + Landmine
+- Phase AA-AF: 部署配置 + 沙箱容器 + Workspace + SSM
 - Phase AG: 记忆和上下文机制增强 (11 tasks + 5 deferred)
-- **Phase AH: Hook 系统增强 (15 tasks + 3 deferred) @ 4ebc7fa**
+- Phase AH: Hook 系统增强 (15 tasks + 3 deferred)
+- Phase AI: WASM Component Model Hook 插件 (11 tasks + 4 deferred)
+- Phase AJ: 多会话复用 (13 tasks + D4 resolved)
+- Phase AK: Server 安全加固 (7 tasks)
+- Phase AL: Web 前端完善 (7 tasks)
+- Phase AM: 可观测性 (6 tasks)
+- **Phase AO: octo-server 功能完善 (10 tasks + 2 stubs) @ 39159aa**
+
+### 最新提交
+```
+39159aa feat(server): resolve 2 NOT_IMPLEMENTED stubs
+a660366 feat(server): Phase AO Wave 3 — Config Update + Audit + Context
+9b3075b feat(server): Phase AO Wave 2 — Hooks + Security + Secrets + Sandbox
+757ddc8 feat(server): Phase AO Wave 1 — Metering API + Knowledge Graph API
+```
 
 ### 测试基线
-- 2476+ tests (pre-AH baseline)
-- 104 new hook tests
-- DB version: 12
+- 2476+ tests passing（建议跑全量确认）
+- DB Version: 13
+- 新增 36 个 E2E 测试覆盖 Phase AO API
 
 ---
 
-## Phase AH 产出摘要
+## 下一步优先级
 
-三层混合 Hook 架构：
-- **L1 编程式** (priority=10): SecurityPolicyHandler + AuditLogHandler, 自动注册
-- **L2 策略引擎** (priority=100): policies.yaml 零代码规则
-- **L3 声明式** (priority=500): hooks.yaml (command + prompt + webhook)
-
-关键文件：
-```
-crates/octo-engine/src/hooks/
-├── context.rs          # HookContext (增强后含 env/history/query + Serialize)
-├── builtin/            # SecurityPolicyHandler + AuditLogHandler
-├── declarative/        # config + command_executor + prompt_renderer/executor + webhook_executor + bridge + loader
-└── policy/             # config + matcher + bridge
-```
-
-Runtime 接线: `agent/runtime.rs` 初始化时自动从 `.octo/hooks.yaml` 和 `.octo/policies.yaml` 加载
+1. **全量测试验证** — `cargo test --workspace -- --test-threads=1` 确认无回归
+2. **Deferred 清理** — 跨 Phase 暂缓项（见下方列表）
+3. **Phase AN** — octo-platform-server 多租户平台（独立产品线）
+4. **前端集成** — 基于 AO 新增 API 扩展 web/ 功能（KG 可视化等）
 
 ---
 
 ## ⚠️ Deferred 未清项
 
-| 来源 | ID | 内容 | 前置条件 | 优先级 |
-|------|----|----|---------|--------|
-| Phase AH | D2 | WASM 插件 hook | WASM 基础设施 | P5 |
-| Phase AH | D3 | 平台租户策略合并 | octo-platform-server | P4 |
-| Phase AH | D4 | TUI hook 状态面板 | — | P4 |
-| Phase AH | D5 | Stop/SubagentStop 声明式 | 新 HookPoint variant | P3 |
-| Phase AH | D6 | ask → ApprovalGate | approval 系统 | P3 |
+### Phase AO
+| ID | 内容 | 前置条件 |
+|----|------|---------|
+| AO-D1 | WebSocket 订阅 metering 实时流 | 需前端配合 |
+| AO-D2 | KG 图算法扩展（PageRank、社区检测） | 需产品场景明确 |
+| AO-D3 | Hook 在线编辑（YAML 在线修改） | 需设计审批流 |
+| AO-D4 | Secret rotation（自动轮换） | 需与 AK-D3 合并 |
 
-Landmine: `DeclarativeHookBridge::with_provider()` 未在 runtime 调用，prompt hooks 优雅跳过
+### 历史遗留
+| Phase | ID | 内容 |
+|-------|-----|------|
+| AK | D1 | Rate limiter 精细化 |
+| AK | D3 | API Key rotation |
+| AL | D1-D4 | KG 可视化、主题、响应式、i18n |
+| AM | D3 | OpenTelemetry 集成 |
 
 ---
 
-## 下一步建议
+## 关键代码路径
 
-1. **示例配置**: 创建 `examples/hooks.yaml` 和 `examples/policies.yaml` 供用户参考
-2. **集成测试**: 在真实 agent loop 中验证三层 hook 链端到端
-3. **D5 Stop events**: 添加 `HookPoint::Stop` / `HookPoint::SubagentStop` variant
-4. **with_provider 接线**: 在 runtime 中将 provider clone 传入 DeclarativeHookBridge
-5. **新 Phase 方向**: 可考虑 eval 增强、前端 MCP workbench 改进、或平台多租户推进
+- **Server API**: `crates/octo-server/src/api/` (28 模块)
+- **Engine Core**: `crates/octo-engine/src/` (21 模块)
+- **Frontend**: `web/src/` (React + Jotai)
+- **测试**: `crates/octo-server/tests/` (force-add, .gitignore)
+
+## 备注
+
+- octo-server 零 NOT_IMPLEMENTED stub
+- RuntimeConfigOverrides 模式用于运行时配置和安全策略覆盖
+- Phase AO 计划文档: `docs/plans/2026-04-01-phase-ao-server-completeness.md`

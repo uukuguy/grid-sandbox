@@ -1,5 +1,62 @@
 # Octo Sandbox 开发工作日志
 
+## 2026-04-01 — Phase AO: octo-server 功能完善（10/10 + 2 stubs）
+
+### 会话概要
+
+完成 Phase AO — 将 octo-engine 已实现但未暴露的能力全部通过 REST API 输出。3 波次执行，10 个任务全部完成，额外解决 2 个 NOT_IMPLEMENTED stub。
+
+### 完成内容
+
+**Wave 1（P1）@ 757ddc8**:
+- AO-T1: Metering API — 4 个端点（snapshot/summary/by-session/reset）
+- AO-T2: Knowledge Graph API — 9 个端点（CRUD/FTS/traverse/path/stats）
+
+**Wave 2（P2）@ 9b3075b**:
+- AO-T3: Hooks Management — 5 个端点（list/points/reload/wasm/wasm-reload）
+- AO-T4: Security Policy — 4 个端点（policy GET/PUT/tracker/check-command）
+- AO-T5: AI Defence — 3 个端点（scan/pii-redact/defence-status）
+- AO-T6: Secret Vault — 4 个端点（list/store/delete/verify）
+- AO-T7: Sandbox Management — 4 个端点（status/sessions/release/cleanup）
+
+**Wave 3（P2-P3）@ a660366**:
+- AO-T8: Config 运行时热更新 — PUT /config（RuntimeConfigOverrides 模式）
+- AO-T9: Audit 增强 — export/delete/stats 3 个端点
+- AO-T10: Context 可观察性 — snapshot/zones 2 个端点
+
+**Stub 修复 @ 39159aa**:
+- PUT /security/policy — RuntimeConfigOverrides 存储 autonomy_level 等策略覆盖
+- POST /hooks/wasm/:name/reload — feature-gated 插件验证（非 501）
+
+### 技术变更
+
+- `RuntimeConfigOverrides`（RwLock）模式：避免改动所有 `state.config` 读取点
+- `AuditStorage` 新增 export/delete_before/stats 方法 + `AuditStats` 结构体
+- `ContextManager` 轻量级快照用于可观察性端点
+- 新增 `api/context.rs` 模块
+- octo-server 零 NOT_IMPLEMENTED stub
+
+### 测试结果
+
+- 新增 36 个 E2E 测试（Wave 1: 10, Wave 2: 21, Wave 3: 11, Stubs: 4）
+- 全部通过（--test-threads=1）
+- 基线：2476 tests（未运行全量测试套件）
+
+### 暂缓项
+
+| ID | 内容 | 理由 |
+|----|------|------|
+| AO-D1 | WebSocket 订阅 metering 实时流 | 需前端配合 |
+| AO-D2 | KG 图算法扩展 | 需产品场景 |
+| AO-D3 | Hook 在线编辑 | 安全审批流 |
+| AO-D4 | Secret rotation | 需与 AK-D3 合并 |
+
+### 后续建议
+
+1. 跑一次全量测试确认 baseline 无回归
+2. 考虑下一阶段：deferred 清理、Phase AN（platform-server）、或前端集成
+3. 前端可基于新 API 端点扩展功能（KG 可视化 AL-D1 现有后端支持）
+
 ## 2026-03-11 — 架构完成度评估 + Wave 6 计划创建
 
 ### 会话概要
