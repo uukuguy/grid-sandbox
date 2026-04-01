@@ -13,6 +13,8 @@ use crate::agent::{
     AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentExecutor, AgentExecutorHandle, AgentId,
     AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
 };
+use crate::agent::task_tracker::TaskTracker;
+use crate::agent::team::TeamManager;
 use crate::db::Database;
 use crate::event::{EventStore, TelemetryBus};
 use crate::hooks::HookRegistry;
@@ -202,6 +204,10 @@ pub struct AgentRuntime {
     pub(crate) session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
     // Database connection for session registry persistence (AM-T5)
     pub(crate) db_conn: tokio_rusqlite::Connection,
+    // Multi-agent task tracker (Phase AP-T12)
+    pub(crate) task_tracker: Arc<TaskTracker>,
+    // Multi-agent team manager (Phase AP-T13)
+    pub(crate) team_manager: Arc<TeamManager>,
 }
 
 impl AgentRuntime {
@@ -699,6 +705,8 @@ impl AgentRuntime {
             session_sandbox,
             session_summary_store,
             db_conn: conn,
+            task_tracker: Arc::new(TaskTracker::new()),
+            team_manager: Arc::new(TeamManager::new()),
         };
 
         // 17. Load declarative YAML agent definitions (if configured)
@@ -726,6 +734,19 @@ impl AgentRuntime {
             tools_guard.register(crate::tools::mcp_manage::McpInstallTool::new(handle.clone()));
             tools_guard.register(crate::tools::mcp_manage::McpRemoveTool::new(handle.clone()));
             tools_guard.register(crate::tools::mcp_manage::McpListTool::new(handle));
+        }
+
+        // 18b. Register multi-agent coordination tools (Phase AP Wave 5)
+        {
+            let mut tools_guard = runtime.tools.lock().unwrap_or_else(|e| e.into_inner());
+            // Task management tools
+            tools_guard.register(crate::tools::task::TaskCreateTool::new(runtime.task_tracker.clone()));
+            tools_guard.register(crate::tools::task::TaskUpdateTool::new(runtime.task_tracker.clone()));
+            tools_guard.register(crate::tools::task::TaskListTool::new(runtime.task_tracker.clone()));
+            // Team management tools
+            tools_guard.register(crate::tools::team::TeamCreateTool::new(runtime.team_manager.clone()));
+            tools_guard.register(crate::tools::team::TeamAddMemberTool::new(runtime.team_manager.clone()));
+            tools_guard.register(crate::tools::team::TeamDissolveTool::new(runtime.team_manager.clone()));
         }
 
         // 19. Spawn background tasks for deferred MCP servers (autoStart=false)
@@ -889,6 +910,16 @@ impl AgentRuntime {
 
     pub fn mcp_manager(&self) -> &Arc<Mutex<crate::mcp::manager::McpManager>> {
         &self.mcp_manager
+    }
+
+    /// Get the multi-agent task tracker (Phase AP-T12).
+    pub fn task_tracker(&self) -> &Arc<TaskTracker> {
+        &self.task_tracker
+    }
+
+    /// Get the multi-agent team manager (Phase AP-T13).
+    pub fn team_manager(&self) -> &Arc<TeamManager> {
+        &self.team_manager
     }
 
     /// Get metering snapshot for observability

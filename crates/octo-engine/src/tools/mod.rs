@@ -24,6 +24,8 @@ pub mod rate_limiter;
 pub mod recorder;
 pub mod scheduler;
 pub mod subagent;
+pub mod task;
+pub mod team;
 pub mod traits;
 pub mod truncation;
 pub mod web_fetch;
