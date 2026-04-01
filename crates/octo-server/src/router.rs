@@ -15,6 +15,8 @@ use crate::middleware::{audit_middleware, AuditMiddlewareState, RateLimiter};
 use crate::state::AppState;
 use crate::ws::ws_handler;
 
+use uuid::Uuid;
+
 #[derive(Serialize)]
 struct HealthResponse {
     status: &'static str,
@@ -147,6 +149,36 @@ async fn security_headers_middleware(
     response
 }
 
+/// Request ID middleware — generates a UUID v4 for each request, creates a tracing span,
+/// and returns the ID in the `X-Request-Id` response header.
+async fn request_id_middleware(
+    req: Request<Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use tracing::Instrument;
+
+    let request_id = Uuid::new_v4().to_string();
+    let request_id_clone = request_id.clone();
+
+    // Create a tracing span that carries the request_id for all downstream logs.
+    // Use Instrument to propagate the span across .await points.
+    let span = tracing::info_span!("request", request_id = %request_id);
+
+    let mut response = async move {
+        next.run(req).await
+    }
+    .instrument(span)
+    .await;
+
+    // Inject X-Request-Id into response headers
+    response.headers_mut().insert(
+        "x-request-id",
+        request_id_clone.parse().unwrap(),
+    );
+
+    response
+}
+
 pub fn build_router(state: Arc<AppState>) -> Router {
     // CORS: strict mode rejects wildcard when cors_strict=true
     let cors = if state.config.server.cors_strict {
@@ -247,9 +279,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             auth_state,
             auth_middleware_wrapper,
         ))
-        // Rate limiting middleware (runs FIRST - before auth and audit)
+        // Rate limiting middleware (runs after request_id, before auth and audit)
         .layer(axum::middleware::from_fn_with_state(
             rate_limiter,
             rate_limit_middleware,
         ))
+        // Request ID middleware (runs FIRST - before all other middleware)
+        // Generates UUID v4, creates tracing span, adds X-Request-Id header
+        .layer(axum::middleware::from_fn(request_id_middleware))
 }

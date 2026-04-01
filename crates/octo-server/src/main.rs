@@ -85,10 +85,10 @@ async fn main() -> Result<()> {
     // Note: RUST_LOG from .env is intentionally ignored to avoid SSE debug noise.
     // Use OCTO_LOG=octo_engine=debug for explicit server-level debug logging.
     let log_filter = std::env::var("OCTO_LOG").unwrap_or_else(|_| cfg.logging.level.clone());
-    let log_format = std::env::var("OCTO_LOG_FORMAT").unwrap_or_default();
     let env_filter = EnvFilter::new(&log_filter);
 
-    if log_format == "json" {
+    // Log format: cfg.logging.format already incorporates OCTO_LOG_FORMAT env var
+    if cfg.logging.format == "json" {
         tracing_subscriber::fmt()
             .json()
             .with_env_filter(env_filter)

@@ -2,11 +2,13 @@ import type { ClientMessage, ServerMessage } from "./types";
 import { isConfigReady, getWsUrl } from "../config";
 
 type MessageHandler = (msg: ServerMessage) => void;
+type DisconnectHandler = () => void;
 
 class WsManager {
   private ws: WebSocket | null = null;
   private url: string = '';
   private handler: MessageHandler | null = null;
+  private disconnectHandler: DisconnectHandler | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,6 +67,9 @@ class WsManager {
 
     this.ws.onclose = () => {
       console.log("[WS] Disconnected");
+      if (!this.intentionalDisconnect) {
+        this.disconnectHandler?.();
+      }
       this.scheduleReconnect();
     };
 
@@ -94,6 +99,10 @@ class WsManager {
 
   onMessage(handler: MessageHandler) {
     this.handler = handler;
+  }
+
+  onDisconnect(handler: DisconnectHandler) {
+    this.disconnectHandler = handler;
   }
 
   get connected(): boolean {

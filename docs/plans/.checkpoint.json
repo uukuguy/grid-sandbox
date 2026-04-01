@@ -1,52 +1,39 @@
 {
   "plan_file": "docs/plans/2026-04-01-octo-server-roadmap.md",
-  "phase": "complete",
+  "phase": "execution",
   "created_at": "2026-04-01T12:00:00+08:00",
-  "updated_at": "2026-04-01T14:30:00+08:00",
+  "updated_at": "2026-04-01T15:20:00+08:00",
   "completed_tasks": ["AK-T1", "AK-T2", "AK-T3", "AK-T4", "AK-T5", "AK-T6", "AK-T7"],
-  "current_task": null,
-  "total_tasks": 7,
-  "phase_name": "Phase AK — Server 安全加固 + 生产就绪",
-  "status": "ALL COMPLETE (7/7)",
+  "current_task": "AL-T5",
+  "total_tasks": 20,
+  "phase_name": "Phase AL + AM — 前端完善 + 可观测性（并行）",
+  "status": "IN PROGRESS (7/20 — AK complete, AL+AM starting)",
   "execution_mode": "subagent-driven-development",
   "branch": "main",
   "baseline": {
     "tests": 2476,
-    "commit": "16a7469",
+    "commit": "8c0fa9f",
     "db_version": 12
   },
-  "groups": {
-    "G1": { "name": "安全响应头 + CORS 严格化", "tasks": 2, "status": "complete", "priority": "P1" },
-    "G2": { "name": "API 版本化 + 健康检查", "tasks": 2, "status": "complete", "priority": "P1" },
-    "G3": { "name": "请求安全 + 优雅关闭", "tasks": 2, "status": "complete", "priority": "P2" },
-    "G4": { "name": "测试", "tasks": 1, "status": "complete", "priority": "P1" }
-  },
-  "commits": [
-    "be3f5f4 feat(server): Phase AK — API security hardening + production readiness (T1-T7)"
-  ],
-  "test_results": {
-    "octo_server": 54,
-    "new_tests": 9,
-    "test_file": "crates/octo-server/tests/api_security.rs"
-  },
-  "deferred": [
-    "AK-D1: Rate limiter 可配置化（每端点/每用户）",
-    "AK-D2: WebSocket 认证增强（token 参数 vs header）",
-    "AK-D3: API Key 轮换机制（热更新，不重启）"
-  ],
-  "roadmap": {
-    "next_phases": ["Phase AL — Web 前端完善 + 多会话 UI", "Phase AM — 可观测性 + 运维工具"],
-    "deferred_merged": {
-      "AJ-D3": "AK-T6 优雅关闭 ✅",
-      "AJ-D5": "AL-T1 多会话 Tab UI",
-      "AJ-D6": "AM-T4 Event Bus 过滤",
-      "AJ-D2": "AM-T5 崩溃恢复",
-      "AG-D8": "AL-T7 Memory 前端增强"
+  "active_phases": {
+    "AL": {
+      "name": "Phase AL — Web 前端完善 + 多会话 UI",
+      "tasks": 7,
+      "completed": [],
+      "order": ["AL-T5", "AL-T1", "AL-T2", "AL-T3", "AL-T4", "AL-T6", "AL-T7"],
+      "status": "starting"
+    },
+    "AM": {
+      "name": "Phase AM — 可观测性 + 运维工具",
+      "tasks": 6,
+      "completed": [],
+      "order": ["AM-T1", "AM-T2", "AM-T3", "AM-T4", "AM-T5", "AM-T6"],
+      "status": "starting"
     }
   },
   "previous_phase": {
-    "name": "Phase AJ — 多会话复用",
-    "status": "ALL COMPLETE (13/13 + D4 resolved)",
-    "commit": "bfe795f"
+    "name": "Phase AK — Server 安全加固 + 生产就绪",
+    "status": "ALL COMPLETE (7/7)",
+    "commit": "be3f5f4"
   }
 }

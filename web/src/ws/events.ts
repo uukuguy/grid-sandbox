@@ -14,6 +14,7 @@ import {
   pushLiveEventAtom,
   contextStatusAtom,
 } from "../atoms/debug";
+import { addToastAtom } from "../atoms/ui";
 
 let streamBuffer = "";
 let thinkingBuffer = "";
@@ -115,6 +116,11 @@ export function handleWsEvent(msg: ServerMessage, set: Setter) {
         timestamp: Date.now(),
         type: "error",
         summary: `Error: ${msg.message}`,
+      });
+      set(addToastAtom, {
+        type: "error",
+        title: "Server Error",
+        message: msg.message,
       });
       break;
 

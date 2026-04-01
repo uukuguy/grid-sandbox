@@ -139,12 +139,20 @@ impl Default for DatabaseConfig {
 pub struct LoggingConfig {
     /// RUST_LOG filter string
     pub level: String,
+    /// Log output format: "pretty" (default, human-readable) or "json" (structured)
+    #[serde(default = "default_log_format")]
+    pub format: String,
+}
+
+fn default_log_format() -> String {
+    "pretty".to_string()
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             level: "octo_server=info,octo_engine=info,tower_http=info".to_string(),
+            format: default_log_format(),
         }
     }
 }
@@ -433,6 +441,9 @@ impl Config {
         if let Ok(level) = std::env::var("RUST_LOG") {
             config.logging.level = level;
         }
+        if let Ok(fmt) = std::env::var("OCTO_LOG_FORMAT") {
+            config.logging.format = fmt;
+        }
 
         // Working directory
         if let Ok(dir) = std::env::var("OCTO_WORKING_DIR") {
@@ -568,7 +579,11 @@ impl Config {
         // Logging
         output.push_str("# Logging configuration\n");
         output.push_str("# logging:\n");
-        output.push_str(&format!("#   level: {}\n\n", defaults.logging.level));
+        output.push_str(&format!("#   level: {}\n", defaults.logging.level));
+        output.push_str(&format!(
+            "#   format: {}   # pretty (human-readable) or json (structured)\n\n",
+            defaults.logging.format
+        ));
 
         // MCP
         output.push_str("# MCP configuration\n");
