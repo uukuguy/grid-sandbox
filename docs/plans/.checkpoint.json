@@ -1,19 +1,26 @@
 {
   "plan_file": "docs/plans/2026-04-02-phase-ar-ccoss-gap-closure.md",
-  "phase": "design",
+  "phase": "complete",
   "created_at": "2026-04-02T08:00:00+08:00",
-  "updated_at": "2026-04-02T08:00:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-04-02T08:30:00+08:00",
+  "completed_tasks": ["AR-T1", "AR-T2", "AR-T3", "AR-T4", "AR-T5", "AR-T6", "AR-T7"],
   "current_task": null,
   "total_tasks": 7,
   "phase_name": "Phase AR — CC-OSS 缺口补齐",
-  "status": "Design complete. Ready for execution.",
+  "status": "ALL 7/7 TASKS COMPLETE — 3 waves delivered in single commit",
   "execution_mode": "dependency-graph-topological",
   "branch": "main",
   "baseline": {
     "tests": 2476,
     "commit": "22bb3a1",
     "db_version": 13
+  },
+  "completion": {
+    "commit": "beb741b",
+    "new_tests": 29,
+    "new_lines": 1250,
+    "new_files": 5,
+    "modified_files": 9
   },
   "previous_phase": {
     "name": "Phase AQ — 自主能力 + 智能交互",
@@ -24,19 +31,28 @@
     "wave1": {
       "tasks": ["AR-T1", "AR-T2", "AR-T3"],
       "description": "TokenEscalation + SessionTranscript + BlobGC",
-      "status": "pending"
+      "status": "complete"
     },
     "wave2": {
       "tasks": ["AR-T4"],
       "description": "Session Fork/Rewind API",
-      "status": "pending"
+      "status": "complete"
     },
     "wave3": {
       "tasks": ["AR-T5", "AR-T6", "AR-T7"],
       "description": "Webhook + MQ trigger + semantic search",
-      "status": "pending"
+      "status": "complete"
     }
   },
+  "deferred_resolved": [
+    "AP-D2 max_output_tokens 自动升级 → TokenEscalation (T1)",
+    "AP-D6 会话抄本 → TranscriptWriter (T2)",
+    "AP-D7 会话 fork/rewind → Rewind/Fork API (T4)",
+    "AQ-D2 BlobStore GC → BlobGc (T3)",
+    "AQ-D3 tool_search 语义搜索 → hybrid_search_tools (T7)",
+    "AQ-D4 自主模式 Webhook 触发 → ChannelTriggerSource + webhook endpoint (T5)",
+    "AQ-D5 自主模式 MQ 触发 → PollingTriggerSource + TriggerListener (T6)"
+  ],
   "deferred": [
     "AR-D1 TranscriptWriter 压缩归档 ⏳",
     "AR-D2 Fork API 前端 UI ⏳",
