@@ -514,6 +514,59 @@ impl MemoryStore for SqliteMemoryStore {
 /// AJ-T3: Added optional `session_id` filter for multi-session isolation.
 /// When `session_id` is `Some`, only memories from that session are returned.
 /// When `None`, all memories for the user are searched (backward compatible).
+/// Tokenize a query string for FTS5 MATCH, handling CJK characters.
+///
+/// Strategy: scan the query character-by-character, collecting runs of
+/// ASCII/Latin characters as whole words and emitting each CJK character
+/// as an individual token. Punctuation and common stop words are dropped.
+fn tokenize_for_fts(query: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut latin_buf = String::new();
+
+    for ch in query.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            latin_buf.push(ch);
+        } else if is_cjk(ch) {
+            // Flush any pending Latin word
+            if !latin_buf.is_empty() {
+                tokens.push(std::mem::take(&mut latin_buf));
+            }
+            // Each CJK character is a separate token
+            tokens.push(ch.to_string());
+        } else {
+            // Whitespace, punctuation, etc. — flush Latin buffer
+            if !latin_buf.is_empty() {
+                tokens.push(std::mem::take(&mut latin_buf));
+            }
+        }
+    }
+    if !latin_buf.is_empty() {
+        tokens.push(latin_buf);
+    }
+
+    // Filter out very short tokens (single ASCII chars) and common noise
+    tokens.retain(|t| t.len() > 1 || t.chars().next().map_or(false, is_cjk));
+
+    // Deduplicate while preserving order
+    let mut seen = std::collections::HashSet::new();
+    tokens.retain(|t| seen.insert(t.clone()));
+
+    tokens
+}
+
+/// Check if a character is in the CJK Unified Ideographs range.
+fn is_cjk(ch: char) -> bool {
+    matches!(ch,
+        '\u{4E00}'..='\u{9FFF}'   // CJK Unified Ideographs
+        | '\u{3400}'..='\u{4DBF}' // CJK Extension A
+        | '\u{F900}'..='\u{FAFF}' // CJK Compatibility Ideographs
+        | '\u{3000}'..='\u{303F}' // CJK Symbols and Punctuation (、。「」)
+        | '\u{3040}'..='\u{309F}' // Hiragana
+        | '\u{30A0}'..='\u{30FF}' // Katakana
+        | '\u{AC00}'..='\u{D7AF}' // Hangul Syllables
+    )
+}
+
 fn fts_search(
     conn: &rusqlite::Connection,
     query: &str,
@@ -521,8 +574,11 @@ fn fts_search(
     session_id: Option<&str>,
     limit: usize,
 ) -> rusqlite::Result<Vec<(MemoryEntry, f32)>> {
-    // Build FTS match query: simple tokenization for FTS5
-    let fts_query = query.split_whitespace().collect::<Vec<_>>().join(" OR ");
+    // Build FTS match query: tokenize for FTS5 with CJK support.
+    // Split on whitespace, then further split CJK-mixed tokens into
+    // separate Latin words and individual CJK characters so FTS5 can match.
+    let tokens = tokenize_for_fts(query);
+    let fts_query = tokens.join(" OR ");
 
     if fts_query.is_empty() {
         return Ok(Vec::new());

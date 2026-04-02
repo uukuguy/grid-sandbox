@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::id::SandboxId;
+use crate::id::{SandboxId, UserId};
 
 /// Tool risk level (aligned with MCP Tool Annotations spec)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -184,6 +184,7 @@ pub trait PathValidator: Send + Sync + std::fmt::Debug {
 #[derive(Debug, Clone)]
 pub struct ToolContext {
     pub sandbox_id: SandboxId,
+    pub user_id: UserId,
     pub working_dir: PathBuf,
     pub path_validator: Option<Arc<dyn PathValidator>>,
 }

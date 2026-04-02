@@ -37,7 +37,7 @@ use super::loop_config::AgentLoopConfig;
 use super::loop_guard::LoopGuardVerdict;
 use super::loop_steps;
 use super::parallel::execute_parallel;
-use super::CancellationToken;
+// use super::CancellationToken;
 
 const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
 
@@ -373,6 +373,7 @@ async fn run_agent_loop_inner(
             use std::path::PathBuf;
             octo_types::ToolContext {
                 sandbox_id: config.sandbox_id.clone(),
+                user_id: config.user_id.clone(),
                 working_dir: PathBuf::from("."),
                 path_validator: None,
             }
@@ -1173,7 +1174,9 @@ async fn run_agent_loop_inner(
         }
 
         // --- Execute tools (P0-6) ---
-        let cancellation_token = CancellationToken::new();
+        // Use the global cancel token so Esc can abort the entire turn,
+        // not just the LLM streaming.
+        let cancellation_token = config.cancel_token.clone();
 
         // Build a default ApprovalManager if none was injected (dev mode = auto-approve).
         let approval_mgr = config

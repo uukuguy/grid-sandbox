@@ -58,6 +58,7 @@ impl OctoMcpServer {
     pub fn new(registry: Arc<ToolRegistry>, config: OctoMcpServerConfig) -> Self {
         let tool_context = ToolContext {
             sandbox_id: SandboxId::new(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: PathBuf::from("."),
             path_validator: None,
         };

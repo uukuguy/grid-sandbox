@@ -63,7 +63,7 @@ impl Tool for MemoryCompressTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let category_str = params["category"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'category' parameter"))?;
@@ -76,7 +76,7 @@ impl Tool for MemoryCompressTool {
 
         // Load all memories in this category
         let filter = MemoryFilter {
-            user_id: "default".to_string(),
+            user_id: ctx.user_id.as_str().to_string(),
             categories: Some(vec![category.clone()]),
             limit: 200,
             ..Default::default()
@@ -170,7 +170,7 @@ impl Tool for MemoryCompressTool {
         };
 
         // Store compressed summary
-        let mut compressed = MemoryEntry::new("default", category, summary.trim());
+        let mut compressed = MemoryEntry::new(ctx.user_id.as_str(), category, summary.trim());
         compressed.importance = max_importance;
         compressed.source_type = MemorySource::Extracted;
         compressed.embedding = embedding;

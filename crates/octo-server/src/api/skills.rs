@@ -133,6 +133,7 @@ async fn execute_skill(
     // Create a minimal ToolContext for the execution
     let tool_ctx = ToolContext {
         sandbox_id: SandboxId::from_string("api-skill-exec"),
+        user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: PathBuf::from("."),
         path_validator: None,
     };

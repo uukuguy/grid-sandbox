@@ -70,7 +70,7 @@ impl Tool for MemoryTimelineTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let limit = params["limit"].as_u64().unwrap_or(20) as usize;
 
         // Parse time range from date or range parameter
@@ -92,7 +92,7 @@ impl Tool for MemoryTimelineTool {
         // If we have a query, use search with time filtering
         if let Some(query) = params["query"].as_str() {
             let opts = octo_types::SearchOptions {
-                user_id: "default".to_string(),
+                user_id: ctx.user_id.as_str().to_string(),
                 limit,
                 time_range,
                 session_id,
@@ -118,7 +118,7 @@ impl Tool for MemoryTimelineTool {
 
         // Otherwise use list with filters
         let filter = MemoryFilter {
-            user_id: "default".to_string(),
+            user_id: ctx.user_id.as_str().to_string(),
             limit,
             time_range,
             session_id,

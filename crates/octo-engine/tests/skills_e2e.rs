@@ -195,6 +195,7 @@ async fn test_execute_skill_tool_knowledge() {
 
     let ctx = octo_types::ToolContext {
         sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: PathBuf::from("."),
         path_validator: None,
     };
@@ -217,6 +218,7 @@ async fn test_execute_skill_tool_not_found() {
 
     let ctx = octo_types::ToolContext {
         sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: PathBuf::from("."),
         path_validator: None,
     };
@@ -232,6 +234,7 @@ async fn test_execute_skill_tool_missing_params() {
 
     let ctx = octo_types::ToolContext {
         sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: PathBuf::from("."),
         path_validator: None,
     };

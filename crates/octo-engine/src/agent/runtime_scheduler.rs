@@ -38,6 +38,7 @@ impl AgentRuntime {
         // Create tool context with security policy for path validation
         let tool_ctx = ToolContext {
             sandbox_id: sandbox_id.clone(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: self.working_dir.clone(),
             path_validator: Some(
                 self.security_policy.clone() as std::sync::Arc<dyn octo_types::PathValidator>,

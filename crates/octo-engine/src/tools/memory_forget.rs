@@ -64,7 +64,7 @@ impl Tool for MemoryForgetTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let id = params["id"].as_str();
         let category = params["category"].as_str();
         let max_importance = params["max_importance"].as_f64().map(|f| f as f32);
@@ -112,7 +112,7 @@ impl Tool for MemoryForgetTool {
 
         // Build filter from criteria
         let mut filter = MemoryFilter {
-            user_id: "default".to_string(),
+            user_id: ctx.user_id.as_str().to_string(),
             ..Default::default()
         };
 

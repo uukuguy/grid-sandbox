@@ -267,6 +267,7 @@ impl EvalRunner {
 
         let tool_ctx = octo_types::ToolContext {
             sandbox_id: octo_types::SandboxId::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: task_workdir.clone(),
             path_validator: None,
         };
@@ -991,6 +992,7 @@ impl EvalRunner {
 
         let tool_ctx = octo_types::ToolContext {
             sandbox_id: octo_types::SandboxId::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: task_workdir,
             path_validator: None,
         };

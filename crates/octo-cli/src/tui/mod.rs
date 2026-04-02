@@ -57,7 +57,7 @@ pub async fn run_tui_conversation(state: &AppState) -> Result<()> {
         .or_else(|_| std::env::var("OPENAI_MODEL_NAME"))
         .unwrap_or_else(|_| "agent".to_string());
 
-    let user_id = UserId::from_string("cli-user");
+    let user_id = UserId::from_string(octo_types::id::DEFAULT_USER_ID);
     let session_store = state.agent_runtime.session_store();
 
     // Create a new session

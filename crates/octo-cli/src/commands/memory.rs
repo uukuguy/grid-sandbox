@@ -127,7 +127,7 @@ impl TextOutput for GraphOutput {
 async fn search_memory(query: String, limit: usize, state: &AppState) -> Result<()> {
     let memory_store = state.agent_runtime.memory_store();
     let opts = SearchOptions {
-        user_id: "cli-user".to_string(),
+        user_id: octo_types::id::DEFAULT_USER_ID.to_string(),
         limit,
         ..Default::default()
     };
@@ -152,7 +152,7 @@ async fn search_memory(query: String, limit: usize, state: &AppState) -> Result<
 async fn list_memories(limit: usize, state: &AppState) -> Result<()> {
     let memory_store = state.agent_runtime.memory_store();
     let filter = MemoryFilter {
-        user_id: "cli-user".to_string(),
+        user_id: octo_types::id::DEFAULT_USER_ID.to_string(),
         limit,
         ..Default::default()
     };
@@ -191,7 +191,7 @@ async fn add_memory(content: String, tags: Option<String>, state: &AppState) -> 
         })
         .unwrap_or(MemoryCategory::Patterns);
 
-    let entry = MemoryEntry::new("cli-user", category, &content);
+    let entry = MemoryEntry::new(octo_types::id::DEFAULT_USER_ID, category, &content);
     let id = memory_store.store(entry).await?;
 
     let out = MemoryAddOutput {
@@ -209,7 +209,7 @@ async fn show_graph(query: Option<String>, limit: usize, state: &AppState) -> Re
         Some(q) => {
             let memory_store = state.agent_runtime.memory_store();
             let opts = SearchOptions {
-                user_id: "cli-user".to_string(),
+                user_id: octo_types::id::DEFAULT_USER_ID.to_string(),
                 limit,
                 ..Default::default()
             };
@@ -225,7 +225,7 @@ async fn show_graph(query: Option<String>, limit: usize, state: &AppState) -> Re
         }
         None => {
             let filter = MemoryFilter {
-                user_id: "cli-user".to_string(),
+                user_id: octo_types::id::DEFAULT_USER_ID.to_string(),
                 limit,
                 ..Default::default()
             };

@@ -41,7 +41,7 @@ pub struct AskOptions {
 /// Execute the ask command: create/resume a session, send one message,
 /// stream the response to stdout, then exit.
 pub async fn execute_ask(opts: AskOptions, state: &AppState) -> Result<()> {
-    let user_id = UserId::from_string("cli-user");
+    let user_id = UserId::from_string(octo_types::id::DEFAULT_USER_ID);
     let session_store = state.agent_runtime.session_store();
 
     // Resolve session: use provided ID, or create a new one

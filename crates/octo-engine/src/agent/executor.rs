@@ -286,6 +286,7 @@ impl AgentExecutor {
                                     sandbox_id: self.sandbox_id.clone(),
                                     tool_ctx: Some(ToolContext {
                                         sandbox_id: self.sandbox_id.clone(),
+                                        user_id: self.user_id.clone(),
                                         working_dir: self.working_dir.clone(),
                                         path_validator: self.path_validator.clone(),
                                     }),
@@ -317,6 +318,7 @@ impl AgentExecutor {
 
                     let tool_ctx = ToolContext {
                         sandbox_id: self.sandbox_id.clone(),
+                        user_id: self.user_id.clone(),
                         working_dir: self.working_dir.clone(),
                         path_validator: self.path_validator.clone(),
                     };

@@ -131,6 +131,7 @@ async fn invoke_tool(tool_name: String, args: Option<String>, state: &AppState) 
 
     let ctx = octo_types::ToolContext {
         sandbox_id: octo_types::SandboxId::from_string("default"),
+        user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: state.working_dir.clone(),
         path_validator: None,
     };

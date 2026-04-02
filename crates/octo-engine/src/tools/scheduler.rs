@@ -354,6 +354,7 @@ mod tests {
         let tool = ScheduleTaskTool::new(storage);
         let ctx = ToolContext {
             sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: std::path::PathBuf::from("."),
             path_validator: None,
         };
@@ -390,6 +391,7 @@ mod tests {
         let tool = ScheduleTaskTool::new(storage);
         let ctx = ToolContext {
             sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: std::path::PathBuf::from("."),
             path_validator: None,
         };
@@ -444,6 +446,7 @@ mod tests {
         let tool = ScheduleTaskTool::new(storage);
         let ctx = ToolContext {
             sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: std::path::PathBuf::from("."),
             path_validator: None,
         };
@@ -491,6 +494,7 @@ mod tests {
         let tool = ScheduleTaskTool::new(storage);
         let ctx = ToolContext {
             sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: std::path::PathBuf::from("."),
             path_validator: None,
         };

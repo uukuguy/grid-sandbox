@@ -70,7 +70,7 @@ impl Tool for MemorySearchTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let query = params["query"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'query' parameter"))?;
@@ -87,7 +87,7 @@ impl Tool for MemorySearchTool {
         };
 
         let opts = SearchOptions {
-            user_id: "default".to_string(),
+            user_id: ctx.user_id.as_str().to_string(),
             limit,
             query_embedding: query_embedding.clone(),
             ..Default::default()

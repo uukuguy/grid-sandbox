@@ -66,7 +66,7 @@ impl Tool for MemoryStoreTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let content = params["content"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing 'content' parameter"))?;
@@ -97,7 +97,7 @@ impl Tool for MemoryStoreTool {
         // Conflict detection (skip if on_conflict=force)
         if on_conflict != "force" {
             let search_opts = SearchOptions {
-                user_id: "default".to_string(),
+                user_id: ctx.user_id.as_str().to_string(),
                 limit: 3,
                 categories: Some(vec![category.clone()]),
                 query_embedding: embedding.clone(),
@@ -138,7 +138,7 @@ impl Tool for MemoryStoreTool {
         }
 
         // No conflict or force mode — insert new
-        let mut entry = MemoryEntry::new("default", category, content);
+        let mut entry = MemoryEntry::new(ctx.user_id.as_str(), category, content);
         entry.importance = importance;
         entry.source_type = MemorySource::Manual;
         entry.embedding = embedding;

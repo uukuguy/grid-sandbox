@@ -156,6 +156,7 @@ mod tests {
     fn test_ctx() -> ToolContext {
         ToolContext {
             sandbox_id: octo_types::SandboxId::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: PathBuf::from("/tmp"),
             path_validator: None,
         }

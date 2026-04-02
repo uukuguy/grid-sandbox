@@ -28,7 +28,7 @@ use crate::commands::state::AppState;
 /// 4. Sends messages to the agent and renders streaming responses
 /// 5. Saves history on exit
 pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
-    let user_id = UserId::from_string("cli-user");
+    let user_id = UserId::from_string(octo_types::id::DEFAULT_USER_ID);
     let session_store = state.agent_runtime.session_store();
 
     // ── 1. Resolve session ──────────────────────────────────────────────

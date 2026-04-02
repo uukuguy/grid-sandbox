@@ -270,18 +270,12 @@ pub fn hotkey_hints(is_streaming: bool, has_overlay: bool, has_approval: bool) -
 
     if is_streaming {
         return vec![
-            ("Esc", "cancel"),
-            ("Ctrl+C", "interrupt"),
+            ("Esc", "interrupt"),
         ];
     }
 
-    // Default idle hints
-    vec![
-        ("Enter", "submit"),
-        ("Esc", "cancel"),
-        ("/help", "commands"),
-        ("Ctrl+D", "debug"),
-    ]
+    // Idle: no hints needed — Esc interrupt shows during streaming
+    vec![]
 }
 
 /// Reduced motion configuration.

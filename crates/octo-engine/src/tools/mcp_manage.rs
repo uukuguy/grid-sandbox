@@ -468,6 +468,7 @@ mod tests {
         let tool = McpListTool::new(handle);
         let ctx = ToolContext {
             sandbox_id: octo_types::SandboxId::from_string("test"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: PathBuf::from("."),
             path_validator: None,
         };

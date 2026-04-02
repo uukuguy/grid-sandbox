@@ -33,6 +33,7 @@ fn test_skill() -> SkillDefinition {
 fn test_ctx() -> ToolContext {
     ToolContext {
         sandbox_id: SandboxId::from_string("test-sandbox"),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         working_dir: PathBuf::from("/tmp"),
         path_validator: None,
     }

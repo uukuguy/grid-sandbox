@@ -73,7 +73,7 @@ impl AppState {
         // Create tenant context
         let tenant_context = TenantContext::for_single_user(
             TenantId::from_string("default"),
-            UserId::from_string("cli-user"),
+            UserId::from_string(octo_types::id::DEFAULT_USER_ID),
         );
 
         // Create runtime

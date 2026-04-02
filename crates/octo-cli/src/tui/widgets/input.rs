@@ -171,23 +171,29 @@ impl Widget for InputWidget<'_> {
 
         // Context-aware hotkey hints (right-aligned, middot-separated)
         let hints = super::figures::hotkey_hints(self.is_streaming, self.has_overlay, self.has_approval);
-        let hint_text: String = hints
-            .iter()
-            .map(|(key, desc)| format!("{} {}", key, desc))
-            .collect::<Vec<_>>()
-            .join(&format!(" {} ", super::figures::separator::MIDDOT));
-        let hint_width = hint_text.len() + 2; // padding
-
         let remaining = (area.width as usize).saturating_sub(used);
-        if remaining > hint_width + 4 {
-            let dash_count = remaining - hint_width;
-            spans.push(Span::styled("\u{2500}".repeat(dash_count), sep_style));
-            spans.push(Span::styled(
-                format!(" {} ", hint_text),
-                Style::default().fg(style_tokens::DIM_GREY),
-            ));
-        } else {
+
+        if hints.is_empty() {
+            // No hints — fill entire remaining width with separator
             spans.push(Span::styled("\u{2500}".repeat(remaining), sep_style));
+        } else {
+            let hint_text: String = hints
+                .iter()
+                .map(|(key, desc)| if desc.is_empty() { key.to_string() } else { format!("{} {}", key, desc) })
+                .collect::<Vec<_>>()
+                .join(&format!(" {} ", super::figures::separator::MIDDOT));
+            let hint_width = hint_text.len() + 2; // padding
+
+            if remaining > hint_width + 4 {
+                let dash_count = remaining - hint_width;
+                spans.push(Span::styled("\u{2500}".repeat(dash_count), sep_style));
+                spans.push(Span::styled(
+                    format!(" {} ", hint_text),
+                    Style::default().fg(style_tokens::DIM_GREY),
+                ));
+            } else {
+                spans.push(Span::styled("\u{2500}".repeat(remaining), sep_style));
+            }
         }
         let sep_line = Line::from(spans);
         buf.set_line(area.left(), area.top(), &sep_line, area.width);

@@ -388,6 +388,7 @@ mod tests {
         let tool = EnterPlanModeTool::new(buf.clone());
         let ctx = ToolContext {
             sandbox_id: Default::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: "/tmp".into(),
             path_validator: None,
         };
@@ -407,6 +408,7 @@ mod tests {
         let tool = ExitPlanModeTool::new(buf.clone());
         let ctx = ToolContext {
             sandbox_id: Default::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: "/tmp".into(),
             path_validator: None,
         };
@@ -423,6 +425,7 @@ mod tests {
         let tool = ExitPlanModeTool::new(buf.clone());
         let ctx = ToolContext {
             sandbox_id: Default::default(),
+            user_id: octo_types::UserId::from_string(octo_types::id::DEFAULT_USER_ID),
             working_dir: "/tmp".into(),
             path_validator: None,
         };
