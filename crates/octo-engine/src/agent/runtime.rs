@@ -148,8 +148,8 @@ pub struct SessionMetrics {
 pub struct AgentRuntime {
     /// 单一主 executor（单用户场景）- 使用 Mutex 实现内部可变性
     pub(crate) primary_handle: Mutex<Option<AgentExecutorHandle>>,
-    /// Phase AJ-T5: 多会话注册表 — SessionId → SessionEntry
-    pub(crate) sessions: DashMap<SessionId, SessionEntry>,
+    /// Phase AJ-T5: 多会话注册表 — SessionId → SessionEntry (Arc for sharing with session tools)
+    pub(crate) sessions: Arc<DashMap<SessionId, SessionEntry>>,
     /// Phase AJ-T5: Primary session ID（兼容单用户模式）
     pub(crate) primary_session_id: Mutex<Option<SessionId>>,
     /// Phase AJ-T5: 最大并发会话数
@@ -210,6 +210,8 @@ pub struct AgentRuntime {
     pub(crate) task_tracker: Arc<TaskTracker>,
     // Multi-agent team manager (Phase AP-T13)
     pub(crate) team_manager: Arc<TeamManager>,
+    // Plan mode buffer for enter_plan_mode/exit_plan_mode tools (T-G4)
+    pub(crate) plan_buffer: crate::tools::plan_mode::PlanBuffer,
 }
 
 impl AgentRuntime {
@@ -551,7 +553,7 @@ impl AgentRuntime {
 
         let runtime = Self {
             primary_handle: Mutex::new(None),
-            sessions: DashMap::new(),
+            sessions: Arc::new(DashMap::new()),
             primary_session_id: Mutex::new(None),
             max_concurrent_sessions: config.max_concurrent_sessions.unwrap_or(DEFAULT_MAX_CONCURRENT_SESSIONS),
             agent_handles: DashMap::new(),
@@ -694,6 +696,7 @@ impl AgentRuntime {
             db_conn: conn,
             task_tracker: Arc::new(TaskTracker::new()),
             team_manager: Arc::new(TeamManager::new()),
+            plan_buffer: crate::tools::plan_mode::PlanBuffer::new(),
         };
 
 
@@ -738,6 +741,15 @@ impl AgentRuntime {
             // Phase AS: InteractionGate + AskUserTool + ToolSearchTool wiring
             tools_guard.register(crate::tools::ask_user::AskUserTool::new(runtime.interaction_gate.clone()));
             tools_guard.register(crate::tools::tool_search::ToolSearchTool::new(runtime.tools.clone()));
+            // T-G4: Plan mode tools
+            tools_guard.register(crate::tools::plan_mode::EnterPlanModeTool::new(runtime.plan_buffer.clone()));
+            tools_guard.register(crate::tools::plan_mode::ExitPlanModeTool::new(runtime.plan_buffer.clone()));
+            // T-G1: Session management tools (message/status/stop)
+            // session_create is deferred — spawn_subagent covers the core use case;
+            // session_create requires Arc<AgentRuntime> which is not available at construction time.
+            tools_guard.register(crate::tools::session::SessionMessageTool::new(runtime.sessions.clone()));
+            tools_guard.register(crate::tools::session::SessionStatusTool::new(runtime.sessions.clone()));
+            tools_guard.register(crate::tools::session::SessionStopTool::new(runtime.sessions.clone()));
         }
 
         // 19. Spawn background tasks for MCP servers (parallel, non-blocking)

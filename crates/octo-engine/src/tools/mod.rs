@@ -28,6 +28,7 @@ pub mod memory_update;
 pub mod rate_limiter;
 pub mod recorder;
 pub mod scheduler;
+pub mod session;
 pub mod sleep;
 pub mod subagent;
 pub mod task;

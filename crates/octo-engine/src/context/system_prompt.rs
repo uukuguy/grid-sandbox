@@ -287,6 +287,8 @@ pub struct SystemPromptBuilder {
     autonomous_mode: bool,
     /// Whether sub-agent mode prompt section should be included.
     subagent_mode: bool,
+    /// Available tool names for conditional guidance injection (T-G6).
+    available_tools: Vec<String>,
 }
 
 impl SystemPromptBuilder {
@@ -301,6 +303,7 @@ impl SystemPromptBuilder {
             active_skill_section: None,
             autonomous_mode: false,
             subagent_mode: false,
+            available_tools: Vec::new(),
             datetime: None,
             mcp_status: None,
             session_state: None,
@@ -417,6 +420,12 @@ impl SystemPromptBuilder {
     /// Enable the sub-agent mode prompt section.
     pub fn with_subagent_mode(mut self, enabled: bool) -> Self {
         self.subagent_mode = enabled;
+        self
+    }
+
+    /// Set available tool names for conditional guidance injection (T-G6).
+    pub fn with_available_tools(mut self, tools: Vec<String>) -> Self {
+        self.available_tools = tools;
         self
     }
 
@@ -595,6 +604,45 @@ impl SystemPromptBuilder {
         parts.push(CODE_STYLE_SECTION.to_string());
         parts.push(ACTIONS_SECTION.to_string());
         parts.push(USING_TOOLS_SECTION.to_string());
+
+        // T-G6: Conditional tool guidance based on available tools
+        if !self.available_tools.is_empty() {
+            let mut guidance = String::new();
+            if self.available_tools.iter().any(|t| t == "session_create") {
+                guidance.push_str(
+                    "- For complex multi-step tasks, use `session_create` to spawn sub-sessions for parallel work. \
+                     Sub-session results will notify you automatically — do not poll for status.\n",
+                );
+            }
+            if self.available_tools.iter().any(|t| t == "session_message") {
+                guidance.push_str(
+                    "- To communicate with a running sub-session, use `session_message`. \
+                     Your text output is not visible to sub-sessions.\n",
+                );
+            }
+            if self.available_tools.iter().any(|t| t == "task_create") {
+                guidance.push_str(
+                    "- Use `task_create` to track progress on complex work (3+ steps). \
+                     Mark tasks `in_progress` when starting and `completed` when done.\n",
+                );
+            }
+            if self.available_tools.iter().any(|t| t == "enter_plan_mode") {
+                guidance.push_str(
+                    "- For complex tasks, use `enter_plan_mode` to explore and plan in read-only mode before executing. \
+                     Use `exit_plan_mode` to review and commit the plan.\n",
+                );
+            }
+            if self.available_tools.iter().any(|t| t == "ask_user") {
+                guidance.push_str(
+                    "- When genuinely stuck or facing an ambiguous choice, use `ask_user` to get clarification. \
+                     Do not ask for things you can determine yourself.\n",
+                );
+            }
+            if !guidance.is_empty() {
+                parts.push(format!("### Tool-Specific Guidance\n\n{}", guidance.trim_end()));
+            }
+        }
+
         parts.push(OUTPUT_EFFICIENCY_SECTION.to_string());
         parts.push(GIT_WORKFLOW_SECTION.to_string());
         parts.push(CYBER_RISK_SECTION.to_string());

@@ -265,6 +265,8 @@ async fn run_agent_loop_inner(
         builder = builder.with_environment_info(&platform, &shell, &os_version, &config.model);
         // Phase AT: Inject token budget (dynamic)
         builder = builder.with_token_budget(config.max_tokens as usize, 200_000);
+        // T-G6: Conditional tool guidance based on available tools
+        builder = builder.with_available_tools(tools.names());
 
         // Use build_separated() for future prompt caching support
         let parts = builder.build_separated();
