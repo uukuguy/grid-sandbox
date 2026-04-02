@@ -50,6 +50,9 @@ const DEFAULT_CONTEXT_WINDOW: usize = 128_000;
 /// Maximum number of retries when the LLM produces a malformed tool call.
 const MAX_MALFORMED_TOOL_CALL_RETRIES: u32 = 2;
 
+/// Maximum number of retries when stream consumption fails (JSON parse error, connection drop, etc.)
+const MAX_STREAM_ERROR_RETRIES: u32 = 2;
+
 /// Interval (in rounds) at which Zone B working memory is refreshed.
 /// This allows agent's memory_edit changes to take effect mid-conversation.
 const ZONE_B_REFRESH_INTERVAL: u32 = 5;
@@ -364,6 +367,8 @@ async fn run_agent_loop_inner(
 
     // Malformed tool call retry counter — tracks consecutive retries within a turn
     let mut malformed_retry_count: u32 = 0;
+    // Stream consumption error counter — retries on JSON parse errors, connection drops, etc.
+    let mut stream_error_count: u32 = 0;
 
     // P1-4: DeferredActionDetector for detecting deferred actions in text
     let deferred_detector = DeferredActionDetector::new();
@@ -782,16 +787,43 @@ async fn run_agent_loop_inner(
         let stream_result = match stream_result {
             Ok(r) => r,
             Err(e) => {
-                warn!("Stream error: {e}");
+                // Stream consumption failed (JSON parse error, connection drop, etc.)
+                // Retry instead of terminating the conversation.
+                stream_error_count += 1;
+                let err_str = e.to_string();
+                if stream_error_count <= MAX_STREAM_ERROR_RETRIES {
+                    warn!(
+                        attempt = stream_error_count,
+                        max = MAX_STREAM_ERROR_RETRIES,
+                        "Stream consumption error, retrying: {err_str}"
+                    );
+                    let _ = tx
+                        .send(AgentEvent::Error {
+                            message: format!(
+                                "Stream error (retry {}/{}): {err_str}",
+                                stream_error_count, MAX_STREAM_ERROR_RETRIES
+                            ),
+                        })
+                        .await;
+                    // Brief delay before retry
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
+                    continue; // Re-enter loop to retry LLM call
+                }
+                warn!("Stream error retries exhausted ({MAX_STREAM_ERROR_RETRIES}): {err_str}");
                 let _ = tx
                     .send(AgentEvent::Error {
-                        message: e.to_string(),
+                        message: format!("Stream failed after {MAX_STREAM_ERROR_RETRIES} retries: {err_str}"),
                     })
                     .await;
+                let _ = tx.send(AgentEvent::Done).await;
                 fire_session_end(&config, &tx, total_tool_calls, &recent_tools).await;
                 return;
             }
         };
+
+        // Reset stream error counter on successful stream consumption
+        stream_error_count = 0;
 
         // Update budget with actual usage
         budget.update_actual_usage(stream_result.input_tokens, messages.len());
