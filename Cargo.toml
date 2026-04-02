@@ -1,6 +1,17 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# Exclude octo-desktop from default build — Tauri build.rs triggers
+# recompilation every time. Build explicitly: cargo build -p octo-desktop
+default-members = [
+    "crates/octo-types",
+    "crates/octo-sandbox",
+    "crates/octo-engine",
+    "crates/octo-eval",
+    "crates/octo-cli",
+    "crates/octo-server",
+    "crates/octo-platform-server",
+]
 
 [workspace.package]
 edition = "2021"
