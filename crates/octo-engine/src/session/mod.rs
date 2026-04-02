@@ -2,6 +2,7 @@ pub mod events;
 pub mod memory;
 pub mod sqlite;
 pub mod thread_store;
+pub mod transcript;
 
 use async_trait::async_trait;
 use octo_types::{ChatMessage, SandboxId, SessionId, UserId};
@@ -114,3 +115,4 @@ pub use events::{SessionEvent, SessionEventBus};
 pub use memory::InMemorySessionStore;
 pub use sqlite::SqliteSessionStore;
 pub use thread_store::SqliteThreadStore;
+pub use transcript::{TranscriptEntry, TranscriptWriter, make_preview};

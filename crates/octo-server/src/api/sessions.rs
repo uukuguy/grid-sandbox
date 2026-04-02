@@ -170,3 +170,89 @@ pub async fn session_metrics(
     let metrics = state.agent_supervisor.session_metrics().await;
     Json(metrics)
 }
+
+// ---------------------------------------------------------------------------
+// AR-T4: Session rewind / fork
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct RewindRequest {
+    pub to_turn: usize,
+}
+
+/// POST /api/v1/sessions/{id}/rewind — Rewind conversation to a specific turn.
+pub async fn rewind_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<RewindRequest>,
+) -> impl IntoResponse {
+    use octo_engine::agent::AgentMessage;
+
+    let session_id = SessionId::from_string(&id);
+    if let Some(handle) = state.agent_supervisor.get_session_handle(&session_id) {
+        if handle.send(AgentMessage::Rewind { to_turn: body.to_turn }).await.is_err() {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Failed to send rewind message" })),
+            );
+        }
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "session_id": id,
+                "rewound_to_turn": body.to_turn,
+            })),
+        )
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Session not found or not active" })),
+        )
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ForkRequest {
+    pub at_turn: usize,
+}
+
+/// POST /api/v1/sessions/{id}/fork — Fork conversation at a turn into a new session.
+pub async fn fork_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(body): Json<ForkRequest>,
+) -> impl IntoResponse {
+    use octo_engine::agent::AgentMessage;
+
+    let session_id = SessionId::from_string(&id);
+    let new_session_id = SessionId::from_string(&uuid::Uuid::new_v4().to_string());
+
+    if let Some(handle) = state.agent_supervisor.get_session_handle(&session_id) {
+        if handle
+            .send(AgentMessage::Fork {
+                at_turn: body.at_turn,
+                new_session_id: new_session_id.clone(),
+            })
+            .await
+            .is_err()
+        {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": "Failed to send fork message" })),
+            );
+        }
+        (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "source_session_id": id,
+                "new_session_id": new_session_id.as_str(),
+                "forked_at_turn": body.at_turn,
+            })),
+        )
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Session not found or not active" })),
+        )
+    }
+}

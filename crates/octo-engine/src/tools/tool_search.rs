@@ -75,7 +75,7 @@ impl Tool for ToolSearchTool {
             .unwrap_or(10) as usize;
 
         let registry = self.registry.read().await;
-        let results = search_tools(&registry, query, limit);
+        let results = hybrid_search_tools(&registry, query, limit);
 
         if results.is_empty() {
             Ok(ToolOutput::success(format!(
@@ -137,6 +137,93 @@ pub fn search_tools(registry: &ToolRegistry, query: &str, limit: usize) -> Vec<T
 
     results.sort_by(|a, b| b.score.cmp(&a.score));
     results.truncate(limit);
+    results
+}
+
+// ---------------------------------------------------------------------------
+// AR-T7: Hybrid search with token-overlap semantic fallback
+// ---------------------------------------------------------------------------
+
+/// Tokenize a string into lowercase word tokens (alphanumeric only).
+fn tokenize(s: &str) -> std::collections::HashSet<String> {
+    s.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .filter(|w| w.len() >= 2)
+        .map(String::from)
+        .collect()
+}
+
+/// Compute Jaccard similarity between two token sets (0.0 to 1.0).
+fn jaccard_similarity(
+    a: &std::collections::HashSet<String>,
+    b: &std::collections::HashSet<String>,
+) -> f64 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let intersection = a.intersection(b).count() as f64;
+    let union = a.union(b).count() as f64;
+    intersection / union
+}
+
+/// Hybrid search: substring match first, then token-overlap fallback
+/// for remaining capacity.
+///
+/// This avoids requiring an external embedding provider while still
+/// providing fuzzy matching beyond simple substring containment.
+pub fn hybrid_search_tools(
+    registry: &ToolRegistry,
+    query: &str,
+    limit: usize,
+) -> Vec<ToolSearchResult> {
+    // Phase 1: Exact / substring matches
+    let mut results = search_tools(registry, query, limit);
+
+    if results.len() >= limit {
+        return results;
+    }
+
+    // Phase 2: Token-overlap semantic fallback for remaining slots
+    let remaining = limit - results.len();
+    let matched_names: std::collections::HashSet<&str> =
+        results.iter().map(|r| r.name.as_str()).collect();
+    let query_tokens = tokenize(query);
+
+    if query_tokens.is_empty() {
+        return results;
+    }
+
+    let mut semantic_hits: Vec<(String, String, f64)> = registry
+        .iter()
+        .filter(|(name, _)| !matched_names.contains(name.as_str()))
+        .filter_map(|(name, tool)| {
+            let spec = tool.spec();
+            let combined = format!("{} {}", name, spec.description);
+            let tool_tokens = tokenize(&combined);
+            let sim = jaccard_similarity(&query_tokens, &tool_tokens);
+            if sim > 0.05 {
+                Some((
+                    name.clone(),
+                    spec.description.chars().take(100).collect(),
+                    sim,
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    semantic_hits.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    semantic_hits.truncate(remaining);
+
+    for (name, description, sim) in semantic_hits {
+        results.push(ToolSearchResult {
+            name,
+            description,
+            score: (sim * 60.0) as u32, // Normalize to 0-60 range
+        });
+    }
+
     results
 }
 
@@ -222,5 +309,59 @@ mod tests {
         let results_lower = search_tools(&reg, "bash", 10);
         let results_upper = search_tools(&reg, "BASH", 10);
         assert_eq!(results_lower.len(), results_upper.len());
+    }
+
+    // --- AR-T7: Hybrid search tests ---
+
+    #[test]
+    fn test_hybrid_returns_substring_first() {
+        let reg = test_registry();
+        let results = hybrid_search_tools(&reg, "bash", 10);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].name, "bash");
+        assert_eq!(results[0].score, 100);
+    }
+
+    #[test]
+    fn test_hybrid_fallback_to_semantic() {
+        let reg = test_registry();
+        // "execute command" should match bash via token overlap even though
+        // "execute command" is not a substring of "bash"
+        let results = hybrid_search_tools(&reg, "execute command", 10);
+        // Should find at least bash (description contains "execute" and "command")
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_hybrid_dedup() {
+        let reg = test_registry();
+        // "file" matches file_read and file_write by substring
+        let results = hybrid_search_tools(&reg, "file", 10);
+        let names: Vec<&str> = results.iter().map(|r| r.name.as_str()).collect();
+        let unique: std::collections::HashSet<&str> = names.iter().cloned().collect();
+        assert_eq!(names.len(), unique.len(), "No duplicates allowed");
+    }
+
+    #[test]
+    fn test_tokenize_basic() {
+        let tokens = super::tokenize("file read write");
+        assert!(tokens.contains("file"));
+        assert!(tokens.contains("read"));
+        assert!(tokens.contains("write"));
+    }
+
+    #[test]
+    fn test_jaccard_identical() {
+        let a = super::tokenize("hello world");
+        let sim = super::jaccard_similarity(&a, &a);
+        assert!((sim - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_jaccard_disjoint() {
+        let a = super::tokenize("hello world");
+        let b = super::tokenize("foo bar");
+        let sim = super::jaccard_similarity(&a, &b);
+        assert!((sim - 0.0).abs() < f64::EPSILON);
     }
 }

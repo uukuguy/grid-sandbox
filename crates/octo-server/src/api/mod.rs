@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod audit;
+pub mod autonomous;
 pub mod budget;
 pub mod collaboration;
 pub mod context;
@@ -74,6 +75,9 @@ pub fn routes() -> Router<Arc<AppState>> {
             get(executions::list_session_executions),
         )
         .route("/sessions/{id}", get(sessions::get_session))
+        // AR-T4: Session fork/rewind
+        .route("/sessions/{id}/rewind", post(sessions::rewind_session))
+        .route("/sessions/{id}/fork", post(sessions::fork_session))
         // Then less specific
         .route("/sessions", get(sessions::list_sessions))
         .route("/executions", get(executions::list_user_executions))
@@ -129,4 +133,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .merge(security::router())
         // Context Observability (AO-T10)
         .merge(context::router())
+        // AR-T5: Autonomous webhook trigger
+        .route("/autonomous/trigger", post(autonomous::trigger_autonomous))
 }

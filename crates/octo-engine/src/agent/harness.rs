@@ -351,6 +351,9 @@ async fn run_agent_loop_inner(
         ..Default::default()
     });
 
+    // AR-T1: TokenEscalation — try upgrading max_tokens before falling back to continuation
+    let mut token_escalation = super::token_escalation::TokenEscalation::new();
+
     // Malformed tool call retry counter — tracks consecutive retries within a turn
     let mut malformed_retry_count: u32 = 0;
 
@@ -894,7 +897,24 @@ async fn run_agent_loop_inner(
             // Reset malformed retry counter on successful non-tool turn
             malformed_retry_count = 0;
 
-            // P1-1: Auto-continuation on max_tokens
+            // AR-T1: Try TokenEscalation before ContinuationTracker.
+            // If max_tokens caused truncation and we have a higher tier available,
+            // upgrade and retry without wasting a continuation round-trip.
+            if stop_reason == StopReason::MaxTokens {
+                if let Some(new_max) = token_escalation.escalate() {
+                    debug!(
+                        old = config.max_tokens,
+                        new = new_max,
+                        "TokenEscalation: upgrading max_tokens"
+                    );
+                    config.max_tokens = new_max;
+                    messages.push(ChatMessage::assistant(&full_text));
+                    let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
+                    continue; // Re-enter loop with larger max_tokens
+                }
+            }
+
+            // P1-1: Auto-continuation on max_tokens (fallback after escalation exhausted)
             if stop_reason == StopReason::MaxTokens
                 && continuation_tracker.should_continue("max_tokens")
             {
@@ -2340,5 +2360,77 @@ mod tests {
         // Complete JSON should NOT trigger (it will be handled by parse_tool_calls_from_text)
         let text = r#"{"name": "bash", "arguments": {"command": "ls"}}"#;
         assert!(detect_malformed_tool_call(text).is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AR-T4: Conversation rewind helper
+// ---------------------------------------------------------------------------
+
+/// Rewind messages to the specified turn.
+///
+/// A "turn" is a (user, assistant) pair. Turn 0 = the first complete pair.
+/// System messages are always preserved. Messages after `to_turn` are dropped.
+pub fn rewind_messages(messages: &mut Vec<ChatMessage>, to_turn: usize) {
+    // Count turns (assistant responses) and find the cutoff point.
+    let mut turn_count = 0;
+    let mut keep_until = 0;
+
+    for (i, msg) in messages.iter().enumerate() {
+        keep_until = i + 1;
+        if msg.role == MessageRole::Assistant {
+            if turn_count >= to_turn {
+                break;
+            }
+            turn_count += 1;
+        }
+    }
+
+    messages.truncate(keep_until);
+}
+
+#[cfg(test)]
+mod rewind_tests {
+    use super::*;
+
+    fn make_messages(pairs: usize) -> Vec<ChatMessage> {
+        let mut msgs = Vec::new();
+        for i in 0..pairs {
+            msgs.push(ChatMessage::user(format!("Question {}", i)));
+            msgs.push(ChatMessage::assistant(format!("Answer {}", i)));
+        }
+        msgs
+    }
+
+    #[test]
+    fn test_rewind_to_first_turn() {
+        let mut msgs = make_messages(5);
+        assert_eq!(msgs.len(), 10); // 5*(user+assistant)
+        rewind_messages(&mut msgs, 0);
+        // Should keep: user0, assistant0
+        assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn test_rewind_to_middle() {
+        let mut msgs = make_messages(5);
+        rewind_messages(&mut msgs, 2);
+        // 3 pairs (turns 0, 1, 2) = 6 messages
+        assert_eq!(msgs.len(), 6);
+    }
+
+    #[test]
+    fn test_rewind_beyond_end_keeps_all() {
+        let mut msgs = make_messages(3);
+        let original_len = msgs.len();
+        rewind_messages(&mut msgs, 10);
+        assert_eq!(msgs.len(), original_len);
+    }
+
+    #[test]
+    fn test_rewind_empty() {
+        let mut msgs: Vec<ChatMessage> = Vec::new();
+        rewind_messages(&mut msgs, 0);
+        assert!(msgs.is_empty());
     }
 }

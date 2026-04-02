@@ -159,6 +159,10 @@ pub struct AgentLoopConfig {
     // === Blob Store (Phase AQ-T3) ===
     /// Content-addressed blob store for externalizing large tool outputs.
     pub blob_store: Option<Arc<crate::storage::BlobStore>>,
+
+    // === Transcript Writer (Phase AR-T2) ===
+    /// Append-only JSONL transcript for session audit trail.
+    pub transcript_writer: Option<Arc<crate::session::TranscriptWriter>>,
 }
 
 impl Default for AgentLoopConfig {
@@ -209,6 +213,7 @@ impl Default for AgentLoopConfig {
             round_memory_config: None,
             interaction_gate: None,
             blob_store: None,
+            transcript_writer: None,
         }
     }
 }
@@ -465,6 +470,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn blob_store(mut self, v: Arc<crate::storage::BlobStore>) -> Self {
         self.config.blob_store = Some(v);
+        self
+    }
+
+    pub fn transcript_writer(mut self, v: Arc<crate::session::TranscriptWriter>) -> Self {
+        self.config.transcript_writer = Some(v);
         self
     }
 

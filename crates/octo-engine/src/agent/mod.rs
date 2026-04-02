@@ -1,6 +1,8 @@
 pub mod autonomous;
 pub mod autonomous_audit;
+pub mod autonomous_trigger;
 pub mod cancellation;
+pub mod token_escalation;
 pub mod capability;
 pub mod catalog;
 pub mod collaboration;
@@ -36,6 +38,9 @@ pub mod turn_gate;
 pub mod yaml_def;
 
 pub use autonomous::{AutonomousConfig, AutonomousState, AutonomousStatus, AutonomousTrigger};
+pub use autonomous_trigger::{
+    ChannelTriggerSource, PollingTriggerSource, TriggerEvent, TriggerListener, TriggerSource,
+};
 pub use cancellation::{CancellationToken, ChildCancellationToken};
 pub use capability::AgentCapability;
 pub use catalog::AgentCatalog;
@@ -69,5 +74,6 @@ pub use team::{Team, TeamManager, TeamMember, TeamRole};
 pub use subagent::{SubAgentHandle, SubAgentManager, SubAgentResult, SubAgentStatus, SubAgentTask};
 pub use tenant::TenantContext;
 pub use self_repair::{RepairResult, SelfRepairManager, StuckDetector};
+pub use token_escalation::TokenEscalation;
 pub use turn_gate::TurnGate;
 pub use yaml_def::AgentYamlDef;

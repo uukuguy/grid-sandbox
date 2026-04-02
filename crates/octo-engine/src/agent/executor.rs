@@ -22,7 +22,7 @@ use crate::tools::bash::BashTool;
 use crate::tools::ToolRegistry;
 
 use super::entry::AgentManifest;
-use super::harness::run_agent_loop;
+use super::harness::{run_agent_loop, rewind_messages};
 use super::CancellationToken;
 
 /// Channel → AgentExecutor 的消息
@@ -44,6 +44,13 @@ pub enum AgentMessage {
     Resume,
     /// Update user presence state for autonomous mode (AQ-T6).
     UserPresence(bool),
+    /// AR-T4: Rewind conversation to a specific turn index.
+    Rewind { to_turn: usize },
+    /// AR-T4: Fork conversation at a turn into a new session.
+    Fork {
+        at_turn: usize,
+        new_session_id: SessionId,
+    },
 }
 
 /// AgentExecutor 的对外句柄（可 clone，廉价）
@@ -84,6 +91,16 @@ impl AgentExecutorHandle {
     /// Update user presence state for autonomous mode (AQ-T6).
     pub async fn set_user_presence(&self, online: bool) -> Result<(), mpsc::error::SendError<AgentMessage>> {
         self.tx.send(AgentMessage::UserPresence(online)).await
+    }
+
+    /// AR-T4: Rewind conversation to a specific turn.
+    pub async fn rewind(&self, to_turn: usize) -> Result<(), mpsc::error::SendError<AgentMessage>> {
+        self.tx.send(AgentMessage::Rewind { to_turn }).await
+    }
+
+    /// AR-T4: Fork conversation at a turn into a new session.
+    pub async fn fork(&self, at_turn: usize, new_session_id: SessionId) -> Result<(), mpsc::error::SendError<AgentMessage>> {
+        self.tx.send(AgentMessage::Fork { at_turn, new_session_id }).await
     }
 }
 
@@ -317,6 +334,15 @@ impl AgentExecutor {
                         Arc::new(crate::storage::BlobStore::new(blobs_dir))
                     };
 
+                    // --- AR-T2: Create TranscriptWriter for session audit trail ---
+                    let transcript_writer = {
+                        let transcripts_dir = self.working_dir.join(".octo").join("transcripts");
+                        Arc::new(crate::session::TranscriptWriter::new(
+                            transcripts_dir,
+                            self.session_id.as_str(),
+                        ))
+                    };
+
                     // Build AgentLoopConfig directly (D5 Stage 3)
                     let loop_config = AgentLoopConfig {
                         max_iterations: if self.config.max_rounds == 0 {
@@ -348,10 +374,12 @@ impl AgentExecutor {
                         session_summary_store: self.session_summary_store.clone(),
                         interaction_gate: Some(interaction_gate),
                         blob_store: Some(blob_store),
+                        transcript_writer: Some(transcript_writer.clone()),
                         ..AgentLoopConfig::default()
                     };
 
                     // Call the harness directly and consume the event stream
+                    let history_len_before = self.history.len();
                     let mut stream = run_agent_loop(loop_config, self.history.clone());
 
                     while let Some(event) = stream.next().await {
@@ -369,6 +397,13 @@ impl AgentExecutor {
                             break;
                         }
                     }
+
+                    // AR-T2: Write new messages to transcript
+                    Self::write_transcript(
+                        &transcript_writer,
+                        &self.history,
+                        history_len_before,
+                    );
 
                     // 持久化 history 到 SessionStore
                     if let Some(ref store) = self.session_store {
@@ -399,6 +434,34 @@ impl AgentExecutor {
                 }
                 AgentMessage::UserPresence(online) => {
                     info!(session_id = %self.session_id.as_str(), online, "AgentExecutor: user presence updated");
+                }
+                AgentMessage::Rewind { to_turn } => {
+                    let before = self.history.len();
+                    rewind_messages(&mut self.history, to_turn);
+                    info!(
+                        session_id = %self.session_id.as_str(),
+                        to_turn,
+                        before,
+                        after = self.history.len(),
+                        "AgentExecutor: conversation rewound"
+                    );
+                    if let Some(ref store) = self.session_store {
+                        store.set_messages(&self.session_id, self.history.clone()).await;
+                    }
+                }
+                AgentMessage::Fork { at_turn, new_session_id } => {
+                    let mut forked = self.history.clone();
+                    rewind_messages(&mut forked, at_turn);
+                    if let Some(ref store) = self.session_store {
+                        let _ = store.create_session_with_user(&self.user_id).await;
+                        store.set_messages(&new_session_id, forked).await;
+                    }
+                    info!(
+                        session_id = %self.session_id.as_str(),
+                        new_session_id = %new_session_id.as_str(),
+                        at_turn,
+                        "AgentExecutor: conversation forked"
+                    );
                 }
             }
         }
@@ -584,5 +647,42 @@ impl AgentExecutor {
     /// 返回当前对话历史（用于 session 持久化）
     pub fn history(&self) -> &[ChatMessage] {
         &self.history
+    }
+
+    /// AR-T2: Write new messages (since `from_idx`) to the transcript.
+    fn write_transcript(
+        writer: &Arc<crate::session::TranscriptWriter>,
+        history: &[ChatMessage],
+        from_idx: usize,
+    ) {
+        use crate::session::transcript::{make_preview, TranscriptEntry};
+        use chrono::Utc;
+
+        for msg in history.iter().skip(from_idx) {
+            let text = msg
+                .content
+                .iter()
+                .filter_map(|b| match b {
+                    octo_types::ContentBlock::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            if text.is_empty() {
+                continue;
+            }
+            let entry = TranscriptEntry {
+                timestamp: Utc::now(),
+                role: format!("{:?}", msg.role).to_lowercase(),
+                content_preview: make_preview(&text),
+                blob_ref: None,
+                tool_name: None,
+                input_tokens: None,
+                output_tokens: None,
+            };
+            if let Err(e) = writer.append(&entry) {
+                tracing::debug!(error = %e, "TranscriptWriter: failed to append entry");
+            }
+        }
     }
 }
