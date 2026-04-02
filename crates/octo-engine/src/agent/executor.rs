@@ -155,6 +155,8 @@ pub struct AgentExecutor {
     session_sandbox: Option<Arc<SessionSandboxManager>>,
     // Session summary store for episodic memory (Phase AG)
     session_summary_store: Option<Arc<SessionSummaryStore>>,
+    // Shared interaction gate for agent-to-user communication (Phase AS)
+    interaction_gate: Arc<crate::tools::interaction::InteractionGate>,
 }
 
 impl AgentExecutor {
@@ -185,6 +187,7 @@ impl AgentExecutor {
         recorder: Option<Arc<crate::tools::recorder::ToolExecutionRecorder>>,
         session_sandbox: Option<Arc<SessionSandboxManager>>,
         session_summary_store: Option<Arc<SessionSummaryStore>>,
+        interaction_gate: Arc<crate::tools::interaction::InteractionGate>,
     ) -> Self {
         Self {
             session_id,
@@ -214,6 +217,7 @@ impl AgentExecutor {
             recorder,
             session_sandbox,
             session_summary_store,
+            interaction_gate,
         }
     }
 
@@ -324,10 +328,8 @@ impl AgentExecutor {
                     };
                     let _ = tokio::fs::create_dir_all(&tool_ctx.working_dir).await;
 
-                    // --- AQ-T1: Create shared InteractionGate for this turn ---
-                    let interaction_gate = Arc::new(
-                        crate::tools::interaction::InteractionGate::new(),
-                    );
+                    // --- AQ-T1 + Phase AS: Use shared InteractionGate from runtime ---
+                    let interaction_gate = self.interaction_gate.clone();
 
                     // --- AQ-T3: Create BlobStore from working dir ---
                     // Uses <working_dir>/.octo/blobs/ as the blob storage location.

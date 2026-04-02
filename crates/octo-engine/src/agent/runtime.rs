@@ -191,6 +191,8 @@ pub struct AgentRuntime {
     pub(crate) canary_token: Option<String>,
     // Shared approval gate for pending human approval requests (T7)
     pub(crate) approval_gate: Option<crate::tools::approval::ApprovalGate>,
+    // Interaction gate for agent-to-user communication (Phase AS: InteractionGate wiring)
+    pub(crate) interaction_gate: Arc<crate::tools::interaction::InteractionGate>,
     // Optional collaboration manager for multi-agent sessions (T9)
     pub(crate) collaboration_manager:
         Option<Arc<Mutex<crate::agent::collaboration::manager::CollaborationManager>>>,
@@ -530,6 +532,9 @@ impl AgentRuntime {
         // 17. Shared ApprovalGate for interactive tool approval (T7)
         let approval_gate = crate::tools::approval::ApprovalGate::new();
 
+        // 17b. InteractionGate for agent-to-user communication (Phase AS)
+        let interaction_gate = Arc::new(crate::tools::interaction::InteractionGate::new());
+
         // 18. (CredentialResolver moved to step 5b — before provider creation)
 
         // 19. SessionSandboxManager (SSM) — conditional on run mode + profile
@@ -699,6 +704,7 @@ impl AgentRuntime {
             safety_pipeline: Some(safety_pipeline),
             canary_token: Some(canary_token),
             approval_gate: Some(approval_gate),
+            interaction_gate: interaction_gate.clone(),
             collaboration_manager: None,
             knowledge_graph,
             credential_resolver,
@@ -747,6 +753,9 @@ impl AgentRuntime {
             tools_guard.register(crate::tools::team::TeamCreateTool::new(runtime.team_manager.clone()));
             tools_guard.register(crate::tools::team::TeamAddMemberTool::new(runtime.team_manager.clone()));
             tools_guard.register(crate::tools::team::TeamDissolveTool::new(runtime.team_manager.clone()));
+            // Phase AS: InteractionGate + AskUserTool + ToolSearchTool wiring
+            tools_guard.register(crate::tools::ask_user::AskUserTool::new(runtime.interaction_gate.clone()));
+            tools_guard.register(crate::tools::tool_search::ToolSearchTool::new(runtime.tools.clone()));
         }
 
         // 19. Spawn background tasks for deferred MCP servers (autoStart=false)
@@ -975,6 +984,11 @@ impl AgentRuntime {
     /// Get shared approval gate (if any) — T7
     pub fn approval_gate(&self) -> Option<&crate::tools::approval::ApprovalGate> {
         self.approval_gate.as_ref()
+    }
+
+    /// Get shared interaction gate for agent-to-user communication (Phase AS)
+    pub fn interaction_gate(&self) -> &Arc<crate::tools::interaction::InteractionGate> {
+        &self.interaction_gate
     }
 
     /// Get collaboration context (if a collaboration session is active) — T9.
@@ -1397,6 +1411,7 @@ impl AgentRuntime {
             Some(self.recorder.clone()),
             self.session_sandbox.clone(),
             self.session_summary_store.clone(),
+            self.interaction_gate.clone(),
         );
 
         // Spawn 持久化主循环

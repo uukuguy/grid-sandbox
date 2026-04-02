@@ -1,2 +1,2 @@
-// Backward compatibility: re-export from context module
-pub use crate::context::builder::{estimate_messages_tokens, ContextBuilder};
+// Backward compatibility: re-export estimate_messages_tokens from context module
+pub use crate::context::builder::estimate_messages_tokens;

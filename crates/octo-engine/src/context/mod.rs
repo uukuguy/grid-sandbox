@@ -16,7 +16,7 @@ pub mod tool_use_summary;
 pub use auto_compact::{AutoCompactConfig, AutoCompactSummary};
 pub use budget::{ContextBudgetManager, DegradationLevel};
 pub use collapse::ContextCollapser;
-pub use builder::{estimate_messages_tokens, BootstrapFile, ContextBuilder, SystemPromptBuilder};
+pub use builder::estimate_messages_tokens;
 pub use compaction_pipeline::{
     CompactionContext, CompactionPipeline, CompactionPipelineConfig, CompactionResult,
     SNIP_MARKER,

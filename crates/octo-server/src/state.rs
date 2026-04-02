@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use octo_engine::{
     auth::AuthConfig, mcp::McpStorage, metrics::MetricsRegistry, scheduler::Scheduler,
-    tools::approval::ApprovalGate, AgentExecutorHandle, AgentRuntime,
+    tools::approval::ApprovalGate, tools::interaction::InteractionGate,
+    AgentExecutorHandle, AgentRuntime,
 };
 use octo_types::SessionId;
 use tokio::sync::RwLock;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub start_time: std::time::Instant,
     /// Shared approval gate for pending human approval requests (T3).
     pub approval_gate: Option<ApprovalGate>,
+    /// Shared interaction gate for agent-to-user communication (Phase AS).
+    pub interaction_gate: Arc<InteractionGate>,
 }
 
 impl AppState {
@@ -63,6 +66,9 @@ impl AppState {
         // Create shared ApprovalGate — same instance shared between WS handler and AgentRuntime
         let approval_gate = agent_supervisor.approval_gate().cloned();
 
+        // Shared InteractionGate for agent-to-user communication (Phase AS)
+        let interaction_gate = agent_supervisor.interaction_gate().clone();
+
         Self {
             db_path,
             scheduler,
@@ -74,6 +80,7 @@ impl AppState {
             agent_handle,
             start_time: std::time::Instant::now(),
             approval_gate,
+            interaction_gate,
         }
     }
 

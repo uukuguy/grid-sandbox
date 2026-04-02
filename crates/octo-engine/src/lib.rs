@@ -39,8 +39,9 @@ pub use auth::{
     AuthMode, Permission, Role, UserContext,
 };
 pub use context::{
-    BootstrapFile, ContextBudgetManager, ContextPruner, DegradationLevel, SystemPromptBuilder,
+    ContextBudgetManager, ContextPruner, DegradationLevel, NewSystemPromptBuilder as SystemPromptBuilder,
 };
+pub use context::system_prompt::BootstrapFile;
 pub use db::Database;
 pub use event::{TelemetryBus, EventCountProjection, EventStore, TelemetryEvent, Projection, StoredEvent};
 pub use hooks::{

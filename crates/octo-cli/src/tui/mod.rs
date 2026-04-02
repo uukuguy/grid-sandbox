@@ -388,6 +388,18 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: octo_engine::agent
             });
             state.dirty = true;
         }
+        AgentEvent::InteractionRequested { request_id, request } => {
+            // Phase AS: Log the interaction request. Full TUI modal is deferred (AQ-D1).
+            let prompt = match &request {
+                octo_engine::tools::interaction::InteractionRequest::Question { prompt, .. } => prompt.clone(),
+                octo_engine::tools::interaction::InteractionRequest::Select { prompt, .. } => prompt.clone(),
+                octo_engine::tools::interaction::InteractionRequest::Confirm { prompt } => prompt.clone(),
+            };
+            state.messages.push(ChatMessage::assistant(&format!("[ask_user] {}", prompt)));
+            state.dirty = true;
+            // Note: response is handled by InteractionGate timeout (60s default)
+            let _ = (request_id, request); // suppress unused warnings
+        }
         AgentEvent::Completed(result) => {
             // Re-enable raw mode in case a child process inadvertently disabled it.
             // This is a defensive measure — without raw mode, terminal escape sequences

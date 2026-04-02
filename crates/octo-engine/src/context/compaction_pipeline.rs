@@ -378,7 +378,7 @@ impl CompactionPipeline {
             }
         }
 
-        // Zone B+: cross-session memory
+        // Zone B+: cross-session memory (FTS search + importance pinned)
         if let Some(ref store) = ctx.memory_store {
             let injector = MemoryInjector::with_defaults();
             let cross = injector
@@ -390,6 +390,18 @@ impl CompactionPipeline {
                     content: vec![ContentBlock::Text { text: cross }],
                 });
                 debug!("Reinjected Zone B+ cross-session memory");
+            }
+
+            // Phase AS: Importance-based pinned memories (safety net for high-importance entries)
+            let pinned = injector
+                .build_pinned_memories(store.as_ref(), ctx.user_id.as_str(), 0.8, 5, &[])
+                .await;
+            if !pinned.is_empty() {
+                reinjections.push(ChatMessage {
+                    role: MessageRole::User,
+                    content: vec![ContentBlock::Text { text: pinned }],
+                });
+                debug!("Reinjected Zone B+ pinned high-importance memories");
             }
         }
 

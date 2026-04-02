@@ -3,14 +3,13 @@
 //! Provides an LLM-callable tool that searches the tool registry by name
 //! and description, returning ranked results.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use anyhow::Result;
 use async_trait::async_trait;
 use octo_types::{ToolContext, ToolOutput, ToolSource};
 use serde::Serialize;
 use serde_json::{json, Value};
-use tokio::sync::RwLock;
 
 use super::traits::Tool;
 use super::ToolRegistry;
@@ -24,11 +23,11 @@ pub struct ToolSearchResult {
 }
 
 pub struct ToolSearchTool {
-    registry: Arc<RwLock<ToolRegistry>>,
+    registry: Arc<StdMutex<ToolRegistry>>,
 }
 
 impl ToolSearchTool {
-    pub fn new(registry: Arc<RwLock<ToolRegistry>>) -> Self {
+    pub fn new(registry: Arc<StdMutex<ToolRegistry>>) -> Self {
         Self { registry }
     }
 }
@@ -74,7 +73,7 @@ impl Tool for ToolSearchTool {
             .and_then(|v| v.as_u64())
             .unwrap_or(10) as usize;
 
-        let registry = self.registry.read().await;
+        let registry = self.registry.lock().unwrap_or_else(|e| e.into_inner());
         let results = hybrid_search_tools(&registry, query, limit);
 
         if results.is_empty() {

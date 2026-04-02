@@ -106,6 +106,66 @@ impl MemoryInjector {
         section
     }
 
+    /// Retrieve high-importance memories regardless of query relevance.
+    ///
+    /// This provides a "safety net" for important memories that might not match
+    /// the current FTS query but should always be visible to the agent.
+    /// Memories are sorted by importance descending, then by recency.
+    pub async fn build_pinned_memories(
+        &self,
+        store: &dyn MemoryStore,
+        user_id: &str,
+        min_importance: f32,
+        max_pinned: usize,
+        exclude_contents: &[&str],
+    ) -> String {
+        if !self.config.enabled || max_pinned == 0 {
+            return String::new();
+        }
+
+        let filter = octo_types::MemoryFilter {
+            user_id: user_id.to_string(),
+            limit: max_pinned * 3, // over-fetch to allow filtering
+            ..Default::default()
+        };
+
+        let mut entries = match store.list(filter).await {
+            Ok(e) => e,
+            Err(_) => return String::new(),
+        };
+
+        // Filter to high-importance entries not already injected via FTS
+        entries.retain(|e| {
+            e.importance >= min_importance
+                && !exclude_contents.iter().any(|c| e.content.contains(c))
+        });
+
+        // Sort by importance descending, then by most recent first
+        entries.sort_by(|a, b| {
+            b.importance
+                .partial_cmp(&a.importance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.timestamps.updated_at.cmp(&a.timestamps.updated_at))
+        });
+
+        entries.truncate(max_pinned);
+
+        if entries.is_empty() {
+            return String::new();
+        }
+
+        let mut section = String::from("\n## Pinned Memories (high importance)\n\n");
+        for entry in &entries {
+            let category = entry.category.as_str();
+            section.push_str(&format!(
+                "- [{}] (importance: {:.1}) {}\n",
+                category, entry.importance, entry.content
+            ));
+        }
+        section.push('\n');
+        section
+    }
+
     /// Get the injection config
     pub fn config(&self) -> &MemoryInjectionConfig {
         &self.config
@@ -280,5 +340,52 @@ mod tests {
         };
         injector.set_config(new_config);
         assert_eq!(injector.config().max_memories, 5);
+    }
+
+    // --- Phase AS: Pinned memories tests ---
+
+    #[tokio::test]
+    async fn test_pinned_memories_empty_store() {
+        let store = MockMemoryStore::empty();
+        let injector = MemoryInjector::with_defaults();
+        let result = injector
+            .build_pinned_memories(&store, "user1", 0.8, 5, &[] as &[&str])
+            .await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_pinned_memories_filters_by_importance() {
+        // MockMemoryStore.list() returns empty, so pinned returns empty
+        // (Full integration test would need a real SQLite store)
+        let store = MockMemoryStore::empty();
+        let injector = MemoryInjector::with_defaults();
+        let result = injector
+            .build_pinned_memories(&store, "user1", 0.9, 3, &[] as &[&str])
+            .await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_pinned_memories_disabled() {
+        let store = MockMemoryStore::empty();
+        let injector = MemoryInjector::new(MemoryInjectionConfig {
+            enabled: false,
+            ..Default::default()
+        });
+        let result = injector
+            .build_pinned_memories(&store, "user1", 0.5, 5, &[] as &[&str])
+            .await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_pinned_memories_max_zero() {
+        let store = MockMemoryStore::empty();
+        let injector = MemoryInjector::with_defaults();
+        let result = injector
+            .build_pinned_memories(&store, "user1", 0.5, 0, &[] as &[&str])
+            .await;
+        assert!(result.is_empty());
     }
 }

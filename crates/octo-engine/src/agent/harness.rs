@@ -298,6 +298,15 @@ async fn run_agent_loop_inner(
                     cross_session.len()
                 );
             }
+
+            // Phase AS: Pinned high-importance memories (safety net, query-independent)
+            let pinned = injector
+                .build_pinned_memories(store.as_ref(), config.user_id.as_str(), 0.8, 5, &[])
+                .await;
+            if !pinned.is_empty() {
+                loop_steps::inject_zone_b(&mut messages, &pinned);
+                debug!("Zone B+ injected: pinned high-importance memories {} chars", pinned.len());
+            }
         }
     }
 

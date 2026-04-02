@@ -39,6 +39,12 @@ pub enum ClientMessage {
         tool_id: String,
         approved: bool,
     },
+    /// Phase AS: User's response to an agent interaction request
+    #[serde(rename = "interaction_response")]
+    InteractionResponse {
+        request_id: String,
+        response: octo_engine::tools::interaction::InteractionResponse,
+    },
     #[serde(rename = "ping")]
     Ping,
 }
@@ -119,6 +125,14 @@ pub enum ServerMessage {
         tool_name: String,
         tool_id: String,
         risk_level: octo_types::RiskLevel,
+    },
+
+    /// Phase AS: Agent requesting user interaction
+    #[serde(rename = "interaction_requested")]
+    InteractionRequested {
+        session_id: String,
+        request_id: String,
+        request: octo_engine::tools::interaction::InteractionRequest,
     },
 
     #[serde(rename = "security_blocked")]
@@ -388,6 +402,13 @@ async fn handle_socket(
                                     tool_id,
                                     risk_level,
                                 },
+                                AgentEvent::InteractionRequested { request_id, request } => {
+                                    ServerMessage::InteractionRequested {
+                                        session_id: sid_str.clone(),
+                                        request_id,
+                                        request,
+                                    }
+                                }
                                 AgentEvent::SecurityBlocked { reason } => {
                                     ServerMessage::SecurityBlocked {
                                         session_id: sid_str.clone(),
@@ -426,6 +447,14 @@ async fn handle_socket(
                     }
                 } else {
                     warn!("ApprovalResponse received but no ApprovalGate configured");
+                }
+            }
+            ClientMessage::InteractionResponse { request_id, response } => {
+                let found = runtime.interaction_gate().respond(&request_id, response).await;
+                if found {
+                    info!(request_id = %request_id, "Interaction response forwarded");
+                } else {
+                    warn!(request_id = %request_id, "No pending interaction request");
                 }
             }
             ClientMessage::Ping => {

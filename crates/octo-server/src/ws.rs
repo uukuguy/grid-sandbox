@@ -27,6 +27,12 @@ enum ClientMessage {
         tool_id: String,
         approved: bool,
     },
+    /// Phase AS: User's response to an agent interaction request (ask_user tool)
+    #[serde(rename = "interaction_response")]
+    InteractionResponse {
+        request_id: String,
+        response: octo_engine::tools::interaction::InteractionResponse,
+    },
 }
 
 // --- Server -> Client messages ---
@@ -106,6 +112,14 @@ enum ServerMessage {
         tool_name: String,
         tool_id: String,
         risk_level: octo_types::RiskLevel,
+    },
+
+    /// Phase AS: Agent is requesting user interaction (ask_user tool)
+    #[serde(rename = "interaction_requested")]
+    InteractionRequested {
+        session_id: String,
+        request_id: String,
+        request: octo_engine::tools::interaction::InteractionRequest,
     },
 
     #[serde(rename = "security_blocked")]
@@ -370,6 +384,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExe
                                     tool_id,
                                     risk_level,
                                 },
+                                AgentEvent::InteractionRequested { request_id, request } => {
+                                    ServerMessage::InteractionRequested {
+                                        session_id: sid_str.clone(),
+                                        request_id,
+                                        request,
+                                    }
+                                }
                                 AgentEvent::SecurityBlocked { reason } => {
                                     ServerMessage::SecurityBlocked {
                                         session_id: sid_str.clone(),
@@ -417,6 +438,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExe
                     }
                 } else {
                     warn!("ApprovalResponse received but no ApprovalGate configured");
+                }
+            }
+            ClientMessage::InteractionResponse { request_id, response } => {
+                let found = state.interaction_gate.respond(&request_id, response).await;
+                if found {
+                    info!(request_id = %request_id, "Interaction response forwarded");
+                } else {
+                    warn!(request_id = %request_id, "No pending interaction request");
                 }
             }
         }

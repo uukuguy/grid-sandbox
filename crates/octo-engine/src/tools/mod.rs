@@ -15,6 +15,7 @@ pub mod grep;
 pub mod interceptor;
 pub mod knowledge_graph;
 pub mod mcp_manage;
+pub mod notebook_edit;
 pub mod path_safety;
 pub mod memory_compress;
 pub mod memory_edit;
@@ -50,6 +51,7 @@ use self::file_write::FileWriteTool;
 use self::find::FindTool;
 use self::glob::GlobTool;
 use self::grep::GrepTool;
+use self::notebook_edit::NotebookEditTool;
 use self::memory_compress::MemoryCompressTool;
 use self::memory_forget::MemoryForgetTool;
 use self::memory_recall::MemoryRecallTool;
@@ -159,6 +161,7 @@ pub fn default_tools_with_search_priority(search_priority: &[String]) -> ToolReg
     };
     registry.register(search_tool);
     registry.register(SleepTool);
+    registry.register(NotebookEditTool::new());
     registry
 }
 
