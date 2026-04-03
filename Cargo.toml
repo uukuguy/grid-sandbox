@@ -1,16 +1,16 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
-# Exclude octo-desktop from default build — Tauri build.rs triggers
-# recompilation every time. Build explicitly: cargo build -p octo-desktop
+# Exclude grid-desktop from default build — Tauri build.rs triggers
+# recompilation every time. Build explicitly: cargo build -p grid-desktop
 default-members = [
-    "crates/octo-types",
-    "crates/octo-sandbox",
-    "crates/octo-engine",
-    "crates/octo-eval",
-    "crates/octo-cli",
-    "crates/octo-server",
-    "crates/octo-platform-server",
+    "crates/grid-types",
+    "crates/grid-sandbox",
+    "crates/grid-engine",
+    "crates/grid-eval",
+    "crates/grid-cli",
+    "crates/grid-server",
+    "crates/grid-platform",
 ]
 
 [workspace.package]
@@ -73,9 +73,9 @@ dirs = "6"
 # TUI framework
 ratatui = { version = "0.29", features = ["unstable-rendered-line-info"] }
 # Internal crates
-octo-types = { path = "crates/octo-types" }
-octo-engine = { path = "crates/octo-engine" }
-octo-sandbox = { path = "crates/octo-sandbox" }
+grid-types = { path = "crates/grid-types" }
+grid-engine = { path = "crates/grid-engine" }
+grid-sandbox = { path = "crates/grid-sandbox" }
 
 # ============================================================
 # 编译速度优化 Profile 配置

@@ -1,0 +1,42 @@
+[package]
+name = "grid-server"
+edition.workspace = true
+version.workspace = true
+
+[features]
+default = []
+full = ["grid-engine/full"]
+sandbox-wasm = ["grid-engine/sandbox-wasm"]
+sandbox-docker = ["grid-engine/sandbox-docker"]
+tls = ["grid-engine/tls", "dep:axum-server"]
+
+[dependencies]
+grid-types = { workspace = true }
+grid-engine = { workspace = true }
+grid-sandbox = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+axum-extra = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+dotenvy = { workspace = true }
+dashmap = { workspace = true }
+uuid.workspace = true
+futures-util = { workspace = true }
+async-stream = { workspace = true }
+tokio-stream = { workspace = true }
+chrono.workspace = true
+rusqlite = { workspace = true }
+tokio-rusqlite = { workspace = true }
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

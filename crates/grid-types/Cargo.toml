@@ -1,0 +1,14 @@
+[package]
+name = "grid-types"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+ulid = { workspace = true }
+serde_yaml = { workspace = true }

@@ -1,0 +1,93 @@
+[package]
+name = "grid-engine"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+grid-types = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+futures-util = { workspace = true }
+reqwest = { workspace = true, features = ["blocking"] }
+url = "2"
+flate2 = "1"
+urlencoding = { workspace = true }
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+glob = "0.3"
+rusqlite = { workspace = true }
+tokio-rusqlite = { workspace = true }
+sqlx = { workspace = true }
+ulid = { workspace = true }
+bincode = { workspace = true }
+dashmap = { workspace = true }
+serde_yaml = { workspace = true }
+notify = { workspace = true }
+notify-debouncer-mini = { workspace = true }
+rmcp = { workspace = true }
+hex = "0.4"
+sha2 = "0.10"
+hmac = "0.12"
+subtle = "2.5"
+jsonwebtoken = "9"
+thiserror = { workspace = true }
+cron = "0.15"
+
+# Secret Manager
+aes-gcm = "0.10"
+argon2 = "0.5"
+zeroize = { version = "1.7", features = ["derive"] }
+rand = "0.8"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+keyring = { version = "3", optional = true }
+regex = "1"
+dirs = { workspace = true }
+lru = "0.12"
+include_dir = "0.7"
+calamine = { version = "0.26", optional = true }
+pdf-extract = { version = "0.7", optional = true }
+zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
+hnsw_rs = { workspace = true, optional = true }
+tiktoken-rs = { version = "0.6", optional = true }
+rcgen = { version = "0.13", optional = true }
+redis = { version = "0.27", features = ["tokio-comp", "streams"], optional = true }
+
+[features]
+default = ["tiktoken"]
+# Enable all optional heavy features (WASM sandbox, Docker sandbox, PDF/Excel parsing)
+full = ["sandbox-wasm", "sandbox-docker", "file-parsing"]
+file-parsing = ["dep:calamine", "dep:pdf-extract", "dep:zip"]
+sandbox-wasm = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:base64"]
+sandbox-docker = ["dep:bollard", "dep:base64"]
+keyring = ["dep:keyring"]
+hnsw = ["dep:hnsw_rs"]
+tiktoken = ["dep:tiktoken-rs"]
+trigger-redis = ["dep:redis"]
+tls = ["dep:rcgen"]
+
+[dependencies.wasmtime]
+version = "36"
+optional = true
+features = ["component-model"]
+
+[dependencies.wasmtime-wasi]
+version = "36"
+optional = true
+
+[dependencies.bollard]
+version = "0.18"
+optional = true
+
+[dependencies.base64]
+version = "0.22"
+optional = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,5 +1,44 @@
 # Octo Sandbox 开发工作日志
 
+## 2026-04-04 — Phase BA 设计：Grid Crate 拆分 + 品牌重命名
+
+### 会话概要
+
+完成 Grid 产品拆分设计：将 `octo-cli`（24,160 行）拆分为 grid-cli-common + grid-cli + grid-studio 三个独立 crate，并规划全局 octo → grid 品牌重命名。
+
+### 完成内容
+
+**产品分析**
+- 审查 GRID_PRODUCT_DESIGN.md，给出 8 条产品和技术建议
+- 确认新项目无向后兼容需求，采用一步到位策略
+
+**代码结构分析**
+- 分析 88 个 .rs 文件的归属：tui/(61%) → Studio, repl/(8%) → CLI, commands/(25%) → 需拆分
+- 发现 tui/ 完全自封闭（零外部依赖），可整体搬迁
+- 发现 repl/ 仅被 commands/run.rs 单点调用
+- 识别 ui/(table/streaming/theme) 为唯一真正共享层
+- 精确标注 commands/ 内 22 个文件的归属（共享/CLI/Studio）
+
+**设计输出**
+- `docs/design/Grid/GRID_CRATE_SPLIT_DESIGN.md` — 完整架构设计
+- `docs/plans/2026-04-04-grid-crate-split.md` — 6 步实施计划
+
+### 设计决策
+
+| 决策 | 说明 |
+|------|------|
+| 新建 grid-cli-common 共享层 | 避免 grid-cli 和 grid-studio 代码重复 |
+| grid-cli 不依赖 ratatui/crossterm | 瘦 CLI 用于 CI/CD 场景 |
+| grid-studio 不依赖 rustyline | TUI 有自己的输入框 |
+| 直接拆分而非 feature flag | 新项目无需过渡态 |
+| S1-S6 执行顺序 | 先重命名骨架 → 再拆分 → 最后品牌 |
+
+### 下一步
+
+执行 Phase BA Step 1：全局 crate 重命名（octo-* → grid-*）
+
+---
+
 ## 2026-04-03 — Phase AY: SubAgent Runtime 完整生命周期 @ e80679f
 
 ### 会话概要

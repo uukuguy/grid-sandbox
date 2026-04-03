@@ -5,18 +5,18 @@
 # configuration parameters with their default values.
 #
 # To customize, copy to one of:
-#   ~/.octo/config.yaml           (global, all projects)
-#   $PROJECT/.octo/config.yaml    (project-specific)
-#   $PROJECT/.octo/config.local.yaml  (local overrides, .gitignore)
+#   ~/.grid/config.yaml           (global, all projects)
+#   $PROJECT/.grid/config.yaml    (project-specific)
+#   $PROJECT/.grid/config.local.yaml  (local overrides, .gitignore)
 #
 # Priority (lowest → highest):
 #   1. Code defaults
-#   2. ~/.octo/config.yaml
-#   3. $PROJECT/.octo/config.yaml
-#   4. $PROJECT/.octo/config.local.yaml
-#   5. $PROJECT/.octo/credentials.yaml  (API keys only)
+#   2. ~/.grid/config.yaml
+#   3. $PROJECT/.grid/config.yaml
+#   4. $PROJECT/.grid/config.local.yaml
+#   5. $PROJECT/.grid/credentials.yaml  (API keys only)
 #   6. CLI arguments (--port, --host)
-#   7. Environment variables (OCTO_*, ANTHROPIC_*, OPENAI_*)
+#   7. Environment variables (GRID_*, ANTHROPIC_*, OPENAI_*)
 # =============================================================================
 
 # ── Server ───────────────────────────────────────────────────────────────────
@@ -34,10 +34,10 @@
 
 # ── Database ─────────────────────────────────────────────────────────────────
 # Auto-resolved when empty:
-#   1. OCTO_DB_PATH env var
-#   2. ./data/octo.db (legacy server)
-#   3. ./octo.db (legacy CLI)
-#   4. ~/.octo/projects/<key>/octo.db (default)
+#   1. GRID_DB_PATH env var
+#   2. ./data/grid.db (legacy server)
+#   3. ./grid.db (legacy CLI)
+#   4. ~/.grid/projects/<key>/grid.db (default)
 # database:
 #   path: ""                     # Empty = auto-resolve via OctoRoot
 
@@ -50,10 +50,10 @@
 #   servers_dir: null            # Directory containing MCP server configs
 
 # ── Skills ───────────────────────────────────────────────────────────────────
-# Builtin skills are auto-installed to ~/.octo/skills/ on first run.
+# Builtin skills are auto-installed to ~/.grid/skills/ on first run.
 # Additional skills are loaded from:
-#   1. $PROJECT/.octo/skills/    (project-level, highest priority)
-#   2. ~/.octo/skills/           (global, includes builtins)
+#   1. $PROJECT/.grid/skills/    (project-level, highest priority)
+#   2. ~/.grid/skills/           (global, includes builtins)
 # skills:
 #   dirs: []                     # Extra skill directories (auto-resolved by OctoRoot)
 
@@ -73,7 +73,7 @@
 # ── Sandbox ──────────────────────────────────────────────────────────────────
 # Sandbox profile controls tool execution isolation level.
 # Profiles: development | staging | production | custom
-# Set via env: OCTO_SANDBOX_PROFILE=staging
+# Set via env: GRID_SANDBOX_PROFILE=staging
 #
 # sandbox_profile: null          # null = auto-detect (development if local)
 #
@@ -92,10 +92,10 @@
 
 # ── Authentication ───────────────────────────────────────────────────────────
 # Configure via environment variables (recommended):
-#   OCTO_AUTH_MODE=none          # Disable auth (local dev only)
-#   OCTO_AUTH_MODE=api_key       # API key auth
-#   OCTO_API_KEY=your-key        # Key for Authorization: Bearer header
-#   OCTO_API_KEY_USER=dev        # Optional user ID (default: "default")
+#   GRID_AUTH_MODE=none          # Disable auth (local dev only)
+#   GRID_AUTH_MODE=api_key       # API key auth
+#   GRID_API_KEY=your-key        # Key for Authorization: Bearer header
+#   GRID_API_KEY_USER=dev        # Optional user ID (default: "default")
 #
 # auth:
 #   mode: api_key                # none | api_key

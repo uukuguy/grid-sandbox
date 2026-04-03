@@ -1,0 +1,1393 @@
+//! octo-eval CLI — run evaluation suites and multi-model comparisons.
+//!
+//! Usage:
+//!   cargo run -p octo-eval -- list-suites
+//!   cargo run -p octo-eval -- run --suite tool_call
+//!   cargo run -p octo-eval -- compare --suite tool_call
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use anyhow::Result;
+
+use grid_eval::benchmark::BenchmarkAggregator;
+use grid_eval::comparison::{ComparisonReport, ComparisonRunner, TaskRecord};
+use grid_eval::config::{EvalConfig, EvalTarget, EvalTomlConfig, EngineConfig, MultiModelConfig, ModelEntry};
+use grid_eval::model::{ModelInfo, ModelTier};
+use grid_eval::reporter::Reporter;
+use grid_eval::runner::{EvalReport, EvalRunner};
+use grid_eval::suites::context::ContextSuite;
+use grid_eval::suites::e2e::E2eSuite;
+use grid_eval::suites::memory::MemorySuite;
+use grid_eval::suites::output_format::OutputFormatSuite;
+use grid_eval::suites::provider::ProviderSuite;
+use grid_eval::suites::reasoning::ReasoningSuite;
+use grid_eval::suites::security::SecuritySuite;
+use grid_eval::suites::tool_boundary::ToolBoundarySuite;
+use grid_eval::benchmarks::BenchmarkRegistry;
+use grid_eval::suites::platform_security::PlatformSecuritySuite;
+use grid_eval::suites::provider_resilience::ProviderResilienceSuite;
+use grid_eval::suites::resilience::ResilienceSuite;
+use grid_eval::suites::tool_call::ToolCallSuite;
+use grid_eval::task::EvalTask;
+
+fn main() -> Result<()> {
+    // Load .env from project root (walk up from crate dir)
+    let _ = dotenvy::dotenv();
+
+    tracing_subscriber::fmt::init();
+
+    let args: Vec<String> = std::env::args().collect();
+    let command = args.get(1).map(|s| s.as_str()).unwrap_or("help");
+
+    match command {
+        "list-suites" => cmd_list_suites(),
+        "run" => cmd_run(&args[2..]),
+        "compare" => cmd_compare(&args[2..]),
+        "benchmark" => cmd_benchmark(&args[2..]),
+        "help" | "--help" | "-h" => cmd_help(),
+        _ => {
+            eprintln!("Unknown command: {command}");
+            let _ = cmd_help();
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_help() -> Result<()> {
+    println!("octo-eval — Agent Evaluation Harness\n");
+    println!("USAGE:");
+    println!("  cargo run -p octo-eval -- <COMMAND> [OPTIONS]\n");
+    println!("COMMANDS:");
+    println!("  list-suites              List available evaluation suites");
+    println!("  run --suite <NAME>       Run a single-model evaluation");
+    println!("  compare --suite <NAME>   Run multi-model comparison");
+    println!("  benchmark                Aggregate multi-suite comparisons into a unified report");
+    println!("  help                     Show this help\n");
+    println!("OPTIONS:");
+    println!("  --suite <NAME>           Suite name: tool_call, security, context, output_format, tool_boundary, reasoning, resilience, provider, memory, e2e, gaia, swe_bench, tau_bench");
+    println!("  --suites <A,B,C>         Comma-separated suite list (for benchmark command)");
+    println!("  --input <DIR>            Input directory with comparison.json files (for benchmark command)");
+    println!("  --output <DIR>           Output directory (default: eval_output)");
+    println!("  --format <FMT>           Output format: json, markdown, both (default: both)");
+    println!("  --baseline <PATH>        Baseline report JSON for regression detection");
+    println!("  --config <PATH>          Config file path (default: eval.toml)");
+    println!("  --replay <DIR>           Replay mode: use saved traces (zero LLM cost)");
+    println!("  --target <MODE>          Target mode: engine (default), cli, or server");
+    println!("  --binary <PATH>          CLI binary path (default: target/debug/octo-cli)");
+    println!("  --server-url <URL>       Server base URL (default: http://127.0.0.1:3001)");
+    println!("  --tag <NAME>            Tag this run for future reference");
+    Ok(())
+}
+
+fn cmd_list_suites() -> Result<()> {
+    println!("Available evaluation suites:\n");
+    println!("  Agent Loop Suites (require LLM provider):");
+    println!("    tool_call   — Tool calling accuracy (23 tasks, L1-L4)");
+    println!("    security    — Security policy enforcement (14 tasks, S1-S4)");
+    println!("    context     — Output quality & error handling (6 tasks, CX1-CX3)");
+    println!("    output_format — Structured output format verification (JSON, YAML, CSV, Markdown)");
+    println!("    tool_boundary — Tool boundary awareness and creative tool use");
+    println!("    reasoning     — Reasoning, planning, and task decomposition (LlmJudge)");
+    println!();
+    println!("    resilience    — Resilience: retry, e-stop, canary detection, error recovery (20 tasks)");
+    println!("    platform_security — Platform security: SecurityPolicy modes, autonomy, path traversal (15 tasks)");
+    println!("    provider_resilience — Provider resilience: failover, rate limit, timeout health (12 tasks)");
+    println!();
+    println!("  Direct API Suites (mock-based, no LLM required):");
+    println!("    provider    — Provider fault tolerance & failover (10 tests)");
+    println!("    memory      — Memory system consistency across 4 layers (12 tests)");
+    println!("    e2e         — End-to-end bug-fix verification (8 fixtures)");
+    println!();
+    println!("  External Dataset Suites:");
+    println!("    bfcl        — Berkeley Function Calling Leaderboard simple subset (10 tasks)");
+    println!();
+    println!("  External Benchmarks:");
+    let registry = BenchmarkRegistry::with_defaults();
+    for bm in registry.list() {
+        let sandbox_note = if bm.requires_sandbox() {
+            if bm.sandbox_available() {
+                " [sandbox: available]"
+            } else {
+                " [sandbox: unavailable — mock mode]"
+            }
+        } else {
+            ""
+        };
+        println!("    {:12} — {}{}", bm.name(), bm.description(), sandbox_note);
+    }
+    Ok(())
+}
+
+fn load_suite(name: &str) -> Result<Vec<Box<dyn EvalTask>>> {
+    match name {
+        "tool_call" => ToolCallSuite::load(),
+        "security" => SecuritySuite::load(),
+        "context" => ContextSuite::load(),
+        "output_format" => OutputFormatSuite::load(),
+        "tool_boundary" => ToolBoundarySuite::load(),
+        "reasoning" => ReasoningSuite::load(),
+        "resilience" => ResilienceSuite::load(),
+        "platform_security" => PlatformSecuritySuite::load(),
+        "provider_resilience" => ProviderResilienceSuite::load(),
+        "bfcl" => {
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let path = manifest_dir.join("datasets/bfcl_simple.jsonl");
+            grid_eval::datasets::bfcl::load_bfcl_as_tasks(&path)
+        }
+        // External benchmarks — delegate to BenchmarkRegistry
+        name if BenchmarkRegistry::with_defaults().contains(name) => {
+            let registry = BenchmarkRegistry::with_defaults();
+            let bm = registry.get(name).unwrap();
+            bm.load_tasks()
+        }
+        _ => anyhow::bail!("Unknown suite: {name}. Use 'list-suites' to see available suites."),
+    }
+}
+
+struct CliArgs {
+    suite: String,
+    suites: Option<String>,
+    input: Option<PathBuf>,
+    output: PathBuf,
+    output_explicit: bool,
+    format: String,
+    baseline: Option<PathBuf>,
+    config_path: Option<PathBuf>,
+    replay: Option<PathBuf>,
+    target: String,
+    binary: Option<PathBuf>,
+    server_url: Option<String>,
+    tag: Option<String>,
+    /// Maximum tasks per suite (0 = unlimited)
+    max_tasks: usize,
+}
+
+fn parse_args(args: &[String]) -> CliArgs {
+    let mut suite = "tool_call".to_string();
+    let mut suites: Option<String> = None;
+    let mut input: Option<PathBuf> = None;
+    let mut output = PathBuf::from("eval_output");
+    let mut output_explicit = false;
+    let mut format = "both".to_string();
+    let mut baseline = None;
+    let mut config_path = None;
+    let mut replay = None;
+    let mut target = "engine".to_string();
+    let mut binary = None;
+    let mut server_url = None;
+    let mut tag = None;
+    let mut max_tasks: usize = 0;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--suite" => {
+                if i + 1 < args.len() {
+                    suite = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--output" => {
+                if i + 1 < args.len() {
+                    output = PathBuf::from(&args[i + 1]);
+                    output_explicit = true;
+                    i += 1;
+                }
+            }
+            "--format" => {
+                if i + 1 < args.len() {
+                    format = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--baseline" => {
+                if i + 1 < args.len() {
+                    baseline = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--config" => {
+                if i + 1 < args.len() {
+                    config_path = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--replay" => {
+                if i + 1 < args.len() {
+                    replay = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--target" => {
+                if i + 1 < args.len() {
+                    target = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--binary" => {
+                if i + 1 < args.len() {
+                    binary = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--server-url" => {
+                if i + 1 < args.len() {
+                    server_url = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--suites" => {
+                if i + 1 < args.len() {
+                    suites = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--input" => {
+                if i + 1 < args.len() {
+                    input = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--tag" => {
+                if i + 1 < args.len() {
+                    tag = Some(args[i + 1].clone());
+                    i += 1;
+                }
+            }
+            "--max-tasks" => {
+                if i + 1 < args.len() {
+                    max_tasks = args[i + 1].parse().unwrap_or(0);
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    CliArgs {
+        suite,
+        suites,
+        input,
+        output,
+        output_explicit,
+        format,
+        baseline,
+        config_path,
+        replay,
+        target,
+        binary,
+        server_url,
+        tag,
+        max_tasks,
+    }
+}
+
+fn cmd_run(args: &[String]) -> Result<()> {
+    let cli = parse_args(args);
+
+    // Direct API suites — run their own runner, no LLM required
+    match cli.suite.as_str() {
+        "provider" | "memory" | "e2e" => return cmd_run_direct_suite(&cli),
+        _ => {}
+    }
+
+    let tasks = load_suite(&cli.suite)?;
+
+    println!("Running suite '{}' ({} tasks)...\n", cli.suite, tasks.len());
+
+    // Layer config: code defaults < eval.toml < CLI args
+    let toml_path = cli.config_path.clone().unwrap_or_else(|| PathBuf::from("eval.toml"));
+    let toml_config = EvalTomlConfig::load(&toml_path)?;
+
+    let mut config = EvalConfig::default();
+    // Layer 1: Apply TOML defaults (overrides code defaults)
+    if let Some(ref tc) = toml_config {
+        tc.apply_to_eval_config(&mut config);
+        // If TOML defines models, use the first model's engine config for single-model run
+        let model_entries = tc.to_model_entries();
+        if let Some(first) = model_entries.first() {
+            config.target = grid_eval::config::EvalTarget::Engine(first.engine.clone());
+        }
+    }
+    // Layer 2: CLI overrides (highest priority)
+    if cli.output_explicit {
+        config.output_dir = cli.output.clone();
+    }
+
+    // Apply target mode
+    match cli.target.as_str() {
+        "cli" => {
+            let binary_path = cli
+                .binary
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("target/debug/octo-cli"));
+            config.target = grid_eval::config::EvalTarget::Cli(grid_eval::config::CliConfig {
+                binary_path,
+                ..Default::default()
+            });
+        }
+        "server" => {
+            let base_url = cli
+                .server_url
+                .clone()
+                .unwrap_or_else(|| "http://127.0.0.1:3001".to_string());
+            config.target =
+                grid_eval::config::EvalTarget::Server(grid_eval::config::ServerConfig {
+                    base_url,
+                    ..Default::default()
+                });
+        }
+        _ => {} // "engine" — default
+    }
+
+    // Extract model name before config is moved into async block
+    let run_model_name = match &config.target {
+        grid_eval::config::EvalTarget::Engine(e) => e.model.clone(),
+        _ => cli.target.clone(),
+    };
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let report = rt.block_on(async {
+        if let Some(ref replay_dir) = cli.replay {
+            run_with_replay(&config, &tasks, replay_dir).await
+        } else {
+            let runner = EvalRunner::new(config)?;
+            runner.run_suite(&tasks).await
+        }
+    })?;
+
+    println!("Results: {}/{} passed ({:.1}%)\n", report.passed, report.total, report.pass_rate * 100.0);
+
+    let (categories, difficulties) = build_metadata(&tasks);
+    let detailed = Reporter::generate(&report, &categories, &difficulties);
+
+    output_report(&cli, &detailed)?;
+
+    // Save to RunStore
+    match save_to_run_store("run", &cli.suite, &[run_model_name], &detailed, None, cli.tag.as_deref()) {
+        Ok(run_id) => println!("Run saved: {} (eval_output/runs/{})", run_id, run_id),
+        Err(e) => eprintln!("Warning: Failed to save run: {}", e),
+    }
+
+    Ok(())
+}
+
+/// Run direct API suites (provider, memory, e2e) — no LLM provider needed
+fn cmd_run_direct_suite(cli: &CliArgs) -> Result<()> {
+    println!("Running direct API suite '{}'...\n", cli.suite);
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let report = rt.block_on(async {
+        match cli.suite.as_str() {
+            "provider" => ProviderSuite::run().await,
+            "memory" => MemorySuite::run().await,
+            "e2e" => E2eSuite::run().await,
+            _ => unreachable!(),
+        }
+    })?;
+
+    println!(
+        "Results: {}/{} passed ({:.1}%)\n",
+        report.passed, report.total, report.pass_rate * 100.0
+    );
+
+    // Generate report with empty metadata (direct suites don't use JSONL metadata)
+    let categories = HashMap::new();
+    let difficulties = HashMap::new();
+    let detailed = Reporter::generate(&report, &categories, &difficulties);
+
+    output_report(cli, &detailed)?;
+    Ok(())
+}
+
+/// Write report files and handle regression detection
+fn output_report(cli: &CliArgs, detailed: &grid_eval::reporter::DetailedReport) -> Result<()> {
+    std::fs::create_dir_all(&cli.output)?;
+
+    if cli.format == "json" || cli.format == "both" {
+        let json = Reporter::to_json(detailed);
+        let path = cli.output.join("report.json");
+        std::fs::write(&path, &json)?;
+        println!("JSON report: {}", path.display());
+    }
+
+    if cli.format == "markdown" || cli.format == "both" {
+        let md = Reporter::to_markdown(detailed);
+        let path = cli.output.join("report.md");
+        std::fs::write(&path, &md)?;
+        println!("Markdown report: {}", path.display());
+    }
+
+    // Regression detection against baseline
+    if let Some(baseline_path) = &cli.baseline {
+        let baseline_content = std::fs::read_to_string(baseline_path)?;
+        let baseline: grid_eval::reporter::DetailedReport =
+            serde_json::from_str(&baseline_content)?;
+        let regression = Reporter::diff_report(detailed, &baseline);
+        let regression_md = Reporter::regression_to_markdown(&regression);
+
+        let regression_path = cli.output.join("regression.md");
+        std::fs::write(&regression_path, &regression_md)?;
+        println!("Regression report: {}", regression_path.display());
+
+        let regression_json_path = cli.output.join("regression.json");
+        let regression_json = serde_json::to_string_pretty(&regression)?;
+        std::fs::write(&regression_json_path, &regression_json)?;
+        println!("Regression JSON: {}", regression_json_path.display());
+
+        // Print summary
+        let delta = regression.current_pass_rate - regression.baseline_pass_rate;
+        let arrow = if delta > 0.0 { "▲" } else if delta < 0.0 { "▼" } else { "=" };
+        println!(
+            "\nRegression: {:.1}% → {:.1}% ({}{:+.1}%) | {} improved, {} regressed, {} unchanged",
+            regression.baseline_pass_rate * 100.0,
+            regression.current_pass_rate * 100.0,
+            arrow,
+            delta * 100.0,
+            regression.improved,
+            regression.regressed,
+            regression.unchanged,
+        );
+    }
+
+    Ok(())
+}
+
+/// Run evaluation in replay mode using saved traces (zero LLM cost).
+async fn run_with_replay(
+    config: &EvalConfig,
+    tasks: &[Box<dyn EvalTask>],
+    replay_dir: &std::path::Path,
+) -> Result<grid_eval::runner::EvalReport> {
+    use grid_eval::mock_provider::ReplayProvider;
+    use grid_eval::recorder::EvalRecorder;
+
+    // Try to load summary JSONL first, then try individual trace files
+    let summary_path = replay_dir.join("eval_traces.jsonl");
+    let traces = if summary_path.exists() {
+        EvalRecorder::load_summary(&summary_path)?
+    } else {
+        // Load individual trace files from the directory
+        let mut traces = Vec::new();
+        for entry in std::fs::read_dir(replay_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "json") {
+                if let Ok(trace) = EvalRecorder::load_trace(&path) {
+                    traces.push(trace);
+                }
+            }
+        }
+        traces
+    };
+
+    if traces.is_empty() {
+        eprintln!(
+            "WARNING: No traces found in {}. Falling back to normal provider.",
+            replay_dir.display()
+        );
+        let runner = EvalRunner::new(config.clone())?;
+        return runner.run_suite(tasks).await;
+    }
+
+    eprintln!(
+        "Replay mode: loaded {} traces from {}",
+        traces.len(),
+        replay_dir.display()
+    );
+
+    // Extract all interactions from traces for the ReplayProvider
+    let mut all_interactions = Vec::new();
+    for trace in &traces {
+        let interactions = EvalRecorder::extract_interactions(trace);
+        all_interactions.extend(interactions);
+    }
+
+    let replay_provider = Arc::new(ReplayProvider::new(all_interactions));
+    let runner = EvalRunner::with_provider(config.clone(), replay_provider);
+    runner.run_suite(tasks).await
+}
+
+fn cmd_compare(args: &[String]) -> Result<()> {
+    let cli = parse_args(args);
+    let suite_name = &cli.suite;
+    let output_dir = &cli.output;
+    let format = &cli.format;
+    let tasks = load_suite(suite_name)?;
+
+    // Load TOML config for model definitions
+    let toml_path = cli.config_path.clone().unwrap_or_else(|| PathBuf::from("eval.toml"));
+    let toml_config = EvalTomlConfig::load(&toml_path)?;
+
+    // Load model configurations: EVAL_MODEL_* env vars > TOML models > auto-detect
+    let mut models = load_models_from_env();
+    if models.is_empty() {
+        if let Some(ref tc) = toml_config {
+            models = tc.to_model_entries();
+        }
+    }
+    if models.is_empty() {
+        models = auto_detect_models();
+    }
+    if models.is_empty() {
+        println!("No models configured. Using mock models for demonstration.\n");
+        return run_mock_comparison(&tasks, &output_dir, &format, &suite_name);
+    }
+
+    println!(
+        "Comparing {} models on suite '{}' ({} tasks)...\n",
+        models.len(),
+        suite_name,
+        tasks.len()
+    );
+
+    let config = MultiModelConfig {
+        models,
+        output_dir: output_dir.clone(),
+        ..MultiModelConfig::default()
+    };
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let report = rt.block_on(async {
+        let runner = ComparisonRunner::new(config);
+        runner.run_comparison(&tasks).await
+    })?;
+
+    output_comparison(&report, &tasks, &output_dir, &format)?;
+
+    // Save to RunStore — build a summary report from comparison
+    let model_names: Vec<String> = report.model_reports.iter().map(|r| r.0.name.clone()).collect();
+    let (categories, difficulties) = build_metadata(&tasks);
+    // Use first model's report as a representative
+    if let Some((_, first_report)) = report.model_reports.first() {
+        let detailed = Reporter::generate(first_report, &categories, &difficulties);
+        let comparison_json = serde_json::from_str::<serde_json::Value>(
+            &report.to_json(&categories, &difficulties),
+        )
+        .ok();
+        match save_to_run_store(
+            "compare",
+            suite_name,
+            &model_names,
+            &detailed,
+            comparison_json.as_ref(),
+            cli.tag.as_deref(),
+        ) {
+            Ok(run_id) => println!("Run saved: {} (eval_output/runs/{})", run_id, run_id),
+            Err(e) => eprintln!("Warning: Failed to save run: {}", e),
+        }
+    }
+
+    Ok(())
+}
+
+fn auto_detect_models() -> Vec<ModelEntry> {
+    let api_key = std::env::var("OPENAI_API_KEY").ok();
+    let base_url = std::env::var("OPENAI_BASE_URL").ok();
+
+    if api_key.is_none() {
+        return vec![];
+    }
+
+    let models = vec![
+        ("DeepSeek-V3", "deepseek/deepseek-chat-v3-0324", ModelTier::Economy, 0.30, 0.88),
+        ("Qwen3-30B", "qwen/qwen3-30b-a3b", ModelTier::Economy, 0.15, 0.60),
+        ("Qwen3.5-122B", "qwen/qwen3.5-122b-a10b", ModelTier::Standard, 0.30, 1.20),
+    ];
+
+    models
+        .into_iter()
+        .map(|(name, model_id, tier, cost_in, cost_out)| ModelEntry {
+            engine: EngineConfig {
+                provider_name: "openai".into(),
+                api_key: api_key.clone(),
+                base_url: base_url.clone(),
+                model: model_id.into(),
+                ..EngineConfig::default()
+            },
+            info: ModelInfo {
+                name: name.into(),
+                model_id: model_id.into(),
+                provider: "openrouter".into(),
+                tier,
+                cost_per_1m_input: cost_in,
+                cost_per_1m_output: cost_out,
+            },
+        })
+        .collect()
+}
+
+fn load_models_from_env() -> Vec<ModelEntry> {
+    let mut models = Vec::new();
+
+    // Check for EVAL_MODEL_* environment variables
+    // Format: EVAL_MODEL_1_NAME, EVAL_MODEL_1_PROVIDER, EVAL_MODEL_1_MODEL, EVAL_MODEL_1_KEY
+    for i in 1..=10 {
+        let prefix = format!("EVAL_MODEL_{}", i);
+        let name = std::env::var(format!("{}_NAME", prefix)).ok();
+        let provider = std::env::var(format!("{}_PROVIDER", prefix)).ok();
+        let model_id = std::env::var(format!("{}_MODEL", prefix)).ok();
+        let api_key = std::env::var(format!("{}_KEY", prefix)).ok();
+        let base_url = std::env::var(format!("{}_BASE_URL", prefix)).ok();
+
+        if let (Some(name), Some(provider), Some(model_id)) = (name, provider, model_id) {
+            let tier = std::env::var(format!("{}_TIER", prefix))
+                .ok()
+                .and_then(|t| match t.to_lowercase().as_str() {
+                    "free" | "t0" => Some(ModelTier::Free),
+                    "economy" | "t1" => Some(ModelTier::Economy),
+                    "standard" | "t2" => Some(ModelTier::Standard),
+                    "high" | "t3" => Some(ModelTier::HighPerformance),
+                    "flagship" | "t4" => Some(ModelTier::Flagship),
+                    "top" | "t5" => Some(ModelTier::TopTier),
+                    _ => None,
+                })
+                .unwrap_or(ModelTier::Standard);
+
+            models.push(ModelEntry {
+                engine: EngineConfig {
+                    provider_name: provider.clone(),
+                    api_key,
+                    base_url,
+                    model: model_id.clone(),
+                    ..EngineConfig::default()
+                },
+                info: ModelInfo {
+                    name,
+                    model_id,
+                    provider,
+                    tier,
+                    cost_per_1m_input: 0.0,
+                    cost_per_1m_output: 0.0,
+                },
+            });
+        }
+    }
+
+    models
+}
+
+fn run_mock_comparison(
+    tasks: &[Box<dyn EvalTask>],
+    output_dir: &PathBuf,
+    format: &str,
+    suite_name: &str,
+) -> Result<()> {
+    use grid_eval::mock_provider::MockProvider;
+
+    println!("Running mock comparison demo with 2 simulated models...\n");
+
+    let model_a = ModelInfo {
+        name: "MockEconomy".into(),
+        model_id: "mock-economy".into(),
+        provider: "mock".into(),
+        tier: ModelTier::Economy,
+        cost_per_1m_input: 0.15,
+        cost_per_1m_output: 0.75,
+    };
+
+    let model_b = ModelInfo {
+        name: "MockFlagship".into(),
+        model_id: "mock-flagship".into(),
+        provider: "mock".into(),
+        tier: ModelTier::Flagship,
+        cost_per_1m_input: 3.0,
+        cost_per_1m_output: 15.0,
+    };
+
+    let provider_a = Arc::new(MockProvider::with_text("mock response economy"));
+    let provider_b = Arc::new(MockProvider::with_text("mock response flagship"));
+
+    let config = MultiModelConfig {
+        output_dir: output_dir.clone(),
+        ..MultiModelConfig::default()
+    };
+
+    let rt = tokio::runtime::Runtime::new()?;
+    let report = rt.block_on(async {
+        ComparisonRunner::run_comparison_with_providers(
+            vec![
+                (model_a, provider_a),
+                (model_b, provider_b),
+            ],
+            tasks,
+            &config,
+        )
+        .await
+    })?;
+
+    println!(
+        "Compared {} models on suite '{}'\n",
+        report.model_count(),
+        suite_name
+    );
+
+    output_comparison(&report, tasks, output_dir, format)?;
+    Ok(())
+}
+
+fn output_comparison(
+    report: &ComparisonReport,
+    tasks: &[Box<dyn EvalTask>],
+    output_dir: &PathBuf,
+    format: &str,
+) -> Result<()> {
+    let (categories, difficulties) = build_metadata(tasks);
+
+    std::fs::create_dir_all(output_dir)?;
+
+    if format == "json" || format == "both" {
+        let json = report.to_json(&categories, &difficulties);
+        let path = output_dir.join("comparison.json");
+        std::fs::write(&path, &json)?;
+        println!("JSON comparison: {}", path.display());
+    }
+
+    if format == "markdown" || format == "both" {
+        let md = report.to_markdown(&categories, &difficulties);
+        let path = output_dir.join("comparison.md");
+        std::fs::write(&path, &md)?;
+        println!("Markdown comparison: {}", path.display());
+
+        // Print summary to stdout
+        println!("\n{}", md);
+    }
+
+    Ok(())
+}
+
+fn cmd_benchmark(args: &[String]) -> Result<()> {
+    let cli = parse_args(args);
+
+    // Mode 1: Aggregate from existing comparison.json files in --input directory
+    if let Some(ref input_dir) = cli.input {
+        return cmd_benchmark_from_files(input_dir, &cli);
+    }
+
+    // Mode 2: Run all suites and aggregate
+    let suite_list = cli
+        .suites
+        .as_deref()
+        .unwrap_or("gaia,swe_bench,tau_bench,terminal_bench,bfcl,security,context,resilience");
+    let suite_names: Vec<&str> = suite_list.split(',').map(|s| s.trim()).collect();
+
+    // Load TOML config for model definitions
+    let toml_path = cli
+        .config_path
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("config/eval/benchmark.toml"));
+    let toml_config = EvalTomlConfig::load(&toml_path)?;
+
+    let mut models = load_models_from_env();
+    if models.is_empty() {
+        if let Some(ref tc) = toml_config {
+            models = tc.to_model_entries();
+        }
+    }
+    if models.is_empty() {
+        models = auto_detect_models();
+    }
+    if models.is_empty() {
+        anyhow::bail!(
+            "No models configured. Set OPENAI_API_KEY or provide --config with model definitions."
+        );
+    }
+
+    println!(
+        "Benchmark: {} models x {} suites\n",
+        models.len(),
+        suite_names.len()
+    );
+
+    let timeout_secs = toml_config
+        .as_ref()
+        .and_then(|tc| tc.default.timeout_secs)
+        .unwrap_or(120);
+    let record_traces = toml_config
+        .as_ref()
+        .and_then(|tc| tc.default.record_traces)
+        .unwrap_or(false);
+    let max_tasks = cli.max_tasks;
+
+    // Auto-generate a dated run ID (YYYY-MM-DD-NNN) for the canonical run directory.
+    // All suite data AND the RunStore manifest live under the same directory.
+    // When --output is explicit, use it as-is (enables named runs like benchmark-p5).
+    let runs_base = PathBuf::from("eval_output/runs");
+    let output_root = if cli.output_explicit {
+        cli.output.clone()
+    } else {
+        use grid_eval::run_store::RunStore;
+        let store = RunStore::new(runs_base.clone())?;
+        let run_id = store.next_run_id();
+        runs_base.join(&run_id)
+    };
+    println!("Run directory: {}", output_root.display());
+    std::fs::create_dir_all(&output_root)?;
+
+    let report_format = cli.format.clone();
+
+    // ── Phase 1: Load all task lists up-front (once per suite, before spawning threads).
+    // This guarantees every model sees the exact same task IDs in the same order.
+    let mut suite_task_records: HashMap<String, Vec<TaskRecord>> = HashMap::new();
+    for suite_name in &suite_names {
+        let mut tasks = load_suite(suite_name)?;
+        if max_tasks > 0 && tasks.len() > max_tasks {
+            tasks.truncate(max_tasks);
+        }
+        // Freeze tasks into TaskRecord (Clone + Send) so each model thread can share them.
+        let records: Vec<TaskRecord> =
+            tasks.iter().map(|t| TaskRecord::from_task(t.as_ref())).collect();
+        eprintln!("[suite:{}] {} tasks loaded (shared across {} models)",
+            suite_name, records.len(), models.len());
+        suite_task_records.insert(suite_name.to_string(), records);
+    }
+
+    // ── Phase 2: Spawn one thread per (suite, model) — full matrix, all parallel.
+    // Thread key: (suite_name, model_index)
+    // Thread returns: (suite_name, model_index, Result<(ModelInfo, EvalReport)>)
+    let mut cell_handles: Vec<std::thread::JoinHandle<(String, usize, anyhow::Result<(ModelInfo, EvalReport)>)>> =
+        Vec::with_capacity(suite_names.len() * models.len());
+
+    // Build SWE-bench harness config from TOML (if present)
+    let swe_bench_harness_base: Option<grid_eval::benchmarks::swe_bench::SweBenchHarnessConfig> =
+        toml_config.as_ref()
+            .and_then(|tc| tc.swe_bench.as_ref())
+            .and_then(|sb| sb.harness.as_ref())
+            .map(|h| grid_eval::benchmarks::swe_bench::SweBenchHarnessConfig {
+                python_bin: h.python_bin.clone()
+                    .unwrap_or_else(|| "/tmp/swebench-env/bin/python3".into()),
+                dataset_name: h.dataset_name.clone()
+                    .unwrap_or_else(|| "princeton-nlp/SWE-bench_Lite".into()),
+                max_workers: h.max_workers.unwrap_or(4),
+                cache_level: h.cache_level.clone().unwrap_or_else(|| "env".into()),
+                ..Default::default()
+            });
+
+    for suite_name in &suite_names {
+        let records = suite_task_records.remove(suite_name.as_ref() as &str).unwrap_or_default();
+        let records = std::sync::Arc::new(records);
+
+        for (mi, entry) in models.iter().enumerate() {
+            let suite_owned = suite_name.to_string();
+            let records_clone = records.clone();
+            let entry_clone = entry.clone();
+            let output_root_clone = output_root.clone();
+            let harness_config = swe_bench_harness_base.clone();
+            let handle = std::thread::spawn(move || -> (String, usize, anyhow::Result<(ModelInfo, EvalReport)>) {
+                let result = (|| -> anyhow::Result<(ModelInfo, EvalReport)> {
+                    let model_slug = entry_clone.info.name.to_lowercase().replace([' ', '/', '.'], "_");
+                    let cell_output = output_root_clone.join(&suite_owned).join(&model_slug);
+                    std::fs::create_dir_all(&cell_output)?;
+
+                    let eval_config = EvalConfig {
+                        target: EvalTarget::Engine(entry_clone.engine.clone()),
+                        concurrency: 1,
+                        timeout_secs,
+                        record_traces,
+                        output_dir: cell_output.clone(),
+                    };
+
+                    eprintln!("[{}/model:{}] starting {} tasks",
+                        suite_owned, entry_clone.info.name, records_clone.len());
+
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()?;
+                    // Box each TaskRecord into Box<dyn EvalTask> for run_suite
+                    let boxed_tasks: Vec<Box<dyn EvalTask>> = records_clone
+                        .iter()
+                        .map(|r| Box::new(r.clone()) as Box<dyn EvalTask>)
+                        .collect();
+
+                    let report = rt.block_on(async {
+                        let mut runner = EvalRunner::new(eval_config)?;
+                        // Attach SWE-bench harness config for swe_bench suite
+                        if suite_owned == "swe_bench" {
+                            if let Some(mut hc) = harness_config {
+                                // Per-model run_id and report_dir for isolation
+                                hc.run_id = format!("octo-eval-{}", model_slug);
+                                hc.report_dir = cell_output.clone();
+                                runner = runner.with_swe_bench_harness(hc);
+                            }
+                        }
+                        runner.run_suite(&boxed_tasks).await
+                    })?;
+                    let report = report.with_model(entry_clone.info.clone());
+
+                    // ── Immediately flush per-model result to disk
+                    let result_path = cell_output.join("model_result.json");
+                    let cell_json = serde_json::json!({
+                        "suite": suite_owned,
+                        "model": entry_clone.info.name,
+                        "total": report.total,
+                        "passed": report.passed,
+                        "pass_rate": report.pass_rate,
+                        "avg_score": report.avg_score,
+                        "tokens": report.total_tokens,
+                        "duration_ms": report.total_duration_ms,
+                        "task_results": report.results.iter().map(|r| serde_json::json!({
+                            "task_id": r.task_id,
+                            "passed": r.score.passed,
+                            "score": r.score.score,
+                            "duration_ms": r.duration_ms,
+                            "tokens": r.output.input_tokens + r.output.output_tokens,
+                        })).collect::<Vec<serde_json::Value>>(),
+                    });
+                    std::fs::write(&result_path, serde_json::to_string_pretty(&cell_json)?)?;
+
+                    eprintln!("[{}/model:{}] DONE — {}/{} passed ({:.1}%), flushed {}",
+                        suite_owned, entry_clone.info.name,
+                        report.passed, report.total, report.pass_rate * 100.0,
+                        result_path.display());
+
+                    // Also write suite-level comparison.json after EACH model completes
+                    // (partial — overwritten by each model, complete after last model)
+                    let suite_output = output_root_clone.join(&suite_owned);
+                    if let Ok(entries) = std::fs::read_dir(&suite_output) {
+                        let mut partial: Vec<serde_json::Value> = entries
+                            .filter_map(|e| e.ok())
+                            .filter(|e| e.path().is_dir())
+                            .filter_map(|e| {
+                                let p = e.path().join("model_result.json");
+                                std::fs::read_to_string(&p).ok()
+                                    .and_then(|s| serde_json::from_str(&s).ok())
+                            })
+                            .collect();
+                        partial.sort_by_key(|v| v["model"].as_str().unwrap_or("").to_string());
+                        let _ = std::fs::write(
+                            suite_output.join("progress.json"),
+                            serde_json::to_string_pretty(&partial).unwrap_or_default(),
+                        );
+                    }
+
+                    Ok((entry_clone.info.clone(), report))
+                })();
+                (suite_owned, mi, result)
+            });
+
+            cell_handles.push(handle);
+        }
+    }
+
+    // ── Phase 3: Progress reporting thread
+    let start_time = std::time::Instant::now();
+    let total_cells = suite_names.len() * models.len();
+    let handles_done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let done_flag = handles_done.clone();
+    let progress_thread = std::thread::spawn(move || {
+        while !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            if !done_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                let elapsed = start_time.elapsed().as_secs();
+                eprintln!("[progress] {}m{}s elapsed — {total_cells} cells running",
+                    elapsed / 60, elapsed % 60);
+            }
+        }
+    });
+
+    // ── Phase 4: Collect results — rebuild ComparisonReport per suite
+    // Collect all cell results indexed by suite
+    let mut cell_results: HashMap<String, Vec<(usize, ModelInfo, EvalReport)>> = HashMap::new();
+    for handle in cell_handles {
+        match handle.join() {
+            Ok((suite, mi, Ok((info, report)))) => {
+                cell_results.entry(suite).or_default().push((mi, info, report));
+            }
+            Ok((suite, mi, Err(e))) => {
+                eprintln!("WARNING: [{}/model#{}] failed: {}", suite, mi, e);
+            }
+            Err(_) => eprintln!("WARNING: A cell thread panicked"),
+        }
+    }
+    handles_done.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = progress_thread.join();
+
+    // Reconstruct ComparisonReports in suite order, preserving model order
+    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
+    for suite_name in &suite_names {
+        if let Some(mut cells) = cell_results.remove(suite_name.as_ref() as &str) {
+            // Sort by original model index to preserve config order
+            cells.sort_by_key(|(mi, _, _)| *mi);
+            let model_reports: Vec<(ModelInfo, EvalReport)> = cells.into_iter().map(|(_, info, report)| (info, report)).collect();
+            let comparison = ComparisonReport { model_reports };
+
+            // Write final comparison.json/.md for this suite
+            let suite_output = output_root.join(suite_name);
+            // Rebuild tasks from saved records for metadata
+            let records = {
+                let mut tmp = load_suite(suite_name).unwrap_or_default();
+                if max_tasks > 0 && tmp.len() > max_tasks { tmp.truncate(max_tasks); }
+                tmp
+            };
+            output_comparison(&comparison, &records, &suite_output, &report_format)?;
+            eprintln!("[suite:{}] all models complete — reports written", suite_name);
+
+            suite_comparisons.push((suite_name.to_string(), comparison));
+        }
+    }
+
+    // Aggregate all suite reports
+    let suite_refs: Vec<(&str, &ComparisonReport)> = suite_comparisons
+        .iter()
+        .map(|(name, report)| (name.as_str(), report))
+        .collect();
+
+    let benchmark = BenchmarkAggregator::aggregate(suite_refs);
+    output_benchmark(&benchmark, &output_root, &cli.format)?;
+
+    // Save to RunStore with full benchmark data
+    let model_names: Vec<String> = benchmark.models.iter().map(|m| m.info.name.clone()).collect();
+
+    // Aggregate totals across all models (not just first model)
+    let total_tasks: usize = benchmark.models.iter()
+        .map(|m| m.per_suite.values().map(|s| s.total).sum::<usize>())
+        .max().unwrap_or(0);
+    let total_passed: usize = benchmark.models.iter()
+        .map(|m| m.per_suite.values().map(|s| s.passed).sum::<usize>())
+        .sum::<usize>();
+    let avg_pass_rate = benchmark.models.iter().map(|m| m.overall_pass_rate).sum::<f64>()
+        / benchmark.models.len().max(1) as f64;
+    let avg_score = benchmark.models.iter().map(|m| m.overall_avg_score).sum::<f64>()
+        / benchmark.models.len().max(1) as f64;
+
+    // Build by_category from suite pass rates
+    let by_category: HashMap<String, grid_eval::reporter::CategoryStats> = benchmark.models
+        .iter()
+        .flat_map(|m| m.per_suite.iter().map(move |(suite, stats)| {
+            (suite.clone(), (stats.passed, stats.total, m.info.name.clone()))
+        }))
+        .fold(HashMap::new(), |mut acc, (suite, (passed, total, _model))| {
+            let entry = acc.entry(suite).or_insert(grid_eval::reporter::CategoryStats {
+                total: 0, passed: 0, pass_rate: 0.0, avg_score: 0.0,
+            });
+            entry.total += total;
+            entry.passed += passed;
+            entry.pass_rate = if entry.total > 0 { entry.passed as f64 / entry.total as f64 } else { 0.0 };
+            acc
+        });
+
+    let summary_report = grid_eval::reporter::DetailedReport {
+        summary: grid_eval::reporter::ReportSummary {
+            total: total_tasks,
+            passed: total_passed,
+            failed: total_tasks * benchmark.models.len() - total_passed,
+            pass_rate: avg_pass_rate,
+            avg_score,
+        },
+        by_category,
+        by_difficulty: HashMap::new(),
+        latency: grid_eval::reporter::LatencyStats::default(),
+        token_usage: grid_eval::reporter::TokenUsageStats::default(),
+        task_results: vec![],
+    };
+
+    // Serialize full benchmark report as the comparison payload stored in RunStore
+    let benchmark_json_val = serde_json::to_value(&benchmark).ok();
+
+    match save_to_run_store_at(
+        &output_root,
+        "benchmark",
+        suite_list,
+        &model_names,
+        &summary_report,
+        benchmark_json_val.as_ref(),
+        cli.tag.as_deref(),
+    ) {
+        Ok(run_id) => {
+            println!("Run saved: {} (eval_output/runs/{})", run_id, run_id);
+        }
+        Err(e) => eprintln!("Warning: Failed to save run: {}", e),
+    }
+
+    Ok(())
+}
+
+fn cmd_benchmark_from_files(input_dir: &PathBuf, cli: &CliArgs) -> Result<()> {
+    println!("Aggregating benchmark from {}\n", input_dir.display());
+
+    let mut suite_comparisons: Vec<(String, ComparisonReport)> = Vec::new();
+
+    // Scan subdirectories for comparison.json files
+    if input_dir.is_dir() {
+        let mut entries: Vec<_> = std::fs::read_dir(input_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+
+        for entry in entries {
+            let json_path = entry.path().join("comparison.json");
+            if json_path.exists() {
+                let suite_name = entry
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string();
+
+                match BenchmarkAggregator::load_comparison_json(&json_path) {
+                    Ok((models, reports)) => {
+                        let model_reports: Vec<_> =
+                            models.into_iter().zip(reports.into_iter()).collect();
+                        let comparison = ComparisonReport { model_reports };
+                        println!("  Loaded: {} ({} models)", suite_name, comparison.model_count());
+                        suite_comparisons.push((suite_name, comparison));
+                    }
+                    Err(e) => {
+                        eprintln!("  WARNING: Failed to load {}: {}", json_path.display(), e);
+                    }
+                }
+            }
+        }
+    }
+
+    if suite_comparisons.is_empty() {
+        anyhow::bail!("No comparison.json files found in {}", input_dir.display());
+    }
+
+    let suite_refs: Vec<(&str, &ComparisonReport)> = suite_comparisons
+        .iter()
+        .map(|(name, report)| (name.as_str(), report))
+        .collect();
+
+    let benchmark = BenchmarkAggregator::aggregate(suite_refs);
+
+    // For --input mode, write benchmark report into a timestamped run dir
+    let out_dir = if cli.output_explicit {
+        cli.output.clone()
+    } else {
+        let ts = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+        PathBuf::from("eval_output").join("runs").join(&ts)
+    };
+    output_benchmark(&benchmark, &out_dir, &cli.format)?;
+
+    // Save to RunStore with full benchmark JSON
+    let model_names: Vec<String> = benchmark.models.iter().map(|m| m.info.name.clone()).collect();
+    let suite_names_str = suite_comparisons.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(",");
+    let benchmark_json_val = serde_json::to_value(&benchmark).ok();
+    let avg_pass = benchmark.models.iter().map(|m| m.overall_pass_rate).sum::<f64>()
+        / benchmark.models.len().max(1) as f64;
+    let avg_score = benchmark.models.iter().map(|m| m.overall_avg_score).sum::<f64>()
+        / benchmark.models.len().max(1) as f64;
+    let total_tasks = benchmark.models.first().map(|m| m.per_suite.values().map(|s| s.total).sum()).unwrap_or(0);
+    let total_passed: usize = benchmark.models.iter().map(|m| m.per_suite.values().map(|s| s.passed).sum::<usize>()).sum();
+    let summary = grid_eval::reporter::DetailedReport {
+        summary: grid_eval::reporter::ReportSummary { total: total_tasks, passed: total_passed, failed: 0, pass_rate: avg_pass, avg_score },
+        by_category: HashMap::new(),
+        by_difficulty: HashMap::new(),
+        latency: grid_eval::reporter::LatencyStats::default(),
+        token_usage: grid_eval::reporter::TokenUsageStats::default(),
+        task_results: vec![],
+    };
+    match save_to_run_store("benchmark", &suite_names_str, &model_names, &summary, benchmark_json_val.as_ref(), cli.tag.as_deref()) {
+        Ok(run_id) => {
+            let md_src = out_dir.join("benchmark.md");
+            let run_dir = PathBuf::from("eval_output/runs").join(&run_id);
+            if md_src.exists() && run_dir != out_dir {
+                let _ = std::fs::copy(&md_src, run_dir.join("benchmark.md"));
+            }
+            println!("Run saved: {} (eval_output/runs/{})", run_id, run_id);
+        }
+        Err(e) => eprintln!("Warning: Failed to save run: {}", e),
+    }
+
+    Ok(())
+}
+
+fn output_benchmark(
+    benchmark: &grid_eval::benchmark::BenchmarkReport,
+    output_dir: &PathBuf,
+    format: &str,
+) -> Result<()> {
+    std::fs::create_dir_all(output_dir)?;
+
+    if format == "json" || format == "both" {
+        let json = BenchmarkAggregator::to_json(benchmark);
+        let path = output_dir.join("benchmark.json");
+        std::fs::write(&path, &json)?;
+        println!("\nBenchmark JSON: {}", path.display());
+    }
+
+    if format == "markdown" || format == "both" {
+        let md = BenchmarkAggregator::to_markdown(benchmark);
+        let path = output_dir.join("benchmark.md");
+        std::fs::write(&path, &md)?;
+        println!("Benchmark report: {}", path.display());
+        println!("\n{}", md);
+    }
+
+    Ok(())
+}
+
+/// Save evaluation results into a pre-determined directory (benchmark mode).
+/// The run_id is inferred from the last component of `run_dir`.
+fn save_to_run_store_at(
+    run_dir: &PathBuf,
+    command: &str,
+    suite: &str,
+    models: &[String],
+    report: &grid_eval::reporter::DetailedReport,
+    comparison: Option<&serde_json::Value>,
+    tag: Option<&str>,
+) -> Result<String> {
+    use grid_eval::run_store::{RunData, RunManifest, RunStore};
+    use std::process::Command;
+
+    // run_id is the directory name (last component), e.g. "2026-03-16-007"
+    let run_id = run_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // The store's base_dir is the parent of run_dir
+    let runs_base = run_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("eval_output/runs"));
+    let store = RunStore::new(runs_base)?;
+
+    // Get git info
+    let git_commit = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    let git_branch = Command::new("git")
+        .args(["branch", "--show-current"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+
+    let config_str = format!("{}:{}", suite, models.join(","));
+    let config_hash = {
+        let mut h: u64 = 0;
+        for b in config_str.bytes() {
+            h = h.wrapping_mul(31).wrapping_add(b as u64);
+        }
+        let hex = format!("{:x}", h);
+        hex[..8.min(hex.len())].to_string()
+    };
+
+    let manifest = RunManifest {
+        run_id: run_id.clone(),
+        tag: tag.map(|s| s.to_string()),
+        timestamp: chrono::Local::now().to_rfc3339(),
+        command: command.to_string(),
+        suite: suite.to_string(),
+        models: models.to_vec(),
+        git_commit,
+        git_branch,
+        task_count: report.summary.total,
+        passed: report.summary.passed,
+        pass_rate: report.summary.pass_rate,
+        avg_score: report.summary.avg_score,
+        duration_ms: report.latency.total_ms,
+        total_tokens: report.token_usage.total,
+        estimated_cost: 0.0,
+        eval_config_hash: config_hash,
+        failure_summary: grid_eval::benchmark::FailureSummary::default(),
+    };
+
+    let run_data = RunData {
+        manifest,
+        report: Some(report.clone()),
+        comparison: comparison.cloned(),
+        traces: vec![],
+    };
+
+    // Save directly into run_dir (RunStore writes to base_dir/run_id, which equals run_dir)
+    store.save_run(&run_data)?;
+    store.update_latest_link(&run_id)?;
+
+    Ok(run_id)
+}
+
+/// Save evaluation results to the versioned RunStore.
+fn save_to_run_store(
+    command: &str,
+    suite: &str,
+    models: &[String],
+    report: &grid_eval::reporter::DetailedReport,
+    comparison: Option<&serde_json::Value>,
+    tag: Option<&str>,
+) -> Result<String> {
+    use grid_eval::run_store::{RunData, RunManifest, RunStore};
+    use std::process::Command;
+
+    let store = RunStore::new(PathBuf::from("eval_output/runs"))?;
+    let run_id = store.next_run_id();
+
+    // Get git info
+    let git_commit = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+    let git_branch = Command::new("git")
+        .args(["branch", "--show-current"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|_| "unknown".into());
+
+    // Compute config hash (simplified: hash the suite name + model list)
+    let config_str = format!("{}:{}", suite, models.join(","));
+    let config_hash = {
+        let mut h: u64 = 0;
+        for b in config_str.bytes() {
+            h = h.wrapping_mul(31).wrapping_add(b as u64);
+        }
+        let hex = format!("{:x}", h);
+        hex[..8.min(hex.len())].to_string()
+    };
+
+    let manifest = RunManifest {
+        run_id: run_id.clone(),
+        tag: tag.map(|s| s.to_string()),
+        timestamp: chrono::Local::now().to_rfc3339(),
+        command: command.to_string(),
+        suite: suite.to_string(),
+        models: models.to_vec(),
+        git_commit,
+        git_branch,
+        task_count: report.summary.total,
+        passed: report.summary.passed,
+        pass_rate: report.summary.pass_rate,
+        avg_score: report.summary.avg_score,
+        duration_ms: report.latency.total_ms,
+        total_tokens: report.token_usage.total,
+        estimated_cost: 0.0,
+        eval_config_hash: config_hash,
+        failure_summary: grid_eval::benchmark::FailureSummary::default(),
+    };
+
+    let run_data = RunData {
+        manifest,
+        report: Some(report.clone()),
+        comparison: comparison.cloned(),
+        traces: vec![],
+    };
+
+    store.save_run(&run_data)?;
+    store.update_latest_link(&run_id)?;
+
+    Ok(run_id)
+}
+
+fn build_metadata(
+    tasks: &[Box<dyn EvalTask>],
+) -> (
+    HashMap<String, String>,
+    HashMap<String, grid_eval::task::Difficulty>,
+) {
+    let mut categories = HashMap::new();
+    let mut difficulties = HashMap::new();
+
+    for task in tasks {
+        let meta = task.metadata();
+        categories.insert(task.id().to_string(), meta.category);
+        difficulties.insert(task.id().to_string(), meta.difficulty);
+    }
+
+    (categories, difficulties)
+}

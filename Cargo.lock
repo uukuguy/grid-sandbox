@@ -2901,6 +2901,252 @@ dependencies = [
 ]
 
 [[package]]
+name = "grid-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "axum-server",
+ "chrono",
+ "clap",
+ "clap_complete",
+ "crossterm 0.28.1",
+ "dialoguer",
+ "directories",
+ "dirs",
+ "dotenvy",
+ "futures-util",
+ "grid-engine",
+ "grid-eval",
+ "grid-sandbox",
+ "grid-types",
+ "http-body-util",
+ "ignore",
+ "indicatif",
+ "owo-colors",
+ "ratatui",
+ "rcgen",
+ "rusqlite",
+ "rustyline",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "termimad",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "unicode-width 0.2.0",
+ "uuid",
+]
+
+[[package]]
+name = "grid-desktop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "grid-cli",
+ "grid-engine",
+ "grid-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-shell",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "grid-engine"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "bincode",
+ "bollard",
+ "bytes",
+ "calamine",
+ "chrono",
+ "cron",
+ "dashmap",
+ "dirs",
+ "ed25519-dalek",
+ "flate2",
+ "futures-util",
+ "glob",
+ "grid-types",
+ "hex",
+ "hmac",
+ "hnsw_rs",
+ "include_dir",
+ "jsonwebtoken",
+ "keyring",
+ "lru",
+ "notify",
+ "notify-debouncer-mini",
+ "pdf-extract",
+ "rand 0.8.5",
+ "rcgen",
+ "redis",
+ "regex",
+ "reqwest 0.12.28",
+ "rmcp",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tiktoken-rs",
+ "tokio",
+ "tokio-rusqlite",
+ "tokio-stream",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+ "url",
+ "urlencoding",
+ "uuid",
+ "wasmtime",
+ "wasmtime-wasi",
+ "zeroize",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "grid-eval"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dotenvy",
+ "futures-util",
+ "grid-engine",
+ "grid-types",
+ "rand 0.10.0",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "toml 0.8.23",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "grid-platform"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "chrono",
+ "dashmap",
+ "dotenvy",
+ "futures-util",
+ "grid-engine",
+ "grid-sandbox",
+ "grid-types",
+ "jsonwebtoken",
+ "rand 0.8.5",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "grid-sandbox"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "grid-types",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "grid-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "axum",
+ "axum-extra",
+ "axum-server",
+ "chrono",
+ "dashmap",
+ "dotenvy",
+ "futures-util",
+ "grid-engine",
+ "grid-sandbox",
+ "grid-types",
+ "http-body-util",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "tokio",
+ "tokio-rusqlite",
+ "tokio-stream",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "grid-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "ulid",
+ "uuid",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4641,252 +4887,6 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap 2.13.0",
  "memchr",
-]
-
-[[package]]
-name = "octo-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "axum-server",
- "chrono",
- "clap",
- "clap_complete",
- "crossterm 0.28.1",
- "dialoguer",
- "directories",
- "dirs",
- "dotenvy",
- "futures-util",
- "http-body-util",
- "ignore",
- "indicatif",
- "octo-engine",
- "octo-eval",
- "octo-sandbox",
- "octo-types",
- "owo-colors",
- "ratatui",
- "rcgen",
- "rusqlite",
- "rustyline",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "termimad",
- "thiserror 2.0.18",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "unicode-width 0.2.0",
- "uuid",
-]
-
-[[package]]
-name = "octo-desktop"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "octo-cli",
- "octo-engine",
- "octo-types",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-shell",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "octo-engine"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "argon2",
- "async-trait",
- "base64 0.22.1",
- "bincode",
- "bollard",
- "bytes",
- "calamine",
- "chrono",
- "cron",
- "dashmap",
- "dirs",
- "ed25519-dalek",
- "flate2",
- "futures-util",
- "glob",
- "hex",
- "hmac",
- "hnsw_rs",
- "include_dir",
- "jsonwebtoken",
- "keyring",
- "lru",
- "notify",
- "notify-debouncer-mini",
- "octo-types",
- "pdf-extract",
- "rand 0.8.5",
- "rcgen",
- "redis",
- "regex",
- "reqwest 0.12.28",
- "rmcp",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "sqlx",
- "subtle",
- "tempfile",
- "thiserror 2.0.18",
- "tiktoken-rs",
- "tokio",
- "tokio-rusqlite",
- "tokio-stream",
- "tracing",
- "tracing-subscriber",
- "ulid",
- "url",
- "urlencoding",
- "uuid",
- "wasmtime",
- "wasmtime-wasi",
- "zeroize",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "octo-eval"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "dotenvy",
- "futures-util",
- "octo-engine",
- "octo-types",
- "rand 0.10.0",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "tokio",
- "tokio-stream",
- "toml 0.8.23",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "octo-platform-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "async-trait",
- "axum",
- "axum-extra",
- "chrono",
- "dashmap",
- "dotenvy",
- "futures-util",
- "jsonwebtoken",
- "octo-engine",
- "octo-sandbox",
- "octo-types",
- "rand 0.8.5",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
-]
-
-[[package]]
-name = "octo-sandbox"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "octo-types",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "octo-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-stream",
- "axum",
- "axum-extra",
- "axum-server",
- "chrono",
- "dashmap",
- "dotenvy",
- "futures-util",
- "http-body-util",
- "octo-engine",
- "octo-sandbox",
- "octo-types",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "tokio",
- "tokio-rusqlite",
- "tokio-stream",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "octo-types"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.18",
- "ulid",
- "uuid",
 ]
 
 [[package]]

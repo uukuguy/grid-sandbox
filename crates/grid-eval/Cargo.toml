@@ -1,0 +1,32 @@
+[package]
+name = "grid-eval"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "grid-eval"
+path = "src/main.rs"
+
+[dependencies]
+grid-types = { workspace = true }
+grid-engine = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+dotenvy = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+tempfile = "3"
+toml = { workspace = true }
+serde_yaml = { workspace = true }
+regex = "1"
+reqwest = { workspace = true }
+rand = "0.10.0"
+
+[dev-dependencies]

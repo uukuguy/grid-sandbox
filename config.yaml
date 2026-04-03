@@ -19,7 +19,7 @@
 
 # Database configuration
 # database:
-#   path: ./data/octo.db  # SQLite database path
+#   path: ./data/grid.db  # SQLite database path
 
 # Logging configuration
 # logging:
@@ -55,12 +55,12 @@
 # Configure via environment variables (recommended) or inline below.
 #
 # Option 1: Disable auth (local dev only)
-#   OCTO_AUTH_MODE=none
+#   GRID_AUTH_MODE=none
 #
 # Option 2: API key auth
-#   OCTO_AUTH_MODE=api_key
-#   OCTO_API_KEY=your-secret-key     # key clients use in Authorization: Bearer header
-#   OCTO_API_KEY_USER=dev            # optional user id (default: "default")
+#   GRID_AUTH_MODE=api_key
+#   GRID_API_KEY=your-secret-key     # key clients use in Authorization: Bearer header
+#   GRID_API_KEY_USER=dev            # optional user id (default: "default")
 #
 # auth:
 #   mode: api_key   # none | api_key

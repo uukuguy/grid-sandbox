@@ -1,0 +1,11 @@
+[package]
+name = "grid-sandbox"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+grid-types = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }

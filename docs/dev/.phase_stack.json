@@ -1,5 +1,16 @@
 {
-  "active_phases": [],
+  "active_phases": [
+    {
+      "name": "Phase BA — Octo to Grid: Crate 拆分 + 品牌重命名",
+      "started_at": "2026-04-04T01:30:00+08:00",
+      "branch": "Grid",
+      "plan": "docs/plans/2026-04-04-grid-crate-split.md",
+      "design": "docs/design/Grid/GRID_CRATE_SPLIT_DESIGN.md",
+      "progress": "0%",
+      "tasks": "0/6 steps",
+      "current_step": null
+    }
+  ],
   "suspended_phases": [],
   "archived_phases": [
     {

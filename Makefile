@@ -37,7 +37,7 @@ setup:
 
 # 生成默认配置文件 (config.yaml)
 config-gen:
-	cargo run -p octo-server -- config-gen > config.yaml
+	cargo run -p grid-server -- config-gen > config.yaml
 
 # 编译检查 (最快, 不生成二进制)
 check:
@@ -55,10 +55,10 @@ build-full:
 	cargo build --features full
 
 build-cli:
-	cargo build -p octo-cli --bin octo
+	cargo build -p grid-cli --bin octo
 
 build-cli-full:
-	cargo build -p octo-cli --bin octo --features full
+	cargo build -p grid-cli --bin grid --features full
 
 # 编译构建 (release, 含全部功能)
 release:
@@ -66,7 +66,7 @@ release:
 
 # 运行后端服务器 (exec ensures Ctrl+C reaches the server directly)
 server:
-	@exec cargo run -p octo-server
+	@exec cargo run -p grid-server
 
 # 运行测试
 test:
@@ -80,10 +80,10 @@ test-engine:
 	cargo test -p octo-engine
 
 test-sandbox:
-	cargo test -p octo-sandbox
+	cargo test -p grid-sandbox
 
 test-server:
-	cargo test -p octo-server
+	cargo test -p grid-server
 
 # 代码格式化
 fmt:
@@ -137,7 +137,7 @@ clean-web:
 clean-all: clean clean-web
 
 # ============================================================
-# CLI 命令 (octo-cli)
+# CLI 命令 (grid-cli)
 # ============================================================
 
 CLI_ARGS ?=
@@ -145,44 +145,44 @@ QUERY    ?=
 
 # 显示 CLI 帮助
 cli:
-	cargo run -p octo-cli --bin octo -- --help
+	cargo run -p grid-cli --bin grid -- --help
 
 # 交互式 REPL 会话
 cli-run:
-	@cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
+	@cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # 单次提问 (headless 模式)
 # 用法: make cli-ask QUERY="你的问题"
 cli-ask:
 	@if [ -z "$(QUERY)" ]; then echo "Usage: make cli-ask QUERY=\"your question\""; exit 1; fi
-	@cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) ask "$(QUERY)" $(CLI_ARGS)
+	@cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) ask "$(QUERY)" $(CLI_ARGS)
 
 # TUI 全屏模式 (uses pre-built binary if available, otherwise builds first)
 cli-tui: build-cli
-	@if [ -f target/debug/octo ]; then \
-		target/debug/octo --project $(TEST_PROJECT) tui $(CLI_ARGS); \
+	@if [ -f target/debug/grid ]; then \
+		target/debug/grid --project $(TEST_PROJECT) tui $(CLI_ARGS); \
 	else \
-		cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) tui $(CLI_ARGS); \
+		cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) tui $(CLI_ARGS); \
 	fi
 
 # Agent 管理
 cli-agent:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) agent list
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) agent list
 
 # Session 管理
 cli-session:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) session list
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) session list
 
 # 配置管理
 cli-config:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) config show
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) config show
 
 # 健康诊断
 cli-doctor:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) doctor
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) doctor
 
 # ============================================================
-# 评估命令 (octo-eval)
+# 评估命令 (grid-eval)
 # 注意: 所有命令从 workspace 根目录运行，输出写入 eval_output/
 # ============================================================
 
@@ -196,19 +196,19 @@ EVAL_TASK_ID    ?=
 
 # 列出可用 suite
 eval-list:
-	cargo run -p octo-eval -- list-suites
+	cargo run -p grid-eval -- list-suites
 
 # 运行单个 suite（单模型）
 # 用法: make eval-run EVAL_SUITE=resilience
 eval-run:
-	cargo run -p octo-eval -- run --suite $(EVAL_SUITE) \
+	cargo run -p grid-eval -- run --suite $(EVAL_SUITE) \
 	  $(if $(filter-out 0,$(EVAL_MAX_TASKS)),--max-tasks $(EVAL_MAX_TASKS),) \
 	  --format $(EVAL_FORMAT)
 
 # 多模型对比单个 suite
 # 用法: make eval-compare EVAL_SUITE=security EVAL_CONFIG=config/eval/benchmark.toml
 eval-compare:
-	cargo run -p octo-eval -- compare --suite $(EVAL_SUITE) \
+	cargo run -p grid-eval -- compare --suite $(EVAL_SUITE) \
 	  --config $(EVAL_CONFIG) \
 	  $(if $(filter-out 0,$(EVAL_MAX_TASKS)),--max-tasks $(EVAL_MAX_TASKS),) \
 	  --format $(EVAL_FORMAT)
@@ -216,7 +216,7 @@ eval-compare:
 # 完整 benchmark（全部 suite × 全部模型，并发）
 # 用法: make eval-benchmark EVAL_CONFIG=config/eval/benchmark.toml
 eval-benchmark:
-	cargo run -p octo-eval -- benchmark \
+	cargo run -p grid-eval -- benchmark \
 	  --config $(EVAL_CONFIG) \
 	  $(if $(filter-out 0,$(EVAL_MAX_TASKS)),--max-tasks $(EVAL_MAX_TASKS),) \
 	  --format $(EVAL_FORMAT)
@@ -224,40 +224,40 @@ eval-benchmark:
 # Mini benchmark：每 suite 3 个任务，快速冒烟测试
 # 用法: make eval-benchmark-mini
 eval-benchmark-mini:
-	cargo run -p octo-eval -- benchmark \
+	cargo run -p grid-eval -- benchmark \
 	  --config $(EVAL_MINI_CONFIG) \
 	  --max-tasks 3 \
 	  --format $(EVAL_FORMAT)
 
 # 列出历史运行记录
 eval-history:
-	cargo run -p octo-eval -- history
+	cargo run -p grid-eval -- history
 
 # 查看运行报告
 # 用法: make eval-report EVAL_RUN_ID=2026-03-16-001
 eval-report:
 	@if [ -z "$(EVAL_RUN_ID)" ]; then echo "Usage: make eval-report EVAL_RUN_ID=<run_id>"; exit 1; fi
-	cargo run -p octo-eval -- report $(EVAL_RUN_ID) --format $(EVAL_FORMAT)
+	cargo run -p grid-eval -- report $(EVAL_RUN_ID) --format $(EVAL_FORMAT)
 
 # 查看任务 trace 时间线
 # 用法: make eval-trace EVAL_RUN_ID=2026-03-16-001 EVAL_TASK_ID=tc-01
 eval-trace:
 	@if [ -z "$(EVAL_RUN_ID)" ]; then echo "Usage: make eval-trace EVAL_RUN_ID=<run_id> EVAL_TASK_ID=<task_id>"; exit 1; fi
 	@if [ -z "$(EVAL_TASK_ID)" ]; then echo "Usage: make eval-trace EVAL_RUN_ID=<run_id> EVAL_TASK_ID=<task_id>"; exit 1; fi
-	cargo run -p octo-eval -- trace $(EVAL_RUN_ID) $(EVAL_TASK_ID)
+	cargo run -p grid-eval -- trace $(EVAL_RUN_ID) $(EVAL_TASK_ID)
 
 # 失败原因分类分析
 # 用法: make eval-diagnose EVAL_RUN_ID=2026-03-16-001
 eval-diagnose:
 	@if [ -z "$(EVAL_RUN_ID)" ]; then echo "Usage: make eval-diagnose EVAL_RUN_ID=<run_id>"; exit 1; fi
-	cargo run -p octo-eval -- diagnose $(EVAL_RUN_ID)
+	cargo run -p grid-eval -- diagnose $(EVAL_RUN_ID)
 
 # 两次运行回归对比
 # 用法: make eval-diff EVAL_RUN_A=2026-03-15-001 EVAL_RUN_B=2026-03-16-001
 eval-diff:
 	@if [ -z "$(EVAL_RUN_A)" ] || [ -z "$(EVAL_RUN_B)" ]; then \
 	  echo "Usage: make eval-diff EVAL_RUN_A=<run_a> EVAL_RUN_B=<run_b>"; exit 1; fi
-	cargo run -p octo-eval -- diff $(EVAL_RUN_A) $(EVAL_RUN_B)
+	cargo run -p grid-eval -- diff $(EVAL_RUN_A) $(EVAL_RUN_B)
 
 # 即时进度：查看正在运行的 benchmark 每个 suite/model 的完成情况
 # 用法: make eval-progress              (查看 latest 运行)
@@ -296,7 +296,7 @@ eval-progress:
 	fi
 
 # ============================================================
-# 手工验证命令 (octo-workbench)
+# 手工验证命令 (grid-workbench)
 # ============================================================
 
 # 静态验证: 编译检查 + TS 类型 + Vite 生产构建 (无需运行服务)
@@ -314,7 +314,7 @@ verify:
 
 # 运行时验证指南 (需先 make server + make web 分两个终端)
 verify-runtime:
-	@echo "=== octo-workbench 运行时验证步骤 ==="
+	@echo "=== grid-workbench 运行时验证步骤 ==="
 	@echo ""
 	@echo "前置条件:"
 	@echo "  1. 确认 .env 已配置 ANTHROPIC_API_KEY"
@@ -423,33 +423,33 @@ verify-api-mcp:
 
 # 查看当前沙箱状态 (RunMode, Profile, Policy 等)
 sandbox-status:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox status
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) sandbox status
 
 # 预览所有工具类别的路由决策 (不实际执行)
 sandbox-dry-run:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox dry-run
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) sandbox dry-run
 
 # 列出已注册的沙箱后端
 sandbox-backends:
-	cargo run -p octo-cli --bin octo -- --project $(TEST_PROJECT) sandbox list-backends
+	cargo run -p grid-cli --bin grid -- --project $(TEST_PROJECT) sandbox list-backends
 
 # Development 模式运行 CLI (默认, 所有工具本地执行)
 sandbox-dev:
-	OCTO_SANDBOX_PROFILE=dev cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
+	GRID_SANDBOX_PROFILE=dev cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # Staging 模式运行 CLI (强制容器, 无后端时报错)
 sandbox-staging:
-	OCTO_SANDBOX_PROFILE=staging cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
+	GRID_SANDBOX_PROFILE=staging cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # Production 模式运行 CLI (强制容器隔离)
 sandbox-production:
-	OCTO_SANDBOX_PROFILE=production cargo run --quiet -p octo-cli --bin octo -- --project $(TEST_PROJECT) run $(CLI_ARGS)
+	GRID_SANDBOX_PROFILE=production cargo run --quiet -p grid-cli --bin grid -- --project $(TEST_PROJECT) run $(CLI_ARGS)
 
 # 进入容器内交互式 shell (自动检测为 Sandboxed 模式)
 # API keys 从宿主机环境透传 (AD-D5)
 sandbox-shell:
-	@if ! docker image inspect octo-sandbox:dev >/dev/null 2>&1; then \
-		echo "镜像 octo-sandbox:dev 不存在，先构建..."; \
+	@if ! docker image inspect grid-sandbox:dev >/dev/null 2>&1; then \
+		echo "镜像 grid-sandbox:dev 不存在，先构建..."; \
 		$(MAKE) container-build-dev; \
 	fi
 	docker run -it --rm \
@@ -458,53 +458,53 @@ sandbox-shell:
 		$(if $(ANTHROPIC_API_KEY),-e ANTHROPIC_API_KEY,) \
 		$(if $(OPENAI_API_KEY),-e OPENAI_API_KEY,) \
 		$(if $(OPENAI_BASE_URL),-e OPENAI_BASE_URL,) \
-		octo-sandbox:dev bash
+		grid-sandbox:dev bash
 
 # ============================================================
-# Container images (octo-sandbox base/dev)
+# Container images (grid-sandbox base/dev)
 # ============================================================
 
 # Build base image (local, single platform)
 container-build:
-	docker build -t octo-sandbox:base container/
+	docker build -t grid-sandbox:base container/
 
 # Build dev image (local, single platform)
 container-build-dev: container-build
-	docker build -f container/Dockerfile.dev -t octo-sandbox:dev container/
+	docker build -f container/Dockerfile.dev -t grid-sandbox:dev container/
 
 # Build base image (multi-platform, push to GHCR)
 container-build-multi:
 	docker buildx build --platform linux/amd64,linux/arm64 \
-	  -t ghcr.io/uukuguy/octo-sandbox:base \
+	  -t ghcr.io/uukuguy/grid-sandbox:base \
 	  --push container/
 
 # Build dev image (multi-platform, push to GHCR)
 container-build-multi-dev: container-build-multi
 	docker buildx build --platform linux/amd64,linux/arm64 \
 	  -f container/Dockerfile.dev \
-	  -t ghcr.io/uukuguy/octo-sandbox:dev \
+	  -t ghcr.io/uukuguy/grid-sandbox:dev \
 	  --push container/
 
-# List octo-sandbox container images
+# List grid-sandbox container images
 container-list:
-	@echo "=== Octo Sandbox Images ==="
-	@docker images 'octo-sandbox' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null || echo "  (none)"
+	@echo "=== Grid Sandbox Images ==="
+	@docker images 'grid-sandbox' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null || echo "  (none)"
 	@echo ""
-	@echo "=== Running Octo Sandbox Containers ==="
+	@echo "=== Running Grid Sandbox Containers ==="
 	@docker ps --filter 'label=octo.sandbox=true' --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo "  (none)"
 
-# Remove octo-sandbox images and stopped containers
+# Remove grid-sandbox images and stopped containers
 container-clean:
-	@echo "Removing stopped Octo sandbox containers..."
+	@echo "Removing stopped Grid sandbox containers..."
 	@docker ps -a --filter 'label=octo.sandbox=true' --filter 'status=exited' -q | xargs -r docker rm -f 2>/dev/null || true
-	@echo "Removing Octo sandbox images..."
-	@docker images 'octo-sandbox' -q | xargs -r docker rmi -f 2>/dev/null || true
+	@echo "Removing Grid sandbox images..."
+	@docker images 'grid-sandbox' -q | xargs -r docker rmi -f 2>/dev/null || true
 	@echo "Done."
 
 # Smoke-test: build base image and verify key tools
 container-test: container-build
 	@echo "=== Container Smoke Test ==="
-	@docker run --rm --entrypoint sh octo-sandbox:base -c '\
+	@docker run --rm --entrypoint sh grid-sandbox:base -c '\
 	  echo "--- System tools ---" && \
 	  pdftotext -v 2>&1 | head -1 && \
 	  tesseract --version 2>&1 | head -1 && \
@@ -549,17 +549,17 @@ docker-build-swebench:
 	docker/sandbox-images/build.sh swebench
 
 docker-list:
-	@docker images 'octo-sandbox/*' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}'
+	@docker images 'grid-sandbox/*' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}'
 
 docker-clean:
-	@docker images 'octo-sandbox/*' -q | xargs -r docker rmi -f
+	@docker images 'grid-sandbox/*' -q | xargs -r docker rmi -f
 
 # ============================================================
 # 帮助
 # ============================================================
 
 help:
-	@echo "octo-sandbox Makefile"
+	@echo "grid-sandbox Makefile"
 	@echo ""
 	@echo "常用命令:"
 	@echo "  make dev              同时启动后端 + 前端开发服务器"
@@ -569,13 +569,13 @@ help:
 	@echo "  make server           启动后端服务器 (端口 3001)"
 	@echo "  make web              启动前端开发服务器 (端口 5173)"
 	@echo ""
-	@echo "手工验证 (octo-workbench):"
+	@echo "手工验证 (grid-workbench):"
 	@echo "  make verify           静态验证: cargo check + tsc + vite build"
 	@echo "  make verify-runtime   打印运行时验证步骤清单 (需先启动服务)"
 	@echo "  make verify-api       REST API 端点可用性检查 (需先 make server)"
 	@echo "  make verify-api-mcp ID=<id>  MCP server 专属端点检查"
 	@echo ""
-	@echo "CLI (octo-cli):"
+	@echo "CLI (grid-cli):"
 	@echo "  make cli                             显示 CLI 帮助"
 	@echo "  make cli-run                         交互式 REPL 会话"
 	@echo "  make cli-ask QUERY=\"问题\"             单次提问 (headless)"
@@ -608,7 +608,7 @@ help:
 	@echo "  make clean            清理 Rust 构建产物"
 	@echo "  make clean-all        清理全部构建产物"
 	@echo ""
-	@echo "评估 (octo-eval):"
+	@echo "评估 (grid-eval):"
 	@echo "  make eval-list                       列出可用 suite"
 	@echo "  make eval-benchmark-mini             快速冒烟: 3 tasks/suite × 3 模型"
 	@echo "  make eval-benchmark                  完整 benchmark (全 suite × 全模型)"
@@ -622,7 +622,7 @@ help:
 	@echo "  make eval-progress                   即时查看正在运行的 benchmark 进度"
 	@echo "  make eval-progress EVAL_RUN_ID=<id>  查看指定运行的进度"
 	@echo ""
-	@echo "Container images (octo-sandbox base/dev):"
+	@echo "Container images (grid-sandbox base/dev):"
 	@echo "  make container-build           构建 base 镜像 (本地单平台)"
 	@echo "  make container-build-dev       构建 dev 镜像 (本地单平台)"
 	@echo "  make container-build-multi     构建 base 镜像 (多平台, 推送 GHCR)"
