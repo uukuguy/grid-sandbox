@@ -475,6 +475,17 @@ impl Tool for BashTool {
     fn is_concurrency_safe(&self) -> bool {
         false
     }
+
+    fn classify_input_risk(&self, params: &serde_json::Value) -> Option<RiskLevel> {
+        let command = params.get("command").and_then(|v| v.as_str())?;
+        let policy = crate::security::SecurityPolicy::default();
+        let risk = policy.assess_command_risk(command);
+        Some(match risk {
+            crate::security::CommandRiskLevel::High => RiskLevel::HighRisk,
+            crate::security::CommandRiskLevel::Medium => RiskLevel::HighRisk,
+            crate::security::CommandRiskLevel::Low => RiskLevel::LowRisk,
+        })
+    }
 }
 
 #[cfg(test)]

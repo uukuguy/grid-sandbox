@@ -5,6 +5,7 @@ use tracing::debug;
 
 use octo_types::{ApprovalRequirement, RiskLevel, ToolContext, ToolOutput, ToolSource};
 
+use super::input_risk::classify_path_risk;
 use super::traits::Tool;
 
 pub struct FileEditTool;
@@ -149,5 +150,9 @@ impl Tool for FileEditTool {
 
     fn is_concurrency_safe(&self) -> bool {
         false
+    }
+
+    fn classify_input_risk(&self, params: &serde_json::Value) -> Option<RiskLevel> {
+        classify_path_risk(params.get("path").and_then(|v| v.as_str()))
     }
 }

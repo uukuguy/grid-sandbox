@@ -1541,10 +1541,12 @@ async fn run_agent_loop_inner(
         let tool_outputs: Vec<_> = if config.agent_config.enable_parallel {
             // --- T3-4: Approval check for parallel tools (before batch execution) ---
             let mut approval_blocked = false;
-            for (tu, _input) in &parsed_tools {
+            for (tu, input) in &parsed_tools {
                 if let Some(tool) = tools.get(&tu.name) {
                     let requirement = tool.approval();
-                    let risk = tool.risk_level();
+                    // AV: Use input-level risk when available, fall back to static
+                    let risk = tool.classify_input_risk(input)
+                        .unwrap_or_else(|| tool.risk_level());
                     let decision = approval_mgr.check_requirement(&tu.name, requirement, risk);
                     match decision {
                         ApprovalDecision::NeedsApproval { reason, .. } => {
@@ -1733,7 +1735,9 @@ async fn run_agent_loop_inner(
                 // --- T3-4: Approval check for sequential tools ---
                 if let Some(tool) = tools.get(&tu.name) {
                     let requirement = tool.approval();
-                    let risk = tool.risk_level();
+                    // AV: Use input-level risk when available, fall back to static
+                    let risk = tool.classify_input_risk(&input)
+                        .unwrap_or_else(|| tool.risk_level());
                     let decision = approval_mgr.check_requirement(&tu.name, requirement, risk);
                     match decision {
                         ApprovalDecision::NeedsApproval { reason, .. } => {

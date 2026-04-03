@@ -200,6 +200,11 @@ impl Tool for WebSearchTool {
     fn is_concurrency_safe(&self) -> bool {
         true
     }
+
+    fn classify_input_risk(&self, _params: &serde_json::Value) -> Option<RiskLevel> {
+        // Web search is always low risk — queries are read-only
+        Some(RiskLevel::LowRisk)
+    }
 }
 
 impl WebSearchTool {

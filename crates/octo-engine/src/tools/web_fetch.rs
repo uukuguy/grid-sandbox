@@ -5,6 +5,7 @@ use tracing::debug;
 
 use octo_types::{RiskLevel, ToolContext, ToolOutput, ToolProgress, ToolSource};
 
+use super::input_risk::classify_url_risk;
 use super::traits::Tool;
 
 /// Tool for fetching web content from a URL
@@ -193,6 +194,10 @@ impl Tool for WebFetchTool {
 
     fn is_concurrency_safe(&self) -> bool {
         true
+    }
+
+    fn classify_input_risk(&self, params: &serde_json::Value) -> Option<RiskLevel> {
+        classify_url_risk(params.get("url").and_then(|v| v.as_str()))
     }
 }
 

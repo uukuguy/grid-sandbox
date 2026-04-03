@@ -72,6 +72,13 @@ pub trait Tool: Send + Sync {
         false
     }
 
+    /// Classify input risk at runtime based on actual parameters.
+    /// Returns None to use the static `risk_level()`.
+    /// Override for tools where risk depends on input content (e.g., file paths, URLs, commands).
+    fn classify_input_risk(&self, _params: &serde_json::Value) -> Option<RiskLevel> {
+        None
+    }
+
     /// Validate input parameters before execution.
     /// Return Err to reject the call with an error message shown to the LLM.
     async fn validate_input(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<()> {
@@ -160,5 +167,11 @@ mod tests {
     fn test_default_is_concurrency_safe_false() {
         let tool = MockTool;
         assert!(!tool.is_concurrency_safe()); // fail-closed: default unsafe
+    }
+
+    #[test]
+    fn test_default_classify_input_risk_none() {
+        let tool = MockTool;
+        assert!(tool.classify_input_risk(&serde_json::json!({})).is_none());
     }
 }

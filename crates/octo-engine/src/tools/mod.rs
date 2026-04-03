@@ -1,6 +1,7 @@
 pub mod prompts;
 pub mod approval;
 pub mod bash;
+pub mod input_risk;
 pub mod bash_classifier;
 pub mod cast_params;
 pub mod dev_commands;
@@ -45,6 +46,7 @@ pub mod web_search;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub use input_risk::{classify_path_risk, classify_url_risk};
 pub use interceptor::ToolCallInterceptor;
 pub use traits::Tool;
 
