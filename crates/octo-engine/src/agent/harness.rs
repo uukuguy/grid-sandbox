@@ -252,8 +252,12 @@ async fn run_agent_loop_inner(
             builder = builder.with_active_skill(active_skill);
         }
         // Phase AS: Load CLAUDE.md and other bootstrap files from working directory
-        if let Some(ref wd) = config.working_dir {
-            builder = builder.with_bootstrap_dir(wd);
+        // AX-D6: Skip for agents with omit_context_docs (e.g., explore, plan)
+        let omit_docs = config.manifest.as_ref().map_or(false, |m| m.omit_context_docs);
+        if !omit_docs {
+            if let Some(ref wd) = config.working_dir {
+                builder = builder.with_bootstrap_dir(wd);
+            }
         }
         // Phase AS: Inject git status into system prompt (dynamic)
         if let Some(ref git) = config.git_context {
