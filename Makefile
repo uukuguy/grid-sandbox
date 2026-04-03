@@ -43,6 +43,9 @@ config-gen:
 check:
 	cargo check --workspace
 
+autofix:
+	cargo fix --workspace --allow-dirty --allow-staged
+
 # 编译构建 (日常开发, 不含 WASM/Docker/PDF)
 build:
 	cargo build

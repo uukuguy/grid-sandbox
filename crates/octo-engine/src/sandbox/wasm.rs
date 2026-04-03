@@ -331,7 +331,7 @@ impl RuntimeAdapter for WasmAdapter {
     }
 
     /// Create a new WASM sandbox instance
-    async fn create(&self, config: &SandboxConfig) -> Result<SandboxId, SandboxError> {
+    async fn create(&self, _config: &SandboxConfig) -> Result<SandboxId, SandboxError> {
         #[cfg(not(feature = "sandbox-wasm"))]
         {
             return Err(SandboxError::UnsupportedType(

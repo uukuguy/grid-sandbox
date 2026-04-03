@@ -12,7 +12,6 @@ use tokio::sync::broadcast;
 
 use octo_types::{RiskLevel, ToolContext, ToolOutput, ToolProgress, ToolSource};
 
-use crate::agent::builtin_agents::preload_skills_into_prompt;
 use crate::agent::catalog::AgentCatalog;
 use crate::agent::entry::AgentManifest;
 use crate::agent::events::AgentEvent;

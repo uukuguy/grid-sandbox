@@ -3,7 +3,6 @@
 //! Registered once per HookPoint, examines the matching entries in `HooksConfig`
 //! and executes the configured actions (command, prompt, webhook).
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
