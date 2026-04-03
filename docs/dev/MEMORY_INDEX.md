@@ -7,6 +7,9 @@
 
 ## [Active Work]
 
+- 2026-04-03 18:30 | **Phase AY DESIGN COMPLETE** — SubAgentRuntime lifecycle. AgentTool rename, sync default, Skill convergence, delete agents/ YAML. 7 tasks, 2 waves. Plan @ ad3e7bb.
+- 2026-04-03 18:10 | **Phase AX deferred D4+D5+D6 resolved** + SpawnSubAgentTool wired to production + dynamic agent listing. Architecture brainstorming: Agent vs Skill boundary clarified, SubAgentRuntime concept established.
+- 2026-04-03 17:25 | **Phase AX COMPLETE (7/7)** — W3: preload_skills_into_prompt(), SUBAGENT_DESCRIPTION enhanced with agent type table, compilation verified. Total: 17 new tests, ~870 lines, 3 commits @ 37a30de. Deferred: AX-D1~D7.
 - 2026-04-03 17:10 | **Phase AX W2 COMPLETE** — T3: ToolRegistry::snapshot_excluded() blacklist. T4: SpawnSubAgentTool agent_type routing via AgentCatalog (tool isolation, model/maxTurns override, system_prompt injection). 7 new tests @ 68a49a7. Next: W3.
 - 2026-04-03 16:50 | **Phase AX W1 COMPLETE** — T1: AgentManifest +7 CC-OSS parity fields (when_to_use, disallowed_tools, background, omit_context_docs, max_turns, source, skills) + Default derive. T2: BuiltinAgentRegistry with 6 agents (general-purpose, explore, plan, coder, reviewer, verification). 8 new tests @ 489edb7. Next: W2 (T3 snapshot_excluded + T4 agent_type routing).
 - 2026-04-03 16:00 | **BashGuard Host-mode safety** — 4-level guard (None/Light/Moderate/Strict) by RunMode×Profile. Detects rm -rf /, pipe-to-shell, system redirects, force push, system path writes, package installs, network downloads. 14 tests @ a58e341.
