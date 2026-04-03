@@ -703,6 +703,10 @@ impl AgentRuntime {
         };
 
 
+        // 16.5. Register built-in agents (before YAML so YAML can override)
+        let builtin_count = crate::agent::builtin_agents::register_builtin_agents(&runtime.catalog);
+        tracing::info!(count = builtin_count, "Registered built-in agents");
+
         // 17. Load declarative YAML agent definitions (if configured)
         if let Some(ref dir) = config.agents_dir {
             let loader = crate::agent::AgentManifestLoader::new(dir);

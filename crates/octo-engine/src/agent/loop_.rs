@@ -185,19 +185,8 @@ impl AgentLoop {
         #[allow(deprecated)]
         let manifest = if let Some(ref prompt_override) = self.system_prompt_override {
             Some(AgentManifest {
-                name: String::new(),
-                tags: Vec::new(),
-                role: None,
-                goal: None,
-                backstory: None,
                 system_prompt: Some(prompt_override.clone()),
-                model: None,
-                tool_filter: Vec::new(),
-                config: AgentConfig::default(),
-                max_concurrent_tasks: 0,
-                priority: None,
-                coordinator: false,
-                worker_allowed_tools: Vec::new(),
+                ..Default::default()
             })
         } else {
             self.manifest.clone()

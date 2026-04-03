@@ -5,6 +5,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentConfig;
 
+/// Agent source type — how this agent was defined.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentSource {
+    /// Hardcoded in Rust (general-purpose, explore, plan, etc.)
+    #[default]
+    BuiltIn,
+    /// Loaded from YAML file on disk
+    Yaml,
+    /// Loaded from plugin
+    Plugin,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AgentId(pub String);
 
@@ -30,7 +43,7 @@ impl std::fmt::Display for AgentId {
 ///
 /// System prompt priority:
 ///   system_prompt > role/goal/backstory > SOUL.md > CORE_INSTRUCTIONS
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentManifest {
     pub name: String,
     #[serde(default)]
@@ -68,6 +81,39 @@ pub struct AgentManifest {
     /// Empty = use default worker tools. Only relevant when coordinator=true.
     #[serde(default)]
     pub worker_allowed_tools: Vec<String>,
+
+    // ── CC-OSS parity fields (Phase AX) ──
+
+    /// LLM-facing description for agent selection (CC-OSS: whenToUse).
+    #[serde(default)]
+    pub when_to_use: Option<String>,
+
+    /// Tool blacklist — tools the agent cannot use.
+    /// Applied after tool_filter (whitelist). CC-OSS: disallowedTools.
+    #[serde(default)]
+    pub disallowed_tools: Vec<String>,
+
+    /// Run as background task (fire-and-forget). CC-OSS: background.
+    #[serde(default)]
+    pub background: bool,
+
+    /// Skip CLAUDE.md/project docs injection for read-only agents.
+    /// Saves tokens for Explore/Plan type agents. CC-OSS: omitClaudeMd.
+    #[serde(default)]
+    pub omit_context_docs: bool,
+
+    /// Maximum conversation turns for this agent.
+    /// Overrides max_iterations in SpawnSubAgentTool. CC-OSS: maxTurns.
+    #[serde(default)]
+    pub max_turns: Option<u32>,
+
+    /// How this agent was defined.
+    #[serde(default)]
+    pub source: AgentSource,
+
+    /// Skill names to preload into the agent's system prompt.
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 impl AgentManifest {

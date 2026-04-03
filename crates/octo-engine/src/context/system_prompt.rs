@@ -786,18 +786,11 @@ mod tests {
     fn test_system_prompt_override() {
         let manifest = AgentManifest {
             name: "test".to_string(),
-            tags: vec![],
             role: Some("Test Role".to_string()),
             goal: Some("Test Goal".to_string()),
             backstory: Some("Test Backstory".to_string()),
             system_prompt: Some("Custom system prompt".to_string()),
-            model: None,
-            tool_filter: vec![],
-            config: crate::agent::config::AgentConfig::default(),
-            max_concurrent_tasks: 0,
-            priority: None,
-            coordinator: false,
-            worker_allowed_tools: Vec::new(),
+            ..Default::default()
         };
 
         let builder = SystemPromptBuilder::new().with_manifest(manifest);
@@ -810,18 +803,10 @@ mod tests {
     fn test_role_goal_backstory() {
         let manifest = AgentManifest {
             name: "test".to_string(),
-            tags: vec![],
             role: Some("Test Role".to_string()),
             goal: Some("Test Goal".to_string()),
             backstory: Some("Test Backstory".to_string()),
-            system_prompt: None,
-            model: None,
-            tool_filter: vec![],
-            config: crate::agent::config::AgentConfig::default(),
-            max_concurrent_tasks: 0,
-            priority: None,
-            coordinator: false,
-            worker_allowed_tools: Vec::new(),
+            ..Default::default()
         };
 
         let builder = SystemPromptBuilder::new().with_manifest(manifest);
@@ -1004,18 +989,9 @@ mod prompt_parts_tests {
     fn test_build_separated_merge_equals_build() {
         let manifest = AgentManifest {
             name: "test".to_string(),
-            tags: vec![],
             role: Some("Test Role".to_string()),
             goal: Some("Test Goal".to_string()),
-            backstory: None,
-            system_prompt: None,
-            model: None,
-            tool_filter: vec![],
-            config: crate::agent::config::AgentConfig::default(),
-            max_concurrent_tasks: 0,
-            priority: None,
-            coordinator: false,
-            worker_allowed_tools: Vec::new(),
+            ..Default::default()
         };
 
         let builder = SystemPromptBuilder::new()

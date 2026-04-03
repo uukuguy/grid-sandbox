@@ -309,19 +309,8 @@ impl AgentExecutor {
 
                     // Resolve manifest from system_prompt if set
                     let manifest = self.system_prompt.as_ref().map(|prompt| AgentManifest {
-                        name: String::new(),
-                        tags: Vec::new(),
-                        role: None,
-                        goal: None,
-                        backstory: None,
                         system_prompt: Some(prompt.clone()),
-                        model: None,
-                        tool_filter: Vec::new(),
-                        config: AgentConfig::default(),
-                        max_concurrent_tasks: 0,
-                        priority: None,
-                        coordinator: false,
-                        worker_allowed_tools: Vec::new(),
+                        ..Default::default()
                     });
 
                     let tool_ctx = ToolContext {

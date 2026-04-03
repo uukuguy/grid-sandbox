@@ -3,7 +3,7 @@
 use crate::commands::{AgentCommands, AppState};
 use crate::ui::table::Table;
 use anyhow::Result;
-use octo_engine::agent::config::AgentConfig;
+
 use octo_engine::{AgentId, AgentManifest, AgentStatus};
 
 /// Handle agent commands
@@ -101,16 +101,7 @@ async fn create_agent(
         name: name.clone(),
         role,
         goal,
-        tags: Vec::new(),
-        backstory: None,
-        system_prompt: None,
-        model: None,
-        tool_filter: Vec::new(),
-        config: AgentConfig::default(),
-        max_concurrent_tasks: 0,
-        priority: None,
-        coordinator: false,
-        worker_allowed_tools: Vec::new(),
+        ..Default::default()
     };
     let agent_id = state.agent_catalog.register(manifest, None);
     println!("Created agent: {} (ID: {})", name, agent_id);

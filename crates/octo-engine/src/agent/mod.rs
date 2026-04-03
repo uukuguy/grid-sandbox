@@ -2,6 +2,7 @@ pub mod autonomous;
 pub mod autonomous_audit;
 pub mod autonomous_scheduler;
 pub mod autonomous_trigger;
+pub mod builtin_agents;
 pub mod cancellation;
 pub mod token_escalation;
 pub mod capability;
@@ -62,7 +63,7 @@ pub use dual::{AgentSlot, DualAgentManager, DualAgentProfile, PlanStep, ToolFilt
 pub use deferred_action::{
     DeferredActionDetector, DeferredActionMatch, DeferredCategory, DeferredPattern,
 };
-pub use entry::{AgentEntry, AgentError, AgentId, AgentManifest, AgentStatus};
+pub use entry::{AgentEntry, AgentError, AgentId, AgentManifest, AgentSource, AgentStatus};
 pub use estop::{EStopReason, EmergencyStop};
 pub use events::{AgentEvent, AgentLoopResult, NormalizedStopReason};
 pub use executor::{AgentExecutor, AgentExecutorHandle, AgentMessage};

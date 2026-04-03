@@ -243,18 +243,9 @@ impl ExecuteSkillTool {
             tool_ctx: ctx.tool_ctx.clone(),
             manifest: Some(crate::agent::entry::AgentManifest {
                 name: format!("skill-{}", skill.name),
-                tags: vec![],
-                role: None,
-                goal: None,
-                backstory: None,
                 system_prompt: Some(system_prompt),
                 model: skill.model.clone(),
-                tool_filter: vec![],
-                config: crate::agent::config::AgentConfig::default(),
-                max_concurrent_tasks: 0,
-                priority: None,
-                coordinator: false,
-                worker_allowed_tools: Vec::new(),
+                ..Default::default()
             }),
             subagent_manager: Some(child_mgr),
             ..AgentLoopConfig::default()

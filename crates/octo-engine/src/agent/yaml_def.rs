@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::config::AgentConfig;
-use super::entry::AgentManifest;
+use super::entry::{AgentManifest, AgentSource};
 
 /// Declarative agent definition deserialized from a YAML file.
 ///
@@ -43,6 +43,19 @@ pub struct AgentYamlDef {
     pub goal: Option<String>,
     #[serde(default)]
     pub role: Option<String>,
+    // CC-OSS parity fields (Phase AX)
+    #[serde(default)]
+    pub when_to_use: Option<String>,
+    #[serde(default)]
+    pub disallowed_tools: Vec<String>,
+    #[serde(default)]
+    pub background: bool,
+    #[serde(default)]
+    pub omit_context_docs: bool,
+    #[serde(default)]
+    pub max_turns: Option<u32>,
+    #[serde(default)]
+    pub skills: Vec<String>,
 }
 
 impl AgentYamlDef {
@@ -108,6 +121,13 @@ impl AgentYamlDef {
             priority: self.priority,
             coordinator: false,
             worker_allowed_tools: Vec::new(),
+            when_to_use: self.when_to_use,
+            disallowed_tools: self.disallowed_tools,
+            background: self.background,
+            omit_context_docs: self.omit_context_docs,
+            max_turns: self.max_turns,
+            source: AgentSource::Yaml,
+            skills: self.skills,
         })
     }
 }
