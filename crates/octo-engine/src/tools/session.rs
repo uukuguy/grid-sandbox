@@ -5,7 +5,6 @@
 //! to the LLM via the standard Tool trait.
 
 use std::sync::Arc;
-#[allow(unused_imports)]
 use std::time::Duration;
 
 use anyhow::Result;
@@ -20,7 +19,6 @@ use octo_types::{RiskLevel, SessionId, ToolContext, ToolOutput, ToolSource};
 
 // ─── Tool descriptions ───
 
-#[allow(dead_code)]
 const SESSION_CREATE_DESCRIPTION: &str = r#"Create a new agent sub-session to handle an independent task.
 
 ## When to use
@@ -72,30 +70,16 @@ Use this to clean up sub-sessions that are no longer needed, or to cancel a sub-
 "#;
 
 // ─── SessionCreateTool ───
-// NOTE: SessionCreateTool requires Arc<AgentRuntime> which is not available at construction time.
-// Deferred until post-init registration pattern is implemented. spawn_subagent covers the core use case.
 
-/// Trait for session creation, implemented by AgentRuntime post-construction.
-#[allow(dead_code)]
-#[async_trait]
-pub trait SessionCreator: Send + Sync {
-    async fn create_session(
-        &self,
-        prompt: &str,
-        name: Option<&str>,
-        model: Option<&str>,
-    ) -> Result<(SessionId, AgentExecutorHandle)>;
-}
+use crate::agent::runtime::AgentRuntime;
 
-#[allow(dead_code)]
 pub struct SessionCreateTool {
-    creator: Arc<dyn SessionCreator>,
+    runtime: Arc<AgentRuntime>,
 }
 
-#[allow(dead_code)]
 impl SessionCreateTool {
-    pub fn new(creator: Arc<dyn SessionCreator>) -> Self {
-        Self { creator }
+    pub fn new(runtime: Arc<AgentRuntime>) -> Self {
+        Self { runtime }
     }
 }
 
@@ -134,20 +118,43 @@ impl Tool for SessionCreateTool {
         })
     }
 
-    async fn execute(&self, params: Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+    async fn execute(&self, params: Value, ctx: &ToolContext) -> Result<ToolOutput> {
         let prompt = params
             .get("prompt")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing required parameter: prompt"))?;
         let name = params.get("name").and_then(|v| v.as_str());
-        let model = params.get("model").and_then(|v| v.as_str());
 
-        match self.creator.create_session(prompt, name, model).await {
-            Ok((session_id, _handle)) => {
+        // Generate session ID from name or random
+        let session_id = match name {
+            Some(n) => SessionId::from_string(n),
+            None => SessionId::from_string(&format!("sub-{}", uuid::Uuid::new_v4())),
+        };
+
+        let user_id = ctx.user_id.clone();
+        let sandbox_id = ctx.sandbox_id.clone();
+
+        // Send the prompt as the initial user message
+        let initial_message = octo_types::ChatMessage::user(prompt);
+
+        match self
+            .runtime
+            .start_session(
+                session_id.clone(),
+                user_id,
+                sandbox_id,
+                vec![initial_message],
+                None,
+            )
+            .await
+        {
+            Ok(_handle) => {
                 let display_name = name.unwrap_or(session_id.as_str());
                 Ok(ToolOutput::success(format!(
                     "Sub-session created: {display_name} (id: {}). \
-                     The session is processing your prompt. Results will be delivered when complete.",
+                     The session is processing your prompt. \
+                     Use session_message to send follow-up instructions, \
+                     or session_status to check progress.",
                     session_id.as_str()
                 )))
             }

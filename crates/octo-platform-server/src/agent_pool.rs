@@ -421,9 +421,13 @@ impl AgentPool {
             .await
             .map_err(|e| PoolError::RuntimeError(e.to_string()))?;
 
+        let runtime = Arc::new(runtime);
+        // T-G1: Register session_create tool (needs Arc<Self>, so post-init)
+        runtime.register_session_create_tool();
+
         let instance = AgentInstance {
             id: InstanceId::new(),
-            runtime: Some(Arc::new(runtime)),
+            runtime: Some(runtime),
             workspace: Some(Workspace::new(user_id.to_string())),
             state: InstanceState::Busy,
             last_used: Utc::now(),

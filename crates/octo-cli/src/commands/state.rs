@@ -80,6 +80,8 @@ impl AppState {
         let agent_runtime = Arc::new(
             AgentRuntime::new(agent_catalog.clone(), runtime_config, Some(tenant_context)).await?,
         );
+        // T-G1: Register session_create tool (needs Arc<Self>, so post-init)
+        agent_runtime.register_session_create_tool();
 
         Ok(Self {
             db_path,

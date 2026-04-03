@@ -202,6 +202,9 @@ async fn main() -> Result<()> {
         AgentRuntime::new(agent_catalog.clone(), runtime_config, Some(tenant_context)).await?,
     );
 
+    // T-G1: Register session_create tool (needs Arc<Self>, so post-init)
+    agent_runtime.register_session_create_tool();
+
     // AM-T5: Detect crashed sessions from previous run
     let crashed_count = agent_runtime.restore_sessions().await;
     if crashed_count > 0 {

@@ -744,9 +744,8 @@ impl AgentRuntime {
             // T-G4: Plan mode tools
             tools_guard.register(crate::tools::plan_mode::EnterPlanModeTool::new(runtime.plan_buffer.clone()));
             tools_guard.register(crate::tools::plan_mode::ExitPlanModeTool::new(runtime.plan_buffer.clone()));
-            // T-G1: Session management tools (message/status/stop)
-            // session_create is deferred — spawn_subagent covers the core use case;
-            // session_create requires Arc<AgentRuntime> which is not available at construction time.
+            // T-G1: Session management tools (message/status/stop registered here;
+            // session_create registered post-init via register_session_create_tool)
             tools_guard.register(crate::tools::session::SessionMessageTool::new(runtime.sessions.clone()));
             tools_guard.register(crate::tools::session::SessionStatusTool::new(runtime.sessions.clone()));
             tools_guard.register(crate::tools::session::SessionStopTool::new(runtime.sessions.clone()));
@@ -985,6 +984,13 @@ impl AgentRuntime {
     /// Get shared interaction gate for agent-to-user communication (Phase AS)
     pub fn interaction_gate(&self) -> &Arc<crate::tools::interaction::InteractionGate> {
         &self.interaction_gate
+    }
+
+    /// Register session_create tool post-construction (needs Arc<Self>).
+    /// Call this once after wrapping AgentRuntime in Arc.
+    pub fn register_session_create_tool(self: &Arc<Self>) {
+        let mut tools_guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
+        tools_guard.register(crate::tools::session::SessionCreateTool::new(self.clone()));
     }
 
     /// Get collaboration context (if a collaboration session is active) — T9.
