@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-03 17:10 | **Phase AX W2 COMPLETE** — T3: ToolRegistry::snapshot_excluded() blacklist. T4: SpawnSubAgentTool agent_type routing via AgentCatalog (tool isolation, model/maxTurns override, system_prompt injection). 7 new tests @ 68a49a7. Next: W3.
 - 2026-04-03 16:50 | **Phase AX W1 COMPLETE** — T1: AgentManifest +7 CC-OSS parity fields (when_to_use, disallowed_tools, background, omit_context_docs, max_turns, source, skills) + Default derive. T2: BuiltinAgentRegistry with 6 agents (general-purpose, explore, plan, coder, reviewer, verification). 8 new tests @ 489edb7. Next: W2 (T3 snapshot_excluded + T4 agent_type routing).
 - 2026-04-03 16:00 | **BashGuard Host-mode safety** — 4-level guard (None/Light/Moderate/Strict) by RunMode×Profile. Detects rm -rf /, pipe-to-shell, system redirects, force push, system path writes, package installs, network downloads. 14 tests @ a58e341.
 - 2026-04-03 15:30 | **CC-OSS buildTool parity** — fail-closed is_concurrency_safe + classify_input_risk() trait method (path/URL/command risk) + Doing Tasks section. 18 new tests across 3 commits.

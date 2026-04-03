@@ -2,12 +2,12 @@
   "plan_file": "docs/plans/2026-04-03-phase-ax-builtin-agents.md",
   "phase": "design",
   "created_at": "2026-04-03T16:30:00+08:00",
-  "updated_at": "2026-04-03T16:50:00+08:00",
-  "completed_tasks": ["T1-manifest-fields", "T2-builtin-registry"],
-  "current_task": "T3-snapshot-excluded",
+  "updated_at": "2026-04-03T17:10:00+08:00",
+  "completed_tasks": ["T1-manifest-fields", "T2-builtin-registry", "T3-snapshot-excluded", "T4-agent-type-routing"],
+  "current_task": "T5-skill-preloading",
   "total_tasks": 7,
   "phase_name": "Phase AX — Builtin Agents",
-  "status": "W1 complete (T1+T2), W2 next (T3+T4)",
+  "status": "W1+W2 complete (T1-T4), W3 next (T5-T7)",
   "execution_mode": null,
   "branch": "main",
   "baseline": {
@@ -26,7 +26,8 @@
     "wave2": {
       "description": "SpawnSubAgentTool agent_type 路由",
       "tasks": ["T3-snapshot-excluded", "T4-agent-type-routing"],
-      "status": "pending"
+      "status": "complete",
+      "commit": "68a49a7"
     },
     "wave3": {
       "description": "Skill preloading + 集成验证",

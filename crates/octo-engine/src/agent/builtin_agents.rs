@@ -6,6 +6,8 @@
 use super::catalog::AgentCatalog;
 use super::entry::{AgentManifest, AgentSource};
 
+use crate::skills::SkillRegistry;
+
 /// Register all built-in agents into the catalog.
 /// Called during AgentRuntime initialization.
 /// Returns the number of agents registered.
@@ -28,6 +30,40 @@ pub fn builtin_agent_manifests() -> Vec<AgentManifest> {
         reviewer_agent(),
         verification_agent(),
     ]
+}
+
+/// Resolve skill bodies from the registry and append to system prompt.
+/// Returns the enhanced system prompt with skill instructions appended.
+/// Called by SpawnSubAgentTool when manifest.skills is non-empty.
+pub fn preload_skills_into_prompt(
+    system_prompt: &str,
+    skill_names: &[String],
+    skill_registry: &SkillRegistry,
+) -> String {
+    if skill_names.is_empty() {
+        return system_prompt.to_string();
+    }
+
+    let mut sections = Vec::new();
+    for name in skill_names {
+        if let Some(skill) = skill_registry.get(name) {
+            if !skill.body.is_empty() {
+                sections.push(format!("## Skill: {}\n\n{}", skill.name, skill.body));
+            }
+        } else {
+            tracing::warn!(skill = %name, "Skill not found in registry for preloading");
+        }
+    }
+
+    if sections.is_empty() {
+        return system_prompt.to_string();
+    }
+
+    format!(
+        "{}\n\n---\n\n# Preloaded Skills\n\n{}",
+        system_prompt,
+        sections.join("\n\n---\n\n")
+    )
 }
 
 fn general_purpose_agent() -> AgentManifest {
@@ -400,5 +436,23 @@ mod tests {
                 manifest.name
             );
         }
+    }
+
+    #[test]
+    fn test_preload_skills_empty_returns_original() {
+        let registry = SkillRegistry::new();
+        let result = preload_skills_into_prompt("Base prompt", &[], &registry);
+        assert_eq!(result, "Base prompt");
+    }
+
+    #[test]
+    fn test_preload_skills_missing_skill_returns_original() {
+        let registry = SkillRegistry::new();
+        let result = preload_skills_into_prompt(
+            "Base prompt",
+            &["nonexistent".to_string()],
+            &registry,
+        );
+        assert_eq!(result, "Base prompt");
     }
 }

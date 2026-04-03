@@ -12,12 +12,14 @@ use octo_types::{
     ToolSource,
 };
 
+use crate::agent::builtin_agents::preload_skills_into_prompt;
 use crate::agent::catalog::AgentCatalog;
 use crate::agent::entry::AgentManifest;
 use crate::agent::events::AgentEvent;
 use crate::agent::harness::run_agent_loop;
 use crate::agent::loop_config::AgentLoopConfig;
 use crate::agent::subagent::{SubAgentManager, SubAgentStatus};
+use crate::skills::SkillRegistry;
 
 use super::traits::Tool;
 
@@ -28,6 +30,8 @@ pub struct SpawnSubAgentTool {
     parent_config: Arc<AgentLoopConfig>,
     /// Agent catalog for looking up built-in/YAML agent definitions (Phase AX).
     catalog: Option<Arc<AgentCatalog>>,
+    /// Skill registry for preloading skill content into agent system prompts.
+    skill_registry: Option<Arc<SkillRegistry>>,
 }
 
 impl SpawnSubAgentTool {
@@ -36,12 +40,19 @@ impl SpawnSubAgentTool {
             subagent_manager: manager,
             parent_config: config,
             catalog: None,
+            skill_registry: None,
         }
     }
 
     /// Attach an agent catalog for agent_type lookup.
     pub fn with_catalog(mut self, catalog: Arc<AgentCatalog>) -> Self {
         self.catalog = Some(catalog);
+        self
+    }
+
+    /// Attach a skill registry for preloading skills into agent system prompts.
+    pub fn with_skill_registry(mut self, registry: Arc<SkillRegistry>) -> Self {
+        self.skill_registry = Some(registry);
         self
     }
 
@@ -218,8 +229,18 @@ impl Tool for SpawnSubAgentTool {
             .and_then(|m| m.max_turns)
             .unwrap_or(max_iterations);
 
-        // Build manifest for child config (with task prepended to system prompt)
+        // Build manifest for child config:
+        // 1. Preload skills into system prompt (if any)
+        // 2. Prepend task to system prompt
         let child_manifest = manifest.map(|mut m| {
+            // Skill preloading
+            if !m.skills.is_empty() {
+                if let Some(ref sr) = self.skill_registry {
+                    let base = m.system_prompt.as_deref().unwrap_or("");
+                    m.system_prompt = Some(preload_skills_into_prompt(base, &m.skills, sr));
+                }
+            }
+            // Prepend task
             if let Some(ref sp) = m.system_prompt {
                 m.system_prompt = Some(format!("{}\n\n## Your Task\n{}", sp, task));
             }

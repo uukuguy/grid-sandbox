@@ -142,18 +142,33 @@ pub const WEB_FETCH_DESCRIPTION: &str = r#"Fetch content from a URL. Extracts re
 - For API endpoints returning JSON, use `raw: true` to get the full response
 - Respect rate limits — don't fetch the same URL repeatedly"#;
 
-pub const SUBAGENT_DESCRIPTION: &str = r#"Spawn a sub-agent to handle a delegated task. The sub-agent runs asynchronously with its own context and returns results when complete.
+pub const SUBAGENT_DESCRIPTION: &str = r#"Launch a new agent to handle complex, multi-step tasks autonomously.
+
+The Agent tool launches specialized agents that autonomously handle complex tasks. Each agent type has specific capabilities and tools available to it.
+
+## Built-in Agent Types
+
+| agent_type | Capability | Tools |
+|------------|-----------|-------|
+| general-purpose | Research, search, execute multi-step tasks | All tools |
+| explore | Fast read-only codebase search | Read-only (no edit/write) |
+| plan | Architecture planning and design | Read-only (no edit/write) |
+| coder | Code implementation | All tools |
+| reviewer | Code review and quality analysis | Read-only (no edit/write) |
+| verification | Adversarial testing and verification | Read-only + Bash |
 
 ## When to use
 - Need to parallelize multiple independent sub-tasks
 - Research tasks that require extensive searching/reading (protects main context from bloat)
 - Tasks needing different tool permissions or models
 - Complex work that benefits from focused, isolated execution
+- Set `agent_type` to use a specialized agent with pre-configured tools and behavior
+- Omit `agent_type` for a generic sub-agent that inherits parent's tools
 
 ## When NOT to use
-- Simple single-step operations (just use the tool directly)
-- Tasks that need the current conversation context (sub-agents start fresh)
-- Searching within 2-3 specific files (use `grep`/`glob` directly)
+- Simple file reads → use file_read directly
+- Searching for a specific class → use grep/glob directly
+- Tasks that need <3 tool calls → do it yourself
 
 ## Writing effective prompts
 Sub-agents start with zero context. Write prompts like briefing a capable colleague who just walked in:
@@ -162,12 +177,8 @@ Sub-agents start with zero context. Write prompts like briefing a capable collea
 - Give enough background for the sub-agent to make judgment calls
 - If you need a brief response, say so explicitly
 
-## Anti-patterns
-- Don't delegate synthesis/judgment ("fix the bug based on your findings") — specify what to change
-- Don't spawn sub-agents for trivial tasks (reading one file, running one command)
-- Don't peek at sub-agent intermediate output — wait for the final result
-
 ## Parameters
-- `prompt` (required): Detailed task description for the sub-agent
-- `agent_type` (optional): Specialized agent type to use
-- `model` (optional): Model override for this sub-agent"#;
+- `task` (required): Detailed task description for the sub-agent
+- `agent_type` (optional): Specialized agent type name (see table above)
+- `max_iterations` (optional): Max LLM iterations (default: 10, overridden by agent_type's max_turns)
+- `tools_whitelist` (optional): Tool whitelist (overridden when agent_type is provided)"#;
