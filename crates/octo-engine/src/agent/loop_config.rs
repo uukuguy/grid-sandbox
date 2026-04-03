@@ -16,7 +16,7 @@ use crate::tools::approval::{ApprovalGate, ApprovalManager};
 use crate::tools::recorder::ToolExecutionRecorder;
 use crate::tools::ToolRegistry;
 
-use super::autonomous::AutonomousConfig;
+use super::autonomous::{AutonomousConfig, AutonomousControl};
 use super::config::AgentConfig;
 use super::entry::AgentManifest;
 use super::estop::EmergencyStop;
@@ -147,6 +147,11 @@ pub struct AgentLoopConfig {
     /// Autonomous running mode configuration.
     pub autonomous: Option<AutonomousConfig>,
 
+    // === Autonomous Control Channels (Phase AU-G1) ===
+    /// Control channels for real-time user intervention during autonomous sleep.
+    /// Enables pause/resume signals and user message injection via `tokio::select!`.
+    pub autonomous_control: Option<AutonomousControl>,
+
     // === Per-Round Memory Extraction (Phase AP-D5) ===
     /// Configuration for incremental per-round memory extraction.
     /// When enabled, memories are captured after each tool-call round
@@ -227,6 +232,7 @@ impl Default for AgentLoopConfig {
             session_summary_store: None,
             cost_tracker: None,
             autonomous: None,
+            autonomous_control: None,
             round_memory_config: None,
             interaction_gate: None,
             blob_store: None,
@@ -474,6 +480,11 @@ impl AgentLoopConfigBuilder {
 
     pub fn autonomous(mut self, v: AutonomousConfig) -> Self {
         self.config.autonomous = Some(v);
+        self
+    }
+
+    pub fn autonomous_control(mut self, v: AutonomousControl) -> Self {
+        self.config.autonomous_control = Some(v);
         self
     }
 

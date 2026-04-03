@@ -1,6 +1,8 @@
-use octo_types::SessionId;
+use octo_types::{ChatMessage, SessionId};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::{mpsc, Notify};
 
 /// Default values
 fn default_idle_sleep() -> u64 {
@@ -159,6 +161,44 @@ impl Serialize for AutonomousStatus {
             Self::Completed => s.serialize_str("completed"),
             Self::Failed(msg) => s.serialize_str(&format!("failed: {msg}")),
         }
+    }
+}
+
+/// Control channels for autonomous mode — enables real-time user intervention
+/// during autonomous sleep via `tokio::select!` in the harness.
+///
+/// Passed into `AgentLoopConfig.autonomous_control` and consumed by the harness
+/// autonomous tick loop.
+pub struct AutonomousControl {
+    /// Notified when pause is requested.
+    pub pause_signal: Arc<Notify>,
+    /// Notified when resume after pause.
+    pub resume_signal: Arc<Notify>,
+    /// User messages injected during autonomous sleep.
+    pub user_msg_rx: mpsc::Receiver<ChatMessage>,
+    /// Sender side (held by executor/API layer).
+    pub user_msg_tx: mpsc::Sender<ChatMessage>,
+}
+
+impl AutonomousControl {
+    pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel(16);
+        Self {
+            pause_signal: Arc::new(Notify::new()),
+            resume_signal: Arc::new(Notify::new()),
+            user_msg_rx: rx,
+            user_msg_tx: tx,
+        }
+    }
+}
+
+// Cannot derive Debug because mpsc channels don't implement Debug
+impl std::fmt::Debug for AutonomousControl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutonomousControl")
+            .field("pause_signal", &"Arc<Notify>")
+            .field("resume_signal", &"Arc<Notify>")
+            .finish()
     }
 }
 
@@ -358,5 +398,54 @@ mod tests {
             let json = serde_json::to_string(&trigger).unwrap();
             let _parsed: AutonomousTrigger = serde_json::from_str(&json).unwrap();
         }
+    }
+
+    #[test]
+    fn test_autonomous_control_new() {
+        let ctrl = AutonomousControl::new();
+        // Verify channels are created and usable
+        assert!(ctrl.user_msg_tx.try_send(ChatMessage::user("test")).is_ok());
+        // Debug display should work without panic
+        let _debug = format!("{:?}", ctrl);
+    }
+
+    #[tokio::test]
+    async fn test_autonomous_control_user_msg_injection() {
+        let mut ctrl = AutonomousControl::new();
+        let tx = ctrl.user_msg_tx.clone();
+
+        tx.send(ChatMessage::user("hello from user")).await.unwrap();
+        let msg = ctrl.user_msg_rx.recv().await.unwrap();
+        let text = msg.content.iter().find_map(|b| {
+            if let octo_types::ContentBlock::Text { text } = b {
+                Some(text.as_str())
+            } else {
+                None
+            }
+        });
+        assert_eq!(text, Some("hello from user"));
+    }
+
+    #[tokio::test]
+    async fn test_autonomous_control_pause_resume() {
+        let ctrl = AutonomousControl::new();
+        let pause = ctrl.pause_signal.clone();
+        let resume = ctrl.resume_signal.clone();
+
+        // Spawn a task that waits for pause, then waits for resume
+        let handle = tokio::spawn(async move {
+            pause.notified().await;
+            // Simulate pause processing
+            resume.notified().await;
+            true
+        });
+
+        // Signal pause
+        ctrl.pause_signal.notify_one();
+        // Signal resume
+        ctrl.resume_signal.notify_one();
+
+        let result = handle.await.unwrap();
+        assert!(result);
     }
 }

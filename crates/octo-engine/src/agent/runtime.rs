@@ -212,6 +212,8 @@ pub struct AgentRuntime {
     pub(crate) team_manager: Arc<TeamManager>,
     // Plan mode buffer for enter_plan_mode/exit_plan_mode tools (T-G4)
     pub(crate) plan_buffer: crate::tools::plan_mode::PlanBuffer,
+    // Autonomous session scheduler (Phase AU-G2)
+    pub(crate) autonomous_scheduler: super::autonomous_scheduler::AutonomousScheduler,
 }
 
 impl AgentRuntime {
@@ -697,6 +699,7 @@ impl AgentRuntime {
             task_tracker: Arc::new(TaskTracker::new()),
             team_manager: Arc::new(TeamManager::new()),
             plan_buffer: crate::tools::plan_mode::PlanBuffer::new(),
+            autonomous_scheduler: super::autonomous_scheduler::AutonomousScheduler::new(),
         };
 
 
@@ -924,6 +927,11 @@ impl AgentRuntime {
     /// Get the multi-agent team manager (Phase AP-T13).
     pub fn team_manager(&self) -> &Arc<TeamManager> {
         &self.team_manager
+    }
+
+    /// Get autonomous session scheduler (Phase AU-G2).
+    pub fn autonomous_scheduler(&self) -> &super::autonomous_scheduler::AutonomousScheduler {
+        &self.autonomous_scheduler
     }
 
     /// Get metering snapshot for observability

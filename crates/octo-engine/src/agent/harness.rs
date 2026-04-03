@@ -1226,7 +1226,7 @@ async fn run_agent_loop_inner(
             fire_post_task_hooks(&config, &tx, round, turn_start.elapsed().as_millis() as u64, total_tool_calls, &recent_tools)
                 .await;
 
-            // --- Autonomous tick check (AQ-T4): instead of returning, enter tick sleep ---
+            // --- Autonomous tick check (AU-G1): multi-path tokio::select! replacing sequential sleep ---
             if let Some(ref mut state) = auto_state {
                 // Budget check
                 let budget_reason = state.check_budget();
@@ -1238,23 +1238,78 @@ async fn run_agent_loop_inner(
                     let sleep_dur = state.effective_sleep_duration();
                     let _ = tx.send(AgentEvent::AutonomousSleeping { duration_secs: sleep_dur }).await;
 
-                    // Interruptible sleep
-                    tokio::time::sleep(std::time::Duration::from_secs(sleep_dur)).await;
-
-                    // Check cancellation after sleep
+                    // Multi-path select!: sleep, user message, or pause
+                    // Cancellation is checked at the top of the main loop and after select.
+                    // Pre-extract references to avoid borrow conflict in select! macro.
+                    let sleep_duration = std::time::Duration::from_secs(sleep_dur);
+                    enum AutonomousAction {
+                        Tick,
+                        UserMessage(ChatMessage),
+                        Pause,
+                    }
+                    // Split borrow: take mutable rx and shared pause_signal separately
+                    let (has_ctrl, pause_signal) = match config.autonomous_control {
+                        Some(ref ctrl) => (true, Some(ctrl.pause_signal.clone())),
+                        None => (false, None),
+                    };
+                    let action = tokio::select! {
+                        // Path 1: Normal sleep completes → tick
+                        _ = tokio::time::sleep(sleep_duration) => AutonomousAction::Tick,
+                        // Path 2: User message arrives → inject immediately
+                        msg = async {
+                            if has_ctrl {
+                                config.autonomous_control.as_mut().unwrap().user_msg_rx.recv().await
+                            } else {
+                                std::future::pending().await
+                            }
+                        } => {
+                            match msg {
+                                Some(user_msg) => AutonomousAction::UserMessage(user_msg),
+                                None => AutonomousAction::Tick, // channel closed, treat as tick
+                            }
+                        }
+                        // Path 3: Pause signal
+                        _ = async {
+                            if let Some(ref sig) = pause_signal {
+                                sig.notified().await
+                            } else {
+                                std::future::pending::<()>().await
+                            }
+                        } => AutonomousAction::Pause,
+                    };
+                    // Check cancellation after select (covers cancel during sleep)
                     if config.cancel_token.is_cancelled() {
                         info!(session = %config.session_id, "Autonomous: cancelled during sleep");
                     } else {
-                        let _ = tx.send(AgentEvent::AutonomousTick { round: state.rounds_completed }).await;
-                        // Inject tick message and continue main loop
-                        let tick_msg = if state.user_online {
-                            "<tick> Autonomous check-in. User is online. Summarize progress briefly."
-                        } else {
-                            "<tick> Autonomous check-in. Continue working quietly."
-                        };
-                        messages.push(ChatMessage::user(tick_msg));
-                        let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
-                        continue; // Re-enter main loop for next LLM call
+                        match action {
+                            AutonomousAction::Tick => {
+                                let _ = tx.send(AgentEvent::AutonomousTick { round: state.rounds_completed }).await;
+                                let tick_msg = if state.user_online {
+                                    "<tick> Autonomous check-in. User is online. Summarize progress briefly."
+                                } else {
+                                    "<tick> Autonomous check-in. Continue working quietly."
+                                };
+                                messages.push(ChatMessage::user(tick_msg));
+                                let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
+                                continue;
+                            }
+                            AutonomousAction::UserMessage(user_msg) => {
+                                messages.push(user_msg);
+                                continue;
+                            }
+                            AutonomousAction::Pause => {
+                                state.status = super::autonomous::AutonomousStatus::Paused;
+                                let _ = tx.send(AgentEvent::AutonomousPaused).await;
+                                // Wait for resume signal (use cloned Arc to avoid borrow conflict)
+                                if let Some(ref ctrl) = config.autonomous_control {
+                                    let resume_sig = ctrl.resume_signal.clone();
+                                    resume_sig.notified().await;
+                                }
+                                state.status = super::autonomous::AutonomousStatus::Running;
+                                let _ = tx.send(AgentEvent::AutonomousResumed).await;
+                                continue;
+                            }
+                        }
                     }
                 }
             }

@@ -1,5 +1,6 @@
 pub mod autonomous;
 pub mod autonomous_audit;
+pub mod autonomous_scheduler;
 pub mod autonomous_trigger;
 pub mod cancellation;
 pub mod token_escalation;
@@ -37,7 +38,8 @@ pub mod tenant;
 pub mod turn_gate;
 pub mod yaml_def;
 
-pub use autonomous::{AutonomousConfig, AutonomousState, AutonomousStatus, AutonomousTrigger};
+pub use autonomous::{AutonomousConfig, AutonomousControl, AutonomousState, AutonomousStatus, AutonomousTrigger};
+pub use autonomous_scheduler::AutonomousScheduler;
 pub use autonomous_trigger::{
     ChannelTriggerSource, PollingTriggerSource, TriggerEvent, TriggerListener, TriggerSource,
 };

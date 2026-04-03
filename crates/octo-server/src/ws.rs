@@ -140,6 +140,28 @@ enum ServerMessage {
         event_type: String,
         session_id: String,
     },
+
+    // === Autonomous Mode Events (Phase AU-G3) ===
+    #[serde(rename = "autonomous_sleeping")]
+    AutonomousSleeping {
+        session_id: String,
+        duration_secs: u64,
+    },
+
+    #[serde(rename = "autonomous_tick")]
+    AutonomousTick { session_id: String, round: u32 },
+
+    #[serde(rename = "autonomous_paused")]
+    AutonomousPaused { session_id: String },
+
+    #[serde(rename = "autonomous_resumed")]
+    AutonomousResumed { session_id: String },
+
+    #[serde(rename = "autonomous_exhausted")]
+    AutonomousExhausted {
+        session_id: String,
+        reason: String,
+    },
 }
 
 /// Extract a named parameter from a query string.
@@ -407,6 +429,35 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExe
                                     max_attempts,
                                     reason,
                                 },
+                                // === Autonomous Mode Events (Phase AU-G3) ===
+                                AgentEvent::AutonomousSleeping { duration_secs } => {
+                                    ServerMessage::AutonomousSleeping {
+                                        session_id: sid_str.clone(),
+                                        duration_secs,
+                                    }
+                                }
+                                AgentEvent::AutonomousTick { round } => {
+                                    ServerMessage::AutonomousTick {
+                                        session_id: sid_str.clone(),
+                                        round,
+                                    }
+                                }
+                                AgentEvent::AutonomousPaused => {
+                                    ServerMessage::AutonomousPaused {
+                                        session_id: sid_str.clone(),
+                                    }
+                                }
+                                AgentEvent::AutonomousResumed => {
+                                    ServerMessage::AutonomousResumed {
+                                        session_id: sid_str.clone(),
+                                    }
+                                }
+                                AgentEvent::AutonomousExhausted { reason } => {
+                                    ServerMessage::AutonomousExhausted {
+                                        session_id: sid_str.clone(),
+                                        reason,
+                                    }
+                                }
                                 // IterationStart/IterationEnd are internal -- skip
                                 _ => continue,
                             };
