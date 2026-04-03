@@ -153,6 +153,7 @@ async fn test_retry_provider_retries_on_retryable() {
         base_delay: Duration::from_millis(1), // fast for tests
         max_delay: Duration::from_millis(10),
         backoff_factor: 1.0,
+        ..Default::default()
     };
 
     let provider = RetryProvider::new(
@@ -175,6 +176,7 @@ async fn test_retry_provider_exhausts_retries() {
         base_delay: Duration::from_millis(1),
         max_delay: Duration::from_millis(10),
         backoff_factor: 1.0,
+        ..Default::default()
     };
 
     let provider = RetryProvider::new(Box::new(ArcProvider(Arc::clone(&mock))), policy);
@@ -199,6 +201,7 @@ async fn test_retry_provider_no_retry_on_auth() {
         base_delay: Duration::from_millis(1),
         max_delay: Duration::from_millis(10),
         backoff_factor: 1.0,
+        ..Default::default()
     };
 
     let provider = RetryProvider::new(Box::new(ArcProvider(Arc::clone(&mock))), policy);
@@ -347,6 +350,7 @@ async fn test_pipeline_chain() {
         base_delay: Duration::from_millis(1),
         max_delay: Duration::from_millis(10),
         backoff_factor: 1.0,
+        ..Default::default()
     };
 
     let provider = ProviderPipelineBuilder::new(Box::new(mock))
