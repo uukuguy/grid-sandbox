@@ -707,11 +707,17 @@ impl AgentRuntime {
         let builtin_count = crate::agent::builtin_agents::register_builtin_agents(&runtime.catalog);
         tracing::info!(count = builtin_count, "Registered built-in agents");
 
-        // 17. Load declarative YAML agent definitions (if configured)
-        if let Some(ref dir) = config.agents_dir {
+        // 17. Load declarative YAML agent definitions
+        // Priority: explicit agents_dir config → {working_dir}/agents/ fallback
+        let agents_dir = config.agents_dir.clone().unwrap_or_else(|| {
+            working_dir.join("agents")
+        });
+        let agents_dir = Some(agents_dir);
+        if let Some(ref dir) = agents_dir {
             let loader = crate::agent::AgentManifestLoader::new(dir);
             match loader.load_all(&runtime.catalog) {
-                Ok(n) => tracing::info!(count = n, "Loaded YAML agent manifests"),
+                Ok(n) if n > 0 => tracing::info!(count = n, dir = %dir.display(), "Loaded YAML agent manifests (override built-ins)"),
+                Ok(_) => {} // 0 loaded = dir doesn't exist or empty, silent
                 Err(e) => tracing::warn!(error = %e, "Failed to load agent YAML manifests"),
             }
         }
