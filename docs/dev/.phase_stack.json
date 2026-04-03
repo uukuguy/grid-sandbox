@@ -1,19 +1,16 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase AY — SubAgent Runtime",
-      "started_at": "2026-04-03T18:30:00+08:00",
-      "completed_at": "2026-04-03T21:15:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "progress": "100%",
-      "commits": ["c552a87", "6811353"],
-      "tasks": "7/7 (W1: SubAgentRuntime+AgentTool rename+Skill convergence+delete YAML, W2: event_sender+Drop guard+verify)",
-      "tests": 15,
-      "deferred": []
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
+    {
+      "name": "Phase AY — SubAgent Runtime",
+      "completed_at": "2026-04-03T21:40:00+08:00",
+      "progress": "100%",
+      "commits": ["c552a87", "6811353", "782bd01", "e80679f"],
+      "tasks": "7/7 + 6/6 deferred + wiring audit (4 fixes)",
+      "tests": 15,
+      "deferred": []
+    },
     {
       "name": "Phase AX — Builtin Agents",
       "completed_at": "2026-04-03T17:25:00+08:00",
