@@ -2,19 +2,19 @@
   "plan_file": "docs/plans/2026-04-03-phase-ay-subagent-runtime.md",
   "phase": "execution",
   "created_at": "2026-04-03T18:30:00+08:00",
-  "updated_at": "2026-04-03T21:30:00+08:00",
+  "updated_at": "2026-04-03T21:40:00+08:00",
   "completed_tasks": ["T1-subagent-runtime", "T2-agent-tool-rename", "T3-skill-convergence", "T4-delete-agents-yaml", "T5-event-sender", "T6-drop-guard", "T7-verify"],
   "current_task": null,
   "total_tasks": 7,
   "phase_name": "Phase AY — SubAgent Runtime 完整生命周期",
-  "status": "COMPLETE — 7/7 tasks + 6/6 deferred resolved, 15 tests @ 6811353",
+  "status": "COMPLETE — 7/7 tasks + 6/6 deferred + wiring audit (4 fixes), 15 tests @ e80679f",
   "execution_mode": "manual",
   "branch": "main",
   "baseline": {
     "tests": "2593+ (Phase AX) + 15 (Phase AY)",
-    "commit": "6811353",
+    "commit": "e80679f",
     "db_version": 13,
-    "notes": "SubAgentRuntime lifecycle complete. All 6 deferred items resolved. Agent/Skill convergence. YAML agents removed."
+    "notes": "SubAgentRuntime lifecycle complete. All 6 deferred resolved. Wiring audit: safety_pipeline, canary_token, recorder, loop_guard fixed."
   },
   "waves": {
     "wave1": {
