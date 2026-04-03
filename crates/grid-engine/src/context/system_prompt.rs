@@ -15,7 +15,7 @@ use grid_types::skill::SkillDefinition;
 
 use crate::agent::entry::AgentManifest;
 
-const CORE_INSTRUCTIONS: &str = r#"You are Octo, an AI autonomous agent running inside a sandboxed environment.
+const CORE_INSTRUCTIONS: &str = r#"You are Grid, an AI autonomous agent running inside a sandboxed environment.
 
 You have access to tools for executing commands, reading and writing files, searching codebases, and browsing the web. Use these tools to help users with software engineering tasks.
 

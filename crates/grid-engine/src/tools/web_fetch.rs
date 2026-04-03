@@ -124,7 +124,7 @@ impl Tool for WebFetchTool {
         let response = self
             .client
             .get(url)
-            .header("User-Agent", "Octo-Sandbox/1.0")
+            .header("User-Agent", "Grid-Sandbox/1.0")
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("failed to fetch URL: {e}"))?;

@@ -7,14 +7,14 @@ use owo_colors::Style;
 /// Named color themes for the CLI
 #[derive(Debug, Clone, Copy, Default, clap::ValueEnum)]
 pub enum ThemeName {
-    /// Ocean cyan (recommended)
-    #[default]
+    /// Ocean cyan
     Cyan,
     /// State Grid green
     Sgcc,
     /// Dodge blue
     Blue,
-    /// Deep indigo
+    /// Deep indigo (recommended)
+    #[default]
     Indigo,
     /// Violet
     Violet,

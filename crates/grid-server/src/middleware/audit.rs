@@ -1,4 +1,4 @@
-//! Audit middleware for Octo Server
+//! Audit middleware for Grid Server
 //!
 //! Logs HTTP requests to the audit log for security and compliance.
 

@@ -1,4 +1,4 @@
-//! Rate limiting middleware for Octo Server
+//! Rate limiting middleware for Grid Server
 
 use std::{collections::HashMap, sync::Arc, time::Instant};
 

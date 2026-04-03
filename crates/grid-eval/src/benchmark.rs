@@ -378,7 +378,7 @@ impl BenchmarkAggregator {
     pub fn to_markdown(report: &BenchmarkReport) -> String {
         let mut md = String::new();
 
-        md.push_str("# Octo Agent Benchmark Report\n\n");
+        md.push_str("# Grid Agent Benchmark Report\n\n");
 
         // Overview table
         md.push_str("## Overview\n\n");
@@ -784,7 +784,7 @@ mod tests {
         let benchmark = BenchmarkAggregator::aggregate(vec![("tool_call", &comparison)]);
         let md = BenchmarkAggregator::to_markdown(&benchmark);
 
-        assert!(md.contains("# Octo Agent Benchmark Report"));
+        assert!(md.contains("# Grid Agent Benchmark Report"));
         assert!(md.contains("TestModel"));
         assert!(md.contains("Recommendations"));
     }

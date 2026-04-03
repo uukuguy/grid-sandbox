@@ -1,4 +1,4 @@
-//! System tray icon and menu for Octo Desktop.
+//! System tray icon and menu for Grid Desktop.
 
 use anyhow::Result;
 use tauri::{

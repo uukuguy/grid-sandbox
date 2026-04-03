@@ -698,9 +698,9 @@ mod tests {
     // -- TuiTheme tests --
 
     #[test]
-    fn theme_default_is_cyan() {
+    fn theme_default_is_indigo() {
         let theme = theme::TuiTheme::default();
-        assert_eq!(theme.accent, Color::Rgb(6, 182, 212));
+        assert_eq!(theme.accent, Color::Rgb(99, 102, 241));
     }
 
     #[test]

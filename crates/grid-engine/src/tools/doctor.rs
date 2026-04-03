@@ -20,7 +20,7 @@ impl Tool for DoctorTool {
     }
 
     fn description(&self) -> &str {
-        "Run self-diagnosis checks on the Octo agent environment.\n\
+        "Run self-diagnosis checks on the Grid agent environment.\n\
          Checks: required binaries (git, cargo, node), environment variables\n\
          (API keys), working directory health, and basic system info.\n\n\
          Returns a structured report with PASS/WARN/FAIL for each check.\n\n\

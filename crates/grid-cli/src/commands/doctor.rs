@@ -97,7 +97,7 @@ struct DoctorSummary {
 
 impl TextOutput for DoctorOutput {
     fn to_text(&self) -> String {
-        let mut out = String::from("Octo Doctor - Health Diagnostics\n");
+        let mut out = String::from("Grid Doctor - Health Diagnostics\n");
         out.push_str(&"=".repeat(40));
         out.push('\n');
 

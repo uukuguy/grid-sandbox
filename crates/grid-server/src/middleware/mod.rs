@@ -1,4 +1,4 @@
-//! Middleware for Octo Server
+//! Middleware for Grid Server
 
 pub mod audit;
 pub mod auth;

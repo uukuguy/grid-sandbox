@@ -6,7 +6,7 @@
 //!
 //! Design decision: NOT implemented (recorded as future work):
 //! - Tree-sitter AST parsing (heavy dependency, regex sufficient for critical patterns)
-//! - ML-based command classifier (Octo uses PermissionEngine + static rules)
+//! - ML-based command classifier (Grid uses PermissionEngine + static rules)
 //! - CWD escape tracking (complex, sandbox isolation more reliable)
 //! - sed edit preview (low usage frequency)
 //! - Full pipeline analysis (only check pipe-to-shell patterns)

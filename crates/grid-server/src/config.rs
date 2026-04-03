@@ -524,7 +524,7 @@ impl Config {
         output.push_str(
             "# =============================================================================\n",
         );
-        output.push_str("# Octo Server Configuration\n");
+        output.push_str("# Grid Server Configuration\n");
         output.push_str(
             "# =============================================================================\n",
         );

@@ -157,7 +157,7 @@ async fn build_image(tag: &str, no_cache: bool, dev: bool, multi_platform: bool)
 }
 
 async fn cleanup_containers(force: bool, session: Option<&str>) -> Result<()> {
-    println!("Cleaning up Octo sandbox containers...");
+    println!("Cleaning up Grid sandbox containers...");
 
     let mut cmd = tokio::process::Command::new("docker");
     cmd.arg("ps")
@@ -179,7 +179,7 @@ async fn cleanup_containers(force: bool, session: Option<&str>) -> Result<()> {
     let lines: Vec<&str> = stdout.lines().collect();
 
     if lines.is_empty() {
-        println!("  No Octo sandbox containers found.");
+        println!("  No Grid sandbox containers found.");
         return Ok(());
     }
 

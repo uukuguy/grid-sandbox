@@ -15,7 +15,7 @@ pub use oauth::{
 };
 pub use sse::SseMcpClient;
 pub use stdio::StdioMcpClient;
-pub use server::{OctoMcpServer, OctoMcpServerConfig};
+pub use server::{GridMcpServer, GridMcpServerConfig};
 pub use storage::McpStorage;
 pub use traits::{
     McpClient, McpPromptArgument, McpPromptInfo, McpPromptMessage, McpPromptResult,

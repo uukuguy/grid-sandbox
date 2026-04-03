@@ -28,7 +28,7 @@ impl Tool for NotifierTool {
          - log: append to a notification log file\n\n\
          Parameters:\n\
          - message (required): notification text\n\
-         - title: notification title (default: 'Octo Agent')\n\
+         - title: notification title (default: 'Grid Agent')\n\
          - channel: 'desktop', 'webhook', 'log', or 'all' (default: 'desktop')\n\
          - webhook_url: required if channel is 'webhook'\n\
          - urgency: 'low', 'normal', 'critical' (default: 'normal')\n\n\
@@ -46,7 +46,7 @@ impl Tool for NotifierTool {
                 },
                 "title": {
                     "type": "string",
-                    "description": "Notification title (default: 'Octo Agent')"
+                    "description": "Notification title (default: 'Grid Agent')"
                 },
                 "channel": {
                     "type": "string",
@@ -75,7 +75,7 @@ impl Tool for NotifierTool {
         let title = params
             .get("title")
             .and_then(|v| v.as_str())
-            .unwrap_or("Octo Agent");
+            .unwrap_or("Grid Agent");
         let channel = params
             .get("channel")
             .and_then(|v| v.as_str())
@@ -170,7 +170,7 @@ async fn send_webhook(url: &str, title: &str, message: &str) -> Result<()> {
     let payload = json!({
         "text": format!("*{title}*\n{message}"),
         "content": format!("**{title}**\n{message}"),
-        "username": "Octo Agent"
+        "username": "Grid Agent"
     });
 
     let client = reqwest::Client::new();

@@ -329,7 +329,7 @@ async fn validate_config(state: &AppState) -> Result<()> {
 async fn init_config(_state: &AppState) -> Result<()> {
     use dialoguer::{Input, Select};
 
-    println!("Octo CLI Configuration Wizard\n");
+    println!("Grid CLI Configuration Wizard\n");
 
     // Provider selection
     let providers = vec!["anthropic", "openai"];

@@ -9,7 +9,7 @@ pub async fn execute_init(state: &AppState) -> Result<()> {
     let root = &state.grid_root;
     let project_root = root.project_root();
 
-    println!("Initializing Octo project...\n");
+    println!("Initializing Grid project...\n");
 
     // 1. Ensure all GridRoot directories exist
     root.ensure_dirs()?;
@@ -71,7 +71,7 @@ pub async fn execute_init(state: &AppState) -> Result<()> {
 }
 
 fn generate_project_config_template() -> String {
-    r#"# Octo Project Configuration
+    r#"# Grid Project Configuration
 # This file is version-controlled. Do NOT put secrets here.
 # Use ~/.grid/credentials.yaml for API keys.
 # Use .grid/config.local.yaml for local overrides (git-ignored).
@@ -97,7 +97,7 @@ fn generate_project_config_template() -> String {
 }
 
 fn generate_local_config_template() -> String {
-    r#"# Octo Local Configuration (git-ignored)
+    r#"# Grid Local Configuration (git-ignored)
 # Put local development overrides here.
 # This file is NOT version-controlled.
 
@@ -113,7 +113,7 @@ fn generate_local_config_template() -> String {
 }
 
 fn generate_credentials_template() -> String {
-    r#"# Octo Credentials (mode 600 — do NOT commit this file)
+    r#"# Grid Credentials (mode 600 — do NOT commit this file)
 # API keys for LLM providers.
 
 providers:
@@ -158,7 +158,7 @@ fn ensure_gitignore(path: &Path) -> Result<()> {
         }
     } else {
         let content = format!(
-            "# Octo project local files (do not commit)\n{}\n",
+            "# Grid project local files (do not commit)\n{}\n",
             entries.join("\n")
         );
         std::fs::write(path, content)?;

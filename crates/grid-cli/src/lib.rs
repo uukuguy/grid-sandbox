@@ -75,7 +75,7 @@ pub enum Commands {
         #[arg(short, long)]
         agent: Option<String>,
         /// Color theme
-        #[arg(long, default_value = "cyan")]
+        #[arg(long, default_value = "indigo")]
         theme: String,
         /// Additional directories to include as context
         #[arg(long = "add-dir")]

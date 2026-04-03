@@ -1,4 +1,4 @@
-//! Command type definitions for Octo CLI
+//! Command type definitions for Grid CLI
 
 use clap::Subcommand;
 
@@ -268,7 +268,7 @@ pub enum SandboxCommands {
     DryRun,
     /// List registered sandbox backends
     ListBackends,
-    /// Build the Octo sandbox Docker image
+    /// Build the Grid sandbox Docker image
     Build {
         /// Image tag (default: octo-sandbox:base)
         #[arg(short, long, default_value = "octo-sandbox:base")]
@@ -285,7 +285,7 @@ pub enum SandboxCommands {
     },
     /// Clean up sandbox containers
     Cleanup {
-        /// Force-remove all Octo sandbox containers
+        /// Force-remove all Grid sandbox containers
         #[arg(long)]
         force: bool,
         /// Clean up containers for a specific session

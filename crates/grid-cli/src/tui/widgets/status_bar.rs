@@ -275,13 +275,13 @@ impl Widget for StatusBarWidget<'_> {
             Style::default().fg(style_tokens::BORDER),
         );
 
-        // Row 1: brand 🦑 Octo | model | tokens | mcp | cost | context%
+        // Row 1: brand ◆ Grid | model | tokens | mcp | cost | context%
         if area.height >= 2 {
             let mut spans: Vec<Span> = Vec::new();
 
             // Brand
             spans.push(Span::styled(
-                " \u{1F991} Octo",
+                " \u{25C6} Grid",
                 Style::default()
                     .fg(style_tokens::AMBER)
                     .add_modifier(Modifier::BOLD),
@@ -520,7 +520,7 @@ mod tests {
 
         // Collect all symbols from the buffer
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Octo"), "Should contain brand name Octo");
+        assert!(content.contains("Octo"), "Should contain brand name Grid");
         assert!(content.contains("test-model"), "Should contain model name");
     }
 

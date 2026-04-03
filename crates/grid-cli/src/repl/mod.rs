@@ -1,4 +1,4 @@
-//! REPL main loop — interactive chat with an Octo agent via rustyline
+//! REPL main loop — interactive chat with an Grid agent via rustyline
 
 pub mod context;
 pub mod file_ref;
@@ -97,7 +97,7 @@ pub async fn run_repl(state: &AppState, opts: &RunOptions) -> Result<()> {
     let _ = rl.load_history(&history_path);
 
     // ── 4. Welcome banner ───────────────────────────────────────────────
-    eprintln!("Octo REPL — Session: {}", session_id);
+    eprintln!("Grid REPL — Session: {}", session_id);
     eprintln!("Type a message to chat. /help for commands. Ctrl+D to exit.\n");
 
     // Show additional context directories if provided

@@ -6,7 +6,7 @@
 //! Visual identity (vs opendev-tui):
 //! - Amber-gold (hue 30-60) instead of cyan-blue (190-250)
 //! - Double-line border (╔═╗║╚═╝) instead of rounded (╭─╮│╰─╯)
-//! - ASCII Art "OCTO" (Tier 3) / "O C T O" (Tier 2) / 🦑 (Tier 1)
+//! - ASCII Art "GRID" (Tier 3) / "G R I D" (Tier 2) / ◆ (Tier 1)
 //! - Breathing gradient animation on border + title
 
 mod color;
@@ -80,21 +80,19 @@ impl<'a> WelcomePanel<'a> {
         }
     }
 
-    // 5-row ASCII art: "OCTO" in slant style (width 30)
-    // Thin line aesthetic using underscores, slashes, and pipes
-    // 5-row ASCII art: "OCTO" in dense block style (width 31)
-    // Matches grid-tui proportions: 7-wide letters, 2-col strokes, 1-space gaps
+    // 5-row ASCII art: "GRID" in dense block style (width 30)
+    // Matches grid-tui proportions: 6-wide letters, 2-col strokes, 2-space gaps
     const LOGO_LINES: [&'static str; 5] = [
-        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} ",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        "\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}        \u{2588}\u{2588}\u{2588}   \u{2588}\u{2588}   \u{2588}\u{2588}",
-        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}    \u{2588}\u{2588}\u{2588}    \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} ",
+        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588}  \u{2588}\u{2588}\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}\u{2588}\u{2588}  ",
+        "\u{2588}\u{2588}      \u{2588}\u{2588}  \u{2588}\u{2588} \u{2588}\u{2588} \u{2588}\u{2588}  \u{2588}\u{2588}",
+        "\u{2588}\u{2588}  \u{2588}\u{2588} \u{2588}\u{2588}\u{2588}\u{2588}   \u{2588}\u{2588} \u{2588}\u{2588}  \u{2588}\u{2588}",
+        "\u{2588}\u{2588}   \u{2588} \u{2588}\u{2588}  \u{2588}\u{2588} \u{2588}\u{2588} \u{2588}\u{2588}  \u{2588}\u{2588}",
+        " \u{2588}\u{2588}\u{2588}\u{2588}\u{2588} \u{2588}\u{2588}  \u{2588}\u{2588} \u{2588}\u{2588} \u{2588}\u{2588}\u{2588}\u{2588}  ",
     ];
-    const LOGO_WIDTH: usize = 31;
+    const LOGO_WIDTH: usize = 30;
     const LOGO_HEIGHT: usize = 5;
 
-    /// Render the dot-grid background with pulsing intersections and OCTO logo as negative space.
+    /// Render the dot-grid background with pulsing intersections and GRID logo as negative space.
     fn render_grid_bg(
         &self,
         buf: &mut Buffer,
@@ -217,7 +215,7 @@ impl Widget for WelcomePanel<'_> {
         if area.height < 5 {
             // ── Tier 1: tiny terminal — emoji brand ──
             let cy = area.y + area.height / 2;
-            Self::center_text(buf, area, cy, "\u{1F991} octo \u{2014} autonomous ai workbench", dim);
+            Self::center_text(buf, area, cy, "\u{25C6} grid \u{2014} autonomous ai agent platform", dim);
         } else if area.height < 12 {
             // ── Tier 2: small — border + spaced title + subtitle ──
             let box_w = (area.width.saturating_sub(4)).min(50);
@@ -226,10 +224,10 @@ impl Widget for WelcomePanel<'_> {
             let by = area.y + (area.height.saturating_sub(box_h)) / 2;
 
             self.draw_border(buf, area, bx, by, box_w, box_h);
-            self.write_gradient_line(buf, area, by + 1, "O C T O", 0);
+            self.write_gradient_line(buf, area, by + 1, "G R I D", 0);
             Self::center_text(buf, area, by + 3, subtitle, dim);
         } else {
-            // ── Tier 3: full — grid background with OCTO logo + info box ──
+            // ── Tier 3: full — grid background with GRID logo + info box ──
             let box_w = (area.width.saturating_sub(4)).min(70);
             let box_h = 3u16; // info box: border + help text + border
             let grid_h = (area.height.saturating_sub(box_h + 2)).clamp(5, 18) as usize;
@@ -240,7 +238,7 @@ impl Widget for WelcomePanel<'_> {
             let start_y = area.y + area.height.saturating_sub(total_h) / 2;
             let center_x = area.x + (area.width.saturating_sub(box_w)) / 2;
 
-            // Grid background with OCTO logo as negative space
+            // Grid background with GRID logo as negative space
             let grid_x = area.x + (area.width.saturating_sub(grid_w as u16)) / 2;
             self.render_grid_bg(buf, area, grid_x, start_y, grid_w, grid_h);
 

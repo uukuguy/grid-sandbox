@@ -22,10 +22,10 @@ use grid_types::{RiskLevel, SandboxId, ToolContext};
 
 use crate::tools::{Tool, ToolRegistry};
 
-/// Configuration for the OctoMcpServer (distinct from `McpServerConfig` in traits.rs
+/// Configuration for the GridMcpServer (distinct from `McpServerConfig` in traits.rs
 /// which configures MCP *client* connections to external servers).
 #[derive(Debug, Clone)]
-pub struct OctoMcpServerConfig {
+pub struct GridMcpServerConfig {
     /// Server name reported to clients.
     pub name: String,
     /// Server version reported to clients.
@@ -34,7 +34,7 @@ pub struct OctoMcpServerConfig {
     pub instructions: Option<String>,
 }
 
-impl Default for OctoMcpServerConfig {
+impl Default for GridMcpServerConfig {
     fn default() -> Self {
         Self {
             name: "octo-engine".to_string(),
@@ -48,14 +48,14 @@ impl Default for OctoMcpServerConfig {
 ///
 /// Implements `rmcp::ServerHandler` to handle `tools/list` and `tools/call`
 /// requests from MCP clients connected via stdio or HTTP transport.
-pub struct OctoMcpServer {
+pub struct GridMcpServer {
     registry: Arc<ToolRegistry>,
-    config: OctoMcpServerConfig,
+    config: GridMcpServerConfig,
     tool_context: ToolContext,
 }
 
-impl OctoMcpServer {
-    pub fn new(registry: Arc<ToolRegistry>, config: OctoMcpServerConfig) -> Self {
+impl GridMcpServer {
+    pub fn new(registry: Arc<ToolRegistry>, config: GridMcpServerConfig) -> Self {
         let tool_context = ToolContext {
             sandbox_id: SandboxId::new(),
             user_id: grid_types::UserId::from_string(grid_types::id::DEFAULT_USER_ID),
@@ -119,7 +119,7 @@ impl OctoMcpServer {
     }
 }
 
-impl ServerHandler for OctoMcpServer {
+impl ServerHandler for GridMcpServer {
     fn get_info(&self) -> ServerInfo {
         let mut caps = ServerCapabilities::default();
         caps.tools = Some(ToolsCapability::default());
@@ -297,8 +297,8 @@ mod tests {
         Arc::new(reg)
     }
 
-    fn make_server() -> OctoMcpServer {
-        OctoMcpServer::new(make_registry(), OctoMcpServerConfig::default())
+    fn make_server() -> GridMcpServer {
+        GridMcpServer::new(make_registry(), GridMcpServerConfig::default())
     }
 
     #[test]
@@ -316,7 +316,7 @@ mod tests {
         let tools = server
             .registry
             .iter()
-            .map(|(_name, tool)| OctoMcpServer::to_rmcp_tool(tool.as_ref()))
+            .map(|(_name, tool)| GridMcpServer::to_rmcp_tool(tool.as_ref()))
             .collect::<Vec<_>>();
 
         assert_eq!(tools.len(), 4);
@@ -341,7 +341,7 @@ mod tests {
         assert!(!result.is_error);
         assert_eq!(result.content, "hello world");
 
-        let rmcp_tool = OctoMcpServer::to_rmcp_tool(tool.as_ref());
+        let rmcp_tool = GridMcpServer::to_rmcp_tool(tool.as_ref());
         assert_eq!(rmcp_tool.name.as_ref(), "echo");
         assert_eq!(
             rmcp_tool.description.as_deref(),
@@ -374,7 +374,7 @@ mod tests {
     fn test_mcp_server_tool_annotations() {
         let server = make_server();
         let tool = server.registry.get("readonly").expect("readonly tool exists");
-        let rmcp_tool = OctoMcpServer::to_rmcp_tool(tool.as_ref());
+        let rmcp_tool = GridMcpServer::to_rmcp_tool(tool.as_ref());
         let ann = rmcp_tool.annotations.expect("should have annotations");
         assert_eq!(ann.read_only_hint, Some(true));
         assert_eq!(ann.destructive_hint, Some(false));
