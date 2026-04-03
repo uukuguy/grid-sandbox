@@ -241,11 +241,18 @@ pub struct PromptParts {
 
 impl PromptParts {
     /// Merge both parts into a single string.
+    ///
+    /// When both parts are non-empty, inserts a `---DYNAMIC---` separator
+    /// so that the Anthropic provider can split the prompt into a cacheable
+    /// static block and a non-cached dynamic block.
     pub fn merge(&self) -> String {
         if self.dynamic_context.is_empty() {
             self.system_prompt.clone()
         } else {
-            format!("{}\n\n{}", self.system_prompt, self.dynamic_context)
+            format!(
+                "{}\n---DYNAMIC---\n{}",
+                self.system_prompt, self.dynamic_context
+            )
         }
     }
 }
@@ -684,7 +691,7 @@ impl SystemPromptBuilder {
     pub fn build(&self) -> String {
         let static_part = self.build_static();
         match self.collect_dynamic_parts() {
-            Some(dynamic) => format!("{}\n\n{}", static_part, dynamic),
+            Some(dynamic) => format!("{}\n---DYNAMIC---\n{}", static_part, dynamic),
             None => static_part,
         }
     }
@@ -1008,7 +1015,7 @@ mod prompt_parts_tests {
             system_prompt: "static".to_string(),
             dynamic_context: "dynamic".to_string(),
         };
-        assert_eq!(parts.merge(), "static\n\ndynamic");
+        assert_eq!(parts.merge(), "static\n---DYNAMIC---\ndynamic");
     }
 
     #[test]

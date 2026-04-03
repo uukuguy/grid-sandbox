@@ -51,6 +51,8 @@ pub enum AgentMessage {
         at_turn: usize,
         new_session_id: SessionId,
     },
+    /// AV-T3: Request context compaction (from /compact command or Ctrl+K).
+    CompactHistory,
 }
 
 /// AgentExecutor 的对外句柄（可 clone，廉价）
@@ -471,6 +473,38 @@ impl AgentExecutor {
                         at_turn,
                         "AgentExecutor: conversation forked"
                     );
+                }
+                AgentMessage::CompactHistory => {
+                    info!(session_id = %self.session_id.as_str(), "Received CompactHistory request");
+                    let keep = 10;
+                    let len = self.history.len();
+                    if len > 8 {
+                        let boundary = len.saturating_sub(keep);
+                        if boundary >= 2 {
+                            let marker = ChatMessage {
+                                role: octo_types::MessageRole::User,
+                                content: vec![octo_types::ContentBlock::Text {
+                                    text: format!("[Compact: {} older messages removed]", boundary),
+                                }],
+                            };
+                            self.history.drain(..boundary);
+                            self.history.insert(0, marker);
+                            info!(
+                                session_id = %self.session_id.as_str(),
+                                removed = boundary,
+                                "CompactHistory done"
+                            );
+                            let _ = self.broadcast_tx.send(AgentEvent::ContextCompacted {
+                                strategy: "auto_snip".into(),
+                                pre_tokens: 0,
+                                post_tokens: boundary,
+                            });
+                            // Persist compacted history
+                            if let Some(ref store) = self.session_store {
+                                store.set_messages(&self.session_id, self.history.clone()).await;
+                            }
+                        }
+                    }
                 }
             }
         }

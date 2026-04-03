@@ -52,7 +52,7 @@ struct ApiRequest {
     max_tokens: u32,
     messages: Vec<ApiMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
+    system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -146,6 +146,37 @@ struct ApiUsage {
     input_tokens: u32,
     #[serde(default)]
     output_tokens: u32,
+}
+
+/// Build system content blocks with optional cache_control for Anthropic prompt caching.
+///
+/// When the system prompt contains `\n---DYNAMIC---\n`, it splits into:
+/// - Static part -> gets `cache_control: {type: "ephemeral"}` for API-side caching
+/// - Dynamic part -> no cache_control (changes each request)
+///
+/// When there's no separator, the entire prompt is treated as cacheable.
+fn build_system_content_blocks(system: &str) -> serde_json::Value {
+    if let Some((static_part, dynamic_part)) = system.split_once("\n---DYNAMIC---\n") {
+        let mut blocks = vec![serde_json::json!({
+            "type": "text",
+            "text": static_part,
+            "cache_control": { "type": "ephemeral" }
+        })];
+        if !dynamic_part.is_empty() {
+            blocks.push(serde_json::json!({
+                "type": "text",
+                "text": dynamic_part
+            }));
+        }
+        serde_json::Value::Array(blocks)
+    } else {
+        // No separator — entire prompt is cacheable
+        serde_json::Value::Array(vec![serde_json::json!({
+            "type": "text",
+            "text": system,
+            "cache_control": { "type": "ephemeral" }
+        })])
+    }
 }
 
 fn convert_messages(messages: &[ChatMessage]) -> Vec<ApiMessage> {
@@ -254,7 +285,7 @@ impl Provider for AnthropicProvider {
             model: request.model,
             max_tokens: request.max_tokens,
             messages: convert_messages(&request.messages),
-            system: request.system,
+            system: request.system.as_deref().map(build_system_content_blocks),
             temperature: request.temperature,
             tools: convert_tools(&request.tools),
             stream: false,
@@ -265,6 +296,7 @@ impl Provider for AnthropicProvider {
             .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .header("content-type", "application/json")
             .json(&api_req)
             .send()
@@ -325,7 +357,7 @@ impl Provider for AnthropicProvider {
             model: request.model,
             max_tokens: request.max_tokens,
             messages: convert_messages(&request.messages),
-            system: request.system,
+            system: request.system.as_deref().map(build_system_content_blocks),
             temperature: request.temperature,
             tools: convert_tools(&request.tools),
             stream: true,
@@ -338,6 +370,7 @@ impl Provider for AnthropicProvider {
             .post(&url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
+            .header("anthropic-beta", "prompt-caching-2024-07-31")
             .header("content-type", "application/json")
             .json(&api_req)
             .send()

@@ -1572,15 +1572,67 @@ async fn run_agent_loop_inner(
             } else {
                 None
             };
-            let parallel_results = execute_parallel(
-                tools_to_run,
-                &tools,
-                config.agent_config.max_parallel_tools,
-                &cancellation_token,
-                &tool_ctx,
-                config_timeout,
-            )
-            .await;
+
+            // --- AV-T1: Partition tools by concurrency safety ---
+            let (safe_indices, unsafe_indices): (Vec<usize>, Vec<usize>) = (0..tools_to_run.len())
+                .partition(|&i| {
+                    tools.get(&tools_to_run[i].0)
+                        .map(|t| t.is_concurrency_safe())
+                        .unwrap_or(false)
+                });
+
+            let safe_tools: Vec<_> = safe_indices.iter().map(|&i| tools_to_run[i].clone()).collect();
+            let unsafe_tools: Vec<_> = unsafe_indices.iter().map(|&i| tools_to_run[i].clone()).collect();
+
+            // Phase 1: Execute safe tools in parallel
+            let safe_results = if !safe_tools.is_empty() {
+                execute_parallel(
+                    safe_tools,
+                    &tools,
+                    config.agent_config.max_parallel_tools,
+                    &cancellation_token,
+                    &tool_ctx,
+                    config_timeout,
+                ).await
+            } else {
+                vec![]
+            };
+
+            // Phase 2: Execute unsafe tools serially
+            let mut unsafe_results = Vec::new();
+            for (name, input) in &unsafe_tools {
+                if cancellation_token.is_cancelled() { break; }
+                let result = match tools.get(name) {
+                    Some(tool) => {
+                        let timeout_secs = config_timeout.unwrap_or(config.agent_config.tool_timeout_secs).max(30);
+                        match tokio::time::timeout(
+                            std::time::Duration::from_secs(timeout_secs),
+                            tool.execute(input.clone(), &tool_ctx),
+                        ).await {
+                            Ok(Ok(output)) => output,
+                            Ok(Err(e)) => ToolOutput::error(format!("Tool error: {e}")),
+                            Err(_) => ToolOutput::error("Tool execution timed out".to_string()),
+                        }
+                    }
+                    None => ToolOutput::error(format!("Unknown tool: {name}")),
+                };
+                unsafe_results.push((name.clone(), result));
+            }
+
+            // Phase 3: Merge results in original order
+            let mut indexed_results: Vec<(usize, (String, ToolOutput))> = Vec::new();
+            for (local_idx, &orig_idx) in safe_indices.iter().enumerate() {
+                if local_idx < safe_results.len() {
+                    indexed_results.push((orig_idx, safe_results[local_idx].clone()));
+                }
+            }
+            for (local_idx, &orig_idx) in unsafe_indices.iter().enumerate() {
+                if local_idx < unsafe_results.len() {
+                    indexed_results.push((orig_idx, unsafe_results[local_idx].clone()));
+                }
+            }
+            indexed_results.sort_by_key(|(idx, _)| *idx);
+            let parallel_results: Vec<_> = indexed_results.into_iter().map(|(_, r)| r).collect();
 
             // Merge parallel results back with rate-limited error results.
             let mut parallel_iter = parallel_results.into_iter();

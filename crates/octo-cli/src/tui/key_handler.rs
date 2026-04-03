@@ -158,6 +158,13 @@ async fn execute_slash_command(state: &mut TuiState, input: &str) {
             state.invalidate_cache();
             state.auto_scroll();
         }
+        "/compact" => {
+            let msg = "Compacting conversation context...";
+            state.messages.push(ChatMessage::assistant(msg));
+            state.invalidate_cache();
+            state.auto_scroll();
+            let _ = state.handle.tx.try_send(AgentMessage::CompactHistory);
+        }
         _ => {
             // Check custom commands from ~/.octo/commands/
             let cmd_name = cmd.strip_prefix('/').unwrap_or(cmd);
@@ -566,6 +573,15 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
                     state.dirty = true;
                 }
             }
+        }
+
+        // ── Ctrl+K: compact context (AV-T3) ──
+        (KeyModifiers::CONTROL, KeyCode::Char('k')) => {
+            let _ = state.handle.tx.try_send(AgentMessage::CompactHistory);
+            let msg = "Compacting conversation context... (Ctrl+K)";
+            state.messages.push(ChatMessage::assistant(msg));
+            state.invalidate_cache();
+            state.auto_scroll();
         }
 
         // ── Ctrl+R: reverse incremental history search ──

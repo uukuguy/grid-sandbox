@@ -455,6 +455,47 @@ impl CompactionPipeline {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-Snip (AV-T3)
+// ---------------------------------------------------------------------------
+
+impl CompactionPipeline {
+    /// Auto-snip: remove messages older than `boundary` index via simple truncation.
+    ///
+    /// Unlike `compact()`, this does NOT call an LLM for summarization — it just
+    /// truncates. Intended for automatic budget pressure relief.
+    ///
+    /// Returns the number of messages removed, or 0 if no action was taken.
+    pub fn auto_snip(
+        messages: &mut Vec<ChatMessage>,
+        keep_recent: usize,
+    ) -> usize {
+        let min_messages = 8;
+        if messages.len() <= min_messages || keep_recent >= messages.len() {
+            return 0;
+        }
+        let boundary = messages.len().saturating_sub(keep_recent);
+        if boundary < 2 {
+            return 0;
+        }
+        info!(boundary, total = messages.len(), keep_recent, "Auto-snip triggered");
+        // Insert a marker at position 0 summarizing what was removed
+        let summary_marker = ChatMessage {
+            role: MessageRole::User,
+            content: vec![ContentBlock::Text {
+                text: format!(
+                    "[Auto-snip: {} older messages removed to free context space]",
+                    boundary
+                ),
+            }],
+        };
+        messages.drain(..boundary);
+        messages.insert(0, summary_marker);
+        info!(removed = boundary, remaining = messages.len(), "Auto-snip complete");
+        boundary
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Snip Compact (AP-T10)
 // ---------------------------------------------------------------------------
 
