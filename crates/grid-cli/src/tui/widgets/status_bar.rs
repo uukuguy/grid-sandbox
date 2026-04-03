@@ -520,7 +520,7 @@ mod tests {
 
         // Collect all symbols from the buffer
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Octo"), "Should contain brand name Grid");
+        assert!(content.contains("Grid"), "Should contain brand name Grid");
         assert!(content.contains("test-model"), "Should contain model name");
     }
 

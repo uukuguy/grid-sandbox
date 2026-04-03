@@ -719,7 +719,7 @@ mod tests {
     #[test]
     fn test_hotkey_hints_modes() {
         let idle = hotkey_hints(false, false, false);
-        assert!(idle.iter().any(|(k, _)| *k == "Enter"));
+        assert!(idle.is_empty(), "Idle mode should have no hints");
 
         let streaming = hotkey_hints(true, false, false);
         assert!(streaming.iter().any(|(k, _)| *k == "Esc"));

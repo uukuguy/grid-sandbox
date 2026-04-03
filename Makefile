@@ -74,10 +74,10 @@ test:
 
 # 单个 crate 测试
 test-types:
-	cargo test -p octo-types
+	cargo test -p grid-types
 
 test-engine:
-	cargo test -p octo-engine
+	cargo test -p grid-engine
 
 test-sandbox:
 	cargo test -p grid-sandbox
@@ -491,12 +491,12 @@ container-list:
 	@docker images 'grid-sandbox' --format 'table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' 2>/dev/null || echo "  (none)"
 	@echo ""
 	@echo "=== Running Grid Sandbox Containers ==="
-	@docker ps --filter 'label=octo.sandbox=true' --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo "  (none)"
+	@docker ps --filter 'label=grid.sandbox=true' --format 'table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Image}}' 2>/dev/null || echo "  (none)"
 
 # Remove grid-sandbox images and stopped containers
 container-clean:
 	@echo "Removing stopped Grid sandbox containers..."
-	@docker ps -a --filter 'label=octo.sandbox=true' --filter 'status=exited' -q | xargs -r docker rm -f 2>/dev/null || true
+	@docker ps -a --filter 'label=grid.sandbox=true' --filter 'status=exited' -q | xargs -r docker rm -f 2>/dev/null || true
 	@echo "Removing Grid sandbox images..."
 	@docker images 'grid-sandbox' -q | xargs -r docker rmi -f 2>/dev/null || true
 	@echo "Done."
