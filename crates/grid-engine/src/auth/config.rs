@@ -19,7 +19,7 @@ fn hash_api_key(key: &str, secret: &str) -> String {
 
 /// Default HMAC secret used when `GRID_HMAC_SECRET` is not set.
 /// In production, always set the environment variable.
-const DEFAULT_HMAC_SECRET: &str = "octo-default-hmac-secret-change-in-production";
+const DEFAULT_HMAC_SECRET: &str = "grid-default-hmac-secret-change-in-production";
 
 use super::roles::Role;
 

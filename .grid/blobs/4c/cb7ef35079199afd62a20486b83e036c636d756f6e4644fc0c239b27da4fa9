@@ -1,0 +1,280 @@
+  PID  PPID USER             COMM
+    1     0 root             /sbin/launchd
+  159     1 sujiangwen       /usr/libexec/adprivacyd
+  256     1 sujiangwen       /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  336     1 root             /usr/libexec/logd
+  338     1 root             /usr/libexec/UserEventAgent
+  340     1 root             /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+  341     1 root             /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoted
+  344     1 root             /usr/sbin/systemstats
+  348     1 root             /usr/libexec/configd
+  350     1 root             /System/Library/CoreServices/powerd.bundle/powerd
+  351     1 root             /usr/libexec/IOMFB_bics_daemon
+  355     1 root             /usr/libexec/remoted
+  359     1 _corespeechd     /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd_system
+  361     1 root             /usr/libexec/watchdogd
+  365     1 root             /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+  367     1 root             /usr/libexec/kernelmanagerd
+  368     1 root             /usr/libexec/diskarbitrationd
+  372     1 root             /usr/sbin/syslogd
+  374     1 root             /usr/libexec/thermalmonitord
+  375     1 root             /System/Library/PrivateFrameworks/CoreDuetContext.framework/Resources/contextstored
+  376     1 root             /usr/libexec/xprotectd
+  377     1 root             /usr/libexec/opendirectoryd
+  379     1 root             /System/Library/PrivateFrameworks/ApplePushService.framework/apsd
+  380     1 root             /System/Library/CoreServices/launchservicesd
+  381     1 _timed           /usr/libexec/timed
+  382     1 _usbmuxd         /System/Library/PrivateFrameworks/MobileDevice.framework/Versions/A/Resources/usbmuxd
+  383     1 root             /usr/sbin/securityd
+  385     1 _locationd       /usr/libexec/locationd
+  386     1 root             /usr/libexec/nesessionmanager
+  388     1 root             autofsd
+  389     1 root             /usr/libexec/dasd
+  390     1 root             /usr/libexec/corerepaird
+  392     1 _distnote        /usr/sbin/distnoted
+  396     1 root             /System/Library/CoreServices/logind
+  397     1 root             /System/Library/PrivateFrameworks/GenerationalStorage.framework/Versions/A/Support/revisiond
+  398     1 root             /usr/sbin/KernelEventAgent
+  403     1 root             /usr/sbin/notifyd
+  405     1 root             /usr/libexec/corebrightnessd
+  406     1 root             /usr/libexec/AirPlayXPCHelper
+  407     1 root             /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/com.apple.cmio.registerassistantservice
+  410     1 _windowserver    /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+  412     1 root             /usr/sbin/cfprefsd
+  413     1 sujiangwen       /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow
+  416     1 root             /usr/libexec/runningboardd
+  417     1 root             /System/Library/CoreServices/coreservicesd
+  420     1 root             /usr/libexec/lsd
+  421     1 _analyticsd      /System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsd
+  424     1 _coreaudiod      /usr/sbin/coreaudiod
+  426     1 _mdnsresponder   /usr/sbin/mDNSResponder
+  428     1 root             /usr/libexec/apfsd
+  429     1 _nsurlsessiond   /usr/libexec/nsurlsessiond
+  432     1 root             /usr/libexec/biometrickitd
+  446     1 root             /usr/libexec/ApplicationFirewall/socketfilterfw
+  450     1 root             /usr/libexec/eligibilityd
+  459     1 _windowserver    /usr/sbin/distnoted
+  466     1 root             /usr/libexec/corercd
+  472     1 root             /usr/sbin/distnoted
+  477     1 root             /usr/libexec/airportd
+  478     1 root             /usr/sbin/mDNSResponderHelper
+  483     1 _networkd        /usr/libexec/symptomsd
+  493     1 root             /System/Library/Frameworks/Security.framework/Versions/A/XPCServices/authd.xpc/Contents/MacOS/authd
+  504     1 _coreaudiod      /usr/sbin/distnoted
+  505     1 root             /usr/libexec/syspolicyd
+  525     1 _coreaudiod      Core Audio Driver (OrayVirtualAudioDevice.driver)
+  530     1 root             /usr/libexec/audioclocksyncd
+  531     1 _cmiodalassistants /usr/sbin/distnoted
+  532     1 _audiomxd        /usr/libexec/audiomxd
+  534     1 _cmiodalassistants /usr/libexec/com.apple.cmio.videodriverkithostextension.systemextension/Contents/MacOS/com.apple.cmio.videodriverkithostextension
+  535     1 _cmiodalassistants /usr/sbin/appleh13camerad
+  537     1 _mds_stores      /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+  542     1 _modelmanagerd   /usr/libexec/modelmanagerd
+  548     1 _appleevents     /System/Library/CoreServices/appleeventsd
+  551     1 _audiomxd        /usr/sbin/distnoted
+  553     1 _softwareupdate  /usr/sbin/distnoted
+  572     1 _accessoryupdater /usr/sbin/distnoted
+  575     1 root             /usr/sbin/BTLEServer
+  577     1 root             /usr/libexec/searchpartyd
+  581     1 _nsurlsessiond   /usr/sbin/distnoted
+  584     1 root             /System/Library/CoreServices/SubmitDiagInfo
+  585     1 root             /System/Library/PrivateFrameworks/AmbientDisplay.framework/Versions/A/XPCServices/com.apple.AmbientDisplayAgent.xpc/Contents/MacOS/com.apple.AmbientDisplayAgent
+  589   344 root             /usr/sbin/systemstats
+  592     1 root             /Applications/SunloginClient.app/Contents/Helpers/SunloginClient_Helper
+  593     1 root             /Library/PrivilegedHelperTools/com.netease.uumac.helper
+  596     1 root             /Library/PrivilegedHelperTools/io.github.clash-verge-rev.clash-verge-rev.service.bundle/Contents/MacOS/clash-verge-service
+  598     1 root             /Applications/ExpressVPN.app/Contents/MacOS/expressvpnd
+  599     1 root             /bin/sh
+  600     1 _spotlight       /usr/sbin/distnoted
+  602   599 root             /bin/wait4path
+  603     1 _cmiodalassistants /usr/libexec/cameracaptured
+  605     1 _cmiodalassistants /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/UVCAssistant.systemextension/Contents/MacOS/UVCAssistant
+  606     1 root             /System/Library/CoreServices/Software Update.app/Contents/Resources/suhelperd
+  608     1 _coreaudiod      Core Audio Driver (ParrotAudioPlugin.driver)
+  616     1 _locationd       /usr/sbin/distnoted
+  627     1 _driverkit       /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN
+  631     1 _driverkit       /System/Library/DriverExtensions/com.apple.DriverKit-IOUserDockChannelSerial.dext/com.apple.DriverKit-IOUserDockChannelSerial
+  634     1 _driverkit       /System/Library/DriverExtensions/com.apple.AppleUserHIDDrivers.dext/com.apple.AppleUserHIDDrivers
+  637     1 _appleevents     /usr/sbin/distnoted
+  641     1 root             /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd
+  644     1 sujiangwen       /usr/sbin/distnoted
+  651     1 sujiangwen       /usr/libexec/UserEventAgent
+  658     1 sujiangwen       /usr/sbin/universalaccessd
+  659     1 sujiangwen       /usr/libexec/ContinuityCaptureAgent
+  660     1 sujiangwen       /usr/libexec/pboard
+  661     1 sujiangwen       /System/Library/Frameworks/InputMethodKit.framework/Resources/imklaunchagent
+  662     1 sujiangwen       /usr/libexec/lsd
+  667     1 sujiangwen       /System/Library/CoreServices/WindowManager.app/Contents/MacOS/WindowManager
+  680     1 sujiangwen       /usr/libexec/nsurlsessiond
+  681     1 sujiangwen       /System/Library/PrivateFrameworks/UserNotificationsCore.framework/Support/usernotificationsd
+  685     1 sujiangwen       /Applications/iTerm.app/Contents/MacOS/iTerm2
+  688     1 _modelmanagerd   /System/Library/ExtensionKit/Extensions/HostInferenceProviderService.appex/Contents/MacOS/HostInferenceProviderService
+  691     1 _modelmanagerd   /usr/sbin/distnoted
+  692     1 sujiangwen       /System/Applications/Notes.app/Contents/MacOS/Notes
+  694     1 sujiangwen       /usr/libexec/rapportd
+  695     1 _nearbyd         /usr/libexec/nearbyd
+  698     1 sujiangwen       /System/Library/PrivateFrameworks/IDS.framework/identityservicesd.app/Contents/MacOS/identityservicesd
+  699     1 sujiangwen       /System/Library/CoreServices/Dock.app/Contents/MacOS/Dock
+  700     1 sujiangwen       /usr/libexec/sharingd
+  701     1 sujiangwen       /System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter
+  702     1 sujiangwen       /System/Library/CoreServices/SystemUIServer.app/Contents/MacOS/SystemUIServer
+  703     1 sujiangwen       /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  706     1 sujiangwen       /System/Library/Frameworks/ApplicationServices.framework/Frameworks/ATS.framework/Support/fontd
+  708     1 sujiangwen       /System/Library/CoreServices/AccessibilityUIServer.app/Contents/MacOS/AccessibilityUIServer
+  713     1 sujiangwen       /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/ATS.framework/Versions/A/Support/fontworker
+  714     1 sujiangwen       /System/Library/CoreServices/WallpaperAgent.app/Contents/MacOS/WallpaperAgent
+  718     1 sujiangwen       /System/Library/CoreServices/sharedfilelistd
+  719     1 root             /usr/sbin/filecoordinationd
+  721     1 sujiangwen       /System/Library/PrivateFrameworks/VoiceShortcuts.framework/Versions/A/Support/siriactionsd
+  724     1 sujiangwen       /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd
+  728     1 sujiangwen       /System/Library/PrivateFrameworks/ChronoCore.framework/Support/chronod
+  729     1 sujiangwen       /System/Library/PrivateFrameworks/StatusKit.framework/StatusKitAgent
+  730     1 root             automountd
+  731     1 sujiangwen       /System/Library/PrivateFrameworks/ViewBridge.framework/Versions/A/XPCServices/ViewBridgeAuxiliary.xpc/Contents/MacOS/ViewBridgeAuxiliary
+  733     1 sujiangwen       /System/Library/CoreServices/audioaccessoryd
+  735     1 sujiangwen       /System/Library/PrivateFrameworks/FileProvider.framework/Support/fileproviderd
+  737     1 sujiangwen       /System/Library/PrivateFrameworks/AMPDevices.framework/Versions/A/Support/AMPDeviceDiscoveryAgent
+  743     1 sujiangwen       /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd
+  744     1 _ctkd            /System/Library/Frameworks/CryptoTokenKit.framework/ctkd
+  749     1 sujiangwen       /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd
+  753     1 sujiangwen       /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension
+  756     1 _oahd            /usr/libexec/rosetta/oahd
+  762     1 sujiangwen       /usr/sbin/usernoted
+  764     1 sujiangwen       /System/Library/CoreServices/UIKitSystem.app/Contents/MacOS/UIKitSystem
+  766     1 sujiangwen       /System/Library/PrivateFrameworks/CommunicationsFilter.framework/CMFSyncAgent
+  773     1 sujiangwen       /System/Library/CoreServices/NotificationCenter.app/Contents/MacOS/NotificationCenter
+  780     1 sujiangwen       /System/Library/PrivateFrameworks/FamilyCircle.framework/Versions/A/Resources/familycircled
+  782     1 sujiangwen       /System/Library/PrivateFrameworks/AuthKit.framework/Versions/A/Support/akd
+  790     1 sujiangwen       /System/Library/PrivateFrameworks/IMCore.framework/imagent.app/Contents/MacOS/imagent
+  792     1 sujiangwen       /System/Library/PrivateFrameworks/UserActivity.framework/Agents/useractivityd
+  793     1 sujiangwen       /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.extra.xpc/Contents/MacOS/com.apple.dock.extra
+  794     1 sujiangwen       /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.external.extra.arm64.xpc/Contents/MacOS/com.apple.dock.external.extra.arm64
+  795     1 sujiangwen       /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.external.extra.arm64.xpc/Contents/MacOS/com.apple.dock.external.extra.arm64
+  818     1 sujiangwen       /System/Library/CoreServices/Spotlight.app/Contents/MacOS/Spotlight
+  822     1 sujiangwen       /usr/libexec/avconferenced
+  823     1 sujiangwen       /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoteagent
+  829     1 sujiangwen       /System/Library/PrivateFrameworks/TextInputUIMacHelper.framework/Versions/A/XPCServices/CursorUIViewService.xpc/Contents/MacOS/CursorUIViewService
+  830     1 sujiangwen       /System/Library/CoreServices/WiFiAgent.app/Contents/MacOS/WiFiAgent
+  831   685 sujiangwen       /Users/sujiangwen/Library/Application Support/iTerm2/iTermServer-3.5.11
+  851     1 sujiangwen       /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper
+  857     1 root             /usr/libexec/wifianalyticsd
+  915     1 sujiangwen       /System/Library/PrivateFrameworks/CommerceKit.framework/Versions/A/Resources/commerce
+  924     1 sujiangwen       /System/Library/Input Methods/PressAndHold.app/Contents/PlugIns/PAH_Extension.appex/Contents/MacOS/PAH_Extension
+  938     1 sujiangwen       /usr/sbin/BTLEServerAgent
+ 1010     1 _fpsd            /System/Library/PrivateFrameworks/CoreFP.framework/Versions/A/fairplayd
+ 1012     1 sujiangwen       /System/Library/PrivateFrameworks/Noticeboard.framework/Versions/A/Resources/nbagent.app/Contents/MacOS/nbagent
+ 1078     1 sujiangwen       /usr/libexec/studentd
+ 1079     1 sujiangwen       /System/Applications/Clock.app/Contents/PlugIns/WorldClockWidget.appex/Contents/MacOS/WorldClockWidget
+ 1082     1 sujiangwen       /System/Applications/Calendar.app/Contents/PlugIns/CalendarWidgetExtension.appex/Contents/MacOS/CalendarWidgetExtension
+ 1109     1 _installcoordinationd /usr/sbin/distnoted
+ 1203     1 sujiangwen       /System/Library/Frameworks/LinkPresentation.framework/Versions/A/XPCServices/com.apple.LinkPresentation.LinkSnapshotGeneratorService.xpc/Contents/MacOS/com.apple.LinkPresentation.LinkSnapshotGeneratorService
+ 1452     1 sujiangwen       /System/Library/PrivateFrameworks/CloudDocs.framework/PlugIns/com.apple.CloudDocs.iCloudDriveFileProvider.appex/Contents/MacOS/com.apple.CloudDocs.iCloudDriveFileProvider
+ 1478     1 sujiangwen       /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdbulkimport
+ 1534     1 _securityagent   /usr/sbin/distnoted
+ 1778     1 sujiangwen       /System/Library/Frameworks/Translation.framework/translationd
+ 1779     1 root             /usr/libexec/powerexperienced
+ 1781     1 sujiangwen       /System/Library/PrivateFrameworks/CallHistory.framework/Support/CallHistoryPluginHelper
+ 1782     1 sujiangwen       /System/Library/Frameworks/Speech.framework/Versions/A/XPCServices/localspeechrecognition.xpc/Contents/MacOS/localspeechrecognition
+ 1783     1 sujiangwen       /System/Library/PrivateFrameworks/ToneLibrary.framework/Versions/A/XPCServices/com.apple.tonelibraryd.xpc/Contents/MacOS/com.apple.tonelibraryd
+ 1796     1 sujiangwen       /System/Library/PrivateFrameworks/FaceTimeMessageStore.framework/facetimemessagestored
+ 1831     1 sujiangwen       /System/Library/Frameworks/MediaAccessibility.framework/Versions/A/XPCServices/com.apple.accessibility.mediaaccessibilityd.xpc/Contents/MacOS/com.apple.accessibility.mediaaccessibilityd
+ 1832     1 sujiangwen       /System/Library/PrivateFrameworks/Synapse.framework/Support/contentlinkingd
+ 1833     1 root             /usr/libexec/audioanalyticsd
+ 1835     1 sujiangwen       /System/Library/Frameworks/GroupActivities.framework/Versions/A/XPCServices/GroupSessionService.xpc/Contents/MacOS/GroupSessionService
+ 1868     1 sujiangwen       /System/Library/PrivateFrameworks/CallIntelligence.framework/callintelligenced
+ 1869     1 sujiangwen       /usr/libexec/transparencyd
+ 1870     1 sujiangwen       /System/Library/Frameworks/Speech.framework/Versions/A/XPCServices/localspeechrecognition.xpc/Contents/MacOS/localspeechrecognition
+ 2042     1 sujiangwen       /System/Cryptexes/App/System/Library/CoreServices/SafariSupport.bundle/Contents/MacOS/SafariBookmarksSyncAgent
+ 2043     1 sujiangwen       /System/Cryptexes/App/usr/libexec/SafariLaunchAgent
+ 2096     1 sujiangwen       /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd
+ 2100     1 sujiangwen       2BUA8C4S2C.com.agilebits.onepassword7-helper
+ 2111     1 sujiangwen       /System/Library/Image Capture/Support/icdd
+ 2112     1 sujiangwen       Contents/Resources/ChatGPTHelper
+ 2119     1 sujiangwen       /System/Library/CoreServices/AirPlayUIAgent.app/Contents/MacOS/AirPlayUIAgent
+ 2122     1 sujiangwen       /System/Library/CoreServices/diagnostics_agent
+ 2123     1 sujiangwen       /Applications/BaiduNetdisk_mac.app/Contents/Frameworks/netdisk_service
+ 2125     1 sujiangwen       /System/Library/CoreServices/TextInputMenuAgent.app/Contents/MacOS/TextInputMenuAgent
+ 2130     1 root             /System/Library/Frameworks/CryptoTokenKit.framework/ctkahp.bundle/Contents/MacOS/ctkahp
+ 2149     1 sujiangwen       /Applications/Moom.app/Contents/MacOS/Moom
+ 2214     1 sujiangwen       /Applications/SnippetsLab.app/Contents/MacOS/SnippetsLab
+ 2217     1 sujiangwen       /Applications/1Password 7.app/Contents/MacOS/1Password 7
+ 2218     1 sujiangwen       /Applications/OrbStack.app/Contents/MacOS/OrbStack
+ 2247     1 sujiangwen       /System/Library/Frameworks/CryptoTokenKit.framework/ctkahp.bundle/Contents/MacOS/ctkahp
+ 2310     1 root             /System/Library/Frameworks/OpenGL.framework/Versions/A/Libraries/CVMServer
+ 2314     1 sujiangwen       /System/Library/PrivateFrameworks/CallHistory.framework/Support/CallHistorySyncHelper
+ 2315     1 sujiangwen       /System/Library/PrivateFrameworks/SiriInference.framework/Versions/A/siriinferenced
+ 2316     1 sujiangwen       /usr/libexec/inputanalyticsd
+ 2349 62011 sujiangwen       /Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Helpers/Browser Helper (Renderer).app/Contents/MacOS/Browser Helper (Renderer)
+ 2350     1 sujiangwen       /System/Library/PrivateFrameworks/SiriSuggestionsSupport.framework/Versions/A/XPCServices/SiriSuggestionsBookkeepingService.xpc/Contents/MacOS/SiriSuggestionsBookkeepingService
+ 2458     1 sujiangwen       /System/Library/PrivateFrameworks/SafariSafeBrowsing.framework/com.apple.Safari.SafeBrowsing.Service
+ 2678     1 sujiangwen       /Applications/OrbStack.app/Contents/Frameworks/OrbStack Helper.app/Contents/MacOS/OrbStack Helper
+ 2686     1 root             /usr/libexec/InternetSharing
+ 2847     1 sujiangwen       /System/Cryptexes/App/usr/libexec/com.apple.Safari.History
+ 3464     1 nobody           /usr/libexec/dhcp6d
+ 3779     1 _gamecontrollerd /usr/sbin/distnoted
+ 3809     1 _applepay        /usr/sbin/distnoted
+ 3915     1 sujiangwen       /System/Library/Frameworks/ApplicationServices.framework/Frameworks/PrintCore.framework/Versions/A/printtool
+ 4001     1 sujiangwen       /System/Library/PrivateFrameworks/UniversalAccess.framework/Versions/A/Resources/universalAccessAuthWarn.app/Contents/MacOS/universalAccessAuthWarn
+ 4045     1 sujiangwen       /Applications/Doubao.app/Contents/PlugIns/finder-ext.appex/Contents/MacOS/finder-ext
+ 4351     1 sujiangwen       /Applications/Doubao.app/Contents/PlugIns/finder-ext.appex/Contents/MacOS/finder-ext
+ 4377     1 sujiangwen       /System/Library/PrivateFrameworks/People.framework/peopled
+ 4899     1 root             /System/Library/PrivateFrameworks/SystemStatusServer.framework/Support/systemst
+
+[... omitted 31800 chars ...]
+
+iangwen       /System/Library/Frameworks/VideoToolbox.framework/Versions/A/XPCServices/VTDecoderXPCService.xpc/Contents/MacOS/VTDecoderXPCService
+50031     1 sujiangwen       /System/Library/PrivateFrameworks/IntlPreferences.framework/Support/localizationswitcherd
+50052     1 sujiangwen       /System/Library/CoreServices/appplaceholdersyncd
+50067     1 sujiangwen       /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/SpeechSynthesis.framework/Versions/A/XPCServices/SpeechSynthesisServerXPC.xpc/Contents/MacOS/SpeechSynthesisServerXPC
+50068     1 sujiangwen       /System/Library/PrivateFrameworks/StreamingZip.framework/Versions/A/XPCServices/com.apple.StreamingUnzipService.xpc/Contents/MacOS/com.apple.StreamingUnzipService
+50075     1 root             /usr/libexec/applekeystored
+50462     1 sujiangwen       /System/Applications/Calendar.app/Contents/MacOS/Calendar
+50890     1 sujiangwen       /Applications/Arc.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate
+50891     1 sujiangwen       /Users/sujiangwen/Library/Caches/company.thebrowser.Browser/org.sparkle-project.Sparkle/Launcher/pbTArzXHg/Updater.app/Contents/MacOS/Updater
+51279     1 sujiangwen       /System/Library/CoreServices/IOUIAgent.app/Contents/MacOS/IOUIAgent
+51438     1 root             /usr/libexec/ASPCarryLog
+51503     1 root             /usr/sbin/spindump
+51616     1 sujiangwen       /System/Library/Frameworks/Metal.framework/Versions/A/XPCServices/MTLCompilerService.xpc/Contents/MacOS/MTLCompilerService
+51617     1 sujiangwen       /System/Library/Frameworks/Metal.framework/Versions/A/XPCServices/MTLCompilerService.xpc/Contents/MacOS/MTLCompilerService
+52395     1 root             /usr/sbin/systemsoundserverd
+52396     1 root             /System/Library/Frameworks/AudioToolbox.framework/XPCServices/com.apple.audio.SandboxHelper.xpc/Contents/MacOS/com.apple.audio.SandboxHelper
+53730     1 sujiangwen       /System/Library/Frameworks/Quartz.framework/Versions/A/Frameworks/ImageKit.framework/Versions/A/PlugIns/OFD_Thumbnail.appex/Contents/MacOS/OFD_Thumbnail
+54391     1 sujiangwen       /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/SpeechSynthesis.framework/Versions/A/XPCServices/SpeechSynthesisServerXPC.xpc/Contents/MacOS/SpeechSynthesisServerXPC
+54577     1 _appinstalld     /usr/sbin/distnoted
+55090     1 root             /usr/sbin/bluetoothd
+55510     1 _driverkit       /System/Library/DriverExtensions/IOUserBluetoothSerialDriver.dext/IOUserBluetoothSerialDriver
+55511     1 _driverkit       /System/Library/DriverExtensions/IOUserBluetoothSerialDriver.dext/IOUserBluetoothSerialDriver
+56253     1 sujiangwen       /System/Library/PrivateFrameworks/SharingXPCServices.framework/Versions/A/XPCServices/SharingXPCHelper.xpc/Contents/MacOS/SharingXPCHelper
+56708     1 root             /System/Library/PrivateFrameworks/BackgroundTaskManagement.framework/Resources/backgroundtaskmanagementd
+56709     1 sujiangwen       /System/Library/PrivateFrameworks/BackgroundTaskManagement.framework/Support/BackgroundTaskManagementAgent.app/Contents/MacOS/BackgroundTaskManagementAgent
+56960     1 sujiangwen       /System/Library/PrivateFrameworks/IMTransferServices.framework/IMTransferAgent.app/Contents/MacOS/IMTransferAgent
+57466     1 sujiangwen       /System/Library/PrivateFrameworks/IntelligencePlatformCompute.framework/Versions/A/XPCServices/IntelligencePlatformComputeService.xpc/Contents/MacOS/IntelligencePlatformComputeService
+57715     1 sujiangwen       /System/Library/Frameworks/ShazamKit.framework/shazamd
+57831     1 root             /System/Library/PrivateFrameworks/XprotectFramework.framework/Versions/A/XPCServices/XprotectService.xpc/Contents/MacOS/XprotectService
+57990     1 sujiangwen       /Applications/Downie 4.app/Contents/MacOS/Downie 4
+58436     1 sujiangwen       /System/Library/ExtensionKit/Extensions/TextThumbnailExtension.appex/Contents/MacOS/TextThumbnailExtension
+58734     1 sujiangwen       /System/Library/ExtensionKit/Extensions/PackageThumbnailExtension.appex/Contents/MacOS/PackageThumbnailExtension
+58848     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/RemoteManagementAgent
+58849     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/remotemanagementd
+58850     1 sujiangwen       /System/Library/PrivateFrameworks/SafariFoundation.framework/Versions/A/XPCServices/SafariConfigurationSubscriber.xpc/Contents/MacOS/SafariConfigurationSubscriber
+58851     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/SecuritySubscriber.xpc/Contents/MacOS/SecuritySubscriber
+58852     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/InteractiveLegacyProfilesSubscriber.xpc/Contents/MacOS/InteractiveLegacyProfilesSubscriber
+58853     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/SecuritySubscriber.xpc/Contents/MacOS/SecuritySubscriber
+58854     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ScreenSharingSubscriber.xpc/Contents/MacOS/ScreenSharingSubscriber
+58855     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/InteractiveLegacyProfilesSubscriber.xpc/Contents/MacOS/InteractiveLegacyProfilesSubscriber
+58856     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ScreenSharingSubscriber.xpc/Contents/MacOS/ScreenSharingSubscriber
+58880     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/LegacyProfilesSubscriber.xpc/Contents/MacOS/LegacyProfilesSubscriber
+58881     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/LegacyProfilesSubscriber.xpc/Contents/MacOS/LegacyProfilesSubscriber
+58882     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/PasscodeSettingsSubscriber.xpc/Contents/MacOS/PasscodeSettingsSubscriber
+58883     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/PasscodeSettingsSubscriber.xpc/Contents/MacOS/PasscodeSettingsSubscriber
+58884     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/DiskManagementSubscriber.xpc/Contents/MacOS/DiskManagementSubscriber
+58885     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/AccountSubscriber.xpc/Contents/MacOS/AccountSubscriber
+58886     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/SoftwareUpdateSubscriber.xpc/Contents/MacOS/SoftwareUpdateSubscriber
+58887     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagedAppsSubscriber.xpc/Contents/MacOS/ManagedAppsSubscriber
+58888     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagedAppsSubscriber.xpc/Contents/MacOS/ManagedAppsSubscriber
+58889     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagementTestSubscriber.xpc/Contents/MacOS/ManagementTestSubscriber
+58890     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagementTestSubscriber.xpc/Contents/MacOS/ManagementTestSubscriber
+58891     1 _rmd             /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagedConfigurationFilesSubscriber.xpc/Contents/MacOS/ManagedConfigurationFilesSubscriber
+58892     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ASConfigurationSubscriber.xpc/Contents/MacOS/ASConfigurationSubscriber
+58920     1 sujiangwen       /System/Library/PrivateFrameworks/RemoteManagement.framework/XPCServices/ManagedSettingsSubscriber.xpc/Contents/MacOS/ManagedSettingsSubscriber
+59155     1 sujiangwen       /System/Applications/Notes.app/Contents/PlugIns/com.apple.Notes.SpotlightIndexExtension.appex/

@@ -23,7 +23,7 @@
 
 # Logging configuration
 # logging:
-#   level: octo_server=debug,octo_engine=debug,tower_http=debug
+#   level: grid_server=debug,grid_engine=debug,tower_http=debug
 
 # MCP configuration
 # mcp:

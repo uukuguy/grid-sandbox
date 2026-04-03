@@ -2,8 +2,8 @@
 # Minimal tool execution environment for sandboxed agent operations.
 # Derived from container.sample/Dockerfile.base, stripped of Claude Code specifics.
 #
-# Build: docker build -t octo-sandbox:base container/
-# Dev:   docker build -f container/Dockerfile.dev -t octo-sandbox:dev container/
+# Build: docker build -t grid-sandbox:base container/
+# Dev:   docker build -f container/Dockerfile.dev -t grid-sandbox:dev container/
 
 # ==============================================================================
 # Stage 1: base-system — OS packages + Python + system CLI tools
@@ -61,13 +61,13 @@ COPY scripts/install-cli-tools.sh /tmp/install-cli-tools.sh
 RUN chmod +x /tmp/install-cli-tools.sh && /tmp/install-cli-tools.sh && rm /tmp/install-cli-tools.sh
 
 # ==============================================================================
-# Stage 2: octo-sandbox:base — Workspace setup + non-root user
+# Stage 2: grid-sandbox:base — Workspace setup + non-root user
 # ==============================================================================
 FROM base-system AS base
 
-LABEL octo.sandbox="true"
-LABEL octo.version="1.0"
-LABEL org.opencontainers.image.title="octo-sandbox"
+LABEL grid.sandbox="true"
+LABEL grid.version="1.0"
+LABEL org.opencontainers.image.title="grid-sandbox"
 LABEL org.opencontainers.image.description="Octo agent tool execution sandbox"
 
 # Create sandbox user (non-root)
@@ -80,8 +80,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python3 --version && git --version && bash --version || exit 1
 
 # OctoRoot directory structure for container environment (AE-D3)
-# These can be overridden at runtime: docker run -e OCTO_GLOBAL_ROOT=/custom/path
-ENV OCTO_GLOBAL_ROOT=/home/sandbox/.octo
+# These can be overridden at runtime: docker run -e GRID_GLOBAL_ROOT=/custom/path
+ENV GRID_GLOBAL_ROOT=/home/sandbox/.grid
 ENV OCTO_SANDBOXED=1
 
 # Provider API keys — not baked in, passed at runtime via docker run -e (AD-D5)
@@ -93,7 +93,7 @@ ENV OCTO_SANDBOXED=1
 USER sandbox
 
 # Ensure global OctoRoot directory exists
-RUN mkdir -p /home/sandbox/.octo
+RUN mkdir -p /home/sandbox/.grid
 
 # Working directory for tool execution
 WORKDIR /home/sandbox

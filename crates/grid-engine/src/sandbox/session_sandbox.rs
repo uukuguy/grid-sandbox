@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = SessionSandboxConfig::default();
-        assert_eq!(config.image, "octo-sandbox:base");
+        assert_eq!(config.image, "grid-sandbox:base");
         assert_eq!(config.idle_timeout, Duration::from_secs(30 * 60));
         assert_eq!(config.max_lifetime, Duration::from_secs(4 * 3600));
         assert_eq!(config.max_containers, 5);

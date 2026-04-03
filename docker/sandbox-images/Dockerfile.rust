@@ -4,4 +4,4 @@ RUN chmod +x /tmp/install-base.sh && /tmp/install-base.sh && rm /tmp/install-bas
 RUN useradd -m -s /bin/bash sandbox
 USER sandbox
 WORKDIR /workspace
-LABEL org.octo-sandbox.type="rust" org.octo-sandbox.version="1.0"
+LABEL org.grid-sandbox.type="rust" org.grid-sandbox.version="1.0"

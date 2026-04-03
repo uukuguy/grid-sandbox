@@ -16,7 +16,7 @@
 #   4. $PROJECT/.grid/config.local.yaml
 #   5. $PROJECT/.grid/credentials.yaml  (API keys only)
 #   6. CLI arguments (--port, --host)
-#   7. Environment variables (GRID_*, ANTHROPIC_*, OPENAI_*)
+#   7. Environment variables (OCTO_*, ANTHROPIC_*, OPENAI_*)
 # =============================================================================
 
 # ── Server ───────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@
 
 # ── Database ─────────────────────────────────────────────────────────────────
 # Auto-resolved when empty:
-#   1. GRID_DB_PATH env var
+#   1. OCTO_DB_PATH env var
 #   2. ./data/grid.db (legacy server)
 #   3. ./grid.db (legacy CLI)
 #   4. ~/.grid/projects/<key>/grid.db (default)
@@ -73,7 +73,7 @@
 # ── Sandbox ──────────────────────────────────────────────────────────────────
 # Sandbox profile controls tool execution isolation level.
 # Profiles: development | staging | production | custom
-# Set via env: GRID_SANDBOX_PROFILE=staging
+# Set via env: OCTO_SANDBOX_PROFILE=staging
 #
 # sandbox_profile: null          # null = auto-detect (development if local)
 #
@@ -92,10 +92,10 @@
 
 # ── Authentication ───────────────────────────────────────────────────────────
 # Configure via environment variables (recommended):
-#   GRID_AUTH_MODE=none          # Disable auth (local dev only)
-#   GRID_AUTH_MODE=api_key       # API key auth
-#   GRID_API_KEY=your-key        # Key for Authorization: Bearer header
-#   GRID_API_KEY_USER=dev        # Optional user ID (default: "default")
+#   OCTO_AUTH_MODE=none          # Disable auth (local dev only)
+#   OCTO_AUTH_MODE=api_key       # API key auth
+#   OCTO_API_KEY=your-key        # Key for Authorization: Bearer header
+#   OCTO_API_KEY_USER=dev        # Optional user ID (default: "default")
 #
 # auth:
 #   mode: api_key                # none | api_key

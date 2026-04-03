@@ -141,8 +141,8 @@ impl TriggerSource for PollingTriggerSource {
 /// ```ignore
 /// let source = RedisStreamTriggerSource::new(
 ///     "redis://localhost:6379",
-///     "octo:autonomous:triggers",
-///     "octo-consumer-group",
+///     "grid:autonomous:triggers",
+///     "grid-consumer-group",
 ///     "consumer-1",
 /// ).await?;
 /// listener.register(Box::new(source));

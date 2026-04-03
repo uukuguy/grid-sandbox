@@ -271,7 +271,7 @@ pub enum SandboxCommands {
     /// Build the Grid sandbox Docker image
     Build {
         /// Image tag (default: octo-sandbox:base)
-        #[arg(short, long, default_value = "octo-sandbox:base")]
+        #[arg(short, long, default_value = "grid-sandbox:base")]
         tag: String,
         /// Build without cache
         #[arg(long)]

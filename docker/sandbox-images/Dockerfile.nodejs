@@ -5,4 +5,4 @@ RUN npm install -g typescript
 RUN useradd -m -s /bin/bash sandbox
 USER sandbox
 WORKDIR /workspace
-LABEL org.octo-sandbox.type="nodejs" org.octo-sandbox.version="1.0"
+LABEL org.grid-sandbox.type="nodejs" org.grid-sandbox.version="1.0"

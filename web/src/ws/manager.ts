@@ -48,10 +48,10 @@ class WsManager {
     }
 
     // Attach auth token for WebSocket connections when auth is enabled.
-    // Priority: window.__OCTO_TOKEN > localStorage 'octo_token'
+    // Priority: window.__GRID_TOKEN > localStorage 'grid_token'
     const token =
-      (window as unknown as Record<string, unknown>).__OCTO_TOKEN as string | undefined
-      ?? localStorage.getItem('octo_token')
+      (window as unknown as Record<string, unknown>).__GRID_TOKEN as string | undefined
+      ?? localStorage.getItem('grid_token')
       ?? undefined;
     if (token) {
       params.push(`token=${encodeURIComponent(token)}`);

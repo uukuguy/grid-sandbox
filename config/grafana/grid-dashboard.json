@@ -42,10 +42,10 @@
     }
   ],
   "id": null,
-  "uid": "octo-server",
+  "uid": "grid-server",
   "title": "Octo Server Dashboard",
   "description": "Monitoring dashboard for Octo AI Agent Server — sessions, requests, tools, tokens, and WebSocket connections.",
-  "tags": ["octo", "ai-agent", "prometheus"],
+  "tags": ["grid", "ai-agent", "prometheus"],
   "style": "dark",
   "timezone": "browser",
   "editable": true,
@@ -127,7 +127,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_active_sessions",
+          "expr": "grid_active_sessions",
           "legendFormat": "Active Sessions",
           "instant": true
         }
@@ -170,7 +170,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_max_concurrent_sessions",
+          "expr": "grid_max_concurrent_sessions",
           "legendFormat": "Max Sessions",
           "instant": true
         }
@@ -215,7 +215,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_ws_connections_active",
+          "expr": "grid_ws_connections_active",
           "legendFormat": "WS Connections",
           "instant": true
         }
@@ -262,7 +262,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "(octo_active_sessions / octo_max_concurrent_sessions) * 100",
+          "expr": "(grid_active_sessions / grid_max_concurrent_sessions) * 100",
           "legendFormat": "Utilization %",
           "instant": true
         }
@@ -326,19 +326,19 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.50, rate(octo_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.50, rate(grid_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P50"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.95, rate(octo_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(grid_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P95"
         },
         {
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, rate(octo_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(grid_request_duration_seconds_bucket[5m]))",
           "legendFormat": "P99"
         }
       ]
@@ -391,7 +391,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(octo_tool_invocations_total[5m]) * 60",
+          "expr": "rate(grid_tool_invocations_total[5m]) * 60",
           "legendFormat": "Tool Invocations / min"
         }
       ]
@@ -444,13 +444,13 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(octo_llm_tokens_used_total[5m]) * 60",
+          "expr": "rate(grid_llm_tokens_used_total[5m]) * 60",
           "legendFormat": "Tokens / min"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_llm_tokens_used_total",
+          "expr": "grid_llm_tokens_used_total",
           "legendFormat": "Total Tokens (cumulative)"
         }
       ]
@@ -512,13 +512,13 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_active_sessions",
+          "expr": "grid_active_sessions",
           "legendFormat": "Active Sessions"
         },
         {
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "octo_max_concurrent_sessions",
+          "expr": "grid_max_concurrent_sessions",
           "legendFormat": "Max Sessions"
         }
       ]

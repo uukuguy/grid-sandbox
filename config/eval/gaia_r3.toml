@@ -35,7 +35,7 @@ model = "minimax/minimax-m2.1"
 tier = "standard"
 
 [gaia_filtered]
-dataset = "crates/octo-eval/datasets/gaia_sample.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_sample.jsonl"
 scorer = "exact_match"
 exclude_file_extensions = ["png", "jpg", "jpeg", "gif", "mp3", "pptx"]
 exclude_question_patterns = ["youtube.com"]

@@ -23,7 +23,7 @@ pub mod manifest;
 #[cfg(feature = "sandbox-wasm")]
 pub mod bindings {
     wasmtime::component::bindgen!({
-        world: "octo-hook-plugin",
+        world: "grid-hook-plugin",
         path: "wit/octo-hook.wit",
     });
 }

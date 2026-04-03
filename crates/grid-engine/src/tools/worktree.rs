@@ -127,7 +127,7 @@ impl Tool for EnterWorktreeTool {
         let worktree_path = git_root
             .parent()
             .unwrap_or(&git_root)
-            .join(format!("octo-worktree-{}", name));
+            .join(format!("grid-worktree-{}", name));
 
         // Create worktree
         let create_output = tokio::process::Command::new("git")
@@ -403,7 +403,7 @@ mod tests {
     async fn test_exit_worktree_keep_clears_state() {
         let state: WorktreeStore = Arc::new(Mutex::new(Some(WorktreeState {
             original_cwd: PathBuf::from("/original"),
-            worktree_path: PathBuf::from("/tmp/octo-worktree-test"),
+            worktree_path: PathBuf::from("/tmp/grid-worktree-test"),
             worktree_branch: "worktree/test".to_string(),
         })));
         let tool = ExitWorktreeTool::new(state.clone());

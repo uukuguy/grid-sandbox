@@ -1,5 +1,5 @@
 # Unified benchmark configuration for GAIA and SWE-bench evaluations
-# Used by: cargo run -p octo-eval -- benchmark --config config/eval/benchmark.toml
+# Used by: cargo run -p grid-eval -- benchmark --config config/eval/benchmark.toml
 
 [default]
 timeout_secs = 300
@@ -46,7 +46,7 @@ tier = "flagship"
 
 # === GAIA ===
 [gaia]
-dataset = "crates/octo-eval/datasets/gaia_sample.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_sample.jsonl"
 scorer = "exact_match"
 
 [gaia.sampling]
@@ -58,7 +58,7 @@ stratified_ratio = [0.3, 0.5, 0.2]  # L1:L2:L3
 
 # === GAIA (filtered) — runtime filter, deprecated in favor of subsets ===
 [gaia_filtered]
-dataset = "crates/octo-eval/datasets/gaia_sample.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_sample.jsonl"
 scorer = "exact_match"
 exclude_file_extensions = ["png", "jpg", "jpeg", "gif", "mp3", "pptx"]
 exclude_question_patterns = ["youtube.com"]
@@ -82,7 +82,7 @@ stratified_ratio = [0.3, 0.5, 0.2]
 # | gaia_media      |    23 | Blind spot: image/audio/video (reference)  |
 
 [gaia_core]
-dataset = "crates/octo-eval/datasets/gaia_core.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_core.jsonl"
 scorer = "exact_match"
 
 [gaia_core.sampling]
@@ -93,7 +93,7 @@ full = 142
 default = "standard"
 
 [gaia_basic]
-dataset = "crates/octo-eval/datasets/gaia_basic.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_basic.jsonl"
 scorer = "exact_match"
 
 [gaia_basic.sampling]
@@ -102,7 +102,7 @@ full = 31
 default = "full"
 
 [gaia_file]
-dataset = "crates/octo-eval/datasets/gaia_file.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_file.jsonl"
 scorer = "exact_match"
 
 [gaia_file.sampling]
@@ -111,7 +111,7 @@ full = 22
 default = "full"
 
 [gaia_web]
-dataset = "crates/octo-eval/datasets/gaia_web.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_web.jsonl"
 scorer = "exact_match"
 
 [gaia_web.sampling]
@@ -121,7 +121,7 @@ full = 44
 default = "standard"
 
 [gaia_reasoning]
-dataset = "crates/octo-eval/datasets/gaia_reasoning.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_reasoning.jsonl"
 scorer = "exact_match"
 
 [gaia_reasoning.sampling]
@@ -131,7 +131,7 @@ full = 45
 default = "standard"
 
 [gaia_media]
-dataset = "crates/octo-eval/datasets/gaia_media.jsonl"
+dataset = "crates/grid-eval/datasets/gaia_media.jsonl"
 scorer = "exact_match"
 
 [gaia_media.sampling]
@@ -141,7 +141,7 @@ default = "full"
 
 # === SWE-bench ===
 [swe_bench]
-dataset = "crates/octo-eval/datasets/swe_bench_lite.jsonl"
+dataset = "crates/grid-eval/datasets/swe_bench_lite.jsonl"
 scorer = "swebench_harness"
 docker_required = true
 
@@ -152,7 +152,7 @@ full = 300
 default = "standard"
 
 [swe_bench.harness]
-dataset_name = "/Users/sujiangwen/sandbox/LLM/speechless.ai/Autonomous-Agents/octo-sandbox/crates/octo-eval/datasets/swe_bench_lite.jsonl"
+dataset_name = "/Users/sujiangwen/sandbox/LLM/speechless.ai/Autonomous-Agents/octo-sandbox/crates/grid-eval/datasets/swe_bench_lite.jsonl"
 max_workers = 4
 cache_level = "env"
 namespace = ""

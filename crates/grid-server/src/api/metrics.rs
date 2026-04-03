@@ -99,32 +99,32 @@ pub async fn get_metrics(State(state): State<Arc<AppState>>) -> Json<MetricsSnap
 /// Well-known core metrics with HELP/TYPE annotations for Prometheus.
 const CORE_METRICS: &[(&str, &str, &str)] = &[
     (
-        "octo_active_sessions",
+        "grid_active_sessions",
         "gauge",
         "Number of currently active sessions",
     ),
     (
-        "octo_request_duration_seconds",
+        "grid_request_duration_seconds",
         "histogram",
         "Request duration in seconds",
     ),
     (
-        "octo_tool_invocations_total",
+        "grid_tool_invocations_total",
         "counter",
         "Total tool invocations",
     ),
     (
-        "octo_llm_tokens_used_total",
+        "grid_llm_tokens_used_total",
         "counter",
         "Total LLM tokens used",
     ),
     (
-        "octo_ws_connections_active",
+        "grid_ws_connections_active",
         "gauge",
         "Number of active WebSocket connections",
     ),
     (
-        "octo_max_concurrent_sessions",
+        "grid_max_concurrent_sessions",
         "gauge",
         "Maximum allowed concurrent sessions",
     ),
@@ -169,14 +169,14 @@ pub async fn get_prometheus_metrics(
 
     // octo_active_sessions
     {
-        let name = "octo_active_sessions";
+        let name = "grid_active_sessions";
         write_help_type(&mut buf, name, "gauge");
         let _ = writeln!(buf, "{name} {active_sessions}");
     }
 
     // octo_max_concurrent_sessions
     {
-        let name = "octo_max_concurrent_sessions";
+        let name = "grid_max_concurrent_sessions";
         write_help_type(&mut buf, name, "gauge");
         let _ = writeln!(buf, "{name} {max_sessions}");
     }
@@ -193,7 +193,7 @@ pub async fn get_prometheus_metrics(
         for (raw_name, value) in entries {
             let name = sanitize_metric_name(&raw_name);
             // Skip if already emitted above
-            if name == "octo_active_sessions" || name == "octo_max_concurrent_sessions" {
+            if name == "grid_active_sessions" || name == "grid_max_concurrent_sessions" {
                 continue;
             }
             write_help_type(&mut buf, &name, "gauge");

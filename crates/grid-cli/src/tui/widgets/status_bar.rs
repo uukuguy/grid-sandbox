@@ -604,7 +604,7 @@ mod tests {
         let long = "/Users/someone/sandbox/LLM/speechless/Agents/octo-sandbox";
         let short = shorten_path(long, 25);
         assert!(short.len() <= 27); // 25 + "…/" prefix
-        assert!(short.contains("octo-sandbox"), "Should keep last component");
+        assert!(short.contains("grid-sandbox"), "Should keep last component");
     }
 
     #[test]

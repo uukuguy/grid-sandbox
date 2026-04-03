@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Default image used when no language-specific image is configured.
-pub const DEFAULT_SANDBOX_IMAGE: &str = "octo-sandbox:base";
+pub const DEFAULT_SANDBOX_IMAGE: &str = "grid-sandbox:base";
 
 /// Preset image registry for language-based Docker image selection.
 ///
@@ -418,7 +418,7 @@ async fn create_container(
 
     // Build labels
     let mut labels = StdHashMap::new();
-    labels.insert("octo-sandbox".to_string(), "true".to_string());
+    labels.insert("grid-sandbox".to_string(), "true".to_string());
     labels.insert("sandbox-id".to_string(), id.to_string());
 
     // Build bind mounts from config
@@ -462,7 +462,7 @@ async fn create_container(
     };
 
     let options = CreateContainerOptions {
-        name: format!("octo-sandbox-{}", id),
+        name: format!("grid-sandbox-{}", id),
         platform: None,
     };
 

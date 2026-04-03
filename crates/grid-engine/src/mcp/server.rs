@@ -37,7 +37,7 @@ pub struct GridMcpServerConfig {
 impl Default for GridMcpServerConfig {
     fn default() -> Self {
         Self {
-            name: "octo-engine".to_string(),
+            name: "grid-engine".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             instructions: None,
         }
@@ -306,7 +306,7 @@ mod tests {
         let server = make_server();
         let info = server.get_info();
         assert!(info.capabilities.tools.is_some());
-        assert_eq!(info.server_info.name, "octo-engine");
+        assert_eq!(info.server_info.name, "grid-engine");
         assert!(!info.server_info.version.is_empty());
     }
 

@@ -50,7 +50,7 @@ impl RuntimeAdapter for SubprocessAdapter {
             dir.clone()
         } else {
             std::env::temp_dir()
-                .join("octo-sandbox")
+                .join("grid-sandbox")
                 .join(id.to_string())
         };
 

@@ -137,10 +137,10 @@ impl TelemetryBus {
                 duration_ms,
                 ..
             } => {
-                self.metrics.counter("octo.tools.executions.total").inc();
+                self.metrics.counter("grid.tools.executions.total").inc();
                 self.metrics
                     .histogram(
-                        "octo.tools.executions.duration_ms",
+                        "grid.tools.executions.duration_ms",
                         vec![
                             10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
                         ],
@@ -148,39 +148,39 @@ impl TelemetryBus {
                     .observe(*duration_ms as f64);
             }
             TelemetryEvent::LoopTurnStarted { turn, .. } => {
-                self.metrics.counter("octo.sessions.turns.total").inc();
+                self.metrics.counter("grid.sessions.turns.total").inc();
                 self.metrics
                     .histogram(
-                        "octo.sessions.turns.number",
+                        "grid.sessions.turns.number",
                         vec![1.0, 5.0, 10.0, 20.0, 50.0, 100.0],
                     )
                     .observe(*turn as f64);
             }
             TelemetryEvent::ToolCallStarted { tool_name: _, .. } => {
-                self.metrics.counter("octo.tools.calls.started.total").inc();
+                self.metrics.counter("grid.tools.calls.started.total").inc();
             }
             TelemetryEvent::ContextDegraded { level: _, .. } => {
                 self.metrics
-                    .counter("octo.context.degradations.total")
+                    .counter("grid.context.degradations.total")
                     .inc();
             }
             TelemetryEvent::LoopGuardTriggered { reason: _, .. } => {
                 self.metrics
-                    .counter("octo.sessions.guards.triggered.total")
+                    .counter("grid.sessions.guards.triggered.total")
                     .inc();
             }
             TelemetryEvent::TokenBudgetUpdated {
                 used, total, ratio, ..
             } => {
                 self.metrics
-                    .gauge("octo.context.tokens.used")
+                    .gauge("grid.context.tokens.used")
                     .set(*used as i64);
                 self.metrics
-                    .gauge("octo.context.tokens.total")
+                    .gauge("grid.context.tokens.total")
                     .set(*total as i64);
                 // ratio is f64, but gauge only supports i64, so we store it as basis points (x10000)
                 self.metrics
-                    .gauge("octo.context.tokens.ratio")
+                    .gauge("grid.context.tokens.ratio")
                     .set((ratio * 10000.0) as i64);
             }
         }

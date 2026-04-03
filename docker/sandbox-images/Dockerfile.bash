@@ -4,4 +4,4 @@ RUN chmod +x /tmp/install-base-alpine.sh && /tmp/install-base-alpine.sh && rm /t
 RUN adduser -D -s /bin/bash sandbox
 USER sandbox
 WORKDIR /workspace
-LABEL org.octo-sandbox.type="bash" org.octo-sandbox.version="1.0"
+LABEL org.grid-sandbox.type="bash" org.grid-sandbox.version="1.0"

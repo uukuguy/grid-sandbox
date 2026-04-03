@@ -1,5 +1,5 @@
 # Phase S evaluation config — measures agent capability improvements
-# Usage: cargo run -p octo-eval -- benchmark --config config/eval/gaia_s_eval.toml --suite gaia_core
+# Usage: cargo run -p grid-eval -- benchmark --config config/eval/gaia_s_eval.toml --suite gaia_core
 #
 # This config uses the GAIA solver agent manifest for ReAct-style persona injection.
 # Compare results with R3 baseline (run 011) to measure improvement.

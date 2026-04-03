@@ -1,8 +1,8 @@
 # Octo Sandbox Dev Image — extends base with full agent development environment
-# Build: docker build -f container/Dockerfile.dev -t octo-sandbox:dev container/
-# CI uses --build-arg BASE_IMAGE=ghcr.io/uukuguy/octo-sandbox:base
+# Build: docker build -f container/Dockerfile.dev -t grid-sandbox:dev container/
+# CI uses --build-arg BASE_IMAGE=ghcr.io/uukuguy/grid-sandbox:base
 
-ARG BASE_IMAGE=octo-sandbox:base
+ARG BASE_IMAGE=grid-sandbox:base
 FROM ${BASE_IMAGE} AS dev
 
 # Optional: pip mirror (inherited from base or set independently)

@@ -34,7 +34,7 @@ impl PythonRuntime {
     #[cfg(test)]
     pub async fn new_for_test() -> Result<Self> {
         let temp_dir = std::env::temp_dir()
-            .join("octo-python-runtime")
+            .join("grid-python-runtime")
             .join(uuid::Uuid::new_v4().to_string());
         fs::create_dir_all(&temp_dir).await?;
         Ok(Self::new(temp_dir))

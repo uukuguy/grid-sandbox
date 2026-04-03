@@ -1,5 +1,5 @@
 # Phase S evaluation — Qwen3.5-27B single model on gaia_core (142 tasks)
-# Usage: cargo run -p octo-eval -- run --suite gaia_core --config config/eval/gaia_s_qwen27b.toml
+# Usage: cargo run -p grid-eval -- run --suite gaia_core --config config/eval/gaia_s_qwen27b.toml
 #
 # Compare results with R3 baseline (run 011, Qwen3.5-27B: 36.9%) to measure improvement.
 

@@ -1,0 +1,217 @@
+  UID   PID  PPID   C STIME   TTY           TIME CMD
+    0     1     0   0 13 3月26 ??       159:58.46 /sbin/launchd
+  501   159     1   0 18 3月26 ??         0:06.81 /usr/libexec/adprivacyd
+  501   256     1   0 一01上午 ??         0:13.36 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+    0   336     1   0 13 3月26 ??       102:41.57 /usr/libexec/logd
+    0   338     1   0 13 3月26 ??         5:18.72 /usr/libexec/UserEventAgent (System)
+    0   340     1   0 13 3月26 ??       128:31.85 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/Versions/A/Support/fseventsd
+    0   341     1   0 13 3月26 ??         2:40.95 /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoted
+    0   344     1   0 13 3月26 ??         2:33.80 /usr/sbin/systemstats --daemon
+    0   348     1   0 13 3月26 ??         8:22.70 /usr/libexec/configd
+    0   350     1   0 13 3月26 ??         9:20.45 /System/Library/CoreServices/powerd.bundle/powerd
+    0   351     1   0 13 3月26 ??         0:00.35 /usr/libexec/IOMFB_bics_daemon
+    0   355     1   0 13 3月26 ??         0:00.82 /usr/libexec/remoted
+  306   359     1   0 13 3月26 ??         0:00.02 /System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd_system
+    0   361     1   0 13 3月26 ??         0:58.75 /usr/libexec/watchdogd
+    0   365     1   0 13 3月26 ??       262:48.24 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds
+    0   367     1   0 13 3月26 ??         0:01.29 /usr/libexec/kernelmanagerd
+    0   368     1   0 13 3月26 ??         8:57.56 /usr/libexec/diskarbitrationd
+    0   372     1   0 13 3月26 ??         1:15.95 /usr/sbin/syslogd
+    0   374     1   0 13 3月26 ??         4:37.23 /usr/libexec/thermalmonitord
+    0   375     1   0 13 3月26 ??        20:29.48 /System/Library/PrivateFrameworks/CoreDuetContext.framework/Resources/contextstored
+    0   376     1   0 13 3月26 ??         0:00.21 /usr/libexec/xprotectd
+    0   377     1   0 13 3月26 ??       101:09.43 /usr/libexec/opendirectoryd
+    0   379     1   0 13 3月26 ??         6:13.95 /System/Library/PrivateFrameworks/ApplePushService.framework/apsd
+    0   380     1   0 13 3月26 ??        16:39.35 /System/Library/CoreServices/launchservicesd
+  266   381     1   0 13 3月26 ??         0:42.42 /usr/libexec/timed
+  213   382     1   0 13 3月26 ??         0:02.65 /System/Library/PrivateFrameworks/MobileDevice.framework/Versions/A/Resources/usbmuxd -launchd
+    0   383     1   0 13 3月26 ??         2:22.93 /usr/sbin/securityd -i
+  205   385     1   0 13 3月26 ??        13:25.18 /usr/libexec/locationd
+    0   386     1   0 13 3月26 ??         0:23.73 /usr/libexec/nesessionmanager
+    0   388     1   0 13 3月26 ??         0:00.05 autofsd
+    0   389     1   0 13 3月26 ??        42:17.61 /usr/libexec/dasd
+    0   390     1   0 13 3月26 ??         0:00.08 /usr/libexec/corerepaird
+  241   392     1   0 13 3月26 ??         6:50.61 /usr/sbin/distnoted daemon
+    0   396     1   0 13 3月26 ??         0:02.67 /System/Library/CoreServices/logind
+    0   397     1   0 13 3月26 ??         0:19.28 /System/Library/PrivateFrameworks/GenerationalStorage.framework/Versions/A/Support/revisiond
+    0   398     1   0 13 3月26 ??         0:00.04 /usr/sbin/KernelEventAgent
+    0   403     1   0 13 3月26 ??        19:31.94 /usr/sbin/notifyd
+    0   405     1   0 13 3月26 ??        36:35.93 /usr/libexec/corebrightnessd --launchd
+    0   406     1   0 13 3月26 ??         1:16.06 /usr/libexec/AirPlayXPCHelper
+    0   407     1   0 13 3月26 ??         3:41.58 /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/com.apple.cmio.registerassistantservice
+   88   410     1   0 13 3月26 ??       5368:46.02 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer -daemon
+    0   412     1   0 13 3月26 ??        13:23.89 /usr/sbin/cfprefsd daemon
+  501   413     1   0 13 3月26 ??       101:42.98 /System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow console
+    0   416     1   0 13 3月26 ??       151:09.88 /usr/libexec/runningboardd
+    0   417     1   0 13 3月26 ??         0:51.04 /System/Library/CoreServices/coreservicesd
+    0   420     1   0 13 3月26 ??         1:05.34 /usr/libexec/lsd runAsRoot
+  263   421     1   0 13 3月26 ??        95:42.29 /System/Library/PrivateFrameworks/CoreAnalytics.framework/Support/analyticsd
+  202   424     1   0 13 3月26 ??       397:09.32 /usr/sbin/coreaudiod
+   65   426     1   0 13 3月26 ??        21:42.53 /usr/sbin/mDNSResponder
+    0   428     1   0 13 3月26 ??         5:27.80 /usr/libexec/apfsd
+  242   429     1   0 13 3月26 ??         1:10.67 /usr/libexec/nsurlsessiond --privileged
+    0   432     1   0 13 3月26 ??         0:06.86 /usr/libexec/biometrickitd --launchd
+    0   446     1   0 13 3月26 ??         0:26.58 /usr/libexec/ApplicationFirewall/socketfilterfw
+    0   450     1   0 13 3月26 ??         0:30.78 /usr/libexec/eligibilityd
+   88   459     1   0 13 3月26 ??         1:07.46 /usr/sbin/distnoted agent
+    0   466     1   0 13 3月26 ??         0:00.93 /usr/libexec/corercd
+    0   472     1   0 13 3月26 ??         1:06.77 /usr/sbin/distnoted agent
+    0   477     1   0 13 3月26 ??       100:46.23 /usr/libexec/airportd
+    0   478     1   0 13 3月26 ??         1:03.92 /usr/sbin/mDNSResponderHelper
+   24   483     1   0 13 3月26 ??        27:29.44 /usr/libexec/symptomsd
+    0   493     1   0 13 3月26 ??         0:44.90 /System/Library/Frameworks/Security.framework/Versions/A/XPCServices/authd.xpc/Contents/MacOS/authd
+  202   504     1   0 13 3月26 ??         1:02.17 /usr/sbin/distnoted agent
+    0   505     1   0 13 3月26 ??       1907:01.32 /usr/libexec/syspolicyd
+  202   525     1   0 13 3月26 ??         0:12.60 Core Audio Driver (OrayVirtualAudioDevice.driver)
+    0   530     1   0 13 3月26 ??        22:28.07 /usr/libexec/audioclocksyncd
+  262   531     1   0 13 3月26 ??         0:59.90 /usr/sbin/distnoted agent
+  294   532     1   0 13 3月26 ??         1:57.90 /usr/libexec/audiomxd
+  262   534     1   0 13 3月26 ??         0:00.49 /usr/libexec/com.apple.cmio.videodriverkithostextension.systemextension/Contents/MacOS/com.apple.cmio.videodriverkithostextension
+  262   535     1   0 13 3月26 ??         2:03.46 /usr/sbin/appleh13camerad
+  308   537     1   0 13 3月26 ??       282:06.09 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mds_stores
+  301   542     1   0 13 3月26 ??         0:11.09 /usr/libexec/modelmanagerd
+   55   548     1   0 13 3月26 ??         0:04.43 /System/Library/CoreServices/appleeventsd --server
+  294   551     1   0 13 3月26 ??         0:58.24 /usr/sbin/distnoted agent
+  200   553     1   0 13 3月26 ??         0:56.38 /usr/sbin/distnoted agent
+  278   572     1   0 13 3月26 ??         0:55.51 /usr/sbin/distnoted agent
+    0   575     1   0 13 3月26 ??         2:19.43 /usr/sbin/BTLEServer
+    0   577     1   0 13 3月26 ??        30:34.07 /usr/libexec/searchpartyd
+  242   581     1   0 13 3月26 ??         0:54.21 /usr/sbin/distnoted agent
+    0   584     1   0 13 3月26 ??         6:59.88 /System/Library/CoreServices/SubmitDiagInfo server-init
+    0   585     1   0 13 3月26 ??         6:25.76 /System/Library/PrivateFrameworks/AmbientDisplay.framework/Versions/A/XPCServices/com.apple.AmbientDisplayAgent.xpc/Contents/MacOS/com.apple.AmbientDisplayAgent
+    0   589   344   0 13 3月26 ??         0:04.94 /usr/sbin/systemstats --logger-helper /private/var/db/systemstats
+    0   592     1   0 13 3月26 ??         1:26.61 /Applications/SunloginClient.app/Contents/Helpers/SunloginClient_Helper -m server
+    0   593     1   0 13 3月26 ??         2:24.83 /Library/PrivilegedHelperTools/com.netease.uumac.helper
+    0   596     1   0 13 3月26 ??       152:03.92 /Library/PrivilegedHelperTools/io.github.clash-verge-rev.clash-verge-rev.service.bundle/Contents/MacOS/clash-verge-service
+    0   598     1   0 13 3月26 ??        13:22.21 /Applications/ExpressVPN.app/Contents/MacOS/expressvpnd
+    0   599     1   0 13 3月26 ??         0:00.01 /bin/sh -c /bin/wait4path /nix/var/nix/profiles/default/bin/nix-daemon && exec /nix/var/nix/profiles/default/bin/nix-daemon
+   89   600     1   0 13 3月26 ??         0:54.20 /usr/sbin/distnoted agent
+    0   602   599   0 13 3月26 ??         0:00.08 /bin/wait4path /nix/var/nix/profiles/default/bin/nix-daemon
+  262   603     1   0 13 3月26 ??         0:00.55 /usr/libexec/cameracaptured
+  262   605     1   0 13 3月26 ??         0:01.11 /System/Library/Frameworks/CoreMediaIO.framework/Versions/A/Resources/UVCAssistant.systemextension/Contents/MacOS/UVCAssistant
+    0   606     1   0 13 3月26 ??         0:01.54 /System/Library/CoreServices/Software Update.app/Contents/Resources/suhelperd
+  202   608     1   0 13 3月26 ??         0:00.16 Core Audio Driver (ParrotAudioPlugin.driver)
+  205   616     1   0 13 3月26 ??         0:54.37 /usr/sbin/distnoted agent
+  270   627     1   0 13 3月26 ??       284:37.72 /System/Library/DriverExtensions/com.apple.DriverKit-AppleBCMWLAN.dext/com.apple.DriverKit-AppleBCMWLAN com.apple.bcmwlan 0x100000f76 com.apple.DriverKit-AppleBCMWLAN
+  270   631     1   0 13 3月26 ??         0:00.10 /System/Library/DriverExtensions/com.apple.DriverKit-IOUserDockChannelSerial.dext/com.apple.DriverKit-IOUserDockChannelSerial com.apple.IOUserDockChannelSerial 0x1000011a5 com.apple.DriverKit-IOUserDockChannelSerial
+  270   634     1   0 13 3月26 ??         1:03.80 /System/Library/DriverExtensions/com.apple.AppleUserHIDDrivers.dext/com.apple.AppleUserHIDDrivers com.apple.driverkit.AppleUserHIDDrivers 0x1000011a7 com.apple.AppleUserHIDDrivers
+   55   637     1   0 13 3月26 ??         0:53.20 /usr/sbin/distnoted agent
+    0   641     1   0 13 3月26 ??         0:30.76 /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd
+  501   644     1   0 13 3月26 ??        15:43.30 /usr/sbin/distnoted agent
+  501   651     1   0 13 3月26 ??         6:15.71 /usr/libexec/UserEventAgent (Aqua)
+  501   658     1   0 13 3月26 ??         1:19.80 /usr/sbin/universalaccessd launchd -s
+  501   659     1   0 13 3月26 ??        11:38.84 /usr/libexec/ContinuityCaptureAgent server
+  501   660     1   0 13 3月26 ??         1:53.56 /usr/libexec/pboard
+  501   661     1   0 13 3月26 ??         0:05.28 /System/Library/Frameworks/InputMethodKit.framework/Resources/imklaunchagent
+  501   662     1   0 13 3月26 ??         5:19.89 /usr/libexec/lsd
+  501   667     1   0 13 3月26 ??        59:09.51 /System/Library/CoreServices/WindowManager.app/Contents/MacOS/WindowManager
+  501   680     1   0 13 3月26 ??        11:29.29 /usr/libexec/nsurlsessiond
+  501   681     1   0 13 3月26 ??         0:14.83 /System/Library/PrivateFrameworks/UserNotificationsCore.framework/Support/usernotificationsd
+  501   685     1   0 13 3月26 ??       5078:30.54 /Applications/iTerm.app/Contents/MacOS/iTerm2
+  301   688     1   0 13 3月26 ??         0:00.17 /System/Library/ExtensionKit/Extensions/HostInferenceProviderService.appex/Contents/MacOS/HostInferenceProviderService -LaunchArguments eyJlbmhhbmNlZFNlY3VyaXR5IjpmYWxzZSwidHlwZSI6OCwic2VydmljZU5hbWUiOiJjb20uYXBwbGUuSG9zdEluZmVyZW5jZVByb3ZpZGVyU2VydmljZSJ9
+  301   691     1   0 13 3月26 ??         0:53.68 /usr/sbin/distnoted agent
+  501   692     1   0 13 3月26 ??        90:33.94 /System/Applications/Notes.app/Contents/MacOS/Notes
+  501   694     1   0 13 3月26 ??        10:02.58 /usr/libexec/rapportd
+  268   695     1   0 13 3月26 ??         8:01.72 /usr/libexec/nearbyd
+  501   698     1   0 13 3月26 ??         6:58.00 /System/Library/PrivateFrameworks/IDS.framework/identityservicesd.app/Contents/MacOS/identityservicesd
+  501   699     1   0 13 3月26 ??         5:19.67 /System/Library/CoreServices/Dock.app/Contents/MacOS/Dock
+  501   700     1   0 13 3月26 ??        14:24.02 /usr/libexec/sharingd
+  501   701     1   0 13 3月26 ??       168:03.86 /System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter
+  501   702     1   0 13 3月26 ??         0:21.23 /System/Library/CoreServices/SystemUIServer.app/Contents/MacOS/SystemUIServer
+  501   703     1   0 13 3月26 ??       168:22.36 /System/Library/CoreServices/Finder.app/Contents/MacOS/Finder
+  501   706     1   0 13 3月26 ??         3:29.01 /System/Library/Frameworks/ApplicationServices.framework/Frameworks/ATS.framework/Support/fontd
+  501   708     1   0 13 3月26 ??         0:17.50 /System/Library/CoreServices/AccessibilityUIServer.app/Contents/MacOS/AccessibilityUIServer
+  501   713     1   0 13 3月26 ??         0:01.21 /System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/ATS.framework/Versions/A/Support/fontworker
+  501   714     1   0 13 3月26 ??         2:05.18 /System/Library/CoreServices/WallpaperAgent.app/Contents/MacOS/WallpaperAgent
+  501   718     1   0 13 3月26 ??         0:08.85 /System/Library/CoreServices/sharedfilelistd
+    0   719     1   0 13 3月26 ??         7:20.52 /usr/sbin/filecoordinationd
+  501   721     1   0 13 3月26 ??        65:19.08 /System/Library/PrivateFrameworks/VoiceShortcuts.framework/Versions/A/Support/siriactionsd
+  501   724     1   0 13 3月26 ??        11:51.17 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/suggestd
+  501   728     1   0 13 3月26 ??        31:22.67 /System/Library/PrivateFrameworks/ChronoCore.framework/Support/chronod
+  501   729     1   0 13 3月26 ??         0:20.34 /System/Library/PrivateFrameworks/StatusKit.framework/StatusKitAgent
+    0   730     1   0 13 3月26 ??        15:28.03 automountd
+  501   731     1   0 13 3月26 ??         9:55.06 /System/Library/PrivateFrameworks/ViewBridge.framework/Versions/A/XPCServices/ViewBridgeAuxiliary.xpc/Contents/MacOS/ViewBridgeAuxiliary
+  501   733     1   0 13 3月26 ??         4:10.13 /System/Library/CoreServices/audioaccessoryd
+  501   735     1   0 13 3月26 ??       147:11.16 /System/Library/PrivateFrameworks/FileProvider.framework/Support/fileproviderd
+  501   737     1   0 13 3月26 ??         0:00.75 /System/Library/PrivateFrameworks/AMPDevices.framework/Versions/A/Support/AMPDeviceDiscoveryAgent --launchd
+  501   743     1   0 13 3月26 ??         0:18.94 /System/Library/Frameworks/LocalAuthentication.framework/Support/coreauthd
+  259   744     1   0 13 3月26 ??         0:00.21 /System/Library/Frameworks/CryptoTokenKit.framework/ctkd -st
+  501   749     1   0 13 3月26 ??        51:19.53 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/corespotlightd
+  501   753     1   0 13 3月26 ??         7:48.48 /System/Library/ExtensionKit/Extensions/WallpaperAerialsExtension.appex/Contents/MacOS/WallpaperAerialsExtension -LaunchArguments eyJ0eXBlIjoxLCJlbmhhbmNlZFNlY3VyaXR5IjpmYWxzZSwic2VydmljZU5hbWUiOiJjb20uYXBwbGUud2FsbHBhcGVyLmV4dGVuc2lvbi5hZXJpYWxzIn0=
+  441   756     1   0 13 3月26 ??         0:01.22 /usr/libexec/rosetta/oahd
+  501   762     1   0 13 3月26 ??         1:32.75 /usr/sbin/usernoted
+  501   764     1   0 13 3月26 ??         5:07.55 /System/Library/CoreServices/UIKitSystem.app/Contents/MacOS/UIKitSystem system_app_start
+  501   766     1   0 13 3月26 ??         0:00.38 /System/Library/PrivateFrameworks/CommunicationsFilter.framework/CMFSyncAgent
+  501   773     1   0 13 3月26 ??        15:20.06 /System/Library/CoreServices/NotificationCenter.app/Contents/MacOS/NotificationCenter
+  501   780     1   0 13 3月26 ??         0:29.20 /System/Library/PrivateFrameworks/FamilyCircle.framework/Versions/A/Resources/familycircled
+  501   782     1   0 13 3月26 ??         1:16.29 /System/Library/PrivateFrameworks/AuthKit.framework/Versions/A/Support/akd
+  501   790     1   0 13 3月26 ??         3:27.27 /System/Library/PrivateFrameworks/IMCore.framework/imagent.app/Contents/MacOS/imagent
+  501   792     1   0 13 3月26 ??         2:06.47 /System/Library/PrivateFrameworks/UserActivity.framework/Agents/useractivityd
+  501   793     1   0 13 3月26 ??         0:52.45 /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.extra.xpc/Contents/MacOS/com.apple.dock.extra
+  501   794     1   0 13 3月26 ??         0:08.12 /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.external.extra.arm64.xpc/Contents/MacOS/com.apple.dock.external.extra.arm64
+  501   795     1   0 13 3月26 ??         0:07.73 /System/Library/CoreServices/Dock.app/Contents/XPCServices/com.apple.dock.external.extra.arm64.xpc/Contents/MacOS/com.apple.dock.external.extra.arm64
+  501   818     1   0 13 3月26 ??        30:16.13 /System/Library/CoreServices/Spotlight.app/Contents/MacOS/Spotlight
+  501   822     1   0 13 3月26 ??         0:07.76 /usr/libexec/avconferenced
+  501   823     1   0 13 3月26 ??         0:02.81 /System/Library/PrivateFrameworks/MediaRemote.framework/Support/mediaremoteagent
+  501   829     1   0 13 3月26 ??        17:50.49 /System/Library/PrivateFrameworks/TextInputUIMacHelper.framework/Versions/A/XPCServices/CursorUIViewService.xpc/Contents/MacOS/CursorUIViewService
+  501   830     1   0 13 3月26 ??        12:14.22 /System/Library/CoreServices/WiFiAgent.app/Contents/MacOS/WiFiAgent
+  501   831   685   0 13 3月26 ??         0:00.05 /Users/sujiangwen/Library/Application Support/iTerm2/iTermServer-3.5.11 /Users/sujiangwen/Library/Application Support/iTerm2/iterm2-daemon-1.socket
+  501   851     1   0 13 3月26 ??         0:23.39 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper
+    0   857     1   0 13 3月26 ??         5:04.38 /usr/libexec/wifianalyticsd
+  501   915     1   0 13 3月26 ??         0:01.70 /System/Library/PrivateFrameworks/CommerceKit.framework/Versions/A/Resources/commerce
+  501   924     1   0 13 3月26 ??         0:25.97 /System/Library/Input Methods/PressAndHold.app/Contents/PlugIns/PAH_Extension.appex/Contents/MacOS/PAH_Extension -AppleLanguages ("zh-Hans-CN", "en-CN")
+  501   938     1   0 13 3月26 ??         0:04.98 /usr/sbin/BTLEServerAgent
+  265  1010     1   0 13 3月26 ??         0:03.44 /System/Library/PrivateFrameworks/CoreFP.framework/Versions/A/fairplayd
+  501  1012     1   0 18 3月26 ??         0:17.08 /System/Library/PrivateFrameworks/Noticeboard.framework/Versions/A/Resources/nbagent.app/Contents/MacOS/nbagent
+  501  1078     1   0 13 3月26 ??         0:45.07 /usr/libexec/studentd
+  501  1079     1   0 13 3月26 ??         0:19.59 /System/Applications/Clock.app/Contents/PlugIns/WorldClockWidget.appex/Contents/MacOS/WorldClockWidget -LaunchArguments eyJzZXJ2aWNlTmFtZSI6ImNvbS5hcHBsZS5jbG9jay5Xb3JsZENsb2NrV2lkZ2V0IiwiZW5oYW5jZWRTZWN1cml0eSI6ZmFsc2UsInR5cGUiOjF9
+  501  1082     1   0 13 3月26 ??         0:05.08 /System/Applications/Calendar.app/Contents/PlugIns/CalendarWidgetExtension.appex/Contents/MacOS/CalendarWidgetExtension -LaunchArguments eyJzZXJ2aWNlTmFtZSI6ImNvbS5hcHBsZS5pQ2FsLkNhbGVuZGFyV2lkZ2V0RXh0ZW5zaW9uIiwiZW5oYW5jZWRTZWN1cml0eSI6ZmFsc2UsInR5cGUiOjF9
+  274  1109     1   0 13 3月26 ??         0:55.82 /usr/sbin/distnoted agent
+  501  1203     1   0 22 3月26 ??         0:05.78 /System/Library/Frameworks/LinkPresentation.framework/Versions/A/XPCServices/com.apple.LinkPresentation.LinkSnapshotGeneratorService.xpc/Contents/MacOS/com.apple.LinkPresentation.LinkSnapshotGeneratorService
+  501  1452     1   0 13 3月26 ??         0:32.04 /System/Library/PrivateFrameworks/CloudDocs.framework/PlugIns/com.apple.CloudDocs.iCloudDriveFileProvider.appex/Contents/MacOS/com.apple.CloudDocs.iCloudDriveFileProvider -LaunchArguments eyJlbmhhbmNlZFNlY3VyaXR5IjpmYWxzZSwidHlwZSI6MSwic2VydmljZU5hbWUiOiJjb20uYXBwbGUuQ2xvdWREb2NzLmlDbG91ZERyaXZlRmlsZVByb3ZpZGVyIn0=
+  501  1478     1   0 13 3月26 ??         3:47.36 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/Metadata.framework/Versions/A/Support/mdbulkimport -s mdworker-bundle -c MDSImporterBundleFinder -m com.apple.metadata.mdbulkimport
+   92  1534     1   0 13 3月26 ??         0:53.07 /usr/sbin/distnoted agent
+  501  1778     1   0 17 3月26 ??         0:13.64 /System/Library/Fr
+
+[... omitted 31800 chars ...]
+
+upport.Helper
+  501 23581     1   0 17 3月26 ??         0:00.05 /usr/libexec/spindump_agent
+  501 23674 62011   0 三11上午 ??         0:15.98 /Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Helpers/Browser Helper (Renderer).app/Contents/MacOS/Browser Helper (Renderer) --type=renderer --origin-trial-disabled-features=CanvasTextNg|WebAssemblyCustomDescriptors --user-data-dir=/Users/sujiangwen/Library/Application Support/Arc/User Data --bcny-app-id=0 --enable-blink-features=MediaSessionEnterPictureInPictureOnGMeetOnly --lang=zh-CN --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5022 --time-ticks-at-unix-epoch=-1773511613309313 --launch-time-ticks=1398356465117 --shared-files --metrics-shmem-handle=1752395122,r,4988319166391167540,10772812075191295878,2097152 --field-trial-handle=1718379636,r,15319159995458692809,10340914049677224397,262144 --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14114383980448646789,7068524875156615407,4 --trace-process-track-uuid=3190713692136037172 --seatbelt-client=245
+  501 23756 62011   0 三11上午 ??         0:15.25 /Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Helpers/Browser Helper (Renderer).app/Contents/MacOS/Browser Helper (Renderer) --type=renderer --origin-trial-disabled-features=CanvasTextNg|WebAssemblyCustomDescriptors --user-data-dir=/Users/sujiangwen/Library/Application Support/Arc/User Data --bcny-app-id=0 --enable-blink-features=MediaSessionEnterPictureInPictureOnGMeetOnly --lang=zh-CN --num-raster-threads=4 --enable-zero-copy --enable-gpu-memory-buffer-compositor-resources --enable-main-frame-before-activation --renderer-client-id=5023 --time-ticks-at-unix-epoch=-1773511613309313 --launch-time-ticks=1398359107716 --shared-files --metrics-shmem-handle=1752395122,r,14969933909163976129,9668434857929235283,2097152 --field-trial-handle=1718379636,r,15319159995458692809,10340914049677224397,262144 --variations-seed-version --pseudonymization-salt-handle=1935764596,r,14114383980448646789,7068524875156615407,4 --trace-process-track-uuid=3190713693073079021 --seatbelt-client=253
+  501 26461     1   0 18 3月26 ??         0:00.02 /System/Library/Frameworks/NetFS.framework/Versions/A/XPCServices/PlugInLibraryService.xpc/Contents/MacOS/PlugInLibraryService
+  501 26658     1   0 18 3月26 ??         0:04.54 /System/Library/PrivateFrameworks/WebPrivacy.framework/webprivacyd
+  501 27028     1   0 18 3月26 ??         0:01.02 /Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect
+  265 27143     1   0 18 3月26 ??         0:19.81 /System/Library/PrivateFrameworks/CoreLSKD.framework/Versions/A/lskdd
+  242 27217     1   0 18 3月26 ??         0:00.74 /System/Library/PrivateFrameworks/StreamingZip.framework/Versions/A/XPCServices/com.apple.StreamingUnzipService.privileged.xpc/Contents/MacOS/com.apple.StreamingUnzipService.privileged
+    0 28183     1   0 20 3月26 ??         0:00.02 /System/Library/PrivateFrameworks/WiFiPolicy.framework/XPCServices/WiFiCloudAssetsXPCService.xpc/Contents/MacOS/WiFiCloudAssetsXPCService
+  501 28221     1   0 五08下午 ??         0:00.07 /System/Applications/Utilities/Screenshot.app/Contents/PlugIns/ScreenshotControls.appex/Contents/MacOS/ScreenshotControls -LaunchArguments eyJlbmhhbmNlZFNlY3VyaXR5IjpmYWxzZSwic2VydmljZU5hbWUiOiJjb20uYXBwbGUuY29udHJvbHMuc2NyZWVuc2hvdCIsInR5cGUiOjF9
+  501 28256     1   0  2:46下午 ??         0:00.14 /System/Library/PrivateFrameworks/GenerativeExperiencesRuntime.framework/Versions/A/generativeexperiencesd
+    0 28514     1   0 五08下午 ??         0:17.45 /System/Library/Frameworks/VideoToolbox.framework/Versions/A/XPCServices/VTEncoderXPCService.xpc/Contents/MacOS/VTEncoderXPCService
+    0 28594     1   0 六09下午 ??         0:00.08 /usr/libexec/ioupsd
+  501 29219     1   0 17 3月26 ??         0:00.55 /System/Library/PrivateFrameworks/MessagesBlastDoorSupport.framework/Versions/A/XPCServices/MessagesBlastDoorService.xpc/Contents/MacOS/MessagesBlastDoorService
+  501 29220     1   0 17 3月26 ??         0:02.51 /usr/libexec/textunderstandingd
+  501 29221     1   0 17 3月26 ??         0:00.72 /System/Library/PrivateFrameworks/CoreSuggestions.framework/Versions/A/Support/reversetemplated
+  501 29222     1   0 17 3月26 ??         0:01.35 /System/Library/PrivateFrameworks/SocialLayer.framework/sociallayerd.app/Contents/MacOS/sociallayerd
+  501 29594     1   0 17 3月26 ??         0:36.12 /System/Library/PrivateFrameworks/DataAccess.framework/Support/dataaccessd
+  278 29595     1   0 17 3月26 ??         0:00.74 /System/Library/PrivateFrameworks/MobileAccessoryUpdater.framework/XPCServices/UARPUpdaterServiceUSBPD.xpc/Contents/MacOS/UARPUpdaterServiceUSBPD
+    0 29792     1   0 17 3月26 ??        74:30.23 /usr/libexec/tailspind
+    0 29985     1   0 17 3月26 ??         0:02.14 /System/Library/CoreServices/ReportCrash daemon
+  501 30067     1   0 26 3月26 ??         0:41.42 /System/Library/Frameworks/AppKit.framework/Versions/C/XPCServices/com.apple.appkit.xpc.openAndSavePanelService.xpc/Contents/MacOS/com.apple.appkit.xpc.openAndSavePanelService
+  501 30068     1   0 26 3月26 ??         0:07.11 /System/Library/Frameworks/QuickLookUI.framework/Versions/A/XPCServices/QuickLookUIService.xpc/Contents/MacOS/QuickLookUIService
+  501 30070     1   0 26 3月26 ??         0:00.01 /System/Library/Frameworks/NetFS.framework/Versions/A/XPCServices/PlugInLibraryService.xpc/Contents/MacOS/PlugInLibraryService
+  501 30162     1   0 26 3月26 ??         0:00.02 /System/Library/PrivateFrameworks/CSExattrCrypto.framework/Versions/A/XPCServices/CSExattrCryptoService.xpc/Contents/MacOS/CSExattrCryptoService
+    0 30489     1   0 18 3月26 ??         0:00.77 /Library/Apple/System/Library/CoreServices/XProtect.app/Contents/MacOS/XProtect
+  501 31553     1   0  8:53上午 ??        13:54.43 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU
+  501 31554     1   0  8:53上午 ??        11:20.90 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.Networking.xpc/Contents/MacOS/com.apple.WebKit.Networking
+  501 31555     1   0  8:53上午 ??        17:22.18 /System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.WebContent.xpc/Contents/MacOS/com.apple.WebKit.WebContent
+  501 31556     1   0  8:53上午 ??         0:00.02 /System/Library/Frameworks/AudioToolbox.framework/XPCServices/com.apple.audio.SandboxHelper.xpc/Contents/MacOS/com.apple.audio.SandboxHelper
+  501 31611     1   0 四09上午 ??        35:18.32 /Applications/Zed.app/Contents/MacOS/zed
+  501 31733 31611   0 四09上午 ??         4:34.49 /Applications/Zed.app/Contents/MacOS/zed --crash-handler /Users/sujiangwen/Library/Caches/Zed/zed-crash-handler-31611
+  501 31804     1   0 四09上午 ??         0:00.13 /System/Library/Frameworks/Metal.framework/Versions/A/XPCServices/MTLCompilerService.xpc/Contents/MacOS/MTLCompilerService
+  501 32588 21648   0  3:36下午 ??         0:20.96 /Users/sujiangwen/.local/bin/claude --output-format stream-json --verbose --input-format stream-json --model claude-sonnet-4-5 --disallowedTools Bash,Read,Write,Edit,Grep,Glob,WebFetch,WebSearch,Task,NotebookEdit,AskUserQuestion,TodoWrite --setting-sources  --permission-mode default
+  501 33227     1   0 二01下午 ??         0:09.91 /Applications/TeX/LaTeXiT.app/Contents/MacOS/LaTeXiT
+  501 33383     1   0 二01下午 ??         0:03.78 /Applications/TeX/LaTeXiT.app/Contents/Library/Applications/LaTeXiT Helper.app/Contents/MacOS/LaTeXiT Helper
+  501 33384     1   0 二01下午 ??         0:00.01 /System/Library/Frameworks/NetFS.framework/Versions/A/XPCServices/PlugInLibraryService.xpc/Contents/MacOS/PlugInLibraryService
+  501 33385     1   0 二01下午 ??         0:04.79 /System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper
+  501 33476     1   0 二01下午 ??         0:00.03 /System/Library/Frameworks/Metal.framework/Versions/A/XPCServi

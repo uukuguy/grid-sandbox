@@ -1,9 +1,9 @@
 #!/bin/bash
-# Build octo-sandbox Docker images
+# Build grid-sandbox Docker images
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TAG_PREFIX="octo-sandbox"
+TAG_PREFIX="grid-sandbox"
 VERSION="1.0"
 
 IMAGES=(python rust nodejs bash general swebench)
