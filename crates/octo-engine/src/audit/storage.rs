@@ -59,6 +59,11 @@ impl AuditStorage {
         Ok(Self { conn })
     }
 
+    /// Create from an existing connection (for testing).
+    pub fn from_conn(conn: Connection) -> Self {
+        Self { conn }
+    }
+
     /// Compute SHA-256 hash for a chain link.
     pub fn compute_hash(
         prev_hash: &str,

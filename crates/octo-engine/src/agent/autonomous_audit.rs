@@ -69,6 +69,7 @@ impl AutonomousAuditEntry {
 ///
 /// Collects all audit entries for a single autonomous session run.
 /// Can be queried or serialized after the run completes.
+/// Use `flush_to_audit_storage()` (AU-D5) to persist entries to SQLite.
 #[derive(Debug, Default)]
 pub struct AutonomousAuditLog {
     entries: Vec<AutonomousAuditEntry>,
@@ -98,6 +99,39 @@ impl AutonomousAuditLog {
     /// Export all entries as a JSON array.
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(&self.entries).unwrap_or_default()
+    }
+
+    /// Persist all entries to the existing AuditStorage (AU-D5).
+    ///
+    /// Converts each `AutonomousAuditEntry` into a generic `AuditEvent`
+    /// and writes it to the `audit_logs` SQLite table with hash chaining.
+    /// Returns the number of entries successfully persisted.
+    pub fn flush_to_audit_storage(
+        &self,
+        storage: &crate::audit::AuditStorage,
+    ) -> usize {
+        let mut persisted = 0;
+        for entry in &self.entries {
+            let audit_event = crate::audit::AuditEvent {
+                event_type: entry.event_type(),
+                user_id: None,
+                session_id: Some(entry.session_id.clone()),
+                resource_id: None,
+                action: entry.event.name().to_string(),
+                result: "ok".to_string(),
+                metadata: Some(entry.to_json()),
+                ip_address: None,
+            };
+            if storage.log(audit_event).is_ok() {
+                persisted += 1;
+            }
+        }
+        persisted
+    }
+
+    /// Clear all entries after flushing.
+    pub fn clear(&mut self) {
+        self.entries.clear();
     }
 }
 
@@ -176,5 +210,50 @@ mod tests {
         assert_eq!(entry.event_type(), "autonomous.user_presence_changed");
         let json = entry.to_json();
         assert_eq!(json["event"]["online"], false);
+    }
+
+    #[test]
+    fn test_flush_to_audit_storage() {
+        use rusqlite::Connection;
+
+        // Setup in-memory AuditStorage
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                event_type TEXT NOT NULL,
+                user_id TEXT,
+                session_id TEXT,
+                resource_id TEXT,
+                action TEXT NOT NULL,
+                result TEXT NOT NULL,
+                metadata TEXT,
+                ip_address TEXT,
+                prev_hash TEXT NOT NULL DEFAULT '',
+                hash TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_hash ON audit_logs(hash);",
+        )
+        .unwrap();
+        // Safety: AuditStorage wraps Connection; construct via field access in test
+        let storage = crate::audit::AuditStorage::from_conn(conn);
+
+        let mut log = AutonomousAuditLog::new();
+        log.record("s1", AutonomousAuditEvent::Started { config_summary: "test".into() });
+        log.record("s1", AutonomousAuditEvent::TickCompleted { round: 1, tokens_used: 100, cost_usd: 0.01 });
+        log.record("s1", AutonomousAuditEvent::Completed { total_rounds: 1, total_tokens: 100, total_cost_usd: 0.01 });
+
+        let persisted = log.flush_to_audit_storage(&storage);
+        assert_eq!(persisted, 3);
+
+        // Verify in AuditStorage
+        let records = storage.query(Some("autonomous.started"), None, 10, 0).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].session_id, Some("s1".to_string()));
+
+        // Test clear
+        log.clear();
+        assert!(log.is_empty());
     }
 }

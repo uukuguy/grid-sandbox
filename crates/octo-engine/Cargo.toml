@@ -10,6 +10,7 @@ tokio-stream = { workspace = true }
 futures-util = { workspace = true }
 reqwest = { workspace = true, features = ["blocking"] }
 url = "2"
+flate2 = "1"
 urlencoding = { workspace = true }
 bytes = { workspace = true }
 serde = { workspace = true }

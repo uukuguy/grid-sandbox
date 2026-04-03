@@ -88,6 +88,62 @@ impl TranscriptWriter {
     pub fn file_path(&self) -> &Path {
         &self.file_path
     }
+
+    /// Compress the transcript file to gzip format (AR-D1).
+    ///
+    /// Creates a `.transcript.jsonl.gz` file and removes the original JSONL.
+    /// Returns the path to the compressed file, or None if no transcript exists.
+    pub fn compress(&self) -> anyhow::Result<Option<PathBuf>> {
+        use std::io::Read;
+
+        if !self.file_path.exists() {
+            return Ok(None);
+        }
+
+        let gz_path = PathBuf::from(format!("{}.gz", self.file_path.display()));
+        let content = fs::read(&self.file_path)?;
+
+        let gz_file = fs::File::create(&gz_path)?;
+        let mut encoder = flate2::write::GzEncoder::new(gz_file, flate2::Compression::default());
+        encoder.write_all(&content)?;
+        encoder.finish()?;
+
+        fs::remove_file(&self.file_path)?;
+        Ok(Some(gz_path))
+    }
+
+    /// Read entries from a compressed transcript (AR-D1).
+    pub fn read_compressed(gz_path: &Path) -> anyhow::Result<Vec<TranscriptEntry>> {
+        use std::io::Read;
+
+        let file = fs::File::open(gz_path)?;
+        let mut decoder = flate2::read::GzDecoder::new(file);
+        let mut content = String::new();
+        decoder.read_to_string(&mut content)?;
+
+        content
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| serde_json::from_str(l).map_err(Into::into))
+            .collect()
+    }
+
+    /// List all transcript files (both JSONL and compressed) in a directory.
+    pub fn list_transcripts(dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut files: Vec<PathBuf> = fs::read_dir(dir)?
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                name.ends_with(".transcript.jsonl") || name.ends_with(".transcript.jsonl.gz")
+            })
+            .collect();
+        files.sort();
+        Ok(files)
+    }
 }
 
 #[cfg(test)]
@@ -168,5 +224,47 @@ mod tests {
         let preview = make_preview(&long);
         assert!(preview.len() < 510); // 500 + "..."
         assert!(preview.ends_with("..."));
+    }
+
+    #[test]
+    fn test_compress_and_read_compressed() {
+        let (writer, _dir) = test_writer();
+        for i in 0..3 {
+            writer.append(&sample_entry("user", &format!("msg {}", i))).unwrap();
+        }
+
+        // Compress
+        let gz_path = writer.compress().unwrap().expect("should compress");
+        assert!(gz_path.exists());
+        assert!(!writer.file_path().exists()); // original removed
+
+        // Read compressed
+        let entries = TranscriptWriter::read_compressed(&gz_path).unwrap();
+        assert_eq!(entries.len(), 3);
+        assert!(entries[0].content_preview.contains("msg 0"));
+    }
+
+    #[test]
+    fn test_compress_empty_returns_none() {
+        let (writer, _dir) = test_writer();
+        let result = writer.compress().unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_list_transcripts() {
+        let dir = TempDir::new().unwrap();
+        let w1 = TranscriptWriter::new(dir.path().to_path_buf(), "sess-a");
+        let w2 = TranscriptWriter::new(dir.path().to_path_buf(), "sess-b");
+        w1.append(&sample_entry("user", "hello")).unwrap();
+        w2.append(&sample_entry("user", "world")).unwrap();
+
+        let files = TranscriptWriter::list_transcripts(dir.path()).unwrap();
+        assert_eq!(files.len(), 2);
+
+        // Compress one and re-list
+        w1.compress().unwrap();
+        let files = TranscriptWriter::list_transcripts(dir.path()).unwrap();
+        assert_eq!(files.len(), 2); // 1 jsonl + 1 gz
     }
 }

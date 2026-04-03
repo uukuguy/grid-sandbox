@@ -229,6 +229,141 @@ pub fn hybrid_search_tools(
     results
 }
 
+// ---------------------------------------------------------------------------
+// AR-D4: Persistent tool search index
+// ---------------------------------------------------------------------------
+
+use serde::Deserialize;
+
+/// Pre-computed token index for fast hybrid search (AR-D4).
+///
+/// Caches tokenized tool names and descriptions so that `hybrid_search_tools`
+/// doesn't need to re-tokenize the entire registry on every query.
+/// Can be serialized to JSON for cross-session persistence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSearchIndex {
+    /// Indexed entries: (tool_name, description_preview, token_set)
+    entries: Vec<ToolSearchIndexEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolSearchIndexEntry {
+    name: String,
+    description: String,
+    tokens: Vec<String>, // sorted for deterministic serialization
+}
+
+impl ToolSearchIndex {
+    /// Build index from a ToolRegistry.
+    pub fn build(registry: &ToolRegistry) -> Self {
+        let entries = registry
+            .iter()
+            .map(|(name, tool)| {
+                let spec = tool.spec();
+                let combined = format!("{} {}", name, spec.description);
+                let mut tokens: Vec<String> = tokenize(&combined).into_iter().collect();
+                tokens.sort();
+                ToolSearchIndexEntry {
+                    name: name.clone(),
+                    description: spec.description.chars().take(100).collect(),
+                    tokens,
+                }
+            })
+            .collect();
+        Self { entries }
+    }
+
+    /// Search using the pre-computed index.
+    pub fn search(&self, query: &str, limit: usize) -> Vec<ToolSearchResult> {
+        let query_lower = query.to_lowercase();
+        let query_tokens = tokenize(query);
+
+        // Phase 1: Exact/substring matches
+        let mut results: Vec<ToolSearchResult> = self
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let name_lower = entry.name.to_lowercase();
+                let desc_lower = entry.description.to_lowercase();
+                let score = if name_lower == query_lower {
+                    100
+                } else if name_lower.contains(&query_lower) {
+                    80
+                } else if desc_lower.contains(&query_lower) {
+                    40
+                } else {
+                    return None;
+                };
+                Some(ToolSearchResult {
+                    name: entry.name.clone(),
+                    description: entry.description.clone(),
+                    score,
+                })
+            })
+            .collect();
+
+        results.sort_by(|a, b| b.score.cmp(&a.score));
+        results.truncate(limit);
+
+        if results.len() >= limit || query_tokens.is_empty() {
+            return results;
+        }
+
+        // Phase 2: Token-overlap fallback
+        let remaining = limit - results.len();
+        let matched: std::collections::HashSet<&str> =
+            results.iter().map(|r| r.name.as_str()).collect();
+
+        let mut semantic_hits: Vec<(String, String, f64)> = self
+            .entries
+            .iter()
+            .filter(|e| !matched.contains(e.name.as_str()))
+            .filter_map(|e| {
+                let entry_tokens: std::collections::HashSet<String> =
+                    e.tokens.iter().cloned().collect();
+                let sim = jaccard_similarity(&query_tokens, &entry_tokens);
+                if sim > 0.05 {
+                    Some((e.name.clone(), e.description.clone(), sim))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        semantic_hits.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        semantic_hits.truncate(remaining);
+
+        for (name, description, sim) in semantic_hits {
+            results.push(ToolSearchResult {
+                name,
+                description,
+                score: (sim * 60.0) as u32,
+            });
+        }
+
+        results
+    }
+
+    /// Number of indexed tools.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Serialize to JSON string for persistence.
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(self)
+    }
+
+    /// Deserialize from JSON string.
+    pub fn from_json(json: &str) -> serde_json::Result<Self> {
+        serde_json::from_str(json)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,5 +500,47 @@ mod tests {
         let b = super::tokenize("foo bar");
         let sim = super::jaccard_similarity(&a, &b);
         assert!((sim - 0.0).abs() < f64::EPSILON);
+    }
+
+    // --- AR-D4: ToolSearchIndex tests ---
+
+    #[test]
+    fn test_search_index_build_and_search() {
+        let reg = test_registry();
+        let index = ToolSearchIndex::build(&reg);
+        assert_eq!(index.len(), 5);
+
+        let results = index.search("bash", 10);
+        assert!(!results.is_empty());
+        assert_eq!(results[0].name, "bash");
+        assert_eq!(results[0].score, 100);
+    }
+
+    #[test]
+    fn test_search_index_semantic_fallback() {
+        let reg = test_registry();
+        let index = ToolSearchIndex::build(&reg);
+
+        let results = index.search("execute command", 10);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_search_index_json_roundtrip() {
+        let reg = test_registry();
+        let index = ToolSearchIndex::build(&reg);
+
+        let json = index.to_json().unwrap();
+        let restored = ToolSearchIndex::from_json(&json).unwrap();
+        assert_eq!(restored.len(), index.len());
+
+        // Search should produce same results
+        let orig_results = index.search("file", 10);
+        let restored_results = restored.search("file", 10);
+        assert_eq!(orig_results.len(), restored_results.len());
+        for (a, b) in orig_results.iter().zip(restored_results.iter()) {
+            assert_eq!(a.name, b.name);
+            assert_eq!(a.score, b.score);
+        }
     }
 }
