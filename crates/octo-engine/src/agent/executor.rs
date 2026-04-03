@@ -331,6 +331,10 @@ impl AgentExecutor {
                                     path_validator: self.path_validator.clone(),
                                 }),
                                 hook_registry: self.hook_registry.clone(),
+                                // AY-D1: Pass working_dir for worktree isolation
+                                working_dir: Some(self.working_dir.clone()),
+                                // AY-D2: transcript_writer passed as None here;
+                                // sub-agents get their own transcript in run_agent_loop harness.
                                 ..AgentLoopConfig::default()
                             });
                             let mut agent_tool = crate::tools::subagent::AgentTool::new(
