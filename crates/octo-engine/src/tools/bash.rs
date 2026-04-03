@@ -46,6 +46,8 @@ pub struct BashTool {
     target_resolver: Option<ExecutionTargetResolver>,
     /// Session sandbox manager for per-session container reuse
     session_sandbox: Option<Arc<SessionSandboxManager>>,
+    /// Host-mode safety guard level (None = container, skip checks).
+    guard_level: super::bash_guard::BashGuardLevel,
 }
 
 impl BashTool {
@@ -55,6 +57,7 @@ impl BashTool {
             router: None,
             target_resolver: None,
             session_sandbox: None,
+            guard_level: super::bash_guard::BashGuardLevel::Light, // Host dev default
         }
     }
 
@@ -64,6 +67,8 @@ impl BashTool {
         profile: SandboxProfile,
         router: SandboxRouter,
     ) -> Self {
+        let guard_level =
+            super::bash_guard::BashGuardLevel::from_context(run_mode, profile.clone());
         let available_backends = router.registered_backends();
         let target_resolver =
             ExecutionTargetResolver::new(run_mode, profile, available_backends);
@@ -71,6 +76,7 @@ impl BashTool {
             router: Some(router),
             target_resolver: Some(target_resolver),
             session_sandbox: None,
+            guard_level,
         }
     }
 
@@ -82,6 +88,8 @@ impl BashTool {
         session_sandbox: Arc<SessionSandboxManager>,
         session_id: String,
     ) -> Self {
+        let guard_level =
+            super::bash_guard::BashGuardLevel::from_context(run_mode, profile.clone());
         let available_backends = router.registered_backends();
         let target_resolver =
             ExecutionTargetResolver::new(run_mode, profile, available_backends)
@@ -90,6 +98,7 @@ impl BashTool {
             router: Some(router),
             target_resolver: Some(target_resolver),
             session_sandbox: Some(session_sandbox),
+            guard_level,
         }
     }
 
@@ -478,6 +487,13 @@ impl Tool for BashTool {
 
     fn classify_input_risk(&self, params: &serde_json::Value) -> Option<RiskLevel> {
         let command = params.get("command").and_then(|v| v.as_str())?;
+
+        // BashGuard: Host-mode safety checks (containers skip)
+        if let Some(risk) = super::bash_guard::check_command(command, self.guard_level) {
+            return Some(risk);
+        }
+
+        // Fall back to SecurityPolicy assessment
         let policy = crate::security::SecurityPolicy::default();
         let risk = policy.assess_command_risk(command);
         Some(match risk {

@@ -1,6 +1,7 @@
 pub mod prompts;
 pub mod approval;
 pub mod bash;
+pub mod bash_guard;
 pub mod input_risk;
 pub mod bash_classifier;
 pub mod cast_params;
