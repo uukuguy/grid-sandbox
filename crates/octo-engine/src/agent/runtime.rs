@@ -58,7 +58,8 @@ pub struct AgentRuntimeConfig {
     pub working_dir: Option<PathBuf>,
     /// Enable event bus for observability
     pub enable_event_bus: bool,
-    /// Optional directory to scan for declarative YAML agent definitions
+    /// Removed: agents_dir (Phase AY — builtin agents are code-only).
+    #[deprecated(note = "Phase AY: agents_dir removed, builtin agents are code-only")]
     pub agents_dir: Option<std::path::PathBuf>,
     /// Optional OctoRoot for unified path management
     pub octo_root: Option<crate::root::OctoRoot>,
@@ -707,20 +708,8 @@ impl AgentRuntime {
         let builtin_count = crate::agent::builtin_agents::register_builtin_agents(&runtime.catalog);
         tracing::info!(count = builtin_count, "Registered built-in agents");
 
-        // 17. Load declarative YAML agent definitions
-        // Priority: explicit agents_dir config → {working_dir}/agents/ fallback
-        let agents_dir = config.agents_dir.clone().unwrap_or_else(|| {
-            working_dir.join("agents")
-        });
-        let agents_dir = Some(agents_dir);
-        if let Some(ref dir) = agents_dir {
-            let loader = crate::agent::AgentManifestLoader::new(dir);
-            match loader.load_all(&runtime.catalog) {
-                Ok(n) if n > 0 => tracing::info!(count = n, dir = %dir.display(), "Loaded YAML agent manifests (override built-ins)"),
-                Ok(_) => {} // 0 loaded = dir doesn't exist or empty, silent
-                Err(e) => tracing::warn!(error = %e, "Failed to load agent YAML manifests"),
-            }
-        }
+        // 17. YAML agent loading removed (Phase AY).
+        // Builtin agents are code-only. User-defined agents use Playbook skills.
 
         // 18. Register MCP management tools (mcp_install, mcp_remove, mcp_list)
         {

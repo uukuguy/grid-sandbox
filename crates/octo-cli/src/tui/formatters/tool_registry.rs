@@ -141,11 +141,19 @@ static TOOL_REGISTRY: &[ToolDisplayEntry] = &[
     },
     // Agent tools
     ToolDisplayEntry {
-        names: &["spawn_subagent"],
+        names: &["agent", "spawn_subagent"],
         category: ToolCategory::Agent,
-        verb: "Spawn",
-        label: "subagent",
-        primary_arg_keys: &["description"],
+        verb: "Agent",
+        label: "agent",
+        primary_arg_keys: &["task", "description"],
+        result_format: ResultFormat::Generic,
+    },
+    ToolDisplayEntry {
+        names: &["query_agent", "query_subagent"],
+        category: ToolCategory::Agent,
+        verb: "Query",
+        label: "agent",
+        primary_arg_keys: &["session_id"],
         result_format: ResultFormat::Generic,
     },
     // User interaction
@@ -323,8 +331,8 @@ fn format_parts_inner(
         return ("Batch".to_string(), format!("{count} tool calls"));
     }
 
-    // Special case: spawn_subagent
-    if tool_name == "spawn_subagent" {
+    // Special case: agent / spawn_subagent
+    if tool_name == "agent" || tool_name == "spawn_subagent" {
         let verb = args
             .get("agent_type")
             .and_then(|v| v.as_str())

@@ -98,7 +98,7 @@ fn explore_agent() -> AgentManifest {
         system_prompt: Some(EXPLORE_PROMPT.into()),
         model: Some("haiku".into()),
         disallowed_tools: vec![
-            "spawn_subagent".into(),
+            "agent".into(),
             "file_edit".into(),
             "file_write".into(),
             "notebook_edit".into(),
@@ -124,7 +124,7 @@ fn plan_agent() -> AgentManifest {
         goal: Some("Explore codebase and design implementation plans".into()),
         system_prompt: Some(PLAN_PROMPT.into()),
         disallowed_tools: vec![
-            "spawn_subagent".into(),
+            "agent".into(),
             "file_edit".into(),
             "file_write".into(),
             "notebook_edit".into(),
@@ -196,7 +196,7 @@ fn verification_agent() -> AgentManifest {
         goal: Some("Try to break the implementation — verify correctness adversarially".into()),
         system_prompt: Some(VERIFICATION_PROMPT.into()),
         disallowed_tools: vec![
-            "spawn_subagent".into(),
+            "agent".into(),
             "file_edit".into(),
             "file_write".into(),
             "notebook_edit".into(),

@@ -97,6 +97,7 @@ fn make_test_skill(name: &str, mode: ExecutionMode, triggers: Vec<SkillTrigger>)
         execution_mode: mode,
         source_type: octo_types::skill::SkillSourceType::ProjectLocal,
         max_rounds: 0,
+        background: false,
     }
 }
 

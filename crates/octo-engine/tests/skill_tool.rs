@@ -27,6 +27,7 @@ fn test_skill() -> SkillDefinition {
         execution_mode: Default::default(),
         source_type: SkillSourceType::default(),
         max_rounds: 0,
+        background: false,
     }
 }
 

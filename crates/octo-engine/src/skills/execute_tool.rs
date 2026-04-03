@@ -1,23 +1,23 @@
 //! `execute_skill` tool — allows the Agent to execute a skill by name.
 //!
 //! For KNOWLEDGE skills, returns the skill body as guidance text.
-//! For PLAYBOOK skills, spawns a SubAgent with isolated context.
+//! For PLAYBOOK skills, spawns a SubAgent via SubAgentRuntime (Phase AY convergence).
 
 use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use futures_util::StreamExt;
 use serde_json::json;
 use tokio::sync::broadcast;
 
 use octo_types::skill::ExecutionMode;
-use octo_types::{ContentBlock, MessageRole, ToolContext, ToolOutput, ToolSource};
+use octo_types::{ToolContext, ToolOutput, ToolSource};
 
+use crate::agent::entry::AgentManifest;
 use crate::agent::events::AgentEvent;
-use crate::agent::harness::run_agent_loop;
 use crate::agent::loop_config::AgentLoopConfig;
 use crate::agent::subagent::SubAgentManager;
+use crate::agent::subagent_runtime::SubAgentRuntime;
 use crate::providers::Provider;
 use crate::skills::constraint::ToolConstraintEnforcer;
 use crate::skills::registry::SkillRegistry;
@@ -42,8 +42,8 @@ pub struct SubAgentContext {
 /// Tool that executes a skill by name.
 ///
 /// - KNOWLEDGE: returns the skill body as instructions for the agent to follow.
-/// - PLAYBOOK: spawns an isolated SubAgent that follows the skill's instructions
-///   with a constrained tool set.
+/// - PLAYBOOK: spawns an isolated SubAgent via SubAgentRuntime that follows the
+///   skill's instructions with a constrained tool set.
 pub struct ExecuteSkillTool {
     skill_registry: Arc<SkillRegistry>,
     subagent_ctx: Option<SubAgentContext>,
@@ -152,14 +152,16 @@ impl Tool for ExecuteSkillTool {
                 };
                 Ok(ToolOutput::success(output))
             }
-            ExecutionMode::Playbook => {
-                self.execute_playbook(&skill, &request).await
-            }
+            ExecutionMode::Playbook => self.execute_playbook(&skill, &request).await,
         }
     }
 }
 
 impl ExecuteSkillTool {
+    /// Execute a playbook skill via SubAgentRuntime (Phase AY convergence).
+    ///
+    /// Builds an AgentManifest from the skill definition, then delegates to
+    /// SubAgentRuntime for the complete lifecycle (build → run → cleanup).
     async fn execute_playbook(
         &self,
         skill: &octo_types::SkillDefinition,
@@ -174,50 +176,6 @@ impl ExecuteSkillTool {
             }
         };
 
-        // Check recursion depth
-        let child_mgr = match ctx.manager.child() {
-            Ok(mgr) => Arc::new(mgr),
-            Err(e) => {
-                return Ok(ToolOutput::error(format!(
-                    "SubAgent depth limit reached: {}",
-                    e
-                )));
-            }
-        };
-
-        // Check concurrent limit
-        if !ctx.manager.can_spawn().await {
-            return Ok(ToolOutput::error(
-                "Maximum concurrent sub-agents reached",
-            ));
-        }
-
-        // Generate sub-agent ID
-        let subagent_id = format!("skill-{}-{}", skill.name, uuid::Uuid::new_v4());
-
-        // Register in manager
-        if let Err(e) = ctx
-            .manager
-            .register(subagent_id.clone(), format!("Skill: {}", skill.name))
-            .await
-        {
-            return Ok(ToolOutput::error(format!(
-                "Failed to register sub-agent: {}",
-                e
-            )));
-        }
-
-        // Build filtered tool registry based on skill's allowed_tools
-        let tools = if skill.allowed_tools.is_some() {
-            let enforcer =
-                ToolConstraintEnforcer::from_active_skills(&[skill.clone()]);
-            let all_names: Vec<String> = ctx.tools.names();
-            let filtered = enforcer.filter_tools(&all_names);
-            Some(Arc::new(ctx.tools.snapshot_filtered(&filtered)))
-        } else {
-            Some(ctx.tools.clone())
-        };
-
         // Build system prompt from skill body
         let system_prompt = format!(
             "You are executing the '{}' skill.\n\n{}\n\n## Your Task\n{}",
@@ -230,155 +188,82 @@ impl ExecuteSkillTool {
             request
         );
 
-        // Build child config
-        let child_config = AgentLoopConfig {
-            max_iterations: if skill.max_rounds > 0 { skill.max_rounds } else { 30 },
+        // Build filtered tool registry based on skill's allowed_tools
+        let tools = if skill.allowed_tools.is_some() {
+            let enforcer = ToolConstraintEnforcer::from_active_skills(&[skill.clone()]);
+            let all_names: Vec<String> = ctx.tools.names();
+            let filtered = enforcer.filter_tools(&all_names);
+            Some(Arc::new(ctx.tools.snapshot_filtered(&filtered)))
+        } else {
+            Some(ctx.tools.clone())
+        };
+
+        // Build a manifest from skill definition
+        let manifest = AgentManifest {
+            name: format!("skill-{}", skill.name),
+            system_prompt: Some(system_prompt),
+            model: skill.model.clone(),
+            background: skill.background,
+            ..Default::default()
+        };
+
+        // Build parent config for SubAgentRuntime
+        let parent_config = AgentLoopConfig {
+            max_iterations: if skill.max_rounds > 0 {
+                skill.max_rounds
+            } else {
+                30
+            },
             provider: Some(ctx.provider.clone()),
             tools,
             memory: None, // Isolated — no shared memory
             model: ctx.model.clone(),
-            session_id: octo_types::SessionId::from_string(subagent_id.clone()),
             user_id: ctx.user_id.clone(),
             sandbox_id: ctx.sandbox_id.clone(),
             tool_ctx: ctx.tool_ctx.clone(),
-            manifest: Some(crate::agent::entry::AgentManifest {
-                name: format!("skill-{}", skill.name),
-                system_prompt: Some(system_prompt),
-                model: skill.model.clone(),
-                ..Default::default()
-            }),
-            subagent_manager: Some(child_mgr),
             ..AgentLoopConfig::default()
         };
 
-        // Build context messages for the sub-agent
-        let messages = vec![octo_types::ChatMessage::user(request)];
-
-        // Short display name for TUI (e.g. "skill-review" from "skill-review-<uuid>")
-        let display_id = format!("skill-{}", skill.name);
-
-        // AX-D4: Background mode — fire-and-forget, return session_id immediately
-        if skill.background {
-            let mgr = ctx.manager.clone();
-            let sa_id = subagent_id.clone();
-            let skill_name = skill.name.clone();
-            tokio::spawn(async move {
-                let mut stream = run_agent_loop(child_config, messages);
-                let mut final_output = String::new();
-
-                while let Some(event) = stream.next().await {
-                    if let AgentEvent::Completed(result) = event {
-                        final_output = result
-                            .final_messages
-                            .iter()
-                            .rev()
-                            .find(|m| m.role == MessageRole::Assistant)
-                            .and_then(|m| {
-                                m.content.iter().find_map(|c| {
-                                    if let ContentBlock::Text { text } = c {
-                                        Some(text.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                            })
-                            .unwrap_or_default();
-                    }
-                }
-
-                if final_output.is_empty() {
-                    let _ = mgr.fail(&sa_id, "No output produced".into()).await;
-                } else {
-                    let _ = mgr.complete(&sa_id, Some(final_output)).await;
-                }
-                tracing::debug!(skill = %skill_name, id = %sa_id, "Background skill completed");
-            });
-
-            return Ok(ToolOutput::success(format!(
-                "Skill '{}' launched in background. Use query_subagent with session_id '{}' to check status.",
-                skill.name, subagent_id
-            )));
-        }
-
-        // Foreground mode — wait for SubAgent to complete
-        let mut stream = run_agent_loop(child_config, messages);
-        let mut final_output = String::new();
-        let mut iterations_used = 0u32;
-
-        while let Some(event) = stream.next().await {
-            match event {
-                AgentEvent::Completed(result) => {
-                    iterations_used = result.rounds;
-                    final_output = result
-                        .final_messages
-                        .iter()
-                        .rev()
-                        .find(|m| m.role == MessageRole::Assistant)
-                        .and_then(|m| {
-                            m.content.iter().find_map(|c| {
-                                if let ContentBlock::Text { text } = c {
-                                    Some(text.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                        })
-                        .unwrap_or_default();
-                    // Forward completion summary to parent as SubAgentEvent
-                    if let Some(ref sender) = ctx.event_sender {
-                        let _ = sender.send(AgentEvent::SubAgentEvent {
-                            source_id: display_id.clone(),
-                            inner: Box::new(AgentEvent::Completed(result)),
-                        });
-                    }
-                }
-                AgentEvent::Error { message } => {
-                    let _ = ctx.manager.fail(&subagent_id, message.clone()).await;
-                    // Forward error to parent before returning
-                    if let Some(ref sender) = ctx.event_sender {
-                        let _ = sender.send(AgentEvent::SubAgentEvent {
-                            source_id: display_id.clone(),
-                            inner: Box::new(AgentEvent::Error { message: message.clone() }),
-                        });
-                    }
-                    return Ok(ToolOutput::error(format!(
-                        "Skill '{}' execution failed: {}",
-                        skill.name, message
-                    )));
-                }
-                AgentEvent::Done => {
-                    // Sub-agent stream ended — don't forward
-                }
-                other => {
-                    // Wrap and forward streaming events to parent for TUI rendering
-                    if let Some(ref sender) = ctx.event_sender {
-                        let _ = sender.send(AgentEvent::SubAgentEvent {
-                            source_id: display_id.clone(),
-                            inner: Box::new(other),
-                        });
-                    }
-                }
+        // Build SubAgentRuntime
+        let runtime = match SubAgentRuntime::build(
+            request.to_string(),
+            Some(manifest),
+            &parent_config,
+            ctx.manager.clone(),
+            ctx.event_sender.clone(),
+            None,
+        )
+        .await
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                return Ok(ToolOutput::error(format!(
+                    "Cannot spawn skill sub-agent: {e}"
+                )));
             }
-        }
+        };
 
-        if final_output.is_empty() {
-            let _ = ctx
-                .manager
-                .fail(&subagent_id, "No output produced".to_string())
-                .await;
-            Ok(ToolOutput::error(format!(
-                "Skill '{}' produced no output",
-                skill.name
+        if skill.background {
+            // Background: fire-and-forget
+            let session_id = runtime.run_async();
+            Ok(ToolOutput::success(format!(
+                "Skill '{}' launched in background. Use query_agent with session_id '{}' to check status.",
+                skill.name, session_id
             )))
         } else {
-            let _ = ctx
-                .manager
-                .complete(&subagent_id, Some(final_output.clone()))
-                .await;
-            Ok(ToolOutput::success(format!(
-                "## Skill '{}' Result (iterations: {})\n\n{}",
-                skill.name, iterations_used, final_output
-            )))
+            // Foreground: wait for result
+            let result = runtime.run_sync().await?;
+            if result.output.is_empty() {
+                Ok(ToolOutput::error(format!(
+                    "Skill '{}' produced no output",
+                    skill.name
+                )))
+            } else {
+                Ok(ToolOutput::success(format!(
+                    "## Skill '{}' Result (iterations: {})\n\n{}",
+                    skill.name, result.rounds, result.output
+                )))
+            }
         }
     }
 }

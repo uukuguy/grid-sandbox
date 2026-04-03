@@ -309,7 +309,7 @@ impl AgentExecutor {
                                 );
                             }
                         }
-                        // Phase AX: Register SpawnSubAgentTool for direct agent spawning
+                        // Phase AY: Register AgentTool (renamed from SpawnSubAgentTool)
                         {
                             let subagent_mgr = Arc::new(SubAgentManager::new(4, 3));
                             let parent_config = Arc::new(AgentLoopConfig {
@@ -330,21 +330,23 @@ impl AgentExecutor {
                                     working_dir: self.working_dir.clone(),
                                     path_validator: self.path_validator.clone(),
                                 }),
+                                hook_registry: self.hook_registry.clone(),
                                 ..AgentLoopConfig::default()
                             });
-                            let mut spawn_tool = crate::tools::subagent::SpawnSubAgentTool::new(
+                            let mut agent_tool = crate::tools::subagent::AgentTool::new(
                                 subagent_mgr.clone(),
                                 parent_config,
-                            );
+                            )
+                            .with_event_sender(self.broadcast_tx.clone());
                             if let Some(ref cat) = self.catalog {
-                                spawn_tool = spawn_tool.with_catalog(cat.clone());
+                                agent_tool = agent_tool.with_catalog(cat.clone());
                             }
                             if let Some(ref sr) = self.skill_registry {
-                                spawn_tool = spawn_tool.with_skill_registry(sr.clone());
+                                agent_tool = agent_tool.with_skill_registry(sr.clone());
                             }
-                            registry.register(spawn_tool);
+                            registry.register(agent_tool);
                             registry.register(
-                                crate::tools::subagent::QuerySubAgentTool::new(subagent_mgr),
+                                crate::tools::subagent::QueryAgentTool::new(subagent_mgr),
                             );
                         }
 
