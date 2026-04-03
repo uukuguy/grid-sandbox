@@ -41,7 +41,7 @@ pub mod yaml_def;
 pub use autonomous::{AutonomousConfig, AutonomousControl, AutonomousState, AutonomousStatus, AutonomousTrigger};
 pub use autonomous_scheduler::AutonomousScheduler;
 pub use autonomous_trigger::{
-    ChannelTriggerSource, PollingTriggerSource, TriggerEvent, TriggerListener, TriggerSource,
+    ChannelTriggerSource, CronTriggerSource, PollingTriggerSource, TriggerEvent, TriggerListener, TriggerSource,
 };
 pub use cancellation::{CancellationToken, ChildCancellationToken};
 pub use capability::AgentCapability;

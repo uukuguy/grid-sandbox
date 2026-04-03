@@ -1444,6 +1444,23 @@ impl AgentRuntime {
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
     ) -> Result<AgentExecutorHandle, AgentError> {
+        self.start_session_with_autonomous(session_id, user_id, sandbox_id, initial_history, agent_id, None).await
+    }
+
+    /// Start a new session with optional autonomous mode (AU-D1).
+    ///
+    /// When `autonomous` is `Some`, the session is registered with
+    /// `AutonomousScheduler` and the executor receives the autonomous config
+    /// for harness tick-loop integration.
+    pub async fn start_session_with_autonomous(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+        autonomous: Option<super::autonomous::AutonomousConfig>,
+    ) -> Result<AgentExecutorHandle, AgentError> {
         // Check if session already exists
         if let Some(entry) = self.sessions.get(&session_id) {
             return Ok(entry.handle.clone());
@@ -1490,7 +1507,18 @@ impl AgentRuntime {
             },
         );
 
-        info!(session_id = %session_id.as_str(), "Session started (registered in multi-session registry)");
+        // AU-D1: Register with AutonomousScheduler if autonomous mode enabled
+        if let Some(auto_config) = autonomous {
+            let auto_state = super::autonomous::AutonomousState::new(
+                session_id.clone(),
+                auto_config,
+            );
+            self.autonomous_scheduler.register(auto_state);
+            info!(session_id = %session_id.as_str(), "Session started with autonomous mode");
+        } else {
+            info!(session_id = %session_id.as_str(), "Session started (registered in multi-session registry)");
+        }
+
         Ok(handle)
     }
 

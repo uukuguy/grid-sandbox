@@ -129,6 +129,226 @@ impl TriggerSource for PollingTriggerSource {
 }
 
 // ---------------------------------------------------------------------------
+// AU-D3: Redis Streams trigger source (feature-gated)
+// ---------------------------------------------------------------------------
+
+/// Redis Streams-based trigger source for enterprise MQ integration.
+///
+/// Reads trigger events from a Redis Stream using XREAD with consumer groups.
+/// Feature-gated behind `trigger-redis` to avoid mandatory redis dependency.
+///
+/// Usage:
+/// ```ignore
+/// let source = RedisStreamTriggerSource::new(
+///     "redis://localhost:6379",
+///     "octo:autonomous:triggers",
+///     "octo-consumer-group",
+///     "consumer-1",
+/// ).await?;
+/// listener.register(Box::new(source));
+/// ```
+#[cfg(feature = "trigger-redis")]
+pub struct RedisStreamTriggerSource {
+    name: String,
+    client: redis::Client,
+    stream_key: String,
+    group: String,
+    consumer: String,
+}
+
+#[cfg(feature = "trigger-redis")]
+impl RedisStreamTriggerSource {
+    pub async fn new(
+        redis_url: &str,
+        stream_key: &str,
+        group: &str,
+        consumer: &str,
+    ) -> anyhow::Result<Self> {
+        let client = redis::Client::open(redis_url)?;
+
+        // Ensure consumer group exists (XGROUP CREATE, ignore if already exists)
+        let mut conn = client.get_multiplexed_async_connection().await?;
+        let _: Result<(), _> = redis::cmd("XGROUP")
+            .arg("CREATE")
+            .arg(stream_key)
+            .arg(group)
+            .arg("0")
+            .arg("MKSTREAM")
+            .query_async(&mut conn)
+            .await;
+
+        Ok(Self {
+            name: format!("redis-stream:{}", stream_key),
+            client,
+            stream_key: stream_key.to_string(),
+            group: group.to_string(),
+            consumer: consumer.to_string(),
+        })
+    }
+}
+
+#[cfg(feature = "trigger-redis")]
+#[async_trait]
+impl TriggerSource for RedisStreamTriggerSource {
+    async fn next_trigger(&mut self) -> anyhow::Result<TriggerEvent> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+
+        loop {
+            // XREADGROUP GROUP <group> <consumer> BLOCK 5000 COUNT 1 STREAMS <key> >
+            let result: redis::RedisResult<redis::Value> = redis::cmd("XREADGROUP")
+                .arg("GROUP")
+                .arg(&self.group)
+                .arg(&self.consumer)
+                .arg("BLOCK")
+                .arg(5000_u64) // 5s block timeout
+                .arg("COUNT")
+                .arg(1_u64)
+                .arg("STREAMS")
+                .arg(&self.stream_key)
+                .arg(">")
+                .query_async(&mut conn)
+                .await;
+
+            match result {
+                Ok(redis::Value::Array(streams)) if !streams.is_empty() => {
+                    // Parse the Redis Stream entry into a TriggerEvent
+                    if let Some(payload_str) = extract_stream_payload(&streams) {
+                        let event: TriggerEvent = serde_json::from_str(&payload_str)
+                            .unwrap_or(TriggerEvent {
+                                session_id: None,
+                                config_override: None,
+                                payload: serde_json::json!({ "raw": payload_str }),
+                            });
+                        return Ok(event);
+                    }
+                }
+                Ok(redis::Value::Nil) | Ok(_) => {
+                    // Timeout or empty — continue polling
+                    continue;
+                }
+                Err(e) => {
+                    warn!(error = %e, "Redis XREADGROUP failed, retrying...");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Extract the payload field from a Redis Stream XREADGROUP response.
+#[cfg(feature = "trigger-redis")]
+fn extract_stream_payload(streams: &[redis::Value]) -> Option<String> {
+    // Response structure: [[stream_name, [[entry_id, [field, value, ...]]]]]
+    use redis::Value;
+    if let Some(Value::Array(stream_data)) = streams.first() {
+        if let Some(Value::Array(entries)) = stream_data.get(1) {
+            if let Some(Value::Array(entry)) = entries.first() {
+                if let Some(Value::Array(fields)) = entry.get(1) {
+                    // Find "payload" field
+                    for chunk in fields.chunks(2) {
+                        if let [Value::BulkString(key), Value::BulkString(val)] = chunk {
+                            if key == b"payload" {
+                                return String::from_utf8(val.clone()).ok();
+                            }
+                        }
+                    }
+                    // Fallback: use first value
+                    if let Some(Value::BulkString(val)) = fields.get(1) {
+                        return String::from_utf8(val.clone()).ok();
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// AU-D2: Cron-based trigger source
+// ---------------------------------------------------------------------------
+
+/// Cron-based trigger source that fires at specified intervals.
+///
+/// Uses a simple interval approach rather than full cron parsing to avoid
+/// adding a cron-expression-parser dependency. For full cron support,
+/// wrap the existing `scheduler/` module's CronScheduler.
+pub struct CronTriggerSource {
+    name: String,
+    interval: Duration,
+    config: AutonomousConfig,
+}
+
+impl CronTriggerSource {
+    /// Create a cron trigger that fires at the given interval with the specified config.
+    pub fn new(name: &str, interval: Duration, config: AutonomousConfig) -> Self {
+        Self {
+            name: name.to_string(),
+            interval,
+            config,
+        }
+    }
+
+    /// Create from a cron-like interval string (e.g., "5m", "1h", "30s").
+    pub fn from_interval_str(name: &str, interval_str: &str, config: AutonomousConfig) -> anyhow::Result<Self> {
+        let interval = parse_duration_str(interval_str)?;
+        Ok(Self::new(name, interval, config))
+    }
+}
+
+/// Parse a simple duration string: "30s", "5m", "1h", "2h30m".
+fn parse_duration_str(s: &str) -> anyhow::Result<Duration> {
+    let s = s.trim().to_lowercase();
+    let mut total_secs: u64 = 0;
+    let mut num_buf = String::new();
+
+    for ch in s.chars() {
+        if ch.is_ascii_digit() {
+            num_buf.push(ch);
+        } else {
+            let n: u64 = num_buf.parse().unwrap_or(0);
+            num_buf.clear();
+            match ch {
+                's' => total_secs += n,
+                'm' => total_secs += n * 60,
+                'h' => total_secs += n * 3600,
+                'd' => total_secs += n * 86400,
+                _ => {}
+            }
+        }
+    }
+    // Handle bare number (treat as seconds)
+    if !num_buf.is_empty() {
+        total_secs += num_buf.parse::<u64>().unwrap_or(0);
+    }
+
+    if total_secs == 0 {
+        anyhow::bail!("Invalid duration: {}", s);
+    }
+    Ok(Duration::from_secs(total_secs))
+}
+
+#[async_trait]
+impl TriggerSource for CronTriggerSource {
+    async fn next_trigger(&mut self) -> anyhow::Result<TriggerEvent> {
+        tokio::time::sleep(self.interval).await;
+        info!(name = %self.name, interval_secs = self.interval.as_secs(), "CronTrigger: firing");
+        Ok(TriggerEvent {
+            session_id: None, // create new session each time
+            config_override: Some(self.config.clone()),
+            payload: serde_json::json!({ "trigger": "cron", "source": self.name }),
+        })
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TriggerListener — unified background listener
 // ---------------------------------------------------------------------------
 
@@ -249,6 +469,38 @@ mod tests {
         let (source, _tx) = ChannelTriggerSource::new("s1");
         listener.register(Box::new(source));
         assert_eq!(listener.source_count(), 1);
+    }
+
+    #[test]
+    fn test_parse_duration_str() {
+        assert_eq!(super::parse_duration_str("30s").unwrap(), Duration::from_secs(30));
+        assert_eq!(super::parse_duration_str("5m").unwrap(), Duration::from_secs(300));
+        assert_eq!(super::parse_duration_str("1h").unwrap(), Duration::from_secs(3600));
+        assert_eq!(super::parse_duration_str("2h30m").unwrap(), Duration::from_secs(9000));
+        assert_eq!(super::parse_duration_str("1d").unwrap(), Duration::from_secs(86400));
+        assert!(super::parse_duration_str("").is_err());
+        assert!(super::parse_duration_str("abc").is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cron_trigger_fires() {
+        let config = super::super::autonomous::AutonomousConfig {
+            enabled: true,
+            max_autonomous_rounds: 10,
+            ..Default::default()
+        };
+        let mut source = super::CronTriggerSource::new("test-cron", Duration::from_millis(10), config);
+        let event = source.next_trigger().await.unwrap();
+        assert_eq!(event.payload["trigger"], "cron");
+        assert!(event.config_override.is_some());
+        assert!(event.session_id.is_none()); // creates new session each time
+    }
+
+    #[test]
+    fn test_cron_trigger_from_interval_str() {
+        let config = super::super::autonomous::AutonomousConfig::default();
+        let source = super::CronTriggerSource::from_interval_str("every-5m", "5m", config).unwrap();
+        assert_eq!(source.interval, Duration::from_secs(300));
     }
 
     #[tokio::test]

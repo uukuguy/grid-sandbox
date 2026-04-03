@@ -1,4 +1,4 @@
-//! AR-T5 + AU-G5: Webhook trigger endpoint for autonomous agent sessions.
+//! AR-T5 + AU-G5 + AU-D1: Webhook trigger endpoint for autonomous agent sessions.
 
 use std::sync::Arc;
 
@@ -6,8 +6,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use octo_engine::agent::{AutonomousConfig, AutonomousState};
-use octo_types::SessionId;
+use octo_engine::agent::AutonomousConfig;
+use octo_types::{SandboxId, SessionId, UserId};
 use serde::Deserialize;
 
 use crate::state::AppState;
@@ -23,6 +23,9 @@ pub struct TriggerRequest {
     /// Override for idle sleep duration in seconds.
     #[serde(default)]
     pub idle_sleep_secs: Option<u64>,
+    /// Initial prompt to send to the agent.
+    #[serde(default)]
+    pub prompt: Option<String>,
     /// Arbitrary payload passed to the agent.
     #[serde(default)]
     pub payload: serde_json::Value,
@@ -30,9 +33,8 @@ pub struct TriggerRequest {
 
 /// POST /api/v1/autonomous/trigger — Webhook endpoint that triggers autonomous mode.
 ///
-/// Registers the session with the AutonomousScheduler and returns configuration details.
-/// Full session creation + executor startup is deferred to AU-D1 (requires runtime.start_session
-/// to accept AutonomousConfig).
+/// Creates a new session with autonomous config, registers with AutonomousScheduler,
+/// and optionally sends an initial prompt. Returns session details for monitoring.
 pub async fn trigger_autonomous(
     State(state): State<Arc<AppState>>,
     Json(body): Json<TriggerRequest>,
@@ -41,6 +43,8 @@ pub async fn trigger_autonomous(
         .session_id
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let session_id = SessionId::from_string(&session_id_str);
+    let user_id = UserId::from_string("webhook");
+    let sandbox_id = SandboxId::new();
 
     let config = AutonomousConfig {
         enabled: true,
@@ -49,27 +53,44 @@ pub async fn trigger_autonomous(
         ..Default::default()
     };
 
-    // Register with AutonomousScheduler
-    let auto_state = AutonomousState::new(session_id.clone(), config.clone());
-    state
+    // AU-D1: Start session with autonomous config via runtime
+    let initial_history = if let Some(ref prompt) = body.prompt {
+        vec![octo_types::ChatMessage::user(prompt)]
+    } else {
+        vec![]
+    };
+
+    match state
         .agent_supervisor
-        .autonomous_scheduler()
-        .register(auto_state);
-
-    // TODO(AU-D1): Actually start a session via runtime.start_session() with autonomous config.
-    // For now, registration is complete. The session can be started via the standard session
-    // creation API, and the autonomous config will be picked up from the scheduler.
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "session_id": session_id_str,
-            "status": "registered",
-            "autonomous": {
-                "enabled": true,
-                "max_rounds": config.max_autonomous_rounds,
-                "idle_sleep_secs": config.idle_sleep_secs,
-            },
-        })),
-    )
+        .start_session_with_autonomous(
+            session_id.clone(),
+            user_id,
+            sandbox_id,
+            initial_history,
+            None,
+            Some(config.clone()),
+        )
+        .await
+    {
+        Ok(_handle) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "session_id": session_id_str,
+                "status": "started",
+                "autonomous": {
+                    "enabled": true,
+                    "max_rounds": config.max_autonomous_rounds,
+                    "idle_sleep_secs": config.idle_sleep_secs,
+                },
+            })),
+        ),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "session_id": session_id_str,
+                "status": "failed",
+                "error": e.to_string(),
+            })),
+        ),
+    }
 }
