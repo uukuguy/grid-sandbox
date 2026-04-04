@@ -237,10 +237,10 @@ mod tests {
 
     /// Default theme should be Cyan.
     #[test]
-    fn default_is_indigo() {
+    fn default_is_coral() {
         let theme = TuiTheme::default();
-        assert!(matches!(theme.name, ThemeName::Indigo));
-        assert_eq!(theme.accent, Color::Rgb(99, 102, 241));
+        assert!(matches!(theme.name, ThemeName::Coral));
+        assert_eq!(theme.accent, Color::Rgb(249, 115, 22));
     }
 
     /// Sunset should have a secondary accent; others should not.

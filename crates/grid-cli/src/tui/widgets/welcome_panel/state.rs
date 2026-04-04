@@ -15,7 +15,7 @@ pub struct WelcomePanelState {
     pub is_fading: bool,
     /// Set to `true` once fade completes; panel should no longer render.
     pub fade_complete: bool,
-    /// Accent hue derived from TuiTheme (0..360°). Default: 235° (Indigo).
+    /// Accent hue derived from TuiTheme (0..360°). Default: 25° (Coral).
     pub(super) accent_hue: f64,
 }
 
@@ -27,7 +27,7 @@ impl WelcomePanelState {
             fade_progress: 1.0,
             is_fading: false,
             fade_complete: false,
-            accent_hue: 235.0, // Indigo default
+            accent_hue: 25.0, // Coral default (matches 🦑)
         }
     }
 
@@ -39,19 +39,20 @@ impl WelcomePanelState {
     /// Advance animations by one tick (~60ms).
     pub fn tick(&mut self, _terminal_width: u16, _terminal_height: u16) {
         if self.is_fading {
-            self.fade_progress -= 0.1;
-            if self.fade_progress <= 0.0 {
+            // Ease-out fade: fast start, gentle finish (cubic ease-out)
+            self.fade_progress -= 0.08 * self.fade_progress.max(0.15);
+            if self.fade_progress <= 0.01 {
                 self.fade_progress = 0.0;
                 self.fade_complete = true;
             }
             return;
         }
 
-        // Gradient rotation (slower, more elegant sweep)
-        self.gradient_offset = (self.gradient_offset + 3) % 360;
+        // Gradient rotation (~4.3s per orbit at 60ms tick)
+        self.gradient_offset = (self.gradient_offset + 5) % 360;
 
-        // Breathing phase: full cycle in ~67 ticks (~4s at 60ms)
-        self.breathe_phase += std::f64::consts::TAU / 67.0;
+        // Breathing phase: full cycle in ~133 ticks (~8s at 60ms)
+        self.breathe_phase += std::f64::consts::TAU / 133.0;
         if self.breathe_phase >= std::f64::consts::TAU {
             self.breathe_phase -= std::f64::consts::TAU;
         }
@@ -78,9 +79,9 @@ mod tests {
         let mut state = WelcomePanelState::new();
         assert_eq!(state.gradient_offset, 0);
         state.tick(80, 24);
-        assert_eq!(state.gradient_offset, 3);
+        assert_eq!(state.gradient_offset, 5);
         state.tick(80, 24);
-        assert_eq!(state.gradient_offset, 6);
+        assert_eq!(state.gradient_offset, 10);
     }
 
     #[test]
@@ -95,17 +96,17 @@ mod tests {
     fn test_fade_completes() {
         let mut state = WelcomePanelState::new();
         state.start_fade();
-        for _ in 0..10 {
+        for _ in 0..120 {
             state.tick(80, 24);
         }
-        assert!(state.fade_complete);
-        assert!(state.fade_progress <= 0.0);
+        assert!(state.fade_complete, "fade should complete, progress={}", state.fade_progress);
+        assert!(state.fade_progress <= 0.01);
     }
 
     #[test]
     fn test_accent_hue_from_theme() {
         let mut state = WelcomePanelState::new();
-        assert!((state.accent_hue - 235.0).abs() < 0.01);
+        assert!((state.accent_hue - 25.0).abs() < 0.01);
         // Set to cyan-ish (6, 182, 212)
         state.set_accent_hue(6, 182, 212);
         assert!(state.accent_hue > 180.0 && state.accent_hue < 200.0,

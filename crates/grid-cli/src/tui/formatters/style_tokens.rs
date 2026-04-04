@@ -6,7 +6,7 @@
 use ratatui::style::Color;
 
 // Markdown heading colors — aligned with TuiTheme::md_*
-pub const HEADING_1: Color = Color::Rgb(177, 180, 248);
+pub const HEADING_1: Color = Color::Rgb(252, 185, 138);
 pub const CODE_FG: Color = Color::Rgb(150, 190, 160);
 pub const CODE_BG: Color = Color::Rgb(17, 17, 24);
 pub const BULLET: Color = Color::Rgb(138, 143, 152);
@@ -14,7 +14,7 @@ pub const BOLD_FG: Color = Color::Rgb(237, 237, 239);
 
 // Core palette — aligned with TuiTheme
 pub const PRIMARY: Color = Color::Rgb(237, 237, 239);
-pub const ACCENT: Color = Color::Rgb(99, 102, 241);
+pub const ACCENT: Color = Color::Rgb(249, 115, 22);
 pub const SUBTLE: Color = Color::Rgb(138, 143, 152);
 pub const SUCCESS: Color = Color::Rgb(34, 197, 94);
 pub const ERROR: Color = Color::Rgb(239, 68, 68);
@@ -23,7 +23,7 @@ pub const BLUE_BRIGHT: Color = Color::Rgb(74, 158, 255);
 pub const BLUE_PATH: Color = Color::Rgb(88, 166, 255);
 pub const GOLD: Color = Color::Rgb(245, 158, 11);
 pub const BORDER: Color = Color::Rgb(38, 38, 46);
-pub const BORDER_ACCENT: Color = Color::Rgb(99, 102, 241);
+pub const BORDER_ACCENT: Color = Color::Rgb(249, 115, 22);
 
 // Semantic colors — aligned with TuiTheme
 pub const GREY: Color = Color::Rgb(78, 81, 88);

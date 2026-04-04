@@ -297,12 +297,23 @@ impl Widget for StatusBarWidget<'_> {
         if area.height >= 2 {
             let mut spans: Vec<Span> = Vec::new();
 
-            // Brand
+            // Brand — 75% accent + 25% grey, no bold
+            let brand_soft = {
+                match self.brand_color {
+                    Color::Rgb(r, g, b) => {
+                        let gr = 140u8;
+                        Color::Rgb(
+                            ((r as u16 * 3 + gr as u16) / 4) as u8,
+                            ((g as u16 * 3 + gr as u16) / 4) as u8,
+                            ((b as u16 * 3 + gr as u16) / 4) as u8,
+                        )
+                    }
+                    other => other,
+                }
+            };
             spans.push(Span::styled(
-                " \u{25C6} Grid",
-                Style::default()
-                    .fg(self.brand_color)
-                    .add_modifier(Modifier::BOLD),
+                " \u{1F991} Grid",
+                Style::default().fg(brand_soft).add_modifier(Modifier::BOLD),
             ));
             spans.push(sep.clone());
 
@@ -369,7 +380,7 @@ impl Widget for StatusBarWidget<'_> {
                 spans.push(sep.clone());
             }
 
-            // Context remaining % with 8-segment progress bar ━━━━━───
+            // Context remaining % with 10-segment thin progress bar ▪▪▪▪▪·····
             let context_left = (100.0 - self.context_usage_pct).max(0.0);
             let pct_color = if context_left > 50.0 {
                 style_tokens::SUCCESS
@@ -379,12 +390,17 @@ impl Widget for StatusBarWidget<'_> {
                 style_tokens::ERROR
             };
 
-            let filled = ((context_left / 100.0) * 8.0).round() as usize;
-            let bar: String = "\u{2501}".repeat(filled)
-                + &"\u{2500}".repeat(8usize.saturating_sub(filled));
+            let segments = 10usize;
+            let filled = ((context_left / 100.0) * segments as f64).round() as usize;
+            let empty = segments.saturating_sub(filled);
+            // ▪ (U+25AA small black square) for filled, · (U+00B7 middle dot) for empty
             spans.push(Span::styled(
-                bar,
+                "\u{25aa}".repeat(filled),
                 Style::default().fg(pct_color),
+            ));
+            spans.push(Span::styled(
+                "\u{00b7}".repeat(empty),
+                Style::default().fg(style_tokens::GREY),
             ));
             spans.push(Span::styled(
                 format!(" {context_left:.0}%"),
@@ -674,7 +690,7 @@ mod tests {
 
         let content: String = buf.content().iter().map(|c| c.symbol()).collect();
         assert!(content.contains("60%"), "Should show context remaining percent");
-        assert!(content.contains("\u{2501}"), "Should contain filled bar segment ━");
-        assert!(content.contains("\u{2500}"), "Should contain empty bar segment ─");
+        assert!(content.contains("\u{25aa}"), "Should contain filled bar segment ▪");
+        assert!(content.contains("\u{00b7}"), "Should contain empty bar segment ·");
     }
 }

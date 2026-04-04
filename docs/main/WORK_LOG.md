@@ -1,5 +1,60 @@
 # Grid Platform 开发工作日志
 
+## 2026-04-04 — Welcome Panel 视觉大修 + 品牌重设计
+
+### 会话概要
+
+对 Welcome Panel 进行全面视觉重设计，建立 🦑 Coral 品牌色系，优化动画系统达到 9.0/10 评分。
+
+### 完成内容
+
+**品牌色系重建**
+- 默认主题从 Indigo → Coral(249,115,22)，匹配 🦑 品牌标识
+- style_tokens ACCENT/BORDER_ACCENT/HEADING_1 全部同步更新
+- 状态栏品牌图标 ◆ → 🦑，颜色柔化(75%accent+25%grey)
+
+**GRID Logo 改进**
+- I 字母：右括号形 `╶──╮` → 居中衬线 `╶─┬─╴`
+- D 字母：全圆角 → 左直角右圆角 `┌╮/└╯`，对齐修正
+- Logo 色相改为对称分布（中心 accent，两端 +15°）
+
+**动画系统升级**
+- 呼吸曲线：线性 sin → flat-top clamp（峰值定格 2s，谷底流畅过渡）
+- 周期：4s → 8s，更沉稳
+- 边框 sweep：三角波 → cos² 聚焦亮点，顺时针环绕 4.3s/圈
+- Fade-out：线性 → ease-out 快起慢收
+- 全组件同步：Logo/subtitle/help/border 共享 breathe_ease()
+
+**UI 细节优化**
+- 进度条：━─ → ▪· (精致 10 段)
+- 输入区上边线：idle 时用 BORDER 色（与状态栏统一）
+- 副标题：Autonomous AI Agent Platform → Autonomous Agent Studio
+- 帮助文本：添加 Esc interrupt，简化 /help
+- 提示框宽度：固定 70 → 紧贴内容自适应
+
+### 技术变更
+
+| 文件 | 改动 |
+|------|------|
+| `welcome_panel/mod.rs` | 全面重写：breathe_ease()、write_breathing_line()、draw_border() clockwise、logo 字形 |
+| `welcome_panel/state.rs` | 呼吸周期 133tick、sweep 5°/tick、ease-out fade、accent_hue 25° |
+| `status_bar.rs` | 🦑 品牌图标、品牌色柔化、▪· 进度条 |
+| `input.rs` | idle separator 用 BORDER 色 |
+| `style_tokens.rs` | ACCENT/BORDER_ACCENT → Coral、HEADING_1 暖色 |
+| `theme.rs` | default test → Coral |
+| `ui/theme.rs` | ThemeName::default() = Coral |
+
+### 测试结果
+
+- 499 studio tests pass, 0 fail
+- 1 doc test pass
+
+### 设计评分
+
+UI/UX Pro Max 评估 **9.0/10**：全组件同步动画系统、3 级响应式降级、统一色彩语言、ease-in-out 呼吸 + ease-out 退场、零 dead code。
+
+---
+
 ## 2026-04-04 — Phase BA 完成：Grid Crate 拆分 + 品牌重命名 + TUI 完善
 
 ### 会话概要

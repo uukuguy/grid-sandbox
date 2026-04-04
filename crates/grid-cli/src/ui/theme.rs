@@ -13,8 +13,7 @@ pub enum ThemeName {
     Sgcc,
     /// Dodge blue
     Blue,
-    /// Deep indigo (recommended)
-    #[default]
+    /// Deep indigo
     Indigo,
     /// Violet
     Violet,
@@ -22,7 +21,8 @@ pub enum ThemeName {
     Emerald,
     /// Amber gold
     Amber,
-    /// Coral orange
+    /// Coral orange (default — matches 🦑 brand)
+    #[default]
     Coral,
     /// Rose red
     Rose,

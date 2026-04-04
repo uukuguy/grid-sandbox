@@ -121,13 +121,13 @@ impl<'a> InputWidget<'a> {
         Some((x, y))
     }
 
-    /// Get the accent color and optional mode label based on current mode.
+    /// Get the separator color and optional mode label based on current mode.
     fn mode_style(&self) -> (ratatui::style::Color, &'static str) {
         match self.mode {
             "Streaming" => (style_tokens::SUCCESS, "\u{25B8} Streaming"),
             "Thinking" => (self.accent_color, "\u{25E6} Thinking"),
             "PLAN" => (style_tokens::SUCCESS, "Plan"),
-            _ => (self.accent_color, ""),  // no label when idle
+            _ => (style_tokens::BORDER, ""),  // idle: subtle border, same as status bar top line
         }
     }
 
