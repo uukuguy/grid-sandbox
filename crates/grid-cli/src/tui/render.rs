@@ -87,7 +87,7 @@ pub fn render(state: &mut TuiState, frame: &mut Frame) {
 
     // Approval dialog (highest priority overlay)
     if let Some(ref approval) = state.pending_approval {
-        render_approval_dialog(approval, frame, area);
+        render_approval_dialog(approval, frame, area, &state.theme);
     }
 }
 
@@ -252,11 +252,12 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
     // Clear background
     frame.render_widget(Clear, popup_area);
 
+    let theme = &state.theme;
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+        .border_style(Style::default().fg(theme.border))
         .title(" Completions ")
-        .title_style(Style::default().fg(Color::Cyan));
+        .title_style(Style::default().fg(theme.accent));
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
@@ -276,16 +277,16 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
         let row = inner.y + vi as u16;
         let style = if *selected {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
+                .fg(theme.surface)
+                .bg(theme.accent)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White)
+            Style::default().fg(theme.text)
         };
         let desc_style = if *selected {
-            Style::default().fg(Color::Black).bg(Color::Cyan)
+            Style::default().fg(theme.surface).bg(theme.accent)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme.text_secondary)
         };
 
         let label_width = label.len().min(inner.width as usize / 2);
@@ -305,17 +306,18 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
 }
 
 /// Render the tool approval dialog as a centered popup with enhanced risk UI.
-fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: Rect) {
+fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: Rect, theme: &crate::tui::theme::TuiTheme) {
     // E-14: Dynamic height — taller if we have args preview
     let has_args = approval.args_preview.is_some();
     let popup_height = if has_args { 14 } else { 10 };
     let popup = centered_rect(70, popup_height, area);
     frame.render_widget(Clear, popup);
 
+    // Risk colors: semantic meaning preserved, mapped through theme where appropriate
     let (risk_color, risk_label) = match approval.risk_level {
-        grid_types::tool::RiskLevel::ReadOnly => (Color::Green, "Low Risk (Read-Only)"),
+        grid_types::tool::RiskLevel::ReadOnly => (theme.success, "Low Risk (Read-Only)"),
         grid_types::tool::RiskLevel::LowRisk => (Color::Yellow, "Low Risk"),
-        grid_types::tool::RiskLevel::HighRisk => (Color::Red, "High Risk"),
+        grid_types::tool::RiskLevel::HighRisk => (theme.error, "High Risk"),
         grid_types::tool::RiskLevel::Destructive => (Color::LightRed, "Destructive"),
     };
 
@@ -341,10 +343,10 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
                 risk_label.to_string(),
                 Style::default().fg(risk_color).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!(" {} ", middot), Style::default().fg(Color::DarkGray)),
+            Span::styled(format!(" {} ", middot), Style::default().fg(theme.text_faint)),
             Span::styled(
                 format!("tool_id: {}", &approval.tool_id[..approval.tool_id.len().min(16)]),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_faint),
             ),
         ]),
     ];
@@ -363,13 +365,13 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
             let prefix = if i == 0 { "\u{25B8} " } else { "  " };
             text.push(Line::from(Span::styled(
                 format!("{}{}", prefix, display),
-                Style::default().fg(Color::Rgb(120, 130, 150)),
+                Style::default().fg(theme.text_secondary),
             )));
         }
         if args.lines().count() > 3 {
             text.push(Line::from(Span::styled(
                 format!("  \u{2026} ({} more lines)", args.lines().count() - 3),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme.text_faint),
             )));
         }
     }
@@ -377,13 +379,13 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
     text.push(Line::from(""));
     // Keybinding hints (YNA)
     text.push(Line::from(vec![
-        Span::styled("[Y] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled("[Y] ", Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
         Span::raw("Allow"),
-        Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
-        Span::styled("[N] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {}  ", middot), Style::default().fg(theme.text_faint)),
+        Span::styled("[N] ", Style::default().fg(theme.error).add_modifier(Modifier::BOLD)),
         Span::raw("Deny"),
-        Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
-        Span::styled("[A] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {}  ", middot), Style::default().fg(theme.text_faint)),
+        Span::styled("[A] ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         Span::raw("Allow session"),
     ]));
 
@@ -393,6 +395,7 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
 
 /// Render the model selector popup (Meta+P).
 fn render_model_selector(state: &TuiState, frame: &mut Frame, area: Rect) {
+    let theme = &state.theme;
     let models = &state.model_selector.models;
     let popup_height = (models.len() as u16 + 2).min(area.height); // +2 for border
     let popup_width = 35u16.min(area.width);
@@ -412,9 +415,9 @@ fn render_model_selector(state: &TuiState, frame: &mut Frame, area: Rect) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
+        .border_style(Style::default().fg(theme.accent))
         .title(" Select Model ")
-        .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        .title_style(Style::default().fg(theme.accent).add_modifier(Modifier::BOLD));
     let inner = block.inner(popup_area);
     frame.render_widget(block, popup_area);
 
@@ -434,11 +437,11 @@ fn render_model_selector(state: &TuiState, frame: &mut Frame, area: Rect) {
 
         let style = if is_selected {
             Style::default()
-                .fg(Color::Black)
-                .bg(Color::Cyan)
+                .fg(theme.surface)
+                .bg(theme.accent)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::White)
+            Style::default().fg(theme.text)
         };
 
         let line = Line::from(vec![

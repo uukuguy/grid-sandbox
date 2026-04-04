@@ -249,6 +249,10 @@ pub struct TuiState {
     /// Vim editing state.
     pub vim: super::widgets::figures::VimState,
 
+    // ── Theme ──
+    /// Active TUI theme (injected for all widgets to access).
+    pub theme: crate::tui::theme::TuiTheme,
+
     // ── Model selector (Meta+P, E-10) ──
     /// Model selector popup state.
     pub model_selector: super::widgets::figures::ModelSelectorState,
@@ -373,6 +377,7 @@ impl TuiState {
             history_search: super::widgets::figures::HistorySearchState::default(),
             permission_mode: super::widgets::figures::PermissionMode::default(),
             vim: super::widgets::figures::VimState::default(),
+            theme: crate::tui::theme::TuiTheme::default(),
             model_selector: super::widgets::figures::ModelSelectorState::default(),
             sub_sessions: Vec::new(),
         }

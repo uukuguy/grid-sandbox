@@ -29,12 +29,24 @@ pub struct TuiTheme {
     pub info: Color,
     pub muted: Color,
 
-    // -- Surface colors (dark terminal background) --
+    // -- Surface colors (4-layer depth system from GRID_UI_UX_DESIGN §3.1) --
     pub surface: Color,
-    pub surface_highlight: Color,
+    pub surface_1: Color,
+    pub surface_2: Color,
+    pub surface_3: Color,
     pub border: Color,
+
+    // -- Text (3-layer) --
     pub text: Color,
     pub text_secondary: Color,
+    pub text_faint: Color,
+
+    // -- Markdown rendering (derived from accent) --
+    pub md_heading: Color,
+    pub md_code_fg: Color,
+    pub md_code_bg: Color,
+    pub md_bold: Color,
+    pub md_bullet: Color,
 
     /// Source theme name
     pub name: ThemeName,
@@ -79,14 +91,22 @@ impl TuiTheme {
             accent2,
             success: Color::Rgb(34, 197, 94),
             error: Color::Rgb(239, 68, 68),
-            warning: Color::Rgb(234, 179, 8),
+            warning: Color::Rgb(245, 158, 11),
             info: Color::Rgb(56, 189, 248),
             muted: Color::Rgb(100, 116, 139),
-            surface: Color::Rgb(15, 23, 42),
-            surface_highlight: Color::Rgb(30, 41, 59),
-            border: Color::Rgb(51, 65, 85),
-            text: Color::Rgb(226, 232, 240),
-            text_secondary: Color::Rgb(148, 163, 184),
+            surface: Color::Rgb(10, 10, 15),
+            surface_1: Color::Rgb(17, 17, 24),
+            surface_2: Color::Rgb(26, 26, 36),
+            surface_3: Color::Rgb(36, 36, 48),
+            border: Color::Rgb(38, 38, 46),
+            text: Color::Rgb(237, 237, 239),
+            text_secondary: Color::Rgb(138, 143, 152),
+            text_faint: Color::Rgb(78, 81, 88),
+            md_heading: accent_glow,
+            md_code_fg: Color::Rgb(150, 190, 160),
+            md_code_bg: Color::Rgb(17, 17, 24),
+            md_bold: Color::Rgb(237, 237, 239),
+            md_bullet: Color::Rgb(138, 143, 152),
             name,
         }
     }
@@ -136,7 +156,7 @@ impl TuiTheme {
     pub fn list_selected(&self) -> Style {
         Style::default()
             .fg(self.accent_text)
-            .bg(self.surface_highlight)
+            .bg(self.surface_1)
             .add_modifier(Modifier::BOLD)
     }
 
@@ -306,6 +326,25 @@ mod tests {
         assert_eq!(cyan.surface, rose.surface);
         assert_eq!(cyan.border, rose.border);
         assert_eq!(cyan.text, rose.text);
+        assert_eq!(cyan.text_faint, rose.text_faint);
+        assert_eq!(cyan.surface_1, rose.surface_1);
+        assert_eq!(cyan.surface_2, rose.surface_2);
+        assert_eq!(cyan.surface_3, rose.surface_3);
+    }
+
+    /// Surface layers should increase in brightness.
+    #[test]
+    fn surface_layers_increase_brightness() {
+        let theme = TuiTheme::default();
+        fn brightness(c: Color) -> u16 {
+            match c {
+                Color::Rgb(r, g, b) => r as u16 + g as u16 + b as u16,
+                _ => 0,
+            }
+        }
+        assert!(brightness(theme.surface) < brightness(theme.surface_1));
+        assert!(brightness(theme.surface_1) < brightness(theme.surface_2));
+        assert!(brightness(theme.surface_2) < brightness(theme.surface_3));
     }
 
     /// styled_block and styled_block_active should not panic.

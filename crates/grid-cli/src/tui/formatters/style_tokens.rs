@@ -5,46 +5,46 @@
 
 use ratatui::style::Color;
 
-// Markdown heading colors
-pub const HEADING_1: Color = Color::Rgb(186, 182, 215);
+// Markdown heading colors — aligned with TuiTheme::md_*
+pub const HEADING_1: Color = Color::Rgb(177, 180, 248);
 pub const CODE_FG: Color = Color::Rgb(150, 190, 160);
-pub const CODE_BG: Color = Color::Rgb(30, 30, 30);
-pub const BULLET: Color = Color::Rgb(140, 148, 160);
-pub const BOLD_FG: Color = Color::Rgb(222, 216, 200);
+pub const CODE_BG: Color = Color::Rgb(17, 17, 24);
+pub const BULLET: Color = Color::Rgb(138, 143, 152);
+pub const BOLD_FG: Color = Color::Rgb(237, 237, 239);
 
-// Core palette
-pub const PRIMARY: Color = Color::Rgb(208, 212, 220);
-pub const ACCENT: Color = Color::Rgb(130, 160, 255);
-pub const SUBTLE: Color = Color::Rgb(154, 160, 172);
-pub const SUCCESS: Color = Color::Rgb(106, 209, 143);
-pub const ERROR: Color = Color::Rgb(255, 92, 87);
-pub const WARNING: Color = Color::Rgb(255, 179, 71);
+// Core palette — aligned with TuiTheme
+pub const PRIMARY: Color = Color::Rgb(237, 237, 239);
+pub const ACCENT: Color = Color::Rgb(99, 102, 241);
+pub const SUBTLE: Color = Color::Rgb(138, 143, 152);
+pub const SUCCESS: Color = Color::Rgb(34, 197, 94);
+pub const ERROR: Color = Color::Rgb(239, 68, 68);
+pub const WARNING: Color = Color::Rgb(245, 158, 11);
 pub const BLUE_BRIGHT: Color = Color::Rgb(74, 158, 255);
 pub const BLUE_PATH: Color = Color::Rgb(88, 166, 255);
-pub const GOLD: Color = Color::Rgb(255, 215, 0);
-pub const BORDER: Color = Color::Rgb(88, 88, 88);
-pub const BORDER_ACCENT: Color = Color::Rgb(147, 147, 255);
+pub const GOLD: Color = Color::Rgb(245, 158, 11);
+pub const BORDER: Color = Color::Rgb(38, 38, 46);
+pub const BORDER_ACCENT: Color = Color::Rgb(99, 102, 241);
 
-// Semantic colors
-pub const GREY: Color = Color::Rgb(122, 126, 134);
-pub const THINKING_BG: Color = Color::Rgb(105, 105, 105);
+// Semantic colors — aligned with TuiTheme
+pub const GREY: Color = Color::Rgb(78, 81, 88);
+pub const THINKING_BG: Color = Color::Rgb(78, 81, 88);
 pub const ORANGE: Color = Color::Rgb(255, 140, 0);
-pub const GREEN_LIGHT: Color = Color::Rgb(137, 209, 133);
+pub const GREEN_LIGHT: Color = Color::Rgb(34, 197, 94);
 pub const GREEN_BRIGHT: Color = Color::Rgb(0, 255, 0);
 pub const BLUE_TASK: Color = Color::Rgb(37, 150, 190);
 pub const BLUE_LIGHT: Color = Color::Rgb(156, 207, 253);
 pub const ORANGE_CAUTION: Color = Color::Rgb(255, 165, 0);
 pub const CYAN: Color = Color::Rgb(0, 191, 255);
-pub const DIM_GREY: Color = Color::Rgb(107, 114, 128);
+pub const DIM_GREY: Color = Color::Rgb(78, 81, 88);
 
 // Brand colors
 pub const AMBER: Color = Color::Rgb(212, 160, 23);
 pub const AMBER_DIM: Color = Color::Rgb(140, 105, 15);
 pub const MAGENTA: Color = Color::Rgb(192, 120, 221);
 
-// Diff background colors
-pub const DIFF_ADD_BG: Color = Color::Rgb(0, 40, 0);
-pub const DIFF_DEL_BG: Color = Color::Rgb(40, 0, 0);
+// Diff background colors — cooler tones for modern look
+pub const DIFF_ADD_BG: Color = Color::Rgb(10, 35, 25);
+pub const DIFF_DEL_BG: Color = Color::Rgb(40, 15, 15);
 
 /// Thinking icon (⟡)
 pub const THINKING_ICON: &str = "\u{27e1}";
