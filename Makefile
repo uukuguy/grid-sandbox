@@ -55,7 +55,7 @@ build-full:
 	cargo build --features full
 
 build-cli:
-	cargo build -p grid-cli --bin octo
+	cargo build -p grid-cli --bin grid
 
 build-cli-full:
 	cargo build -p grid-cli --bin grid --features full
