@@ -1,43 +1,35 @@
 {
-  "plan_file": "docs/plans/2026-04-04-phase-bb-tui-visual-upgrade.md",
-  "phase": "complete",
-  "created_at": "2026-04-04T17:00:00+08:00",
-  "updated_at": "2026-04-04T17:45:00+08:00",
-  "completed_tasks": ["BB-1", "BB-2", "BB-3", "BB-4", "BB-5", "BB-6", "BB-7", "BB-8", "BB-9", "BB-10", "BB-11"],
+  "plan_file": "docs/plans/2026-04-04-phase-bc-tui-deferred-items.md",
+  "phase": "design",
+  "created_at": "2026-04-04T17:55:00+08:00",
+  "updated_at": "2026-04-04T17:55:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 11,
-  "phase_name": "Phase BB — TUI 视觉升级",
-  "status": "COMPLETE — 11/11 tasks across 3 waves, 499 tests pass",
-  "execution_mode": "manual",
+  "total_tasks": 5,
+  "phase_name": "Phase BC — TUI Deferred Items 补齐",
+  "status": "Plan created, ready for execution",
+  "execution_mode": null,
   "branch": "Grid",
   "baseline": {
-    "tests": "499 grid-cli (studio), all pass (was 496)",
-    "commit": "04a5f3b",
+    "tests": "499 grid-cli (studio), all pass",
+    "commit": "e4e3246",
     "db_version": 13,
-    "notes": "Phase BB complete. 3 waves: W1 color system unification (TuiTheme 4-layer + style_tokens migration + popups themed), W2 welcome panel upgrade (accent hue follow + line-drawing logo + model name display), W3 widget refinement (8-seg progress bar + status bar themed + input widget themed). 3 new tests."
+    "notes": "Phase BB complete. Starting BC to resolve BB-D1, BB-D2, BB-D4 deferred items."
   },
-  "commits": ["4f5159a", "9b61990", "04a5f3b"],
   "tasks": {
-    "BB-1": { "description": "TuiTheme 扩充 + 注入 TuiState", "status": "done", "wave": "W1" },
-    "BB-2": { "description": "style_tokens 语义色迁移", "status": "done", "wave": "W1" },
-    "BB-3": { "description": "Autocomplete 主题化", "status": "done", "wave": "W1" },
-    "BB-4": { "description": "Approval/Model Dialog 主题化", "status": "done", "wave": "W1" },
-    "BB-5": { "description": "Welcome 色相跟随主题", "status": "done", "wave": "W2" },
-    "BB-6": { "description": "ASCII Art Logo 圆角线条", "status": "done", "wave": "W2" },
-    "BB-7": { "description": "Welcome 文案 + 模型名", "status": "done", "wave": "W2" },
-    "BB-8": { "description": "进度条 5→8 段", "status": "done", "wave": "W3" },
-    "BB-9": { "description": "状态栏主题化", "status": "done", "wave": "W3" },
-    "BB-10": { "description": "Input Widget 主题化", "status": "done", "wave": "W3" },
-    "BB-11": { "description": "编译验证 + 测试 + 清理", "status": "done", "wave": "W3" }
+    "BC-1": { "description": "MdPalette + MarkdownRenderer 主题化", "status": "pending", "wave": "W1" },
+    "BC-2": { "description": "ConversationWidget 接受 TuiTheme + 替换 style_tokens", "status": "pending", "wave": "W1" },
+    "BC-3": { "description": "StatusBar/TodoPanel/Input/Progress 残留 style_tokens 清理", "status": "pending", "wave": "W1" },
+    "BC-4": { "description": "消息角色分隔线", "status": "pending", "wave": "W2" },
+    "BC-5": { "description": "状态栏渐进式披露", "status": "pending", "wave": "W2" }
   },
   "deferred": {
-    "BB-D1": "消息间距增强 + 角色分隔线",
-    "BB-D2": "状态栏渐进式披露",
-    "BB-D3": "Welcome 边框风格现代化",
-    "BB-D4": "Conversation formatters 全量主题化"
+    "BC-D1": "ToolFormatter trait 添加 theme 参数",
+    "BC-D2": "Thinking block 专用 MdPalette",
+    "BC-D3": "style_tokens.rs 颜色常量标记 deprecated"
   },
   "previous_phase": {
-    "name": "Phase BA — Octo to Grid: Crate 拆分 + 品牌重命名 + TUI 完善",
-    "status": "COMPLETE — 11/11 tasks @ 4d1d7fe"
+    "name": "Phase BB — TUI 视觉升级",
+    "status": "COMPLETE — 11/11 tasks @ 04a5f3b"
   }
 }

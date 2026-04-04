@@ -7,6 +7,7 @@
 
 ## [Active Work]
 
+- 2026-04-04 17:55 | **Phase BC PLAN CREATED (0/5)** — TUI Deferred Items 补齐. W1: MdPalette+ConversationWidget+StatusBar/TodoPanel 全量主题化 (128 style_tokens→TuiTheme). W2: 消息角色分隔线+状态栏渐进式披露. Sources: BB-D1, BB-D2, BB-D4.
 - 2026-04-04 17:45 | **Phase BB COMPLETE (11/11)** — TUI 视觉升级 @ 04a5f3b. W1: TuiTheme 4-layer surface+style_tokens aligned+popups themed. W2: accent hue follow+line-drawing logo+model name. W3: 8-seg progress+status bar+input themed. 499 tests (3 new). Deferred: BB-D1~D4.
 - 2026-04-03 21:30 | **Phase AY ALL DEFERRED RESOLVED (D1-D6)** — D1: working_dir inherit, D2: transcript_writer inherit, D3: child CancellationToken, D4: already covered by tool filter, D5: HookRegistry.scoped() + AgentManifest.hook_scope, D6: per-instance ApprovalManager via AgentManifest.permission_mode. 5 new tests @ 6811353.
 - 2026-04-03 21:15 | **Phase AY COMPLETE (7/7)** — SubAgentRuntime lifecycle. W1: SubAgentRuntime struct (build/run_sync/run_async/Drop), AgentTool rename (spawn_subagent→agent), ExecuteSkillTool Playbook convergence via SubAgentRuntime, delete agents/ YAML (AX-D5 rollback). W2: event_sender injection, Drop guard, 10 tests pass. -266 net lines @ c552a87. Deferred: AY-D1~D6.
