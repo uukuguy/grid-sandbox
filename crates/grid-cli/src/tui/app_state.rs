@@ -49,6 +49,8 @@ pub struct PendingApproval {
     pub tool_id: String,
     pub tool_name: String,
     pub risk_level: RiskLevel,
+    /// Tool arguments preview (truncated JSON for display in approval dialog, E-14).
+    pub args_preview: Option<String>,
 }
 
 /// Main TUI application state.
@@ -232,6 +234,8 @@ pub struct TuiState {
     pub reduced_motion: super::widgets::figures::ReducedMotion,
     /// Reasoning effort level (0=low, 1=med, 2=high, 3=max) for status bar display.
     pub effort_level: Option<u8>,
+    /// Extended thinking mode (E-11): toggles reasoning depth.
+    pub extended_thinking: bool,
 
     // ── History search (Ctrl+R) ──
     /// Reverse incremental history search state.
@@ -365,6 +369,7 @@ impl TuiState {
             subagent_completed: None,
             reduced_motion: super::widgets::figures::ReducedMotion::default(),
             effort_level: None,
+            extended_thinking: false,
             history_search: super::widgets::figures::HistorySearchState::default(),
             permission_mode: super::widgets::figures::PermissionMode::default(),
             vim: super::widgets::figures::VimState::default(),
@@ -1045,6 +1050,7 @@ mod tests {
             tool_id: "t1".to_string(),
             tool_name: "bash".to_string(),
             risk_level: RiskLevel::HighRisk,
+            args_preview: Some("--command echo hello".to_string()),
         };
         let cloned = approval.clone();
         assert_eq!(cloned.tool_id, "t1");

@@ -381,10 +381,18 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: grid_engine::agent
             tool_id,
             risk_level,
         } => {
+            // E-14: Extract args preview from the active tool that triggered approval
+            let args_preview = state.active_tools.iter()
+                .find(|t| t.tool_id == tool_id)
+                .map(|t| {
+                    let s = t.args.to_string();
+                    if s.len() > 200 { format!("{}...", &s[..200]) } else { s }
+                });
             state.pending_approval = Some(app_state::PendingApproval {
                 tool_id,
                 tool_name,
                 risk_level,
+                args_preview,
             });
             state.dirty = true;
         }

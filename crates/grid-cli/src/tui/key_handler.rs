@@ -604,6 +604,17 @@ pub async fn handle_key(state: &mut TuiState, key: KeyEvent) {
             state.dirty = true;
         }
 
+        // ── Alt+T: toggle extended thinking mode (E-11) ──
+        (KeyModifiers::ALT, KeyCode::Char('t')) => {
+            state.extended_thinking = !state.extended_thinking;
+            let mode = if state.extended_thinking { "Extended" } else { "Normal" };
+            state.messages.push(grid_types::message::ChatMessage::assistant(
+                &format!("[Thinking mode: {}]", mode),
+            ));
+            state.invalidate_cache();
+            state.auto_scroll();
+        }
+
         // ── Alt+P / Meta+P: toggle model selector popup ──
         (KeyModifiers::ALT, KeyCode::Char('p')) => {
             state.model_selector.toggle();
@@ -1224,7 +1235,7 @@ mod tests {
         state.pending_approval = Some(crate::tui::app_state::PendingApproval {
             tool_id: "t1".into(),
             tool_name: "bash".into(),
-            risk_level: grid_types::tool::RiskLevel::HighRisk,
+            risk_level: grid_types::tool::RiskLevel::HighRisk, args_preview: None,
         });
         handle_key(&mut state, make_key(KeyCode::Char('y'))).await;
         assert!(state.pending_approval.is_none());
@@ -1242,7 +1253,7 @@ mod tests {
         state.pending_approval = Some(crate::tui::app_state::PendingApproval {
             tool_id: "t2".into(),
             tool_name: "bash".into(),
-            risk_level: grid_types::tool::RiskLevel::HighRisk,
+            risk_level: grid_types::tool::RiskLevel::HighRisk, args_preview: None,
         });
         handle_key(&mut state, make_key(KeyCode::Char('n'))).await;
         assert!(state.pending_approval.is_none());
@@ -1259,7 +1270,7 @@ mod tests {
         state.pending_approval = Some(crate::tui::app_state::PendingApproval {
             tool_id: "t3".into(),
             tool_name: "bash".into(),
-            risk_level: grid_types::tool::RiskLevel::HighRisk,
+            risk_level: grid_types::tool::RiskLevel::HighRisk, args_preview: None,
         });
         handle_key(&mut state, make_key(KeyCode::Char('a'))).await;
         assert!(state.pending_approval.is_none());
@@ -1273,7 +1284,7 @@ mod tests {
         state.pending_approval = Some(crate::tui::app_state::PendingApproval {
             tool_id: "t1".into(),
             tool_name: "bash".into(),
-            risk_level: grid_types::tool::RiskLevel::HighRisk,
+            risk_level: grid_types::tool::RiskLevel::HighRisk, args_preview: None,
         });
         handle_key(&mut state, make_key(KeyCode::Char('y'))).await;
         assert!(state.pending_approval.is_none());

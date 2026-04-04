@@ -6,7 +6,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Widget,
 };
@@ -39,6 +39,8 @@ pub struct StatusBarWidget<'a> {
     sandbox_profile: Option<&'a str>,
     /// Reasoning effort level (0=low, 1=med, 2=high, 3=max)
     effort_level: Option<u8>,
+    /// Extended thinking mode (E-11)
+    extended_thinking: bool,
 }
 
 /// Standalone activity indicator widget (1 row, shown between conversation and input).
@@ -190,7 +192,14 @@ impl<'a> StatusBarWidget<'a> {
             output_tokens: 0,
             sandbox_profile: None,
             effort_level: None,
+            extended_thinking: false,
         }
+    }
+
+    /// Set extended thinking mode (E-11).
+    pub fn extended_thinking(mut self, enabled: bool) -> Self {
+        self.extended_thinking = enabled;
+        self
     }
 
     /// Set the sandbox profile to display.
@@ -338,6 +347,15 @@ impl Widget for StatusBarWidget<'_> {
                 spans.push(Span::styled(
                     format!("{} {}", symbol, label),
                     Style::default().fg(style_tokens::SUBTLE),
+                ));
+                spans.push(sep.clone());
+            }
+
+            // Extended thinking indicator (E-11)
+            if self.extended_thinking {
+                spans.push(Span::styled(
+                    "\u{2728} Think+",
+                    Style::default().fg(Color::Rgb(180, 160, 255)),
                 ));
                 spans.push(sep.clone());
             }
@@ -601,7 +619,7 @@ mod tests {
 
     #[test]
     fn test_shorten_path_long() {
-        let long = "/Users/someone/sandbox/LLM/speechless/Agents/octo-sandbox";
+        let long = "/Users/someone/sandbox/LLM/speechless/Agents/grid-sandbox";
         let short = shorten_path(long, 25);
         assert!(short.len() <= 27); // 25 + "…/" prefix
         assert!(short.contains("grid-sandbox"), "Should keep last component");

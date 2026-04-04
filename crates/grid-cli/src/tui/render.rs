@@ -221,7 +221,8 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
     .context_usage_pct(state.context_usage_pct)
     .session_elapsed(Some(state.session_start_time.elapsed()))
     .tokens(state.total_input_tokens, state.total_output_tokens)
-    .effort_level(state.effort_level);
+    .effort_level(state.effort_level)
+    .extended_thinking(state.extended_thinking);
 
     frame.render_widget(widget, area);
 }
@@ -305,7 +306,10 @@ fn render_autocomplete_popup(state: &TuiState, frame: &mut Frame, input_area: Re
 
 /// Render the tool approval dialog as a centered popup with enhanced risk UI.
 fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: Rect) {
-    let popup = centered_rect(65, 10, area);
+    // E-14: Dynamic height — taller if we have args preview
+    let has_args = approval.args_preview.is_some();
+    let popup_height = if has_args { 14 } else { 10 };
+    let popup = centered_rect(70, popup_height, area);
     frame.render_widget(Clear, popup);
 
     let (risk_color, risk_label) = match approval.risk_level {
@@ -327,7 +331,7 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
 
     // Risk badge with middot separator
     let middot = super::widgets::figures::separator::MIDDOT;
-    let text = vec![
+    let mut text = vec![
         Line::from(vec![
             Span::styled(
                 format!("{} ", super::widgets::figures::status::WARNING),
@@ -343,19 +347,46 @@ fn render_approval_dialog(approval: &PendingApproval, frame: &mut Frame, area: R
                 Style::default().fg(Color::DarkGray),
             ),
         ]),
-        Line::from(""),
-        // Keybinding hints (YNAD)
-        Line::from(vec![
-            Span::styled("[Y] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw("Allow"),
-            Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
-            Span::styled("[N] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::raw("Deny"),
-            Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
-            Span::styled("[A] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::raw("Allow session"),
-        ]),
     ];
+
+    // E-14: Args preview (truncated, dimmed)
+    if let Some(ref args) = approval.args_preview {
+        text.push(Line::from(""));
+        // Truncate to fit popup width, show up to 3 lines
+        let max_width = inner.width.saturating_sub(2) as usize;
+        for (i, line) in args.lines().take(3).enumerate() {
+            let display: String = if line.len() > max_width {
+                format!("{}\u{2026}", &line[..max_width.saturating_sub(1)])
+            } else {
+                line.to_string()
+            };
+            let prefix = if i == 0 { "\u{25B8} " } else { "  " };
+            text.push(Line::from(Span::styled(
+                format!("{}{}", prefix, display),
+                Style::default().fg(Color::Rgb(120, 130, 150)),
+            )));
+        }
+        if args.lines().count() > 3 {
+            text.push(Line::from(Span::styled(
+                format!("  \u{2026} ({} more lines)", args.lines().count() - 3),
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+    }
+
+    text.push(Line::from(""));
+    // Keybinding hints (YNA)
+    text.push(Line::from(vec![
+        Span::styled("[Y] ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::raw("Allow"),
+        Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
+        Span::styled("[N] ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::raw("Deny"),
+        Span::styled(format!("  {}  ", middot), Style::default().fg(Color::DarkGray)),
+        Span::styled("[A] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::raw("Allow session"),
+    ]));
+
     let para = Paragraph::new(text);
     frame.render_widget(para, inner);
 }
