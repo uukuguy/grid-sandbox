@@ -1,6 +1,6 @@
-# Octo Sandbox 开发工作日志
+# Grid Platform 开发工作日志
 
-## 2026-04-04 — Phase BA 设计：Grid Crate 拆分 + 品牌重命名
+## 2026-04-04 — Phase BA 完成：Grid Crate 拆分 + 品牌重命名 + TUI 完善
 
 ### 会话概要
 
@@ -27,28 +27,31 @@
 
 | 决策 | 说明 |
 |------|------|
-| 新建 grid-cli-common 共享层 | 避免 grid-cli 和 grid-studio 代码重复 |
+| Feature-flag 拆分（非独立 crate） | `studio` feature 控制 TUI/Dashboard 编译，避免引入 grid-cli-common |
 | grid-cli 不依赖 ratatui/crossterm | 瘦 CLI 用于 CI/CD 场景 |
-| grid-studio 不依赖 rustyline | TUI 有自己的输入框 |
-| 直接拆分而非 feature flag | 新项目无需过渡态 |
-| S1-S6 执行顺序 | 先重命名骨架 → 再拆分 → 最后品牌 |
+| 一步到位全量重命名 | 新项目无需兼容期 |
 
 ### 执行结果
 
-**Phase BA 完成** — 4 个 commits, 全部测试通过
+**Phase BA 完成** — 8 个 commits (11 个任务), 496 tests pass
 
-| Commit | Step | 内容 |
-|--------|------|------|
-| `9432e1e` | S1+S2 | 全局 crate 重命名 + 环境变量/路径重命名 (994 files) |
-| `f5ca284` | S3+S4 | Feature-flag 拆分 CLI/Studio (studio_main.rs + cfg gates) |
-| `c136dec` | S5 | 品牌视觉替换 (ASCII Art GRID, ◆ 图标, Indigo 主题) |
-| `a50d2a9` | S6 | 测试修复 + 残留清理 |
+| Commit | 内容 |
+|--------|------|
+| `9432e1e` | S1+S2: 全局 crate 重命名 + env vars/paths (994 files) |
+| `f5ca284` | S3+S4: Feature-flag CLI/Studio 拆分 (studio_main.rs + cfg gates) |
+| `c136dec` | S5: 品牌视觉替换 (ASCII Art GRID, ◆ 图标, Indigo 默认主题) |
+| `a50d2a9` | S6: 测试修复 + 残留清理 |
+| `dd0200f` | Deep cleanup: Prometheus 指标名、Grafana/Docker/前端/配置 (59 处遗漏) |
+| `13678ff` | Makefile CLI/Studio 分离 (build-studio, studio-tui, studio-dashboard) |
+| `39de430` | demo-project .octo→.grid + XDG 路径 + root.rs 注释修复 |
+| `4d1d7fe` | TUI E-11 (Alt+T thinking toggle) + E-14 (approval args preview) |
 
-**方案调整说明**：
-- S1+S2 合并执行（crate 重命名 + 环境变量在一个 commit 中完成）
-- S3+S4 方案调整：原计划创建独立 `grid-cli-common` crate，改为使用 Cargo feature flags 方案（`studio` feature 控制 TUI/Dashboard 编译），避免引入额外 crate 的复杂度
+**产品结构**：
 - `cargo build -p grid-cli` → 轻量 `grid` 二进制（无 ratatui/crossterm/axum）
 - `cargo build -p grid-cli --features studio` → 完整 `grid-studio` 二进制
+- `make build-cli` / `make build-studio` / `make studio-tui` / `make studio-dashboard`
+
+**TUI 增强**：20/20 全部实现（TUI_EXPERIENCE_ENHANCEMENT_DESIGN.md）
 
 ### 下一步
 

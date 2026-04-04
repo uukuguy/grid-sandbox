@@ -3,12 +3,12 @@
   "suspended_phases": [],
   "archived_phases": [
     {
-      "name": "Phase BA — Octo to Grid: Crate 拆分 + 品牌重命名",
-      "completed_at": "2026-04-04T03:00:00+08:00",
+      "name": "Phase BA — Octo to Grid: Crate 拆分 + 品牌重命名 + TUI 完善",
+      "completed_at": "2026-04-04T16:00:00+08:00",
       "progress": "100%",
-      "commits": ["9432e1e", "f5ca284", "c136dec", "a50d2a9"],
-      "tasks": "6/6 steps (S1+S2: crate+env rename, S3+S4: feature-flag split, S5: rebrand, S6: cleanup)",
-      "tests": 2023,
+      "commits": ["9432e1e", "f5ca284", "c136dec", "a50d2a9", "dd0200f", "13678ff", "39de430", "4d1d7fe"],
+      "tasks": "11/11 (S1-S6: crate rename+split+rebrand, deep cleanup, Makefile, demo-project, E-11 thinking toggle, E-14 approval args)",
+      "tests": 496,
       "deferred": []
     },
     {
