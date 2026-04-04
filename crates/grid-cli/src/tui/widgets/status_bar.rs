@@ -12,6 +12,7 @@ use ratatui::{
 };
 
 use crate::tui::formatters::style_tokens;
+use crate::tui::theme::TuiTheme;
 
 /// Agent operational state for status bar display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +44,8 @@ pub struct StatusBarWidget<'a> {
     extended_thinking: bool,
     /// Brand accent color (from theme)
     brand_color: Color,
+    /// Full TUI theme reference
+    theme: Option<&'a TuiTheme>,
 }
 
 /// Standalone activity indicator widget (1 row, shown between conversation and input).
@@ -196,6 +199,7 @@ impl<'a> StatusBarWidget<'a> {
             effort_level: None,
             extended_thinking: false,
             brand_color: style_tokens::AMBER,
+            theme: None,
         }
     }
 
@@ -208,6 +212,12 @@ impl<'a> StatusBarWidget<'a> {
     /// Set brand accent color (from theme).
     pub fn brand_color(mut self, color: Color) -> Self {
         self.brand_color = color;
+        self
+    }
+
+    /// Set the full TUI theme.
+    pub fn theme(mut self, theme: &'a TuiTheme) -> Self {
+        self.theme = Some(theme);
         self
     }
 
@@ -282,7 +292,16 @@ impl Widget for StatusBarWidget<'_> {
             return;
         }
 
-        let sep = Span::styled("  \u{2502}  ", Style::default().fg(style_tokens::GREY));
+        // Resolve theme colors with fallback to style_tokens
+        let c_faint = self.theme.map_or(style_tokens::GREY, |t| t.text_faint);
+        let c_border = self.theme.map_or(style_tokens::BORDER, |t| t.border);
+        let c_text = self.theme.map_or(style_tokens::PRIMARY, |t| t.text);
+        let c_secondary = self.theme.map_or(style_tokens::SUBTLE, |t| t.text_secondary);
+        let c_success = self.theme.map_or(style_tokens::SUCCESS, |t| t.success);
+        let c_warning = self.theme.map_or(style_tokens::WARNING, |t| t.warning);
+        let c_error = self.theme.map_or(style_tokens::ERROR, |t| t.error);
+
+        let sep = Span::styled("  \u{2502}  ", Style::default().fg(c_faint));
 
         // Row 0: border line (always)
         let border_line: String = "\u{2500}".repeat(area.width as usize);
@@ -290,117 +309,124 @@ impl Widget for StatusBarWidget<'_> {
             area.left(),
             area.top(),
             &border_line,
-            Style::default().fg(style_tokens::BORDER),
+            Style::default().fg(c_border),
         );
 
-        // Row 1: brand ◆ Grid | model | tokens | mcp | cost | context%
+        // Row 1: progressive disclosure based on terminal width
+        // Tier 1 (always): model + context%
+        // Tier 2 (w >= 60): + brand
+        // Tier 3 (w >= 80): + tokens + elapsed
+        // Tier 4 (w >= 100): + sandbox + effort + thinking
         if area.height >= 2 {
+            let w = area.width as usize;
             let mut spans: Vec<Span> = Vec::new();
 
-            // Brand — 75% accent + 25% grey, no bold
-            let brand_soft = {
-                match self.brand_color {
-                    Color::Rgb(r, g, b) => {
-                        let gr = 140u8;
-                        Color::Rgb(
-                            ((r as u16 * 3 + gr as u16) / 4) as u8,
-                            ((g as u16 * 3 + gr as u16) / 4) as u8,
-                            ((b as u16 * 3 + gr as u16) / 4) as u8,
-                        )
+            // Tier 2: Brand (w >= 60)
+            if w >= 60 {
+                let brand_soft = {
+                    match self.brand_color {
+                        Color::Rgb(r, g, b) => {
+                            let gr = 140u8;
+                            Color::Rgb(
+                                ((r as u16 * 3 + gr as u16) / 4) as u8,
+                                ((g as u16 * 3 + gr as u16) / 4) as u8,
+                                ((b as u16 * 3 + gr as u16) / 4) as u8,
+                            )
+                        }
+                        other => other,
                     }
-                    other => other,
-                }
-            };
-            spans.push(Span::styled(
-                " \u{1F991} Grid",
-                Style::default().fg(brand_soft).add_modifier(Modifier::BOLD),
-            ));
-            spans.push(sep.clone());
+                };
+                spans.push(Span::styled(
+                    " \u{1F991} Grid",
+                    Style::default().fg(brand_soft).add_modifier(Modifier::BOLD),
+                ));
+                spans.push(sep.clone());
+            }
 
-            // Model name
+            // Tier 1: Model name (always)
             spans.push(Span::styled(
                 self.model.to_string(),
                 Style::default()
-                    .fg(style_tokens::PRIMARY)
+                    .fg(c_text)
                     .add_modifier(Modifier::BOLD),
             ));
             spans.push(sep.clone());
 
-            // Session token usage
-            if self.input_tokens > 0 || self.output_tokens > 0 {
-                let input_str = Self::format_tokens(self.input_tokens);
-                let output_str = Self::format_tokens(self.output_tokens);
-                spans.push(Span::styled(
-                    format!("\u{25B8}{input_str} \u{25BE}{output_str}"),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ));
-                spans.push(sep.clone());
+            // Tier 3: tokens + elapsed (w >= 80)
+            if w >= 80 {
+                if self.input_tokens > 0 || self.output_tokens > 0 {
+                    let input_str = Self::format_tokens(self.input_tokens);
+                    let output_str = Self::format_tokens(self.output_tokens);
+                    spans.push(Span::styled(
+                        format!("\u{25B8}{input_str} \u{25BE}{output_str}"),
+                        Style::default().fg(c_secondary),
+                    ));
+                    spans.push(sep.clone());
+                }
+
+                if let Some(elapsed) = self.session_elapsed {
+                    spans.push(Span::styled(
+                        format!("\u{23F1} {}", Self::format_elapsed(elapsed)),
+                        Style::default().fg(c_secondary),
+                    ));
+                    spans.push(sep.clone());
+                }
             }
 
-            // Session elapsed time
-            if let Some(elapsed) = self.session_elapsed {
-                spans.push(Span::styled(
-                    format!("\u{23F1} {}", Self::format_elapsed(elapsed)),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ));
-                spans.push(sep.clone());
+            // Tier 4: sandbox + effort + thinking (w >= 100)
+            if w >= 100 {
+                if let Some(profile) = self.sandbox_profile {
+                    let profile_color = match profile {
+                        "development" => c_success,
+                        "staging" => c_warning,
+                        "production" => self.theme.map_or(style_tokens::ORANGE, |t| t.warning),
+                        _ => c_secondary,
+                    };
+                    spans.push(Span::styled(
+                        format!("\u{25CF} {}", profile),
+                        Style::default().fg(profile_color),
+                    ));
+                    spans.push(sep.clone());
+                }
+
+                if let Some(level) = self.effort_level {
+                    let (symbol, label) = super::figures::effort_indicator(level);
+                    spans.push(Span::styled(
+                        format!("{} {}", symbol, label),
+                        Style::default().fg(c_secondary),
+                    ));
+                    spans.push(sep.clone());
+                }
+
+                if self.extended_thinking {
+                    spans.push(Span::styled(
+                        "\u{2728} Think+",
+                        Style::default().fg(self.brand_color),
+                    ));
+                    spans.push(sep.clone());
+                }
             }
 
-            // Sandbox profile badge
-            if let Some(profile) = self.sandbox_profile {
-                let profile_color = match profile {
-                    "development" => style_tokens::GREEN_LIGHT,
-                    "staging" => style_tokens::GOLD,
-                    "production" => style_tokens::ORANGE,
-                    _ => style_tokens::SUBTLE,
-                };
-                spans.push(Span::styled(
-                    format!("\u{25CF} {}", profile),
-                    Style::default().fg(profile_color),
-                ));
-                spans.push(sep.clone());
-            }
-
-            // Effort indicator (○◐●◉)
-            if let Some(level) = self.effort_level {
-                let (symbol, label) = super::figures::effort_indicator(level);
-                spans.push(Span::styled(
-                    format!("{} {}", symbol, label),
-                    Style::default().fg(style_tokens::SUBTLE),
-                ));
-                spans.push(sep.clone());
-            }
-
-            // Extended thinking indicator (E-11)
-            if self.extended_thinking {
-                spans.push(Span::styled(
-                    "\u{2728} Think+",
-                    Style::default().fg(self.brand_color),
-                ));
-                spans.push(sep.clone());
-            }
-
-            // Context remaining % with 10-segment thin progress bar ▪▪▪▪▪·····
+            // Tier 1: Context remaining % (always)
             let context_left = (100.0 - self.context_usage_pct).max(0.0);
             let pct_color = if context_left > 50.0 {
-                style_tokens::SUCCESS
+                c_success
             } else if context_left > 25.0 {
-                style_tokens::WARNING
+                c_warning
             } else {
-                style_tokens::ERROR
+                c_error
             };
 
             let segments = 10usize;
             let filled = ((context_left / 100.0) * segments as f64).round() as usize;
             let empty = segments.saturating_sub(filled);
-            // ▪ (U+25AA small black square) for filled, · (U+00B7 middle dot) for empty
             spans.push(Span::styled(
                 "\u{25aa}".repeat(filled),
                 Style::default().fg(pct_color),
             ));
             spans.push(Span::styled(
                 "\u{00b7}".repeat(empty),
-                Style::default().fg(style_tokens::GREY),
+                Style::default().fg(c_faint),
             ));
             spans.push(Span::styled(
                 format!(" {context_left:.0}%"),
@@ -410,26 +436,31 @@ impl Widget for StatusBarWidget<'_> {
             buf.set_line(area.left(), area.top() + 1, &Line::from(spans), area.width);
         }
 
-        // Row 2: directory | git
+        // Row 2: directory | git (progressive: full at w>=50, git-only otherwise)
         if area.height >= 3 {
+            let w = area.width as usize;
             let mut spans: Vec<Span> = Vec::new();
             spans.push(Span::raw(" "));
 
-            // Working directory
-            let short_dir = shorten_path(self.working_dir, 40);
-            spans.push(Span::styled(
-                short_dir,
-                Style::default().fg(style_tokens::SUBTLE),
-            ));
+            if w >= 50 {
+                // Full: dir + git
+                let short_dir = shorten_path(self.working_dir, 40);
+                spans.push(Span::styled(
+                    short_dir,
+                    Style::default().fg(c_secondary),
+                ));
+            }
 
             // Git info: ⏇ branch +S ~M ?U ↑N — CC-style
             if let Some(branch) = self.git_branch {
-                spans.push(sep.clone());
+                if w >= 50 {
+                    spans.push(sep.clone());
+                }
                 let has_changes = self.git_staged + self.git_modified + self.git_untracked > 0;
                 let branch_color = if has_changes {
-                    style_tokens::WARNING // dirty
+                    c_warning
                 } else {
-                    style_tokens::SUCCESS // clean
+                    c_success
                 };
                 spans.push(Span::styled(
                     format!("\u{23C7} {}", branch),
@@ -438,25 +469,25 @@ impl Widget for StatusBarWidget<'_> {
                 if self.git_staged > 0 {
                     spans.push(Span::styled(
                         format!(" +{}", self.git_staged),
-                        Style::default().fg(style_tokens::GREEN_LIGHT),
+                        Style::default().fg(c_success),
                     ));
                 }
                 if self.git_modified > 0 {
                     spans.push(Span::styled(
                         format!(" ~{}", self.git_modified),
-                        Style::default().fg(style_tokens::WARNING),
+                        Style::default().fg(c_warning),
                     ));
                 }
                 if self.git_untracked > 0 {
                     spans.push(Span::styled(
                         format!(" ?{}", self.git_untracked),
-                        Style::default().fg(style_tokens::SUBTLE),
+                        Style::default().fg(c_secondary),
                     ));
                 }
                 if self.git_unpushed > 0 {
                     spans.push(Span::styled(
                         format!(" \u{2191}{}", self.git_unpushed),
-                        Style::default().fg(style_tokens::AMBER),
+                        Style::default().fg(c_warning),
                     ));
                 }
             }

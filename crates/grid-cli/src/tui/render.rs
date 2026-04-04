@@ -141,6 +141,7 @@ fn render_conversation(state: &TuiState, frame: &mut Frame, area: Rect) {
         &messages,
         state.scroll_offset,
     )
+    .theme(&state.theme)
     .active_tools(&state.active_tools, spinner_char)
     .formatter_registry(&state.tool_formatter_registry)
     .collapse_state(collapse);
@@ -220,6 +221,7 @@ fn render_status_bar(state: &TuiState, frame: &mut Frame, area: Rect) {
         state.git_branch.as_deref(),
     )
     .brand_color(state.theme.accent)
+    .theme(&state.theme)
     .git_status(state.git_staged, state.git_modified, state.git_untracked, state.git_unpushed)
     .context_usage_pct(state.context_usage_pct)
     .session_elapsed(Some(state.session_start_time.elapsed()))

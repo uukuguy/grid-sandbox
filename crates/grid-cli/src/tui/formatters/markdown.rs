@@ -43,6 +43,34 @@ impl Default for MdPalette {
 }
 
 impl MdPalette {
+    /// Construct from a TuiTheme — all colors follow the theme.
+    pub fn from_theme(theme: &crate::tui::theme::TuiTheme) -> Self {
+        Self {
+            heading: theme.md_heading,
+            code_fg: theme.md_code_fg,
+            code_bg: theme.md_code_bg,
+            bullet: theme.md_bullet,
+            bold_fg: theme.md_bold,
+            link: theme.md_link,
+            text: theme.text,
+            base_modifier: Modifier::empty(),
+        }
+    }
+
+    /// A muted variant from a TuiTheme for thinking/reasoning display.
+    pub fn muted_from_theme(theme: &crate::tui::theme::TuiTheme) -> Self {
+        Self {
+            heading: theme.text_secondary,
+            code_fg: theme.text_secondary,
+            code_bg: theme.surface_1,
+            bullet: theme.text_faint,
+            bold_fg: theme.text_secondary,
+            link: theme.text_secondary,
+            text: theme.text_secondary,
+            base_modifier: Modifier::ITALIC,
+        }
+    }
+
     /// Build a muted palette for thinking/reasoning display.
     pub fn muted(base: Color) -> Self {
         let heading = dim_color(style_tokens::HEADING_1, 0.50);
@@ -81,6 +109,11 @@ impl MarkdownRenderer {
     /// Render markdown text into a vector of styled lines using the default palette.
     pub fn render(text: &str) -> Vec<Line<'static>> {
         Self::render_with_palette(text, &MdPalette::default())
+    }
+
+    /// Render markdown with a themed palette.
+    pub fn render_themed(text: &str, palette: &MdPalette) -> Vec<Line<'static>> {
+        Self::render_with_palette(text, palette)
     }
 
     /// Render markdown with a muted palette (for thinking/reasoning display).

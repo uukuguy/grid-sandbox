@@ -27,8 +27,9 @@ use crate::tui::formatters::diff::{
     is_diff_tool, parse_unified_diff, render_diff_entries,
 };
 use crate::tui::formatters::formatter_registry::ToolFormatterRegistry;
-use crate::tui::formatters::markdown::MarkdownRenderer;
+use crate::tui::formatters::markdown::{MarkdownRenderer, MdPalette};
 use crate::tui::formatters::style_tokens::{self, Indent};
+use crate::tui::theme::TuiTheme;
 use crate::tui::widgets::spinner::{COMPLETED_CHAR, SPINNER_FRAMES};
 
 pub use spinner::ActiveTool;
@@ -50,6 +51,10 @@ impl<'a> ToolCollapseState<'a> {
     }
 }
 
+/// Default TuiTheme instance for backward compatibility.
+static DEFAULT_THEME: std::sync::LazyLock<TuiTheme> =
+    std::sync::LazyLock::new(TuiTheme::default);
+
 /// Widget that renders the conversation log.
 pub struct ConversationWidget<'a> {
     messages: &'a [ChatMessage],
@@ -61,6 +66,8 @@ pub struct ConversationWidget<'a> {
     formatter_registry: Option<&'a ToolFormatterRegistry>,
     /// Optional tool collapse state.
     collapse_state: Option<ToolCollapseState<'a>>,
+    /// TUI theme for color theming.
+    theme: &'a TuiTheme,
 }
 
 impl<'a> ConversationWidget<'a> {
@@ -72,7 +79,13 @@ impl<'a> ConversationWidget<'a> {
             spinner_char: SPINNER_FRAMES[0],
             formatter_registry: None,
             collapse_state: None,
+            theme: &DEFAULT_THEME,
         }
+    }
+
+    pub fn theme(mut self, theme: &'a TuiTheme) -> Self {
+        self.theme = theme;
+        self
     }
 
     pub fn formatter_registry(mut self, registry: &'a ToolFormatterRegistry) -> Self {
@@ -94,8 +107,19 @@ impl<'a> ConversationWidget<'a> {
     /// Build styled lines from messages.
     fn build_lines(&self) -> Vec<Line<'static>> {
         let mut lines: Vec<Line<'static>> = Vec::new();
+        let mut prev_role: Option<MessageRole> = None;
 
         for (msg_idx, msg) in self.messages.iter().enumerate() {
+            // Role transition separator (User ↔ Assistant)
+            if let Some(prev) = &prev_role {
+                if *prev != msg.role && msg.role != MessageRole::System {
+                    lines.push(Line::from(Span::styled(
+                        " \u{2500} \u{2500} \u{2500} \u{2500} \u{2500} \u{2500} \u{2500} \u{2500}",
+                        Style::default().fg(self.theme.border),
+                    )));
+                }
+            }
+
             match msg.role {
                 MessageRole::User => {
                     self.build_user_lines(msg, &mut lines);
@@ -107,6 +131,10 @@ impl<'a> ConversationWidget<'a> {
                     // System messages are the agent's system prompt — not useful to display.
                     // Skip them entirely in the conversation view.
                 }
+            }
+
+            if msg.role != MessageRole::System {
+                prev_role = Some(msg.role.clone());
             }
 
             // Blank line between messages
@@ -130,7 +158,7 @@ impl<'a> ConversationWidget<'a> {
         }
 
         for tool in &active {
-            lines.push(spinner::render_active_tool(tool, self.spinner_char));
+            lines.push(spinner::render_active_tool_themed(tool, self.spinner_char, self.theme));
         }
 
         lines
@@ -140,7 +168,7 @@ impl<'a> ConversationWidget<'a> {
     /// Also handles ToolResult blocks (Anthropic API stores them in User role).
     fn build_user_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
         let user_style = Style::default()
-            .fg(style_tokens::BLUE_BRIGHT)
+            .fg(self.theme.info)
             .add_modifier(Modifier::BOLD);
 
         for block in &msg.content {
@@ -156,7 +184,7 @@ impl<'a> ConversationWidget<'a> {
                                 Span::styled("> ", user_style),
                                 Span::styled(
                                     line.to_string(),
-                                    Style::default().fg(style_tokens::PRIMARY),
+                                    Style::default().fg(self.theme.text),
                                 ),
                             ]));
                         } else {
@@ -164,7 +192,7 @@ impl<'a> ConversationWidget<'a> {
                                 Span::raw("  "),
                                 Span::styled(
                                     line.to_string(),
-                                    Style::default().fg(style_tokens::PRIMARY),
+                                    Style::default().fg(self.theme.text),
                                 ),
                             ]));
                         }
@@ -185,16 +213,16 @@ impl<'a> ConversationWidget<'a> {
                                 lines.push(Line::from(vec![
                                     Span::styled(
                                         "  \u{25B6} ",
-                                        Style::default().fg(style_tokens::ACCENT),
+                                        Style::default().fg(self.theme.accent),
                                     ),
                                     Span::styled(
                                         format!("\u{2699} {name} \u{2713} \u{2014} {line_count} lines "),
-                                        Style::default().fg(style_tokens::GREY),
+                                        Style::default().fg(self.theme.text_faint),
                                     ),
                                     Span::styled(
                                         "(Ctrl+O cycle | Ctrl+Shift+O all)",
                                         Style::default()
-                                            .fg(style_tokens::SUBTLE)
+                                            .fg(self.theme.text_secondary)
                                             .add_modifier(Modifier::DIM),
                                     ),
                                 ]));
@@ -246,12 +274,12 @@ impl<'a> ConversationWidget<'a> {
                             lines.push(Line::from(vec![
                                 Span::styled(
                                     prefix,
-                                    Style::default().fg(style_tokens::SUBTLE),
+                                    Style::default().fg(self.theme.text_secondary),
                                 ),
                                 Span::styled(
                                     line.to_string(),
                                     Style::default()
-                                        .fg(style_tokens::GREY)
+                                        .fg(self.theme.text_faint)
                                         .add_modifier(Modifier::ITALIC),
                                 ),
                             ]));
@@ -260,7 +288,8 @@ impl<'a> ConversationWidget<'a> {
                     }
 
                     // Final response: full markdown rendering with ⏺ marker
-                    let md_lines = MarkdownRenderer::render(&cleaned);
+                    let palette = MdPalette::from_theme(self.theme);
+                    let md_lines = MarkdownRenderer::render_themed(&cleaned, &palette);
                     let mut leading_consumed = false;
                     for md_line in md_lines.into_iter() {
                         let line_text: String = md_line
@@ -274,7 +303,7 @@ impl<'a> ConversationWidget<'a> {
                             // First non-empty line gets ⏺ leading marker (green)
                             let mut spans = vec![Span::styled(
                                 format!("{COMPLETED_CHAR} "),
-                                Style::default().fg(style_tokens::GREEN_BRIGHT),
+                                Style::default().fg(self.theme.success),
                             )];
                             spans.extend(md_line.spans);
                             lines.push(Line::from(spans));
@@ -287,7 +316,7 @@ impl<'a> ConversationWidget<'a> {
                     }
                 }
                 ContentBlock::ToolUse { name, input, .. } => {
-                    let tool_line = tool_format::format_tool_use(name, input);
+                    let tool_line = tool_format::format_tool_use_themed(name, input, self.theme);
                     lines.push(tool_line);
                 }
                 ContentBlock::ToolResult {
@@ -305,16 +334,16 @@ impl<'a> ConversationWidget<'a> {
                                 lines.push(Line::from(vec![
                                     Span::styled(
                                         "  \u{25B6} ",
-                                        Style::default().fg(style_tokens::ACCENT),
+                                        Style::default().fg(self.theme.accent),
                                     ),
                                     Span::styled(
                                         format!("\u{2699} {name} \u{2713} \u{2014} {line_count} lines "),
-                                        Style::default().fg(style_tokens::GREY),
+                                        Style::default().fg(self.theme.text_faint),
                                     ),
                                     Span::styled(
                                         "(Ctrl+O cycle | Ctrl+Shift+O all)",
                                         Style::default()
-                                            .fg(style_tokens::SUBTLE)
+                                            .fg(self.theme.text_secondary)
                                             .add_modifier(Modifier::DIM),
                                     ),
                                 ]));
@@ -341,7 +370,7 @@ impl<'a> ConversationWidget<'a> {
     #[allow(dead_code)]
     fn build_system_lines(&self, msg: &ChatMessage, lines: &mut Vec<Line<'static>>) {
         let system_style = Style::default()
-            .fg(style_tokens::GREY)
+            .fg(self.theme.text_faint)
             .add_modifier(Modifier::ITALIC);
 
         for block in &msg.content {
@@ -382,12 +411,12 @@ impl<'a> ConversationWidget<'a> {
 
         let continuation = style_tokens::CONTINUATION_CHAR;
 
-        // Top separator: ╭─ tool output ─────
+        // Top separator: ╭─ tool output ────��
         let name_label = tool_name.unwrap_or("output");
         let sep_text = format!("  \u{256D}\u{2500} {name_label} \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}");
         lines.push(Line::from(Span::styled(
             sep_text,
-            Style::default().fg(style_tokens::BORDER),
+            Style::default().fg(self.theme.border),
         )));
 
         // Check if this is a diff tool result
@@ -400,9 +429,9 @@ impl<'a> ConversationWidget<'a> {
                 lines.push(Line::from(vec![
                     Span::styled(
                         format!("  \u{2502} "),
-                        Style::default().fg(style_tokens::BORDER),
+                        Style::default().fg(self.theme.border),
                     ),
-                    Span::styled(summary, Style::default().fg(style_tokens::SUBTLE)),
+                    Span::styled(summary, Style::default().fg(self.theme.text_secondary)),
                 ]));
             }
             render_diff_entries(&entries, lines);
@@ -417,9 +446,9 @@ impl<'a> ConversationWidget<'a> {
         } else {
             // Fallback: generic rendering without registry
             let color = if is_error {
-                style_tokens::ERROR
+                self.theme.error
             } else {
-                style_tokens::SUBTLE
+                self.theme.text_secondary
             };
 
             let result_lines: Vec<&str> = content.lines().collect();
@@ -438,7 +467,7 @@ impl<'a> ConversationWidget<'a> {
                     Cow::Borrowed(Indent::RESULT_CONT)
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(prefix, Style::default().fg(style_tokens::SUBTLE)),
+                    Span::styled(prefix, Style::default().fg(self.theme.text_secondary)),
                     Span::styled((*line).to_string(), Style::default().fg(color)),
                 ]));
             }
@@ -447,15 +476,15 @@ impl<'a> ConversationWidget<'a> {
                 let remaining = result_lines.len() - max_display;
                 lines.push(Line::from(Span::styled(
                     format!("  {continuation}  ({remaining} more lines)"),
-                    Style::default().fg(style_tokens::GREY),
+                    Style::default().fg(self.theme.text_faint),
                 )));
             }
         }
 
-        // Bottom separator: ╰──────────────
+        // Bottom separator: ╰��─────────────
         lines.push(Line::from(Span::styled(
             "  \u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
-            Style::default().fg(style_tokens::BORDER),
+            Style::default().fg(self.theme.border),
         )));
     }
 
@@ -604,8 +633,8 @@ impl Widget for ConversationWidget<'_> {
             let mut diff_bg = None;
             for x in content_area.x..content_area.x.saturating_add(content_area.width) {
                 if let Some(cell) = buf.cell(ratatui::layout::Position::new(x, y)) {
-                    if cell.bg == style_tokens::DIFF_ADD_BG
-                        || cell.bg == style_tokens::DIFF_DEL_BG
+                    if cell.bg == self.theme.diff_add_bg
+                        || cell.bg == self.theme.diff_del_bg
                     {
                         diff_bg = Some(cell.bg);
                         break;

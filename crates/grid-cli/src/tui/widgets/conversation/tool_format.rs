@@ -10,8 +10,10 @@ use ratatui::{
 
 use std::collections::HashMap;
 
+#[cfg(test)]
 use crate::tui::formatters::style_tokens;
 use crate::tui::formatters::tool_registry::format_tool_call_parts;
+use crate::tui::theme::TuiTheme;
 
 /// Convert a serde_json::Value to HashMap for tool_registry API.
 fn value_to_hashmap(input: &serde_json::Value) -> HashMap<String, serde_json::Value> {
@@ -22,7 +24,8 @@ fn value_to_hashmap(input: &serde_json::Value) -> HashMap<String, serde_json::Va
     }
 }
 
-/// Format a ToolUse content block as a styled line with verb(arg) pattern.
+/// Format a ToolUse content block as a styled line with verb(arg) pattern (legacy, used by tests).
+#[cfg(test)]
 pub(super) fn format_tool_use(name: &str, input: &serde_json::Value) -> Line<'static> {
     let args = value_to_hashmap(input);
     let (verb, arg) = format_tool_call_parts(name, &args);
@@ -41,6 +44,29 @@ pub(super) fn format_tool_use(name: &str, input: &serde_json::Value) -> Line<'st
         Span::styled(
             format!("({arg})"),
             Style::default().fg(style_tokens::SUBTLE),
+        ),
+    ])
+}
+
+/// Format a ToolUse content block with theme colors.
+pub(super) fn format_tool_use_themed(name: &str, input: &serde_json::Value, theme: &TuiTheme) -> Line<'static> {
+    let args = value_to_hashmap(input);
+    let (verb, arg) = format_tool_call_parts(name, &args);
+
+    Line::from(vec![
+        Span::styled(
+            "\u{25B8} ",
+            Style::default().fg(theme.warning), // amber-like
+        ),
+        Span::styled(
+            verb,
+            Style::default()
+                .fg(theme.text)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("({arg})"),
+            Style::default().fg(theme.text_secondary),
         ),
     ])
 }

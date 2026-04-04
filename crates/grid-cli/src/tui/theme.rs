@@ -47,6 +47,11 @@ pub struct TuiTheme {
     pub md_code_bg: Color,
     pub md_bold: Color,
     pub md_bullet: Color,
+    pub md_link: Color,
+
+    // -- Diff & tool colors --
+    pub diff_add_bg: Color,
+    pub diff_del_bg: Color,
 
     /// Source theme name
     pub name: ThemeName,
@@ -107,6 +112,9 @@ impl TuiTheme {
             md_code_bg: Color::Rgb(17, 17, 24),
             md_bold: Color::Rgb(237, 237, 239),
             md_bullet: Color::Rgb(138, 143, 152),
+            md_link: Color::Rgb(74, 158, 255),
+            diff_add_bg: Color::Rgb(10, 35, 25),
+            diff_del_bg: Color::Rgb(40, 15, 15),
             name,
         }
     }
