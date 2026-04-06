@@ -240,6 +240,7 @@ impl RuntimeContract for GridHarness {
             runtime_id: self.runtime_id.clone(),
             state_data,
             created_at: chrono::Utc::now(),
+            state_format: "rust-serde-v1".into(),
         })
     }
 
@@ -387,6 +388,7 @@ impl RuntimeContract for GridHarness {
                 output_cost_per_1k: 0.015,
             }),
             metadata: Default::default(),
+            requires_hook_bridge: false,
         }
     }
 
@@ -396,6 +398,34 @@ impl RuntimeContract for GridHarness {
 
         info!(session_id = %handle.session_id, "GridHarness: session terminated");
         Ok(())
+    }
+
+    async fn disconnect_mcp(
+        &self,
+        handle: &SessionHandle,
+        server_name: &str,
+    ) -> anyhow::Result<()> {
+        let mcp_manager = self.runtime.mcp_manager();
+        let mut mcp_guard = mcp_manager.lock().await;
+        let _ = mcp_guard.remove_server(server_name).await;
+        info!(
+            session_id = %handle.session_id,
+            server = %server_name,
+            "GridHarness: MCP server disconnected"
+        );
+        Ok(())
+    }
+
+    async fn pause_session(&self, handle: &SessionHandle) -> anyhow::Result<()> {
+        let session_id = SessionId::from_string(&handle.session_id);
+        self.runtime.stop_session(&session_id).await;
+        info!(session_id = %handle.session_id, "GridHarness: session paused");
+        Ok(())
+    }
+
+    async fn resume_session(&self, session_id: &str) -> anyhow::Result<SessionHandle> {
+        warn!(session_id = %session_id, "GridHarness: resume_session stub — use restore_state with persisted state");
+        Err(anyhow::anyhow!("resume_session requires state from L4 session store; use restore_state instead"))
     }
 
     async fn health(&self) -> anyhow::Result<HealthStatus> {

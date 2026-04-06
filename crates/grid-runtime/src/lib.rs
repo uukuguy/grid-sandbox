@@ -15,8 +15,10 @@
 //! The gRPC service definition lives at `proto/eaasp/runtime/v1/runtime.proto`
 //! and is compiled by `build.rs` via tonic-build.
 
+pub mod config;
 pub mod contract;
 pub mod harness;
+pub mod service;
 
 /// Generated gRPC types from runtime.proto.
 pub mod proto {

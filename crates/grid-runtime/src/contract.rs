@@ -80,6 +80,19 @@ pub trait RuntimeContract: Send + Sync {
 
     /// Health check.
     async fn health(&self) -> anyhow::Result<HealthStatus>;
+
+    /// Disconnect a specific MCP server by name.
+    async fn disconnect_mcp(
+        &self,
+        handle: &SessionHandle,
+        server_name: &str,
+    ) -> anyhow::Result<()>;
+
+    /// Pause session: serialize state and release resources.
+    async fn pause_session(&self, handle: &SessionHandle) -> anyhow::Result<()>;
+
+    /// Resume a previously paused session.
+    async fn resume_session(&self, session_id: &str) -> anyhow::Result<SessionHandle>;
 }
 
 // ── Types ──
@@ -96,6 +109,10 @@ pub struct SessionPayload {
     pub quotas: std::collections::HashMap<String, String>,
     /// Additional context key-values.
     pub context: std::collections::HashMap<String, String>,
+    /// HookBridge URL (optional, from L3).
+    pub hook_bridge_url: Option<String>,
+    /// Telemetry endpoint (optional, from L3).
+    pub telemetry_endpoint: Option<String>,
 }
 
 /// Opaque session handle returned by `initialize`.
@@ -174,6 +191,8 @@ pub struct SessionState {
     pub runtime_id: String,
     pub state_data: Vec<u8>,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// Serialization format identifier (e.g., "rust-serde-v1").
+    pub state_format: String,
 }
 
 /// MCP server connection configuration.
@@ -224,6 +243,8 @@ pub struct CapabilityManifest {
     pub native_skills: bool,
     pub cost: Option<CostEstimate>,
     pub metadata: std::collections::HashMap<String, String>,
+    /// Whether this runtime requires HookBridge (false for Tier 1).
+    pub requires_hook_bridge: bool,
 }
 
 /// Runtime tier classification.
@@ -266,6 +287,8 @@ mod tests {
             managed_hooks_json: None,
             quotas: Default::default(),
             context: Default::default(),
+            hook_bridge_url: None,
+            telemetry_endpoint: None,
         };
         let json = serde_json::to_string(&payload).unwrap();
         let restored: SessionPayload = serde_json::from_str(&json).unwrap();
@@ -320,10 +343,12 @@ mod tests {
                 output_cost_per_1k: 0.015,
             }),
             metadata: Default::default(),
+            requires_hook_bridge: false,
         };
         let json = serde_json::to_string_pretty(&manifest).unwrap();
         assert!(json.contains("Harness"));
         assert!(json.contains("200000"));
+        assert!(json.contains("requires_hook_bridge"));
     }
 
     #[test]

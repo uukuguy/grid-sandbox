@@ -47,6 +47,15 @@ service RuntimeService {
 
   // Health check.
   rpc Health(Empty) returns (HealthStatus);
+
+  // Disconnect a specific MCP server.
+  rpc DisconnectMcp(DisconnectMcpRequest) returns (DisconnectMcpResponse);
+
+  // Pause a session (persist state, release resources).
+  rpc PauseSession(PauseRequest) returns (PauseResponse);
+
+  // Resume a paused session.
+  rpc ResumeSession(ResumeRequest) returns (ResumeResponse);
 }
 
 // ── Request / Response types ──
@@ -68,6 +77,8 @@ message SessionPayload {
   string managed_hooks_json = 4;  // managed-settings.json content
   map<string, string> quotas = 5;
   map<string, string> context = 6; // additional key-value context
+  string hook_bridge_url = 7;      // Optional: L3-provided HookBridge address
+  string telemetry_endpoint = 8;   // Optional: L3 telemetry receiver
 }
 
 message SendRequest {
@@ -145,6 +156,7 @@ message SessionState {
   bytes state_data = 2;         // opaque serialized state
   string runtime_id = 3;
   string created_at = 4;        // ISO 8601
+  string state_format = 5;     // "rust-serde-v1" | "python-json" | "ts-json"
 }
 
 message ConnectMcpRequest {
@@ -203,6 +215,7 @@ message CapabilityManifest {
   bool native_skills = 9;
   CostEstimate cost = 10;
   map<string, string> metadata = 11;
+  bool requires_hook_bridge = 12;  // true for Tier 2/3, false for Tier 1
 }
 
 message CostEstimate {
@@ -223,4 +236,30 @@ message HealthStatus {
   bool healthy = 1;
   string runtime_id = 2;
   map<string, string> checks = 3; // e.g. "provider" -> "ok", "mcp" -> "degraded"
+}
+
+message DisconnectMcpRequest {
+  string session_id = 1;
+  string server_name = 2;
+}
+
+message DisconnectMcpResponse {
+  bool success = 1;
+}
+
+message PauseRequest {
+  string session_id = 1;
+}
+
+message PauseResponse {
+  bool success = 1;
+}
+
+message ResumeRequest {
+  string session_id = 1;
+}
+
+message ResumeResponse {
+  bool success = 1;
+  string session_id = 2;
 }
