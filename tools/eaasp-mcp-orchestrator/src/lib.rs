@@ -1,1 +1,3 @@
-//! eaasp-mcp-orchestrator — placeholder crate (WIP).
+pub mod config;
+pub mod manager;
+pub mod routes;
