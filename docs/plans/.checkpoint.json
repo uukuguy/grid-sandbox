@@ -3,25 +3,25 @@
   "phase": "execution",
   "created_at": "2026-04-06T22:00:00+08:00",
   "updated_at": "2026-04-07T00:15:00+08:00",
-  "completed_tasks": ["W1", "W2", "W3", "W5"],
-  "current_task": "W4",
+  "completed_tasks": ["W1", "W2", "W3", "W4", "W5", "W6"],
+  "current_task": "W7",
   "total_tasks": 7,
   "phase_name": "Phase BF — L2 统一资产层 + L1 抽象机制",
-  "status": "W1-W3+W5 done (4/7). 23 new tests (17 certifier + 3 orchestrator + 3 registry). Next: W4 L1 Runtime L2 集成.",
+  "status": "W1-W6 done (6/7). 30 new tests. Next: W7 集成验证 + 设计文档 + Makefile.",
   "execution_mode": "ruflo-parallel",
   "branch": "Grid",
   "baseline": {
-    "tests": "2476 Rust workspace + 39 Python + 23 new (BF W2/W3/W5)",
-    "commit": "9e8bac5",
-    "notes": "W2+W3 in one commit due to parallel agent merge; W5 @ 9e982e0"
+    "tests": "2476 Rust workspace + 39 Python + 30 new (BF W2-W6)",
+    "commit": "59bb58e",
+    "notes": "W4 @ b6af473 (l2_client 4 tests); W6 @ 59bb58e (blindbox 3 tests)"
   },
   "tasks": {
     "W1": { "description": "协议扩展 SessionPayload L2 字段 (proto v1.3)", "status": "done", "commit": "1a54f95" },
     "W2": { "description": "L2 Skill Registry crate (REST + SQLite + Git)", "status": "done", "commit": "9e8bac5" },
     "W3": { "description": "L2 MCP Orchestrator crate (YAML + subprocess)", "status": "done", "commit": "9e8bac5" },
-    "W4": { "description": "L1 Runtime L2 集成 (GridHarness → L2 REST)", "status": "pending" },
+    "W4": { "description": "L1 Runtime L2 集成 (GridHarness → L2 REST)", "status": "done", "commit": "b6af473" },
     "W5": { "description": "Mock L3 RuntimeSelector + 运行时池", "status": "done", "commit": "9e982e0" },
-    "W6": { "description": "盲盒对比 (并行执行 + 匿名评分)", "status": "pending" },
+    "W6": { "description": "盲盒对比 (并行执行 + 匿名评分)", "status": "done", "commit": "59bb58e" },
     "W7": { "description": "集成验证 + 设计文档 + Makefile", "status": "pending" }
   },
   "deferred": {
