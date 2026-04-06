@@ -1,40 +1,42 @@
 {
-  "plan_file": "docs/plans/2026-04-04-phase-bc-tui-deferred-items.md",
-  "phase": "design",
-  "created_at": "2026-04-04T17:55:00+08:00",
-  "updated_at": "2026-04-04T20:30:00+08:00",
-  "completed_tasks": [],
-  "current_task": null,
-  "total_tasks": 5,
-  "phase_name": "Phase BC — TUI Deferred Items 补齐",
-  "status": "BC plan ready. Welcome visual overhaul session done (3 commits: 875255b, aa37870, 0d5f966).",
-  "execution_mode": null,
+  "plan_file": "docs/plans/2026-04-06-bd-w3-grpc-server.md",
+  "phase": "execution",
+  "created_at": "2026-04-05T00:30:00+08:00",
+  "updated_at": "2026-04-06T14:00:00+08:00",
+  "completed_tasks": ["W1", "W2"],
+  "current_task": "W3",
+  "total_tasks": 6,
+  "phase_name": "Phase BD — grid-runtime (EAASP L1)",
+  "status": "W1+W2 done. W3 plan written (6 tasks: proto v1.2, config, service, main, integration tests, Dockerfile). EAASP roadmap document created.",
+  "execution_mode": "ruflo",
   "branch": "Grid",
   "baseline": {
-    "tests": "499 grid-cli (studio), all pass",
-    "commit": "875255b",
-    "db_version": 13,
-    "notes": "Welcome visual session done (3 commits). BC 0/5 tasks pending."
+    "tests": "14 grid-runtime (7 contract + 7 harness)",
+    "commit": "f8b8e3d",
+    "notes": "grid-runtime crate established with RuntimeContract trait + GridHarness impl"
   },
   "tasks": {
-    "BC-1": { "description": "MdPalette + MarkdownRenderer 主题化", "status": "pending", "wave": "W1" },
-    "BC-2": { "description": "ConversationWidget 接受 TuiTheme + 替换 style_tokens", "status": "pending", "wave": "W1" },
-    "BC-3": { "description": "StatusBar/TodoPanel/Input/Progress 残留 style_tokens 清理", "status": "pending", "wave": "W1" },
-    "BC-4": { "description": "消息角色分隔线", "status": "pending", "wave": "W2" },
-    "BC-5": { "description": "状态栏渐进式披露", "status": "pending", "wave": "W2" }
+    "W1": { "description": "新建 crate + proto 定义 + RuntimeContract trait", "status": "complete", "commit": "02dfa82" },
+    "W2": { "description": "GridHarness 实现 13 方法桥接 grid-engine", "status": "complete", "commit": "f8b8e3d" },
+    "W3": { "description": "gRPC server (proto v1.2 + service + main + tests + Dockerfile)", "status": "planned", "plan": "docs/plans/2026-04-06-bd-w3-grpc-server.md" },
+    "W4": { "description": "遥测 schema + 转换", "status": "pending" },
+    "W5": { "description": "gRPC 集成测试 (certifier 降级)", "status": "pending" },
+    "W6": { "description": "Dockerfile + 容器化", "status": "pending" }
+  },
+  "session_output": {
+    "roadmap": "docs/design/Grid/EAASP_ROADMAP.md",
+    "w3_plan": "docs/plans/2026-04-06-bd-w3-grpc-server.md",
+    "notes": "完成 EAASP 中长期路线图设计（BD→BE→BF→BG→BH→BI→BJ+），对齐规范 v1.7 五个阶段。W3 plan 包含 6 个 task（proto v1.2 升级 + config + service + main + 集成测试 + Dockerfile）。W5 certifier 降级为 gRPC 集成测试，独立 certifier 工具留到 Phase BE。"
   },
   "deferred": {
-    "BC-D1": "ToolFormatter trait 添加 theme 参数",
-    "BC-D2": "Thinking block 专用 MdPalette",
-    "BC-D3": "style_tokens.rs 颜色常量标记 deprecated"
+    "BD-D1": "grid-hook-bridge crate（Tier 2/3 sidecar）",
+    "BD-D2": "RuntimeSelector + AdapterRegistry（平台层）",
+    "BD-D3": "盲盒对比（需 2+ 运行时）",
+    "BD-D4": "managed-settings.json 分发机制（L3 治理层）",
+    "BD-D5": "SessionPayload 组织层级（L4 多租户）"
   },
   "previous_phase": {
-    "name": "Phase BB — TUI 视觉升级",
-    "status": "COMPLETE — 11/11 tasks @ 04a5f3b"
-  },
-  "additional_work": {
-    "name": "Welcome Panel Visual Overhaul + 🦑 Brand Redesign",
-    "commit": "875255b",
-    "scope": "Brand Coral, GRID logo I/D fix, flat-top breathing, cos² sweep, ▪· progress bar, input separator, subtitle rename"
+    "name": "Phase BC — TUI Deferred Items 补齐",
+    "status": "COMPLETE — 5/5 tasks @ 41a0fcf"
   }
 }
