@@ -6,6 +6,7 @@
 pub mod mock_l3;
 pub mod report;
 pub mod runtime_pool;
+pub mod blindbox;
 pub mod selector;
 pub mod verifier;
 

@@ -23,6 +23,18 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+    /// Run blindbox comparison between two runtimes.
+    Blindbox {
+        /// First runtime endpoint (e.g., "http://localhost:50051")
+        #[arg(long)]
+        runtime_a: String,
+        /// Second runtime endpoint (e.g., "http://localhost:50052")
+        #[arg(long)]
+        runtime_b: String,
+        /// Prompt to send to both runtimes
+        #[arg(short, long)]
+        prompt: String,
+    },
 }
 
 #[tokio::main]
@@ -45,6 +57,31 @@ async fn main() -> anyhow::Result<()> {
             if !report.passed {
                 std::process::exit(1);
             }
+        }
+        Commands::Blindbox {
+            runtime_a,
+            runtime_b,
+            prompt,
+        } => {
+            info!("Starting blindbox comparison");
+            let runtimes = [
+                eaasp_certifier::runtime_pool::RuntimeEntry {
+                    id: "runtime-a".into(),
+                    name: "Runtime A".into(),
+                    endpoint: runtime_a,
+                    tier: "unknown".into(),
+                    healthy: true,
+                },
+                eaasp_certifier::runtime_pool::RuntimeEntry {
+                    id: "runtime-b".into(),
+                    name: "Runtime B".into(),
+                    endpoint: runtime_b,
+                    tier: "unknown".into(),
+                    healthy: true,
+                },
+            ];
+            let record = eaasp_certifier::blindbox::execute_blindbox(&runtimes, &prompt).await?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
         }
     }
 
