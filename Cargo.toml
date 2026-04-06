@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "tools/*"]
 # Exclude grid-desktop from default build — Tauri build.rs triggers
 # recompilation every time. Build explicitly: cargo build -p grid-desktop
 default-members = [
