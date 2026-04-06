@@ -150,6 +150,10 @@ fn capability_to_proto(c: contract::CapabilityManifest) -> proto::CapabilityMani
         }),
         metadata: c.metadata,
         requires_hook_bridge: c.requires_hook_bridge,
+        deployment_mode: match c.deployment_mode {
+            contract::DeploymentMode::Shared => "shared".into(),
+            contract::DeploymentMode::PerSession => "per_session".into(),
+        },
     }
 }
 

@@ -188,7 +188,7 @@ class EmitTelemetryRequest(_message.Message):
     def __init__(self, session_id: _Optional[str] = ...) -> None: ...
 
 class CapabilityManifest(_message.Message):
-    __slots__ = ("runtime_id", "runtime_name", "tier", "model", "context_window", "supported_tools", "native_hooks", "native_mcp", "native_skills", "cost", "metadata", "requires_hook_bridge")
+    __slots__ = ("runtime_id", "runtime_name", "tier", "model", "context_window", "supported_tools", "native_hooks", "native_mcp", "native_skills", "cost", "metadata", "requires_hook_bridge", "deployment_mode")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -208,6 +208,7 @@ class CapabilityManifest(_message.Message):
     COST_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
     REQUIRES_HOOK_BRIDGE_FIELD_NUMBER: _ClassVar[int]
+    DEPLOYMENT_MODE_FIELD_NUMBER: _ClassVar[int]
     runtime_id: str
     runtime_name: str
     tier: str
@@ -220,7 +221,8 @@ class CapabilityManifest(_message.Message):
     cost: CostEstimate
     metadata: _containers.ScalarMap[str, str]
     requires_hook_bridge: bool
-    def __init__(self, runtime_id: _Optional[str] = ..., runtime_name: _Optional[str] = ..., tier: _Optional[str] = ..., model: _Optional[str] = ..., context_window: _Optional[int] = ..., supported_tools: _Optional[_Iterable[str]] = ..., native_hooks: bool = ..., native_mcp: bool = ..., native_skills: bool = ..., cost: _Optional[_Union[CostEstimate, _Mapping]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., requires_hook_bridge: bool = ...) -> None: ...
+    deployment_mode: str
+    def __init__(self, runtime_id: _Optional[str] = ..., runtime_name: _Optional[str] = ..., tier: _Optional[str] = ..., model: _Optional[str] = ..., context_window: _Optional[int] = ..., supported_tools: _Optional[_Iterable[str]] = ..., native_hooks: bool = ..., native_mcp: bool = ..., native_skills: bool = ..., cost: _Optional[_Union[CostEstimate, _Mapping]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., requires_hook_bridge: bool = ..., deployment_mode: _Optional[str] = ...) -> None: ...
 
 class CostEstimate(_message.Message):
     __slots__ = ("input_cost_per_1k", "output_cost_per_1k")

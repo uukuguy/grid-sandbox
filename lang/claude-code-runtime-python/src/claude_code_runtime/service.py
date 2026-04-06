@@ -73,6 +73,7 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
             native_mcp=True,
             native_skills=True,
             requires_hook_bridge=False,
+            deployment_mode="per_session",
             cost=runtime_pb2.CostEstimate(
                 input_cost_per_1k=0.003,
                 output_cost_per_1k=0.015,

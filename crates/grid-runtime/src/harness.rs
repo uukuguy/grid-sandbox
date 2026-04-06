@@ -353,6 +353,7 @@ impl RuntimeContract for GridHarness {
             }),
             metadata: Default::default(),
             requires_hook_bridge: false,
+            deployment_mode: DeploymentMode::Shared,
         }
     }
 

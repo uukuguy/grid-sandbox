@@ -245,6 +245,17 @@ pub struct CapabilityManifest {
     pub metadata: std::collections::HashMap<String, String>,
     /// Whether this runtime requires HookBridge (false for Tier 1).
     pub requires_hook_bridge: bool,
+    /// Deployment mode: "shared" (multi-session per process) or "per_session" (one container per session).
+    pub deployment_mode: DeploymentMode,
+}
+
+/// How L3 should schedule containers for this runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeploymentMode {
+    /// Single process serves multiple sessions (e.g. grid-runtime with tokio async).
+    Shared,
+    /// One container per session, destroyed on terminate (e.g. claude-code-runtime).
+    PerSession,
 }
 
 /// Runtime tier classification.
@@ -344,6 +355,7 @@ mod tests {
             }),
             metadata: Default::default(),
             requires_hook_bridge: false,
+            deployment_mode: DeploymentMode::Shared,
         };
         let json = serde_json::to_string_pretty(&manifest).unwrap();
         assert!(json.contains("Harness"));

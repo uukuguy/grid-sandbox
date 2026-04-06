@@ -168,6 +168,7 @@ message CapabilityManifest {
   CostEstimate cost = 10;
   map<string, string> metadata = 11;
   bool requires_hook_bridge = 12;  // true for Tier 2/3, false for Tier 1
+  string deployment_mode = 13;     // "shared" (multi-session per process) | "per_session" (one container per session)
 }
 
 message CostEstimate {

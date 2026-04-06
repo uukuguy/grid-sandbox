@@ -54,6 +54,7 @@ mod tests {
             runtime_id: "grid-harness".into(),
             runtime_name: "Grid".into(),
             tier: "harness".into(),
+            deployment_mode: "shared".into(),
             passed: true,
             total: 2,
             passed_count: 2,

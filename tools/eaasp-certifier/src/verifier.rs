@@ -27,6 +27,7 @@ pub struct VerificationReport {
     pub runtime_id: String,
     pub runtime_name: String,
     pub tier: String,
+    pub deployment_mode: String,
     pub passed: bool,
     pub total: usize,
     pub passed_count: usize,
@@ -47,6 +48,7 @@ impl fmt::Display for VerificationReport {
             self.runtime_name, self.runtime_id
         )?;
         writeln!(f, " Tier:        {}", self.tier)?;
+        writeln!(f, " Deploy:      {}", self.deployment_mode)?;
         writeln!(f, " Timestamp:   {}", self.timestamp)?;
         writeln!(f, "----------------------------------------------------------------")?;
         writeln!(
@@ -126,13 +128,14 @@ pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationRepor
 
     let passed_count = results.iter().filter(|r| r.passed).count();
     let total = results.len();
-    let (runtime_id, runtime_name, tier) = parse_caps_info(&caps_info);
+    let (runtime_id, runtime_name, tier, deployment_mode) = parse_caps_info(&caps_info);
 
     Ok(VerificationReport {
         endpoint: endpoint.to_string(),
         runtime_id,
         runtime_name,
         tier,
+        deployment_mode,
         passed: passed_count == total,
         total,
         passed_count,
@@ -142,11 +145,27 @@ pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationRepor
     })
 }
 
-fn parse_caps_info(info: &str) -> (String, String, String) {
-    let parts: Vec<&str> = info.splitn(3, ':').collect();
+fn parse_caps_info(info: &str) -> (String, String, String, String) {
+    let parts: Vec<&str> = info.splitn(4, ':').collect();
     match parts.as_slice() {
-        [id, name, tier] => (id.to_string(), name.to_string(), tier.to_string()),
-        _ => ("unknown".into(), "unknown".into(), "unknown".into()),
+        [id, name, tier, deploy] => (
+            id.to_string(),
+            name.to_string(),
+            tier.to_string(),
+            deploy.to_string(),
+        ),
+        [id, name, tier] => (
+            id.to_string(),
+            name.to_string(),
+            tier.to_string(),
+            "unknown".into(),
+        ),
+        _ => (
+            "unknown".into(),
+            "unknown".into(),
+            "unknown".into(),
+            "unknown".into(),
+        ),
     }
 }
 
@@ -207,8 +226,8 @@ async fn verify_get_capabilities(client: &mut RuntimeServiceClient<Channel>) -> 
             "GetCapabilities OK"
         );
         Ok(Some(format!(
-            "{}:{}:{}",
-            cap.runtime_id, cap.runtime_name, cap.tier
+            "{}:{}:{}:{}",
+            cap.runtime_id, cap.runtime_name, cap.tier, cap.deployment_mode
         )))
     })
 }
@@ -546,6 +565,7 @@ mod tests {
             runtime_id: "grid-harness".into(),
             runtime_name: "Grid".into(),
             tier: "harness".into(),
+            deployment_mode: "shared".into(),
             passed: true,
             total: 2,
             passed_count: 2,
@@ -578,17 +598,28 @@ mod tests {
 
     #[test]
     fn parse_caps_info_valid() {
-        let (id, name, tier) = parse_caps_info("grid-harness:Grid:harness");
+        let (id, name, tier, deploy) =
+            parse_caps_info("grid-harness:Grid:harness:shared");
         assert_eq!(id, "grid-harness");
         assert_eq!(name, "Grid");
         assert_eq!(tier, "harness");
+        assert_eq!(deploy, "shared");
+    }
+
+    #[test]
+    fn parse_caps_info_without_deploy() {
+        let (id, name, tier, deploy) = parse_caps_info("grid-harness:Grid:harness");
+        assert_eq!(id, "grid-harness");
+        assert_eq!(tier, "harness");
+        assert_eq!(deploy, "unknown");
     }
 
     #[test]
     fn parse_caps_info_empty() {
-        let (id, name, tier) = parse_caps_info("");
+        let (id, name, tier, deploy) = parse_caps_info("");
         assert_eq!(id, "unknown");
         assert_eq!(name, "unknown");
         assert_eq!(tier, "unknown");
+        assert_eq!(deploy, "unknown");
     }
 }
