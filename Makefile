@@ -9,7 +9,9 @@
         container-build container-build-dev container-build-multi container-build-multi-dev \
         container-list container-clean container-test \
         docker-build docker-build-python docker-build-rust docker-build-nodejs \
-        docker-build-bash docker-build-general docker-build-swebench docker-list docker-clean
+        docker-build-bash docker-build-general docker-build-swebench docker-list docker-clean \
+        claude-runtime-setup claude-runtime-proto claude-runtime-test claude-runtime-start \
+        verify-dual-runtime
 
 # Default test project for CLI commands
 TEST_PROJECT ?= $(PWD)/examples/demo-project
@@ -689,3 +691,23 @@ help:
 	@echo "首次使用:"
 	@echo "  make setup            安装前端依赖"
 	@echo "  cp .env.example .env  然后填入 ANTHROPIC_API_KEY"
+
+# ============================================================
+# claude-code-runtime (Python EAASP L1 Runtime)
+# ============================================================
+
+claude-runtime-setup:
+	cd lang/claude-code-runtime-python && uv sync --extra dev
+
+claude-runtime-proto:
+	cd lang/claude-code-runtime-python && uv run python build_proto.py
+
+claude-runtime-test:
+	cd lang/claude-code-runtime-python && uv run pytest tests/ -xvs
+
+claude-runtime-start:
+	cd lang/claude-code-runtime-python && uv run python -m claude_code_runtime --port 50052 --env-file ../../.env
+
+# 双 runtime 集成验证 (需要 ANTHROPIC_API_KEY)
+verify-dual-runtime:
+	./scripts/verify-dual-runtime.sh

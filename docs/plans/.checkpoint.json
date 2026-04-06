@@ -1,51 +1,51 @@
 {
-  "plan_file": "docs/plans/2026-04-06-be-w1w2w3-hookbridge-certifier.md",
+  "plan_file": "docs/plans/2026-04-06-be-w4w5w6-python-runtime.md",
   "phase": "execution",
-  "created_at": "2026-04-06T15:30:00+08:00",
-  "updated_at": "2026-04-06T17:00:00+08:00",
-  "completed_tasks": ["W1", "W2", "W3"],
+  "created_at": "2026-04-06T18:00:00+08:00",
+  "updated_at": "2026-04-06T19:30:00+08:00",
+  "completed_tasks": ["W4", "W5", "W6"],
   "current_task": null,
   "total_tasks": 3,
-  "phase_name": "Phase BE — EAASP 协议层 + 第二个 L1 Runtime (W1-W3)",
-  "status": "W1-W3 complete. Proto refactor (common.proto extraction + hook.proto bidirectional streaming), HookBridge trait + InProcess + gRPC, eaasp-certifier contract verification tool. 54 tests total.",
+  "phase_name": "Phase BE W4-W6 — claude-code-runtime Python T1 Harness",
+  "status": "W4-W6 complete. Python T1 Harness with 16-method gRPC service, hook execution, telemetry, skill loading, state management. 39 Python tests + dual-runtime verification script.",
   "execution_mode": "ruflo",
   "branch": "Grid",
   "baseline": {
-    "tests": "54 (6 certifier + 11 hook-bridge + 24 runtime unit + 13 runtime integration)",
-    "commit": "40a231e",
-    "notes": "W1-W3 complete — protocol layer + HookBridge + certifier"
+    "tests": "39 Python (3 config + 11 hook + 15 service + 6 session + 4 telemetry) + 54 Rust (unchanged)",
+    "commit": null,
+    "notes": "W4-W6 complete — Python T1 Harness + dual-runtime verification"
   },
   "tasks": {
-    "W1": {
-      "description": "common.proto + hook.proto + runtime.proto refactor",
+    "W4": {
+      "description": "Project skeleton + claude-agent-sdk wrapper + gRPC service stubs",
       "status": "complete",
-      "commit": "b5d7e54",
+      "commit": "5eba80a",
       "sub_tasks": {
-        "T1": { "description": "Create common.proto (shared types extraction)", "status": "complete" },
-        "T2": { "description": "Modify runtime.proto to import common", "status": "complete" },
-        "T3": { "description": "Create hook.proto (bidirectional streaming)", "status": "complete" },
-        "T4": { "description": "Update grid-runtime build.rs/lib.rs/service.rs/tests", "status": "complete" }
+        "T1": { "description": "uv project + pyproject.toml + config.py", "status": "complete" },
+        "T2": { "description": "build_proto.py + gRPC Python stubs", "status": "complete" },
+        "T3": { "description": "sdk_wrapper.py (claude-agent-sdk encapsulation)", "status": "complete" },
+        "T4": { "description": "service.py 16-method gRPC + __main__.py + tests", "status": "complete" }
       }
     },
-    "W2": {
-      "description": "grid-hook-bridge crate (HookBridge trait + InProcess + gRPC)",
+    "W5": {
+      "description": "Hook execution + telemetry + skill + state management",
       "status": "complete",
-      "commit": "c6fdb68",
+      "commit": "2958f37",
       "sub_tasks": {
-        "T1": { "description": "Crate skeleton + build.rs + lib.rs", "status": "complete" },
-        "T2": { "description": "HookBridge trait + types (3 tests)", "status": "complete" },
-        "T3": { "description": "InProcessHookBridge (8 tests)", "status": "complete" },
-        "T4": { "description": "GrpcHookBridge client + HookBridgeGrpcServer", "status": "complete" }
+        "T1": { "description": "SessionManager + Session dataclass", "status": "complete" },
+        "T2": { "description": "HookExecutor (T1 local, deny-always-wins)", "status": "complete" },
+        "T3": { "description": "TelemetryCollector (per-session, resource tracking)", "status": "complete" },
+        "T4": { "description": "SkillLoader + StateManager + Mapper", "status": "complete" },
+        "T5": { "description": "Service integration + full test suite", "status": "complete" }
       }
     },
-    "W3": {
-      "description": "eaasp-certifier contract verification tool",
+    "W6": {
+      "description": "Integration verification (dual-runtime certifier script)",
       "status": "complete",
-      "commit": "40a231e",
+      "commit": null,
       "sub_tasks": {
-        "T1": { "description": "Crate skeleton + CLI", "status": "complete" },
-        "T2": { "description": "verifier.rs 16-method verification (3 tests)", "status": "complete" },
-        "T3": { "description": "mock_l3.rs + report.rs (3 tests)", "status": "complete" }
+        "T1": { "description": "verify-dual-runtime.sh script", "status": "complete" },
+        "T2": { "description": "Makefile targets for Python runtime", "status": "complete" }
       }
     }
   },
@@ -54,10 +54,15 @@
     "BE-D2": "certifier 端到端测试（需要 grid-runtime gRPC server 运行）",
     "BE-D3": "HookBridge 双向流集成测试",
     "BE-D4": "common.proto 到 contract.rs 类型映射自动化",
-    "BE-D5": "certifier CLI mock-l3 子命令（L3 策略引擎 BH）"
+    "BE-D5": "certifier CLI mock-l3 子命令（L3 策略引擎 BH）",
+    "BE-D6": "claude-code-runtime Dockerfile 容器化",
+    "BE-D7": "MCP server 真实连接（当前记录名称）",
+    "BE-D8": "Skill frontmatter YAML hook 解析 + 注入到 SDK",
+    "BE-D9": "会话持久化（当前内存模式）",
+    "BE-D10": "ANTHROPIC_BASE_URL 端到端验证"
   },
   "previous_phase": {
-    "name": "Phase BD — grid-runtime (EAASP L1)",
-    "status": "COMPLETE — 6/6 tasks @ ae4b337"
+    "name": "Phase BE W1-W3 — EAASP 协议层 + HookBridge + certifier",
+    "status": "COMPLETE — 3/3 tasks @ 40a231e"
   }
 }
