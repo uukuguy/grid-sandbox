@@ -1,5 +1,76 @@
 # Grid Sandbox 工作日志
 
+## Phase BF — L2 统一资产层 + L1 抽象机制 (2026-04-06~07)
+
+### 完成内容
+
+Phase BF 共 7 个 Wave，构建 EAASP L2 统一资产层（Skill Registry + MCP Orchestrator），扩展 L1 协议支持 L2 资产拉取，在 certifier 中实现 Mock L3 RuntimeSelector + 盲盒对比。
+
+**W1: 协议扩展 SessionPayload L2 字段 (1a54f95)**
+- proto v1.3: SessionPayload 新增 skill_ids, skill_registry_url, allowed_skill_search, skill_search_scope
+- contract.rs + service.rs 同步更新
+- 7 个测试（含向后兼容）
+
+**W2: L2 Skill Registry crate (9e8bac5)**
+- `tools/eaasp-skill-registry/`: REST API (Axum) + SQLite 元数据 + 文件系统内容 + Git 版本追溯
+- SkillStore: submit_draft / read_skill / search / promote / list_versions
+- 晋升流水线: Draft → Tested → Reviewed → Production
+- REST 路由: GET /skills/{id}/content, GET /skills/search, POST /skills/draft, POST /skills/{id}/promote/{version}
+- 10 个测试（3 store + 4 API + 3 其他）
+
+**W3: L2 MCP Orchestrator crate (9e8bac5)**
+- `tools/eaasp-mcp-orchestrator/`: YAML 配置驱动 + Shared 模式子进程管理 + REST API
+- McpManager: start/stop/list_servers/list_by_tags
+- REST 路由: GET /mcp-servers, POST /mcp-servers/{name}/start|stop
+- 4 个测试
+
+**W4: L1 Runtime L2 集成 (b6af473)**
+- `crates/grid-runtime/src/l2_client.rs`: L2SkillClient REST 客户端
+- GridHarness initialize 方法扩展：从 L2 Skill Registry 拉取 skill 内容并 load_skill
+- 4 个测试
+
+**W5: Mock L3 RuntimeSelector + 运行时池 (9e982e0)**
+- `tools/eaasp-certifier/src/runtime_pool.rs`: 运行时池管理（register/list/healthy/get）
+- `tools/eaasp-certifier/src/selector.rs`: 三种选择策略（UserPreference/Blindbox/Default）
+- 5 个测试
+
+**W6: 盲盒对比 (59bb58e)**
+- `tools/eaasp-certifier/src/blindbox.rs`: 并行执行两个 runtime + 匿名展示 + 用户评分
+- BlindboxRecord: reveal() 揭示、BlindboxVote (AWins/BWins/Tie)
+- certifier CLI 新增 blindbox 子命令
+- 3 个测试
+
+**W7: 集成验证 + 设计文档 + Makefile (ff5ad56)**
+- `docs/design/Grid/EAASP_L2_ASSET_LAYER_DESIGN.md`: 12 节设计文档，含 12 个设计决策 (BF-KD1~KD12)
+- Makefile 新增 skill-registry / mcp-orch / certifier-blindbox targets
+- EAASP_ROADMAP.md Phase BF 标记完成
+- NEXT_SESSION_GUIDE.md 更新
+
+### 技术决策
+
+| 决策 | 内容 |
+|------|------|
+| BF-KD1 | L2 存储：SQLite 元数据 + 文件系统 + Git 追溯 |
+| BF-KD2 | L1↔L2 Skill 通信：REST（L1 拉取内容） |
+| BF-KD3 | L2 实现语言：Rust（独立 binary） |
+| BF-KD9 | L2 Skill Registry = REST only（去掉 MCP 接口） |
+| BF-KD12 | Skill 转换是 L1 Runtime 内部的事 |
+
+### 测试结果
+
+- 新增 30 个测试（W1~W6）
+- 全部通过（各 crate 独立 --test-threads=1）
+
+### Deferred 暂缓项
+
+BF-D1~D10 全部保留，主要被 L3 未实现阻塞。下一阶段（BG）计划采用 Mock L3 Contract-First 思路，以统一协议驱动 L1/L2 完整化，一次性解锁多个 Deferred。
+
+### 下一步
+
+Phase BG — Mock L3 Contract + L1/L2 完整化（而非原 Roadmap 的 Enterprise SDK）
+
+---
+
 ## Phase BE — EAASP 协议层 + claude-code-runtime (2026-04-06)
 
 ### 完成内容

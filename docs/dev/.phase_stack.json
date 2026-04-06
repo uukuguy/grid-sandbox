@@ -1,16 +1,16 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase BF — L2 技能资产层 + L1 抽象机制",
-      "started_at": "2026-04-06T21:30:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
-      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "progress": "57%",
-      "last_updated": "2026-04-07T00:15:00+08:00"
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
+    {
+      "name": "Phase BF — L2 技能资产层 + L1 抽象机制",
+      "completed_at": "2026-04-07T04:40:00+08:00",
+      "progress": "100%",
+      "commits": ["1a54f95", "9e8bac5", "9e982e0", "b6af473", "59bb58e", "0a929ad", "ff5ad56"],
+      "tasks": "7/7 (W1: proto v1.3 ✅, W2: Skill Registry ✅, W3: MCP Orchestrator ✅, W4: L1-L2 集成 ✅, W5: RuntimeSelector ✅, W6: 盲盒 ✅, W7: 设计文档 ✅)",
+      "tests": "30 new",
+      "deferred": ["BF-D1", "BF-D2", "BF-D3", "BF-D4", "BF-D5", "BF-D6", "BF-D7", "BF-D8", "BF-D9", "BF-D10"]
+    },
     {
       "name": "Phase BE — EAASP 协议层 + 第二个 L1 Runtime",
       "completed_at": "2026-04-06T20:30:00+08:00",
