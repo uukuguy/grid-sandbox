@@ -152,9 +152,38 @@ impl RuntimeContract for GridHarness {
             "GridHarness: session initialized"
         );
 
-        Ok(SessionHandle {
+        let handle = SessionHandle {
             session_id: session_id.as_str().to_string(),
-        })
+        };
+
+        // L2 Skill preloading: fetch skills from L2 Registry if specified
+        if !payload.skill_ids.is_empty() {
+            if let Some(ref url) = payload.skill_registry_url {
+                let client = crate::l2_client::L2SkillClient::new(url);
+                for (id, result) in client.fetch_skills(&payload.skill_ids).await {
+                    match result {
+                        Ok(content) => {
+                            let skill = SkillContent {
+                                skill_id: content.meta.id,
+                                name: content.meta.name,
+                                frontmatter_yaml: content.frontmatter_yaml,
+                                prose: content.prose,
+                            };
+                            if let Err(e) = self.load_skill(&handle, skill).await {
+                                warn!(skill_id = %id, error = %e, "Failed to load L2 skill");
+                            }
+                        }
+                        Err(e) => {
+                            warn!(skill_id = %id, error = %e, "Failed to fetch skill from L2");
+                        }
+                    }
+                }
+            } else {
+                warn!("skill_ids provided but no skill_registry_url in SessionPayload");
+            }
+        }
+
+        Ok(handle)
     }
 
     async fn send(

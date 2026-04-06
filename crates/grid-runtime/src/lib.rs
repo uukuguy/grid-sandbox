@@ -20,6 +20,7 @@
 pub mod config;
 pub mod contract;
 pub mod harness;
+pub mod l2_client;
 pub mod service;
 pub mod telemetry;
 

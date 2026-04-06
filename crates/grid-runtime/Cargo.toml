@@ -26,6 +26,9 @@ tonic = "0.12"
 prost = "0.13"
 prost-types = "0.13"
 
+# HTTP client (L2 Skill Registry)
+reqwest = { workspace = true }
+
 # Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
