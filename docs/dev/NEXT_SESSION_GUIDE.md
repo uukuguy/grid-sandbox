@@ -1,8 +1,8 @@
 # Grid Platform 下一会话指南
 
-**最后更新**: 2026-04-06 20:30 GMT+8
+**最后更新**: 2026-04-06 22:00 GMT+8
 **当前分支**: `Grid`
-**当前状态**: Phase BE 完成 (6/6) — 协议层 + HookBridge + certifier + Python Runtime + 容器化
+**当前状态**: Phase BF 启动 — L2 统一资产层 + L1 抽象机制
 
 ---
 
@@ -19,86 +19,67 @@
 - [x] Phase BB-BC — TUI 视觉升级 + Deferred 补齐
 - [x] Phase BD — grid-runtime EAASP L1 (6/6, 37 tests @ ae4b337)
 - [x] Phase BE W1-W3 — 协议层 + HookBridge + certifier (3/3, 54 tests @ 40a231e)
-- [x] **Phase BE W4-W6** — claude-code-runtime Python T1 Harness (3/3, 39 Python tests)
+- [x] Phase BE W4-W6 — claude-code-runtime Python T1 Harness (3/3, 39 Python tests)
+- [ ] **Phase BF** — L2 统一资产层 + L1 抽象机制 (0/7)
 
-## Phase BE W4-W6 产出物
+## Phase BF 当前进度
 
-| 组件 | 路径 | 说明 |
+**状态**: 设计完成，实施计划已写入
+
+**计划文档**: `docs/plans/2026-04-06-phase-bf-l2-asset-layer.md`
+
+| Wave | 内容 | 状态 |
 |------|------|------|
-| 项目骨架 | `lang/claude-code-runtime-python/` | uv + pyproject.toml + build_proto.py |
-| 配置 | `src/claude_code_runtime/config.py` | ANTHROPIC_BASE_URL/MODEL_NAME/API_KEY 支持 |
-| SDK 封装 | `src/claude_code_runtime/sdk_wrapper.py` | claude-agent-sdk query() 封装 |
-| gRPC Service | `src/claude_code_runtime/service.py` | 16 方法 RuntimeService 实现 |
-| Session | `src/claude_code_runtime/session.py` | SessionManager + Session 数据类 |
-| Hook 执行器 | `src/claude_code_runtime/hook_executor.py` | T1 本地 hook 评估，deny-always-wins |
-| 遥测 | `src/claude_code_runtime/telemetry.py` | TelemetryCollector per-session |
-| Skill 加载 | `src/claude_code_runtime/skill_loader.py` | SkillContent 解析 + system prompt 注入 |
-| 状态管理 | `src/claude_code_runtime/state_manager.py` | JSON 序列化/反序列化 |
-| 验证脚本 | `scripts/verify-dual-runtime.sh` | 双 runtime 集成验证 |
+| W1 | 协议扩展（SessionPayload L2 字段） | ⏳ |
+| W2 | L2 Skill Registry crate (REST + SQLite + Git) | ⏳ |
+| W3 | L2 MCP Orchestrator crate (YAML + subprocess) | ⏳ |
+| W4 | L1 Runtime L2 集成 (GridHarness → L2 REST) | ⏳ |
+| W5 | Mock L3 RuntimeSelector + 运行时池 | ⏳ |
+| W6 | 盲盒对比 (并行执行 + 匿名评分) | ⏳ |
+| W7 | 集成验证 + 设计文档 + Makefile | ⏳ |
 
-## 下一步优先级
+## 关键设计决策 (BF Brainstorming 产出)
 
-### Phase BF — L2 技能资产层 + L1 抽象机制
-
-按路线图 `docs/design/Grid/EAASP_ROADMAP.md` §BF：
-
-1. L2 Skill 仓库 MCP server（7 个 MCP 工具）
-2. L2 晋升引擎（draft → tested → reviewed → production）
-3. L1 运行时选择器（RuntimeSelector）+ 适配器注册表
-4. L1 遥测采集器（统一 schema）
-5. 盲盒对比（Grid vs Claude Code）
-
-### 或处理 Deferred Items
-
-| 来源 | ID | 内容 | 前置条件 |
-|------|----|----|---------|
-| BE | D1 | GrpcHookBridge 端到端集成测试 | HookBridge server 运行 |
-| BE | D2 | certifier 端到端测试 | grid-runtime gRPC 运行 |
-| BE | D3 | HookBridge 双向流集成测试 | server.rs StreamHooks |
-| BE | D4 | common.proto → contract.rs 映射自动化 | 手动同步足够 |
-| BE | D5 | certifier mock-l3 子命令 | BH L3 策略引擎 |
-| BE | D6 | claude-code-runtime Dockerfile | 基本功能稳定后 |
-| BE | D7 | MCP server 真实连接 | claude-agent-sdk MCP 支持 |
-| BE | D8 | Skill frontmatter YAML hook 解析 | Skill 规范稳定 |
-| BE | D9 | 会话持久化（当前内存） | L4 Session Store |
-| BE | D10 | ANTHROPIC_BASE_URL 端到端验证 | 手动测试 |
-| BD | D6 | initialize() payload 字段传递 | grid-engine 扩展参数 |
-| BD | D7 | emit_telemetry 填充 user_id | session 存储 user_id |
+| # | 决策 | 理由 |
+|---|------|------|
+| BF-KD1 | L2 存储：SQLite 元数据 + 文件系统 + Git 追溯 | 三层各司其职 |
+| BF-KD2 | L1 ↔ L2 Skill 通信：REST（L1 拉取内容） | Agent 不直连 L2 |
+| BF-KD3 | L2 三个独立服务（Skill/MCP/Ontology） | 资产类型本质不同 |
+| BF-KD4 | RuntimeSelector 属于 L3，BF 在 certifier mock | L3 未来 Python/TS |
+| BF-KD5 | 盲盒：用户主动开启，并行执行，匿名评分 | 实验性功能 |
+| BF-KD6 | L2 Skill Registry = REST only（去掉 MCP 接口） | Agent 不直连 L2 |
+| BF-KD7 | MCP Orchestrator 管理 MCP Server 运行 | L3 查询后下发给 L1 |
+| BF-KD8 | L3 下发 skill_ids + skill_registry_url | L1 自行从 L2 拉取 |
+| BF-KD9 | Agent 不需要 skill_search | L3 策略筛选子集 |
 
 ## 关键代码路径
 
 | 组件 | 路径 |
 |------|------|
+| SessionPayload (proto) | `proto/eaasp/runtime/v1/runtime.proto` |
+| SessionPayload (Rust) | `crates/grid-runtime/src/contract.rs` |
+| GridHarness | `crates/grid-runtime/src/harness.rs` |
+| gRPC service | `crates/grid-runtime/src/service.rs` |
+| certifier CLI | `tools/eaasp-certifier/src/main.rs` |
+| certifier mock L3 | `tools/eaasp-certifier/src/mock_l3.rs` |
+| certifier verifier | `tools/eaasp-certifier/src/verifier.rs` |
 | common.proto | `proto/eaasp/common/v1/common.proto` |
 | hook.proto | `proto/eaasp/hook/v1/hook.proto` |
-| runtime.proto | `proto/eaasp/runtime/v1/runtime.proto` |
 | HookBridge trait | `crates/grid-hook-bridge/src/traits.rs` |
-| InProcessHookBridge | `crates/grid-hook-bridge/src/in_process.rs` |
-| GrpcHookBridge | `crates/grid-hook-bridge/src/grpc_bridge.rs` |
-| HookBridge server | `crates/grid-hook-bridge/src/server.rs` |
-| Certifier verifier | `tools/eaasp-certifier/src/verifier.rs` |
-| Certifier CLI | `tools/eaasp-certifier/src/main.rs` |
-| RuntimeContract | `crates/grid-runtime/src/contract.rs` |
-| GridHarness | `crates/grid-runtime/src/harness.rs` |
-| gRPC service (Rust) | `crates/grid-runtime/src/service.rs` |
-| gRPC service (Python) | `lang/claude-code-runtime-python/src/claude_code_runtime/service.py` |
-| Python SDK wrapper | `lang/claude-code-runtime-python/src/claude_code_runtime/sdk_wrapper.py` |
-| 双 runtime 验证 | `scripts/verify-dual-runtime.sh` |
+| Python runtime | `lang/claude-code-runtime-python/` |
 
-## 关键 API 模式
+## 新增组件（BF 产出物）
 
-- tonic `extern_path` 必须分步编译：先编译 common.proto，再编译引用方的 proto
-- `tests/` 在 .gitignore 中，需 `git add -f`
-- HookBridge 双向流使用 `mpsc::channel(32)` + `ReceiverStream`
-- Python proto 编译需要 `_fix_imports()` 修正 grpcio 生成的绝对 import 路径
-- `claude-agent-sdk` 底层启动 Claude Code CLI 进程，通过 `env` 参数传递 ANTHROPIC_BASE_URL/API_KEY
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| Skill Registry | `tools/eaasp-skill-registry/` | L2 Skill 仓库 REST API |
+| MCP Orchestrator | `tools/eaasp-mcp-orchestrator/` | L2 MCP Server 管理 |
+| L2 Client | `crates/grid-runtime/src/l2_client.rs` | L1 从 L2 拉取 Skill |
+| RuntimePool | `tools/eaasp-certifier/src/runtime_pool.rs` | 运行时池管理 |
+| RuntimeSelector | `tools/eaasp-certifier/src/selector.rs` | Mock L3 选择策略 |
+| Blindbox | `tools/eaasp-certifier/src/blindbox.rs` | 盲盒对比 |
 
-## Makefile 命令（Python Runtime）
+## 建议下一步
 
-```bash
-make claude-runtime-setup    # uv sync --extra dev
-make claude-runtime-proto    # 编译 proto → Python stubs
-make claude-runtime-test     # pytest tests/
-make claude-runtime-start    # 启动 gRPC server :50052
-make verify-dual-runtime     # 启动两个 runtime + certifier 验证
-```
+1. 执行实施计划 W1-W7（推荐 subagent-driven 模式）
+2. 或 `/dev-phase-manager:resume-plan` 如果已有 checkpoint

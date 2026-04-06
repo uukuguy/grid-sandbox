@@ -113,6 +113,18 @@ pub struct SessionPayload {
     pub hook_bridge_url: Option<String>,
     /// Telemetry endpoint (optional, from L3).
     pub telemetry_endpoint: Option<String>,
+    /// L3-selected skill IDs to preload from L2 Skill Registry.
+    #[serde(default)]
+    pub skill_ids: Vec<String>,
+    /// L2 Skill Registry REST endpoint URL.
+    #[serde(default)]
+    pub skill_registry_url: Option<String>,
+    /// Whether the agent is allowed to search for additional skills at runtime.
+    #[serde(default)]
+    pub allowed_skill_search: bool,
+    /// Allowed search scope patterns (e.g. "org/erp/*").
+    #[serde(default)]
+    pub skill_search_scope: Vec<String>,
 }
 
 /// Opaque session handle returned by `initialize`.
@@ -300,10 +312,51 @@ mod tests {
             context: Default::default(),
             hook_bridge_url: None,
             telemetry_endpoint: None,
+            skill_ids: vec![],
+            skill_registry_url: None,
+            allowed_skill_search: false,
+            skill_search_scope: vec![],
         };
         let json = serde_json::to_string(&payload).unwrap();
         let restored: SessionPayload = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.user_id, "user-1");
+    }
+
+    #[test]
+    fn session_payload_l2_fields_roundtrip() {
+        let payload = SessionPayload {
+            user_id: "user-1".into(),
+            user_role: "developer".into(),
+            org_unit: "engineering".into(),
+            managed_hooks_json: None,
+            quotas: Default::default(),
+            context: Default::default(),
+            hook_bridge_url: None,
+            telemetry_endpoint: None,
+            skill_ids: vec!["order-management".into(), "logistics".into()],
+            skill_registry_url: Some("http://l2-skill:8080".into()),
+            allowed_skill_search: false,
+            skill_search_scope: vec![],
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        let restored: SessionPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.skill_ids.len(), 2);
+        assert_eq!(
+            restored.skill_registry_url.as_deref(),
+            Some("http://l2-skill:8080")
+        );
+        assert!(!restored.allowed_skill_search);
+    }
+
+    #[test]
+    fn session_payload_l2_fields_default_empty() {
+        // Test backward compat: JSON without L2 fields should deserialize with defaults
+        let json = r#"{"user_id":"u","user_role":"r","org_unit":"o","managed_hooks_json":null,"quotas":{},"context":{},"hook_bridge_url":null,"telemetry_endpoint":null}"#;
+        let payload: SessionPayload = serde_json::from_str(json).unwrap();
+        assert!(payload.skill_ids.is_empty());
+        assert!(payload.skill_registry_url.is_none());
+        assert!(!payload.allowed_skill_search);
+        assert!(payload.skill_search_scope.is_empty());
     }
 
     #[test]

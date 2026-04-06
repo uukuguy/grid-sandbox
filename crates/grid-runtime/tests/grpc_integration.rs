@@ -101,11 +101,7 @@ async fn test_initialize_and_terminate() {
                 user_id: "test-user".into(),
                 user_role: "developer".into(),
                 org_unit: "engineering".into(),
-                managed_hooks_json: String::new(),
-                quotas: Default::default(),
-                context: Default::default(),
-                hook_bridge_url: String::new(),
-                telemetry_endpoint: String::new(),
+                ..Default::default()
             }),
         })
         .await
@@ -173,11 +169,7 @@ async fn test_session_lifecycle_get_state() {
                 user_id: "certifier-user".into(),
                 user_role: "evaluator".into(),
                 org_unit: "eaasp-certifier".into(),
-                managed_hooks_json: String::new(),
-                quotas: Default::default(),
-                context: Default::default(),
-                hook_bridge_url: String::new(),
-                telemetry_endpoint: String::new(),
+                ..Default::default()
             }),
         })
         .await
@@ -221,11 +213,7 @@ async fn test_emit_telemetry_returns_metering() {
                 user_id: "telem-user".into(),
                 user_role: "developer".into(),
                 org_unit: "test".into(),
-                managed_hooks_json: String::new(),
-                quotas: Default::default(),
-                context: Default::default(),
-                hook_bridge_url: String::new(),
-                telemetry_endpoint: String::new(),
+                ..Default::default()
             }),
         })
         .await
@@ -324,11 +312,7 @@ async fn test_pause_session_succeeds() {
                 user_id: "pause-user".into(),
                 user_role: "developer".into(),
                 org_unit: "test".into(),
-                managed_hooks_json: String::new(),
-                quotas: Default::default(),
-                context: Default::default(),
-                hook_bridge_url: String::new(),
-                telemetry_endpoint: String::new(),
+                ..Default::default()
             }),
         })
         .await
@@ -380,11 +364,7 @@ async fn test_terminate_includes_final_telemetry() {
                 user_id: "final-telem-user".into(),
                 user_role: "developer".into(),
                 org_unit: "test".into(),
-                managed_hooks_json: String::new(),
-                quotas: Default::default(),
-                context: Default::default(),
-                hook_bridge_url: String::new(),
-                telemetry_endpoint: String::new(),
+                ..Default::default()
             }),
         })
         .await

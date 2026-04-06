@@ -1,68 +1,57 @@
 {
-  "plan_file": "docs/plans/2026-04-06-be-w4w5w6-python-runtime.md",
-  "phase": "execution",
-  "created_at": "2026-04-06T18:00:00+08:00",
-  "updated_at": "2026-04-06T19:30:00+08:00",
-  "completed_tasks": ["W4", "W5", "W6"],
+  "plan_file": "docs/plans/2026-04-06-phase-bf-l2-asset-layer.md",
+  "phase": "design",
+  "created_at": "2026-04-06T22:00:00+08:00",
+  "updated_at": "2026-04-06T22:00:00+08:00",
+  "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 3,
-  "phase_name": "Phase BE W4-W6 — claude-code-runtime Python T1 Harness",
-  "status": "W4-W6 complete. Python T1 Harness with 16-method gRPC service, hook execution, telemetry, skill loading, state management. 39 Python tests + dual-runtime verification script.",
-  "execution_mode": "ruflo",
+  "total_tasks": 7,
+  "phase_name": "Phase BF — L2 统一资产层 + L1 抽象机制",
+  "status": "Design complete. 12 key decisions confirmed (BF-KD1~KD12). 7 waves planned. Ready for execution.",
+  "execution_mode": null,
   "branch": "Grid",
   "baseline": {
-    "tests": "39 Python (3 config + 11 hook + 15 service + 6 session + 4 telemetry) + 54 Rust (unchanged)",
+    "tests": "2476 Rust workspace + 39 Python (unchanged from BE)",
     "commit": null,
-    "notes": "W4-W6 complete — Python T1 Harness + dual-runtime verification"
+    "notes": "Design phase — no code changes yet"
   },
   "tasks": {
-    "W4": {
-      "description": "Project skeleton + claude-agent-sdk wrapper + gRPC service stubs",
-      "status": "complete",
-      "commit": "5eba80a",
-      "sub_tasks": {
-        "T1": { "description": "uv project + pyproject.toml + config.py", "status": "complete" },
-        "T2": { "description": "build_proto.py + gRPC Python stubs", "status": "complete" },
-        "T3": { "description": "sdk_wrapper.py (claude-agent-sdk encapsulation)", "status": "complete" },
-        "T4": { "description": "service.py 16-method gRPC + __main__.py + tests", "status": "complete" }
-      }
-    },
-    "W5": {
-      "description": "Hook execution + telemetry + skill + state management",
-      "status": "complete",
-      "commit": "2958f37",
-      "sub_tasks": {
-        "T1": { "description": "SessionManager + Session dataclass", "status": "complete" },
-        "T2": { "description": "HookExecutor (T1 local, deny-always-wins)", "status": "complete" },
-        "T3": { "description": "TelemetryCollector (per-session, resource tracking)", "status": "complete" },
-        "T4": { "description": "SkillLoader + StateManager + Mapper", "status": "complete" },
-        "T5": { "description": "Service integration + full test suite", "status": "complete" }
-      }
-    },
-    "W6": {
-      "description": "Integration verification (dual-runtime certifier script)",
-      "status": "complete",
-      "commit": null,
-      "sub_tasks": {
-        "T1": { "description": "verify-dual-runtime.sh script", "status": "complete" },
-        "T2": { "description": "Makefile targets for Python runtime", "status": "complete" }
-      }
-    }
+    "W1": { "description": "协议扩展 SessionPayload L2 字段 (proto v1.3)", "status": "pending" },
+    "W2": { "description": "L2 Skill Registry crate (REST + SQLite + Git)", "status": "pending" },
+    "W3": { "description": "L2 MCP Orchestrator crate (YAML + subprocess)", "status": "pending" },
+    "W4": { "description": "L1 Runtime L2 集成 (GridHarness → L2 REST)", "status": "pending" },
+    "W5": { "description": "Mock L3 RuntimeSelector + 运行时池", "status": "pending" },
+    "W6": { "description": "盲盒对比 (并行执行 + 匿名评分)", "status": "pending" },
+    "W7": { "description": "集成验证 + 设计文档 + Makefile", "status": "pending" }
   },
   "deferred": {
-    "BE-D1": "GrpcHookBridge 端到端集成测试（需要 HookBridge server 运行）",
-    "BE-D2": "✅ 已补 — verify-dual-runtime.sh 覆盖 (bf1daab)",
-    "BE-D3": "HookBridge 双向流集成测试",
-    "BE-D4": "common.proto 到 contract.rs 类型映射自动化",
-    "BE-D5": "certifier CLI mock-l3 子命令（L3 策略引擎 BH）",
-    "BE-D6": "✅ 已补 — Dockerfile 已实现 (bd2c967)",
-    "BE-D7": "MCP server 真实连接（当前记录名称）",
-    "BE-D8": "Skill frontmatter YAML hook 解析 + 注入到 SDK",
-    "BE-D9": "会话持久化（当前内存模式）",
-    "BE-D10": "ANTHROPIC_BASE_URL 端到端验证"
+    "BF-D1": "Git 版本追溯集成到 submit_draft/promote",
+    "BF-D2": "MCP Orchestrator PerSession 模式 (Docker API, BH)",
+    "BF-D3": "MCP Orchestrator OnDemand 模式",
+    "BF-D4": "Agent 按需 skill 发现 (allowed_skill_search, BH L3)",
+    "BF-D5": "Ontology Service (BH+)",
+    "BF-D6": "Skill Registry RBAC 访问控制 (BH L3)",
+    "BF-D7": "盲盒 ELO/win-rate 统计聚合",
+    "BF-D8": "RuntimeSelector 成本排序",
+    "BF-D9": "MCP Orchestrator 容器化管理 (Docker)",
+    "BF-D10": "Skill Registry streamable-http 生产模式"
+  },
+  "key_decisions": {
+    "BF-KD1": "L2 存储：SQLite 元数据 + 文件系统 + Git 追溯",
+    "BF-KD2": "L1↔L2 Skill 通信：REST（L1 拉取内容）",
+    "BF-KD3": "L2 实现语言：Rust（独立 binary）",
+    "BF-KD4": "RuntimeSelector 属于 L3，BF 在 certifier mock",
+    "BF-KD5": "盲盒：用户主动开启，并行执行，匿名评分",
+    "BF-KD6": "L2 三个独立服务（Skill/MCP/Ontology）",
+    "BF-KD7": "MCP Orchestrator 对 L1 不直连，L3 下发",
+    "BF-KD8": "Agent 不需要 skill_search，L3 策略筛选子集",
+    "BF-KD9": "L2 Skill Registry = REST only",
+    "BF-KD10": "MCP Server 运行：BF 只实现 Shared 子进程",
+    "BF-KD11": "Skill 获取：BF 只实现预加载，按需发现留后",
+    "BF-KD12": "Skill 转换是 L1 Runtime 内部的事"
   },
   "previous_phase": {
-    "name": "Phase BE W1-W3 — EAASP 协议层 + HookBridge + certifier",
-    "status": "COMPLETE — 3/3 tasks @ 40a231e"
+    "name": "Phase BE — EAASP 协议层 + 第二个 L1 Runtime",
+    "status": "COMPLETE — 6/6 tasks, 93 tests (54 Rust + 39 Python)"
   }
 }

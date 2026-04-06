@@ -240,11 +240,7 @@ async fn verify_initialize(client: &mut RuntimeServiceClient<Channel>) -> Method
                     user_id: "certifier-user".into(),
                     user_role: "tester".into(),
                     org_unit: "qa".into(),
-                    managed_hooks_json: String::new(),
-                    quotas: Default::default(),
-                    context: Default::default(),
-                    hook_bridge_url: String::new(),
-                    telemetry_endpoint: String::new(),
+                    ..Default::default()
                 }),
             })
             .await

@@ -48,6 +48,14 @@ fn to_session_payload(p: proto::SessionPayload) -> contract::SessionPayload {
         } else {
             Some(p.telemetry_endpoint)
         },
+        skill_ids: p.skill_ids,
+        skill_registry_url: if p.skill_registry_url.is_empty() {
+            None
+        } else {
+            Some(p.skill_registry_url)
+        },
+        allowed_skill_search: p.allowed_skill_search,
+        skill_search_scope: p.skill_search_scope,
     }
 }
 

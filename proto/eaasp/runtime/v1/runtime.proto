@@ -81,6 +81,11 @@ message SessionPayload {
   map<string, string> context = 6; // additional key-value context
   string hook_bridge_url = 7;      // Optional: L3-provided HookBridge address
   string telemetry_endpoint = 8;   // Optional: L3 telemetry receiver
+  // L2 Skill Registry fields (proto v1.3)
+  repeated string skill_ids = 9;           // L3-selected skill IDs to preload from L2
+  string skill_registry_url = 10;          // L2 Skill Registry REST endpoint
+  bool allowed_skill_search = 11;          // Whether agent can search for more skills at runtime
+  repeated string skill_search_scope = 12; // Allowed search scope patterns (e.g. "org/erp/*")
 }
 
 message SendRequest {
