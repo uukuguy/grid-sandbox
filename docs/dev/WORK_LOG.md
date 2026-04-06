@@ -1,4 +1,65 @@
-# octo-sandbox 工作日志
+# Grid Sandbox 工作日志
+
+## Phase BD — grid-runtime EAASP L1 (2026-04-06)
+
+### 完成内容
+
+实现 grid-runtime crate 完整的 EAASP L1 Tier 1 Harness，包含 16 方法 gRPC server、遥测模块、集成测试和容器化。
+
+**W1: crate 骨架 + proto + RuntimeContract trait (02dfa82)**
+- 新建 grid-runtime crate，tonic-build 编译 runtime.proto
+- RuntimeContract trait 定义 13 方法（initialize/send/load_skill/on_tool_call/on_tool_result/on_stop/get_state/restore_state/connect_mcp/emit_telemetry/get_capabilities/terminate/health）
+- 7 个 contract 单元测试
+
+**W2: GridHarness 桥接 grid-engine (f8b8e3d)**
+- GridHarness 实现全部 13 方法，直接调用 grid-engine 内部 API
+- AgentEvent → ResponseChunk 流式转换
+- 7 个 harness 单元测试
+
+**W3: gRPC server 完整实现 (3834fd9)**
+- Proto v1.2: +3 RPC (DisconnectMcp/PauseSession/ResumeSession) + 扩展字段
+- config.rs: RuntimeConfig 环境变量配置（1 test）
+- service.rs: RuntimeGrpcService 实现 16 方法 tonic trait
+- main.rs: gRPC server 入口（AgentRuntime + GridHarness + tonic Server）
+- 5 个 gRPC 集成测试（health/capabilities/init-terminate/tool-call/on-stop）
+- Dockerfile (rust:1.92 → debian-slim) + Makefile targets
+
+**W4: 遥测模块 (d85794d)**
+- EaaspEventType 枚举（10 种标准事件类型）
+- TelemetryEventBuilder + TelemetryCollector
+- harness emit_telemetry 从 40 行内联重构为 1 行委托
+- 9 个遥测测试
+
+**W5: certifier 降级集成测试 (ae4b337)**
+- 8 个 gRPC 集成测试覆盖完整契约表面
+- session lifecycle / telemetry / skill / hooks / MCP disconnect / pause / resume degradation / terminate+telemetry
+
+**W6: Dockerfile 更新**
+- Rust 版本对齐本地 1.92.0
+
+### 技术变更
+- 新增 6 个源文件：contract.rs, harness.rs, config.rs, service.rs, telemetry.rs, main.rs
+- 新增 1 个 Dockerfile + 3 个 Makefile targets (runtime-build/run/build-binary)
+- Proto v1.2: 16 个 RPC 方法，扩展 SessionPayload/CapabilityManifest/SessionState
+- 新增设计文档: `docs/design/Grid/EAASP_SANDBOX_EXECUTION_DESIGN.md`（四种沙箱执行模式）
+
+### 测试结果
+- 37 个 grid-runtime 测试全部通过
+  - contract: 7, harness: 7, config: 1, telemetry: 9, integration: 13
+
+### Deferred 项 (7 项)
+- BD-D1: grid-hook-bridge crate（Tier 2/3 sidecar）
+- BD-D2: RuntimeSelector + AdapterRegistry（平台层）
+- BD-D3: 盲盒对比（需 2+ 运行时）
+- BD-D4: managed-settings.json 分发（L3 治理层）
+- BD-D5: SessionPayload 组织层级（L4 多租户）
+- BD-D6: initialize() payload 字段传递到 engine（user_role/org_unit/quotas/hooks 当前丢弃）
+- BD-D7: emit_telemetry 填充 user_id（with_user_id 仅测试调用）
+
+### 工具改进
+- deferred-scan 命令新增 Pattern 5（函数参数未消费）+ Pattern 6（setter 仅测试调用）
+
+---
 
 ## Phase AR — CC-OSS 缺口补齐 (2026-04-02)
 

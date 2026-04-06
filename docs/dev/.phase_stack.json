@@ -1,17 +1,18 @@
 {
-  "active_phases": [
-    {
-      "name": "Phase BD — grid-runtime (EAASP L1)",
-      "started_at": "2026-04-05T00:30:00+08:00",
-      "progress": "67% (W1+W2+W3+W4 complete, 29 tests)",
-      "plan_file": "docs/plans/2026-04-06-bd-w3-grpc-server.md",
-      "tasks": "4/6 (W1: crate+proto ✅, W2: harness ✅, W3: gRPC server ✅, W4: telemetry ✅, W5: certifier, W6: Docker)"
-    }
-  ],
+  "active_phases": [],
   "suspended_phases": [],
   "archived_phases": [
     {
-      "name": "Phase BC — TUI Deferred Items 补齐",
+      "name": "Phase BD — grid-runtime (EAASP L1)",
+      "completed_at": "2026-04-06T16:00:00+08:00",
+      "progress": "100%",
+      "commits": ["02dfa82", "f8b8e3d", "3834fd9", "d85794d", "ae4b337"],
+      "tasks": "6/6 (W1: crate+proto ✅, W2: harness ✅, W3: gRPC server ✅, W4: telemetry ✅, W5: certifier tests ✅, W6: Dockerfile ✅)",
+      "tests": 37,
+      "deferred": ["BD-D1", "BD-D2", "BD-D3", "BD-D4", "BD-D5", "BD-D6", "BD-D7"]
+    },
+    {
+      "name": "Phase BC — TUI Deferred Items 补��",
       "completed_at": "2026-04-04T21:10:00+08:00",
       "progress": "100%",
       "commits": ["41a0fcf"],

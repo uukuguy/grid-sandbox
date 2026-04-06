@@ -40,7 +40,9 @@
     "BD-D2": "RuntimeSelector + AdapterRegistry（平台层）",
     "BD-D3": "盲盒对比（需 2+ 运行时）",
     "BD-D4": "managed-settings.json 分发机制（L3 治理层）",
-    "BD-D5": "SessionPayload 组织层级（L4 多租户）"
+    "BD-D5": "SessionPayload 组织层级（L4 多租户）",
+    "BD-D6": "initialize() 传递 payload 完整字段到 engine session（user_role/org_unit/quotas/hooks/context/hook_bridge_url/telemetry_endpoint 当前丢弃）— 前置: grid-engine start_session 支持扩展参数",
+    "BD-D7": "emit_telemetry 填充 user_id — TelemetryEventBuilder.with_user_id() 仅测试调用，collect() 生成的事件 user_id 始终 None — 前置: session 存储 payload.user_id 关联"
   },
   "previous_phase": {
     "name": "Phase BC — TUI Deferred Items 补齐",
