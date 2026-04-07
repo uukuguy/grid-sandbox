@@ -1,8 +1,8 @@
 # Grid Platform 下一会话指南
 
-**最后更新**: 2026-04-07 20:00 GMT+8
-**当前分支**: `Grid`
-**当前状态**: Phase BH-MVP 设计完成 — 准备 W1 执行
+**最后更新**: 2026-04-07 23:30 GMT+8
+**当前分支**: `main`
+**当前状态**: Phase BH-MVP 完成 — EAASP v1.8 架构蓝图已产出
 
 ---
 
@@ -19,65 +19,105 @@
 - [x] Phase BB-BC — TUI 视觉升级 + Deferred 补齐
 - [x] Phase BD — grid-runtime EAASP L1 (6/6, 37 tests)
 - [x] Phase BE — EAASP 协议层 + claude-code-runtime (6/6, 93 tests)
-- [x] Phase BF — L2 统一资产层 + L1 抽象机制 (7/7, 30 new tests)
-- [x] Phase BG — Enterprise SDK 基石 (6/6, 107 new tests)
-- [ ] **Phase BH-MVP** — E2E 业务智能体全流程验证 (0/7, ~58 tests planned)
+- [x] Phase BF — L2 统一资产层 + L1 抽象机制 (7/7, 30 tests)
+- [x] Phase BG — Enterprise SDK 基石 (6/6, 107 tests)
+- [x] Phase BH-MVP — E2E 全流程验证 (7/7+D3/D5/D10, 71 tests)
+- [ ] **v1.8 Phase 2** — 事件引擎 + 事件室基础
 
-## Phase BH-MVP 设计总结
+## Phase BH-MVP 成果总结
 
-**目标**: 用 HR 入职智能体走通 L4→L3→L2→L1 完整管道
+### 新增组件
 
-### 架构要点
+| 组件 | 位置 | 端口 | 语言 |
+|------|------|------|------|
+| L3 Governance Service | `tools/eaasp-governance/` | :8083 | Python FastAPI |
+| L4 Session Manager | `tools/eaasp-session-manager/` | :8084 | Python FastAPI |
+| SDK `eaasp run` | `sdk/python/src/eaasp/cli/run_cmd.py` | CLI | Python Click |
+| PlatformClient | `sdk/python/src/eaasp/client/platform_client.py` | — | Python httpx |
+| E2E Tests | `tests/e2e/` | — | Python pytest |
+| HR Example (完善) | `sdk/examples/hr-onboarding/` | — | YAML/Python |
 
-- **L3 治理服务** (`eaasp-governance`, :8083): Python FastAPI, 5 API 契约 (§8)
-- **L4 会话管理器** (`eaasp-session-manager`, :8084): Python FastAPI, 四平面骨架 (§3)
-- **策略 DSL**: Kubernetes 风格 YAML → managed_hooks_json 编译
-- **E2E 双模式**: mock-llm (CI) + live-llm (需 API Key)
-- **10 个设计决策** (KD-BH1~10): 详见 `EAASP_MVP_E2E_DESIGN.md`
+### 测试统计
 
-### 7 个 Wave
+| 组件 | 测试数 | 运行命令 |
+|------|--------|---------|
+| L3 governance | 33 | `cd tools/eaasp-governance && .venv/bin/python -m pytest tests/ -xvs` |
+| L4 session-manager | 10 | `cd tools/eaasp-session-manager && .venv/bin/python -m pytest tests/ -xvs` |
+| SDK run_cmd | 8 | `cd sdk/python && .venv/bin/python -m pytest tests/test_run_cmd.py -xvs` |
+| E2E | 20 | `tools/eaasp-governance/.venv/bin/python -m pytest tests/e2e/ -xvs` |
+| **总计** | **71** | |
 
-| Wave | 内容 | Tests | 依赖 |
-|------|------|-------|------|
-| W1 | 策略 DSL + 编译器 | 8 | 无 |
-| W2 | L3 治理服务 5 API 契约 | 12 | W1 |
-| W3 | L4 四平面骨架 | 10 | W2 |
-| W4 | SDK `eaasp run` + E2E 脚本 | 8 | W1-W3 |
-| W5 | E2E 集成测试双模式 | 14 | W1-W4 |
-| W6 | HR 示例完善 + 审计 Hook | 6 | W1-W5 |
-| W7 | Makefile + 文档 | 0 | W1-W6 |
+### Makefile 新增目标
 
-### 下一步: 执行 W1
+```bash
+make l3-setup / l3-start / l3-test
+make l4-setup / l4-start / l4-test
+make e2e-setup / e2e-run / e2e-test / e2e-teardown / e2e-full
+```
 
-W1 产出:
-- `tools/eaasp-governance/` Python 包骨架
-- PolicyBundle / PolicyRule Pydantic V2 模型
-- 策略编译器: YAML DSL → managed_hooks_json
-- 层级合并器 (deny-always-wins)
-- HR 策略示例: `enterprise.yaml` + `bu_hr.yaml`
-- 8 tests
+## EAASP v1.8 架构蓝图
+
+**设计文档**: `docs/design/Grid/EAASP_ARCHITECTURE_v1.8.md`
+
+### 五层架构
+
+```
+L5  协作层  Cowork Layer         人与 Agent 的协作空间
+L4  编排层  Orchestration Layer  事件驱动 + 会话编排 + A2A 协调
+L3  治理层  Governance Layer     策略 + 审批 + 审计 + 校核
+L2  资产层  Asset Layer          Skill + MCP + Memory Engine
+L1  执行层  Execution Layer      Agent Runtime
+```
+
+### 核心升级（vs v1.7）
+
+1. **L5 协作层新增** — 事件室 + 四卡置顶（事件卡/证据包/行动卡/审批卡）
+2. **L4 从会话管理→事件编排** — 事件引擎 + A2A 路由 + 状态机
+3. **L2 新增 Memory Engine** — 证据锚点库 + 文件化记忆 + 混合检索索引
+4. **三纵向机制** — Hook管线 + 数据流管线 + 会话控制管线
+
+### v1.8 实施路径
+
+```
+Phase 1 ✅ 已完成（BH-MVP）— 基础管道验证
+Phase 2 → 事件引擎 + 事件室数据模型（下一步）
+Phase 3 → Memory Engine + 证据索引
+Phase 4 → 审批闸门 + 确定性校核
+Phase 5 → A2A 并行互审
+Phase 6 → 完整四卡 + IM 集成
+```
+
+## 下一步优先级
+
+1. **设计 v1.8 Phase 2 实施计划** — 事件引擎（接入→聚合→事件对象→状态机）+ 事件室 API
+2. 决策：事件引擎放在 L4 现有 `eaasp-session-manager` 还是独立新服务
+3. 决策：事件源接入方式（Webhook vs Kafka vs 内嵌模拟）
 
 ## 关键代码路径
 
 | 组件 | 路径 |
 |------|------|
-| **设计文档** | `docs/design/Grid/EAASP_MVP_E2E_DESIGN.md` |
-| **实施计划** | `docs/plans/2026-04-07-phase-bh-mvp-e2e.md` |
-| SDK 源码 | `sdk/python/src/eaasp/` |
-| HR 示例 | `sdk/examples/hr-onboarding/` |
+| L3 Governance | `tools/eaasp-governance/src/eaasp_governance/` |
+| L4 Session Manager | `tools/eaasp-session-manager/src/eaasp_session/` |
+| L1 Grid Runtime | `crates/grid-runtime/` |
+| L1 Claude Code Runtime | `lang/claude-code-runtime-python/` |
 | L2 Skill Registry | `tools/eaasp-skill-registry/` |
-| L1 grid-runtime | `crates/grid-runtime/src/` |
-| L1 claude-code-runtime | `lang/claude-code-runtime-python/` |
-| HookBridge | `crates/grid-hook-bridge/src/` |
-| Certifier | `tools/eaasp-certifier/src/` |
+| SDK | `sdk/python/src/eaasp/` |
 | Proto | `proto/eaasp/` |
-| managed_hooks_json 消费者 (Rust) | `crates/grid-hook-bridge/src/in_process.rs` |
-| managed_hooks_json 消费者 (Python) | `lang/claude-code-runtime-python/src/claude_code_runtime/hook_executor.py` |
-| EAASP 规范 | `docs/design/Grid/EAASP_-_企业自主智能体支撑平台设计规范_v1.7_.pdf` |
-| EAASP 路线图 | `docs/design/Grid/EAASP_ROADMAP.md` |
+| E2E Tests | `tests/e2e/` |
 
-## 建议下一步
+## ⚠️ Deferred 未清项（下次 session 启动时必查）
 
-1. **执行 W1**: 策略 DSL + 编译器 + HR 策略示例 (8 tests)
-2. 参考 `EAASP_MVP_E2E_DESIGN.md` §三 策略 DSL 规范
-3. 编译器输出需兼容 `hook_executor.py` 的 `load_rules()` 格式
+> 以下暂缓项来自 Phase BH-MVP，前置条件尚未满足。
+
+| 来源 | ID | 内容 | 前置条件 |
+|-----|----|------|---------|
+| BH-MVP | BH-D1 | RBAC 访问控制 | 用户身份管理 |
+| BH-MVP | BH-D2 | 审批闸门 | L4 审批 UI (v1.8 Phase 4) |
+| BH-MVP | BH-D4 | MCP 注册中心 | L2 MCP 扩展 |
+| BH-MVP | BH-D6 | L4 管理控制台 UI | Web 框架 (v1.8 Phase 6) |
+| BH-MVP | BH-D7 | L4 事件总线 | 消息队列 (v1.8 Phase 2) |
+| BH-MVP | BH-D8 | L4 可观测性枢纽 | Grafana/Prometheus |
+| BH-MVP | BH-D9 | 多租户 | PostgreSQL |
+| BH-MVP | BH-D11 | 成本治理 | Cost Ledger |
+| BH-MVP | BH-D12 | T2/T3 HookBridge 验证 | 非 T1 运行时 |

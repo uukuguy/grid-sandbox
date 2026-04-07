@@ -1,5 +1,88 @@
 # Grid Sandbox 工作日志
 
+## Phase BH-MVP — E2E 业务智能体全流程验证 (2026-04-07)
+
+### 完成内容
+
+Phase BH-MVP 共 7 个 Wave + 3 个 Deferred 补齐，验证 L4→L3→L2→L1 全链路。
+
+**W1: 策略 DSL + 编译器 + HR 策略示例 (1493259)**
+- `tools/eaasp-governance/` Python 包: PolicyBundle/PolicyRule Pydantic V2 模型
+- 编译器: K8s 风格 YAML → managed_hooks_json（幂等输出 KD-BH3）
+- 合并器: 四作用域层级合并 deny-always-wins (KD-BH2)
+- HR 策略示例: enterprise.yaml (PII拦截+审计) + bu_hr.yaml (清单强制+bash禁止)
+- 8 个测试
+
+**W2: L3 治理服务 — 5 API 契约 (821bc80)**
+- FastAPI :8083 服务，5 个契约路由器
+- 契约1: PolicyDeploy (编译+存储+列表+详情)
+- 契约2: IntentGateway (关键词→skill_id)
+- 契约3: SkillLifecycle (治理状态+适用策略)
+- 契约4: TelemetryIngest (事件接收+按会话查询)
+- 契约5: SessionControl (三方握手+消息代理+终止)
+- Mock L1/L2 客户端、RuntimePool、GovernanceSession 状态机
+- 12 个测试
+
+**W3: L4 会话管理器 — 四平面骨架 (8a8b014)**
+- `tools/eaasp-session-manager/` Python 包
+- 体验平面: conversations CRUD (create/message/get/delete)
+- 集成平面: 健康检查、L3 gateway 路由
+- 控制平面: 管理员 session 列表 + 遥测查询
+- 持久化平面: SQLite (sessions + execution_log + telemetry_events)
+- L3 HTTP 客户端、Mock 意图路由
+- 10 个测试
+
+**W4: SDK eaasp run + E2E 编排脚本 (76fd05b)**
+- `eaasp run` CLI 命令 (--platform, --mock-llm, --live-llm)
+- PlatformClient: L4 HTTP 客户端 (create/send/get/terminate)
+- `scripts/e2e-mvp.sh`: 一键 E2E 编排脚本
+- 8 个测试
+
+**W5: E2E 集成测试 — 双模式 (51faa75)**
+- `tests/e2e/`: 5 API 契约冒烟 + 3 三方握手 + 4 Hook 强制 + 2 会话生命周期
+- conftest: in-process L3 TestClient with pre-deployed policies
+- 全部标记 @mock_llm（不需要外部依赖）
+- 14 个测试
+
+**W6: HR 示例完善 + 审计 Hook (430bd0a)**
+- audit_logger.py: PostToolUse 审计 hook (结构化 JSON)
+- SKILL.md 增加审计 hook
+- test_cases.jsonl 增加 PII 正反例 (SSN, 身份证, 邮箱)
+- run_e2e.py: 自包含 E2E 脚本 (编译→合并→HookExecutor验证)
+- 6 个测试
+
+**W7: Makefile + 文档收尾 (1124c62)**
+- Makefile 新增: l3-setup/start/test, l4-setup/start/test, e2e-setup/run/test/teardown/full
+
+**Deferred D3/D5/D10 补齐 (a95844c)**
+- D3 审计持久化: GET /v1/telemetry/sessions/{id}/audit — 按 event_type 过滤审计事件
+- D5 意图增强: IntentResolver 多关键词权重匹配 + intents.yaml 配置
+- D10 策略版本回滚: 版本历史栈 + GET versions + POST rollback
+- 13 个测试
+
+**EAASP v1.8 架构蓝图 (5ce0f8b)**
+- 五层架构: L5 协作层(Cowork) + L4 编排层 + L3 治理层 + L2 资产层 + L1 执行层
+- 三纵向机制: Hook管线 + 数据流管线 + 会话控制管线
+- 核心升级: 事件驱动编排、Memory Engine、A2A并行互审、四卡置顶
+- 设计文档: docs/design/Grid/EAASP_ARCHITECTURE_v1.8.md
+
+### 测试结果
+- L3 governance tests: 33 passed
+- L4 session manager tests: 10 passed
+- SDK run_cmd tests: 8 passed
+- E2E tests: 20 passed (14 原 + 6 HR)
+- 总计新增: 71 tests
+
+### 遗留问题
+- BH-D1~D12 中 9 项仍为 ⏳（需外部依赖: RBAC, 审批UI, MCP注册中心等）
+- L4 需按 v1.8 重构为事件驱动编排引擎
+
+### 下一步
+- v1.8 Phase 2: 事件引擎 + 事件室基础
+- v1.8 Phase 3: Memory Engine + 证据索引
+
+---
+
 ## Phase BG — Enterprise SDK 基石 (2026-04-07)
 
 ### 完成内容
