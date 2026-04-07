@@ -1,0 +1,17 @@
+# L1 Runtime Pool Configuration
+# Each entry represents an available agent runtime
+
+runtimes:
+  - id: grid
+    name: Grid Runtime (Rust)
+    endpoint: "localhost:50051"
+    tier: harness
+    protocol: grpc
+    tags: [rust, native, fast]
+
+  - id: claude-code
+    name: Claude Code Runtime (Python)
+    endpoint: "localhost:50052"
+    tier: harness
+    protocol: grpc
+    tags: [python, claude-agent-sdk]
