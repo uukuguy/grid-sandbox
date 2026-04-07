@@ -50,3 +50,4 @@ eval_output/
 
 # Root-level temp tests only (crates/*/tests/ are real integration tests, must be committed)
 /tests/
+tests/e2e/__pycache__/

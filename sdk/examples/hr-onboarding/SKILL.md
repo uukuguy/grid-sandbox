@@ -17,6 +17,12 @@ hooks:
       command: "python hooks/check_pii.py"
     match:
       tool_name: file_write
+  - event: PostToolUse
+    handler_type: command
+    config:
+      command: "python hooks/audit_logger.py"
+    match:
+      tool_name: file_write
   - event: Stop
     handler_type: prompt
     config:
