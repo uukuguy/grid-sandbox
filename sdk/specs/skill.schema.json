@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/skill.schema.json",
+  "title": "Skill",
+  "description": "EAASP Skill — the core abstraction, a SKILL.md with YAML frontmatter and prose.",
+  "type": "object",
+  "required": ["frontmatter", "prose"],
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "default": "1.0.0" },
+        "description": { "type": "string", "default": "" },
+        "author": { "type": "string", "default": "" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "skill_type": {
+          "type": "string",
+          "enum": ["workflow", "production", "domain", "meta"],
+          "default": "workflow"
+        },
+        "preferred_runtime": { "type": ["string", "null"], "default": null },
+        "compatible_runtimes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "hooks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["event", "handler_type"],
+            "properties": {
+              "event": { "type": "string", "enum": ["PreToolUse", "PostToolUse", "Stop"] },
+              "handler_type": { "type": "string", "enum": ["command", "http", "prompt", "agent"] },
+              "config": { "type": "object", "default": {} },
+              "match": { "type": ["object", "null"], "default": null }
+            }
+          },
+          "default": []
+        },
+        "dependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["global", "bu", "dept", "team"],
+          "default": "team"
+        }
+      }
+    },
+    "prose": { "type": "string" }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/message.schema.json",
+  "title": "Message",
+  "description": "EAASP Message types — user messages and response chunks.",
+  "type": "object",
+  "definitions": {
+    "UserMessage": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "content": { "type": "string" },
+        "message_type": {
+          "type": "string",
+          "enum": ["text", "intent"],
+          "default": "text"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        }
+      }
+    },
+    "ResponseChunk": {
+      "type": "object",
+      "required": ["chunk_type"],
+      "properties": {
+        "chunk_type": {
+          "type": "string",
+          "enum": ["text_delta", "tool_start", "tool_result", "thinking", "done", "error"]
+        },
+        "content": { "type": "string", "default": "" },
+        "tool_name": { "type": ["string", "null"], "default": null },
+        "tool_id": { "type": ["string", "null"], "default": null },
+        "is_error": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

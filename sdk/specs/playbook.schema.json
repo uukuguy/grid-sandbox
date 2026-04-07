@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/playbook.schema.json",
+  "title": "Playbook",
+  "description": "EAASP Playbook — multi-Skill orchestration workflow.",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "default": "1.0.0" },
+    "description": { "type": "string", "default": "" },
+    "author": { "type": "string", "default": "" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "skill_id"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "skill_id": { "type": "string", "minLength": 1 },
+          "input_mapping": { "type": "object", "default": {} },
+          "output_key": { "type": ["string", "null"], "default": null },
+          "condition": { "type": ["string", "null"], "default": null },
+          "on_failure": {
+            "type": "string",
+            "enum": ["abort", "skip", "retry"],
+            "default": "abort"
+          },
+          "max_retries": { "type": "integer", "minimum": 0, "default": 0 }
+        }
+      },
+      "default": []
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["global", "bu", "dept", "team"],
+      "default": "team"
+    }
+  }
+}

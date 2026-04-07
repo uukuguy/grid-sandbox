@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/session.schema.json",
+  "title": "Session",
+  "description": "EAASP Session — configuration and state models.",
+  "type": "object",
+  "definitions": {
+    "SessionConfig": {
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string", "default": "" },
+        "user_role": { "type": "string", "default": "" },
+        "org_unit": { "type": "string", "default": "" },
+        "managed_hooks_json": { "type": ["string", "null"], "default": null },
+        "quotas": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
+        "hook_bridge_url": { "type": ["string", "null"], "default": null },
+        "telemetry_endpoint": { "type": ["string", "null"], "default": null },
+        "skill_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "skill_registry_url": { "type": ["string", "null"], "default": null },
+        "allowed_skill_search": { "type": "boolean", "default": false },
+        "skill_search_scope": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "SessionState": {
+      "type": "object",
+      "required": ["session_id"],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "state_data": { "type": "string", "contentEncoding": "base64", "default": "" },
+        "runtime_id": { "type": "string", "default": "" },
+        "created_at": { "type": "string", "default": "" },
+        "state_format": {
+          "type": "string",
+          "enum": ["rust-serde-v1", "python-json", "ts-json"],
+          "default": "python-json"
+        }
+      }
+    }
+  }
+}

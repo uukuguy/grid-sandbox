@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/agent.schema.json",
+  "title": "Agent",
+  "description": "EAASP Agent — capability manifest for runtime agents.",
+  "type": "object",
+  "definitions": {
+    "CostEstimate": {
+      "type": "object",
+      "properties": {
+        "input_cost_per_1k": { "type": "number", "default": 0.0 },
+        "output_cost_per_1k": { "type": "number", "default": 0.0 }
+      }
+    },
+    "AgentCapability": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "supported": { "type": "boolean", "default": true },
+        "description": { "type": "string", "default": "" }
+      }
+    },
+    "CapabilityManifest": {
+      "type": "object",
+      "required": ["runtime_id"],
+      "properties": {
+        "runtime_id": { "type": "string", "minLength": 1 },
+        "runtime_name": { "type": "string", "default": "" },
+        "tier": {
+          "type": "string",
+          "enum": ["harness", "aligned", "framework"],
+          "default": "harness"
+        },
+        "model": { "type": "string", "default": "" },
+        "context_window": { "type": "integer", "minimum": 0, "default": 0 },
+        "supported_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "native_hooks": { "type": "boolean", "default": false },
+        "native_mcp": { "type": "boolean", "default": false },
+        "native_skills": { "type": "boolean", "default": false },
+        "cost": { "$ref": "#/definitions/CostEstimate" },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
+        "requires_hook_bridge": { "type": "boolean", "default": true },
+        "deployment_mode": {
+          "type": "string",
+          "enum": ["shared", "per_session"],
+          "default": "shared"
+        }
+      }
+    }
+  }
+}

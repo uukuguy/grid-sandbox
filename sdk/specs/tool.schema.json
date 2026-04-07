@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eaasp.dev/schemas/tool.schema.json",
+  "title": "Tool",
+  "description": "EAASP Tool definition and MCP server configuration.",
+  "type": "object",
+  "definitions": {
+    "ToolDef": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "default": "" },
+        "input_schema": { "type": "object", "default": {} },
+        "category": { "type": ["string", "null"], "default": null }
+      }
+    },
+    "McpServerConfig": {
+      "type": "object",
+      "required": ["name", "transport"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "transport": {
+          "type": "string",
+          "enum": ["stdio", "sse", "streamable-http"]
+        },
+        "command": { "type": ["string", "null"], "default": null },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "url": { "type": ["string", "null"], "default": null },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        }
+      }
+    }
+  }
+}
