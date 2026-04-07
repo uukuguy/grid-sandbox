@@ -47,3 +47,6 @@ data-platform/*.db-wal
 .swarm/
 eval_output/
 .octo/
+
+# Root-level temp tests only (crates/*/tests/ are real integration tests, must be committed)
+/tests/
