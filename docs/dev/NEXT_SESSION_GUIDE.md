@@ -1,8 +1,8 @@
 # Grid Platform 下一会话指南
 
-**最后更新**: 2026-04-07 04:30 GMT+8
+**最后更新**: 2026-04-07 05:30 GMT+8
 **当前分支**: `Grid`
-**当前状态**: Phase BF 完成 — 准备 Phase BG
+**当前状态**: Phase BG 设计完成 — 准备实施
 
 ---
 
@@ -19,65 +19,54 @@
 - [x] Phase BB-BC — TUI 视觉升级 + Deferred 补齐
 - [x] Phase BD — grid-runtime EAASP L1 (6/6, 37 tests @ ae4b337)
 - [x] Phase BE — EAASP 协议层 + claude-code-runtime (6/6, 93 tests)
-- [x] **Phase BF** — L2 统一资产层 + L1 抽象机制 (7/7, 30 new tests)
-- [ ] **Phase BG** — Enterprise SDK（多语言）
+- [x] Phase BF — L2 统一资产层 + L1 抽象机制 (7/7, 30 new tests)
+- [ ] **Phase BG** — Enterprise SDK 基石 (0/6, 设计已完成)
 
-## Phase BF 完成总结
+## Phase BG 概览
 
-**计划文档**: `docs/plans/2026-04-06-phase-bf-l2-asset-layer.md`
-**设计文档**: `docs/design/Grid/EAASP_L2_ASSET_LAYER_DESIGN.md`
+**目标**: 构建 EAASP Enterprise SDK 的基石层，让企业开发者可以创作、校验、推演 Skill
 
-| Wave | 内容 | 状态 | Commit |
-|------|------|------|--------|
-| W1 | 协议扩展（SessionPayload L2 字段, proto v1.3） | ✅ | `1a54f95` |
-| W2 | L2 Skill Registry crate (REST + SQLite + Git) | ✅ | `9e8bac5` |
-| W3 | L2 MCP Orchestrator crate (YAML + subprocess) | ✅ | `9e8bac5` |
-| W4 | L1 Runtime L2 集成 (GridHarness → L2 REST) | ✅ | `b6af473` |
-| W5 | Mock L3 RuntimeSelector + 运行时池 | ✅ | `9e982e0` |
-| W6 | 盲盒对比 (并行执行 + 匿名评分) | ✅ | `59bb58e` |
-| W7 | 集成验证 + 设计文档 + Makefile | ✅ | — |
+**设计蓝图**: `docs/design/Grid/EAASP_SDK_DESIGN.md`
+**实施计划**: `docs/plans/2026-04-07-phase-bg-enterprise-sdk.md`
 
-**Deferred**: BF-D1~D10（Git 版本追溯、PerSession/OnDemand 模式、RBAC、ELO 统计等）
-
-## BF 新增组件
-
-| 组件 | 路径 | 说明 |
+| Wave | 内容 | 状态 |
 |------|------|------|
-| Skill Registry | `tools/eaasp-skill-registry/` | L2 Skill 仓库 REST API (SQLite + fs + git2) |
-| MCP Orchestrator | `tools/eaasp-mcp-orchestrator/` | L2 MCP Server 管理 (YAML + 子进程) |
-| L2 Client | `crates/grid-runtime/src/l2_client.rs` | L1 从 L2 REST 拉取 Skill |
-| RuntimePool | `tools/eaasp-certifier/src/runtime_pool.rs` | 运行时池管理 |
-| RuntimeSelector | `tools/eaasp-certifier/src/selector.rs` | Mock L3 选择策略 |
-| Blindbox | `tools/eaasp-certifier/src/blindbox.rs` | 盲盒对比 |
+| W1 | specs/ JSON Schema + Python Pydantic 模型 | ⏳ pending |
+| W2 | authoring 创作工具链 (parser + validator + scaffold + hook) | ⏳ pending |
+| W3 | sandbox 核心 + GridCliSandbox | ⏳ pending |
+| W4 | RuntimeSandbox + MultiRuntimeSandbox (gRPC + 对比) | ⏳ pending |
+| W5 | CLI + submit + HR 入职示例 | ⏳ pending |
+| W6 | 文档收尾 + Makefile + ROADMAP 更新 | ⏳ pending |
+
+## SDK 长期演进路线
+
+| 阶段 | Phase | 内容 | 状态 |
+|------|-------|------|------|
+| S1: 基石 | BG | specs + models + authoring + sandbox + CLI | **当前** |
+| S2: 推演增强 | BG-D/BH | GridServerSandbox + test 报告 | 后续 |
+| S3: 治理 | BH | Policy DSL + L3 对接 | 后续 |
+| S4: 编排 | BH/BI | Playbook DSL + 事件触发 | 后续 |
+| S5: 客户端 | BI | 5 REST API + PlatformSandbox | 后续 |
+| S6: TypeScript | BI/BJ | TS SDK | 后续 |
+| S7: 生态 | BJ+ | MCP Tool + Java/Go | 后续 |
 
 ## 关键代码路径
 
 | 组件 | 路径 |
 |------|------|
-| SessionPayload (proto) | `proto/eaasp/runtime/v1/runtime.proto` |
-| SessionPayload (Rust) | `crates/grid-runtime/src/contract.rs` |
-| GridHarness | `crates/grid-runtime/src/harness.rs` |
-| gRPC service | `crates/grid-runtime/src/service.rs` |
+| SDK 设计蓝图 | `docs/design/Grid/EAASP_SDK_DESIGN.md` |
+| BG 实施计划 | `docs/plans/2026-04-07-phase-bg-enterprise-sdk.md` |
+| SDK 源码（待创建） | `sdk/python/src/eaasp/` |
+| JSON Schema（待创建） | `sdk/specs/` |
+| 示例 Skill（待创建） | `sdk/examples/` |
+| Proto 定义 | `proto/eaasp/runtime/v1/runtime.proto` |
 | L2 Skill Registry | `tools/eaasp-skill-registry/` |
-| L2 MCP Orchestrator | `tools/eaasp-mcp-orchestrator/` |
-| certifier CLI | `tools/eaasp-certifier/src/main.rs` |
-| HookBridge trait | `crates/grid-hook-bridge/src/traits.rs` |
-| Python runtime | `lang/claude-code-runtime-python/` |
-
-## Makefile 新增 Targets
-
-```bash
-make skill-registry-build    # 编译 L2 Skill Registry
-make skill-registry-start    # 启动 (port 8081)
-make skill-registry-test     # 运行测试
-make mcp-orch-build          # 编译 L2 MCP Orchestrator
-make mcp-orch-start          # 启动 (port 8082)
-make mcp-orch-test           # 运行测试
-make certifier-blindbox      # 运行盲盒对比
-```
+| grid-runtime gRPC | `crates/grid-runtime/src/service.rs` |
+| claude-code-runtime | `lang/claude-code-runtime-python/` |
+| certifier blindbox | `tools/eaasp-certifier/src/blindbox.rs` |
 
 ## 建议下一步
 
-1. Phase BG — Enterprise SDK（Python/TypeScript 多语言 SDK）
-2. 或处理 BF Deferred Items（BF-D1~D10）
-3. 参考路线图：`docs/design/Grid/EAASP_ROADMAP.md`
+1. 执行 W1: 创建 `sdk/specs/` + `sdk/python/` 项目骨架 + Pydantic 模型
+2. 依次推进 W2-W5
+3. W6 收尾后提交
