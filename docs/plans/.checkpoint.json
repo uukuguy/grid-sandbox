@@ -1,14 +1,14 @@
 {
   "plan_file": "docs/plans/2026-04-07-phase-bg-enterprise-sdk.md",
-  "phase": "design",
+  "phase": "execution",
   "created_at": "2026-04-07T05:30:00+08:00",
-  "updated_at": "2026-04-07T06:00:00+08:00",
-  "completed_tasks": [],
-  "current_task": null,
+  "updated_at": "2026-04-07T12:00:00+08:00",
+  "completed_tasks": ["W1", "W2", "W3"],
+  "current_task": "W4",
   "total_tasks": 6,
   "phase_name": "Phase BG — Enterprise SDK 基石",
-  "status": "DESIGN COMPLETE — brainstorming + writing-plans done, ready for implementation",
-  "execution_mode": null,
+  "status": "IN PROGRESS — W1+W2+W3 complete (61 tests), W4 next",
+  "execution_mode": "ruflo-sequential",
   "branch": "Grid",
   "baseline": {
     "tests": "2476 Rust workspace + 39 Python (existing)",
@@ -16,9 +16,9 @@
     "notes": "BG adds ~50 new Python SDK tests in sdk/python/tests/"
   },
   "tasks": {
-    "W1": { "description": "specs/ JSON Schema + Python Pydantic 模型", "status": "pending" },
-    "W2": { "description": "authoring 创作工具链 (parser + validator + scaffold + hook_builder)", "status": "pending" },
-    "W3": { "description": "sandbox 核心 + GridCliSandbox", "status": "pending" },
+    "W1": { "description": "specs/ JSON Schema + Python Pydantic 模型", "status": "done", "tests": 27, "commit": "cca61bb" },
+    "W2": { "description": "authoring 创作工具链 (parser + validator + scaffold + hook_builder)", "status": "done", "tests": 21, "commit": "12e795f" },
+    "W3": { "description": "sandbox 核心 + GridCliSandbox", "status": "done", "tests": 13, "commit": "pending" },
     "W4": { "description": "RuntimeSandbox + MultiRuntimeSandbox (gRPC 直连 + 对比)", "status": "pending" },
     "W5": { "description": "CLI + submit + HR 入职示例 Skill", "status": "pending" },
     "W6": { "description": "设计文档 + Makefile + ROADMAP 更新", "status": "pending" }
