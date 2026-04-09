@@ -17,7 +17,8 @@
         certifier-blindbox \
         sdk-setup sdk-test sdk-validate sdk-build \
         l3-setup l3-start l3-test l4-setup l4-start l4-test \
-        e2e-setup e2e-run e2e-test e2e-teardown e2e-full
+        e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
+        hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build
 
 # Default test project for CLI commands
 TEST_PROJECT ?= $(PWD)/examples/demo-project
@@ -729,6 +730,23 @@ claude-runtime-run:
 # 双 runtime 集成验证 (先 build 再启动，需要 ANTHROPIC_API_KEY)
 verify-dual-runtime:
 	./scripts/verify-dual-runtime.sh
+
+# ============================================================
+# hermes-runtime (Python EAASP L1 Runtime — T2 Aligned)
+# ============================================================
+
+hermes-runtime-setup:
+	cd lang/hermes-runtime-python && uv venv .venv --python 3.11 && \
+		. .venv/bin/activate && uv pip install -e ".[dev]"
+
+hermes-runtime-test:
+	cd lang/hermes-runtime-python && . .venv/bin/activate && pytest tests/ -xvs
+
+hermes-runtime-start:
+	cd lang/hermes-runtime-python && . .venv/bin/activate && python -m hermes_runtime
+
+hermes-runtime-build:
+	docker build -f lang/hermes-runtime-python/Dockerfile -t hermes-runtime:latest .
 
 # ============================================================
 # L2 Skill Registry
