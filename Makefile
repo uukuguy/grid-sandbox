@@ -19,7 +19,8 @@
         sdk-setup sdk-test sdk-validate sdk-build \
         l3-setup l3-start l3-test l4-setup l4-start l4-test \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
-        hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build
+        hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build hermes-runtime-run \
+        runtime-verify claude-runtime-verify hermes-runtime-verify
 
 # Default test project for CLI commands
 TEST_PROJECT ?= $(PWD)/examples/demo-project
@@ -567,6 +568,10 @@ runtime-run:
 		-e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} \
 		grid-runtime:latest
 
+# Verify grid-runtime gRPC contract (requires runtime-run in another terminal)
+runtime-verify:
+	cargo run -p eaasp-certifier -- verify --endpoint http://localhost:50051
+
 # ============================================================
 # Docker sandbox images (legacy per-language images from Phase J)
 # NOTE: These use docker/sandbox-images/ — the older per-language approach.
@@ -728,6 +733,10 @@ claude-runtime-run:
 		-e ANTHROPIC_MODEL_NAME \
 		claude-code-runtime:latest
 
+# Verify claude-code-runtime gRPC contract (requires claude-runtime-run in another terminal)
+claude-runtime-verify:
+	cargo run -p eaasp-certifier -- verify --endpoint http://localhost:50052
+
 # 双 runtime 集成验证 (先 build 再启动，需要 ANTHROPIC_API_KEY)
 verify-dual-runtime:
 	./scripts/verify-dual-runtime.sh
@@ -748,6 +757,18 @@ hermes-runtime-start:
 
 hermes-runtime-build:
 	docker build -f lang/hermes-runtime-python/Dockerfile -t hermes-runtime:latest .
+
+# 容器运行 (需要 LLM API Key)
+hermes-runtime-run:
+	docker run --rm -p 50053:50053 \
+		-e HERMES_API_KEY=$${OPENROUTER_API_KEY} \
+		-e HERMES_BASE_URL=$${OPENAI_BASE_URL} \
+		-e HERMES_MODEL=$${HERMES_MODEL:-anthropic/claude-sonnet-4-20250514} \
+		hermes-runtime:latest
+
+# Verify hermes-runtime gRPC contract (requires hermes-runtime-run in another terminal)
+hermes-runtime-verify:
+	cargo run -p eaasp-certifier -- verify --endpoint http://localhost:50053
 
 # ============================================================
 # L2 Skill Registry

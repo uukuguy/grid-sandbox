@@ -38,6 +38,14 @@ docs/
 .DS_Store
 Thumbs.db
 
+# Python venvs
+**/.venv/
+**/__pycache__/
+
+# Python projects in tools/ (not needed for Rust builds)
+tools/eaasp-governance/
+tools/eaasp-session-manager/
+
 # Temporary files
 *.tmp
 *.temp

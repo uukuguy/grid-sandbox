@@ -7,8 +7,9 @@
 FROM rust:1.92-bookworm AS builder
 
 WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock config.default.yaml ./
 COPY crates/ crates/
+COPY tools/ tools/
 COPY proto/ proto/
 
 # Install protobuf compiler

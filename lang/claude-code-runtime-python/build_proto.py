@@ -1,10 +1,11 @@
 """Build gRPC Python stubs from proto files."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-PROTO_ROOT = Path(__file__).parent.parent.parent / "proto"
+PROTO_ROOT = Path(os.getenv("PROTO_ROOT", Path(__file__).parent.parent.parent / "proto"))
 OUT_DIR = Path(__file__).parent / "src" / "claude_code_runtime" / "_proto"
 
 

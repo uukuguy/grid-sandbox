@@ -31,30 +31,7 @@ COPY lang/claude-code-runtime-python/build_proto.py ./
 COPY proto/ /proto/
 
 # Build proto stubs
-RUN uv run python -c "\
-import subprocess, sys; \
-from pathlib import Path; \
-PROTO_ROOT = Path('/proto'); \
-OUT = Path('src/claude_code_runtime/_proto'); \
-OUT.mkdir(parents=True, exist_ok=True); \
-(OUT / '__init__.py').touch(); \
-protos = ['eaasp/common/v1/common.proto', 'eaasp/runtime/v1/runtime.proto']; \
-for proto in protos: \
-    p = Path(proto); \
-    for i in range(len(p.parent.parts)): \
-        d = OUT / Path(*p.parent.parts[:i+1]); \
-        d.mkdir(parents=True, exist_ok=True); \
-        (d / '__init__.py').touch(); \
-    subprocess.check_call([sys.executable, '-m', 'grpc_tools.protoc', \
-        f'--proto_path={PROTO_ROOT}', f'--python_out={OUT}', \
-        f'--grpc_python_out={OUT}', f'--pyi_out={OUT}', \
-        str(PROTO_ROOT / proto)]); \
-for f in OUT.rglob('*.py'): \
-    t = f.read_text(); \
-    n = t.replace('from eaasp.', 'from claude_code_runtime._proto.eaasp.'); \
-    (n != t) and f.write_text(n); \
-print('Proto build complete') \
-"
+RUN PROTO_ROOT=/proto uv run python build_proto.py
 
 # ── Runtime stage ──
 FROM python:3.12-slim-bookworm
