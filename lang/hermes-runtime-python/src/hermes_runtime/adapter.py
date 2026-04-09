@@ -1,6 +1,5 @@
 """HermesAdapter — wraps hermes-agent AIAgent for EAASP RuntimeContract."""
 
-import json
 import logging
 import queue
 import threading
@@ -10,6 +9,33 @@ from hermes_runtime.config import HermesRuntimeConfig
 from hermes_runtime.governance_plugin import set_session_id
 
 logger = logging.getLogger(__name__)
+
+# Check if hermes-agent is available
+_HAS_HERMES = False
+try:
+    from run_agent import AIAgent  # noqa: F401
+
+    _HAS_HERMES = True
+except ImportError:
+    logger.warning("hermes-agent not installed — running in mock mode")
+
+
+class _MockAgent:
+    """Mock agent for development/testing when hermes-agent is not installed."""
+
+    def __init__(self, session_id: str, model: str, **kwargs):
+        self.session_id = session_id
+        self.model = model
+        self.stream_delta_callback = None
+        self.tool_start_callback = None
+        self.tool_complete_callback = None
+
+    def run_conversation(self, user_message: str, conversation_history: list | None = None):
+        return {
+            "final_response": (
+                f"[hermes-runtime mock] Echo: {user_message[:200]}"
+            ),
+        }
 
 
 class HermesAdapter:
@@ -21,26 +47,31 @@ class HermesAdapter:
 
     def create_agent(self, session_id: str, **session_kwargs) -> None:
         """Create and store an AIAgent for this session."""
-        from run_agent import AIAgent
+        if _HAS_HERMES:
+            from run_agent import AIAgent
 
-        enabled_toolsets = None
-        if self._config.hermes_toolsets:
-            enabled_toolsets = [
-                t.strip() for t in self._config.hermes_toolsets.split(",") if t.strip()
-            ]
+            enabled_toolsets = None
+            if self._config.hermes_toolsets:
+                enabled_toolsets = [
+                    t.strip() for t in self._config.hermes_toolsets.split(",") if t.strip()
+                ]
 
-        agent = AIAgent(
-            base_url=self._config.hermes_base_url or None,
-            api_key=self._config.hermes_api_key or None,
-            provider=self._config.hermes_provider or None,
-            model=self._config.hermes_model,
-            max_iterations=self._config.hermes_max_iterations,
-            enabled_toolsets=enabled_toolsets,
-            session_id=session_id,
-            quiet_mode=True,
-            skip_context_files=True,
-            skip_memory=True,
-        )
+            agent = AIAgent(
+                base_url=self._config.hermes_base_url or None,
+                api_key=self._config.hermes_api_key or None,
+                provider=self._config.hermes_provider or None,
+                model=self._config.hermes_model,
+                max_iterations=self._config.hermes_max_iterations,
+                enabled_toolsets=enabled_toolsets,
+                session_id=session_id,
+                quiet_mode=True,
+                skip_context_files=True,
+                skip_memory=True,
+            )
+        else:
+            agent = _MockAgent(session_id=session_id, model=self._config.hermes_model)
+            logger.info("Created mock agent for session %s (hermes-agent not available)", session_id)
+
         self._agents[session_id] = agent
 
     def get_agent(self, session_id: str):

@@ -14,7 +14,8 @@
         claude-runtime-build claude-runtime-run verify-dual-runtime \
         skill-registry-build skill-registry-start skill-registry-test \
         mcp-orch-build mcp-orch-start mcp-orch-test \
-        certifier-blindbox \
+        certifier-build certifier-verify certifier-blindbox \
+        build-eaasp-all \
         sdk-setup sdk-test sdk-validate sdk-build \
         l3-setup l3-start l3-test l4-setup l4-start l4-test \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
@@ -552,7 +553,7 @@ container-test: container-build
 # Build grid-runtime release binary
 runtime-build-binary:
 	@echo "Building grid-runtime binary..."
-	cargo build -p grid-runtime --release
+	cargo build -p grid-runtime
 
 # Build grid-runtime container image
 runtime-build:
@@ -775,11 +776,17 @@ mcp-orch-test:
 	cargo test -p eaasp-mcp-orchestrator -- --test-threads=1
 
 # ============================================================
-# Certifier Blindbox
+# EAASP Certifier
 # ============================================================
 
-PROMPT ?= "Hello, please introduce yourself briefly."
+certifier-build:
+	cargo build -p eaasp-certifier
 
+VERIFY_ENDPOINT ?= http://localhost:50051
+certifier-verify:
+	cargo run -p eaasp-certifier -- verify --endpoint $(VERIFY_ENDPOINT)
+
+PROMPT ?= "Hello, please introduce yourself briefly."
 certifier-blindbox:
 	cargo run -p eaasp-certifier -- blindbox \
 		--runtime-a http://localhost:50051 \
@@ -827,6 +834,14 @@ l4-start:
 
 l4-test:
 	cd tools/eaasp-session-manager && .venv/bin/python -m pytest tests/ -xvs
+
+# ============================================================
+# EAASP Build All — 构建所有 EAASP 组件
+# ============================================================
+
+build-eaasp-all: runtime-build-binary skill-registry-build mcp-orch-build certifier-build
+	@echo "=== EAASP Rust crates built ==="
+	@echo "  grid-runtime, eaasp-skill-registry, eaasp-mcp-orchestrator, eaasp-certifier"
 
 # ============================================================
 # EAASP E2E Tests

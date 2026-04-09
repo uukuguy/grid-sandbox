@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "tools/*"]
+members = [
+    "crates/*",
+    "tools/eaasp-certifier",
+    "tools/eaasp-mcp-orchestrator",
+    "tools/eaasp-skill-registry",
+]
 # Exclude grid-desktop from default build — Tauri build.rs triggers
 # recompilation every time. Build explicitly: cargo build -p grid-desktop
 default-members = [
