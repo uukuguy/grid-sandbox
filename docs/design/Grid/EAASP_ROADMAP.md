@@ -1,5 +1,9 @@
 # EAASP 中长期演进路线图
 
+> ⚠️ **注意**: 本路线图基于 EAASP v1.7 规范。v1.8 后续开发请参考：
+> **`docs/design/Grid/EAASP_v1.8_M1_IMPLEMENTATION_BLUEPRINT.md`**（2026-04-10）
+> 本文档中的设计决策 KD-1~KD-5 在 v1.8 中仍然有效。
+
 > **版本**: v1.0
 > **创建日期**: 2026-04-06
 > **基线**: Phase BD W1+W2 完成 @ f8b8e3d（grid-runtime crate + RuntimeContract + GridHarness）

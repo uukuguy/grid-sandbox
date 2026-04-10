@@ -1,18 +1,26 @@
 {
-  "plan_file": null,
-  "phase": "idle",
-  "created_at": null,
-  "updated_at": "2026-04-09T22:20:00+08:00",
+  "plan_file": "docs/plans/2026-04-10-eaasp-m1-phase0-scaffold.md",
+  "phase": "design",
+  "created_at": "2026-04-10T00:30:00+08:00",
+  "updated_at": "2026-04-10T00:30:00+08:00",
   "completed_tasks": [],
   "current_task": null,
-  "total_tasks": 0,
-  "phase_name": null,
-  "status": "No active phase. Last completed: Phase BI — hermes-runtime (2026-04-09)",
+  "total_tasks": 7,
+  "execution_mode": null,
+  "phase_name": "EAASP M1 Phase 0 — Scaffold & Proto v1.4",
+  "status": "Design phase completed, plan written, ready for execution",
+  "notes": "Blueprint: docs/design/Grid/EAASP_v1.8_M1_IMPLEMENTATION_BLUEPRINT.md. Phase 0 is the first of 4 phases (0-3) covering M1 core capability. 45 historical deferred items dispositioned. tools/ assets disposition documented.",
   "last_phase": {
     "name": "Phase BI — hermes-runtime: Grid L1 T2 Aligned Runtime",
     "completed_at": "2026-04-09T22:20:00+08:00",
     "tasks": "6/6",
     "tests": 12,
     "commits": 9
-  }
+  },
+  "related_documents": [
+    "docs/design/Grid/EAASP_v1.8_M1_IMPLEMENTATION_BLUEPRINT.md",
+    "docs/design/Grid/EAASP_Design_Specification_v1_8.docx",
+    "docs/design/Grid/EAASP_v1_8_Milestone_1_Operator_Edition.docx",
+    "docs/design/Grid/EAASP_ROADMAP.md"
+  ]
 }
