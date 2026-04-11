@@ -2,7 +2,7 @@
   "plan_file": "docs/plans/2026-04-11-v2-mvp-phase0-plan.md",
   "phase": "execution",
   "created_at": "2026-04-11T21:00:00+08:00",
-  "updated_at": "2026-04-12T01:00:00+08:00",
+  "updated_at": "2026-04-12T01:10:00+08:00",
   "completed_tasks": ["S1.T1", "S1.T2", "S1.T3", "S2.T1", "S2.T2", "S2.T3", "S2.T4", "S3.T1", "S3.T2", "S3.T3"],
   "current_task": "S3.T4",
   "total_tasks": 15,
@@ -64,7 +64,12 @@
       "S3.T2_tests": "47/47 (8 anchors + 7 files + 5 index + 8 mcp + 6 api + 17 review regression)",
       "S3.T3_commit": "0907d13",
       "S3.T3_tests": "28/28 (9 policy_engine + 6 audit + 3 session_validate + 10 api)",
-      "S3.T3_swarm": "swarm-1775925175221"
+      "S3.T3_swarm": "swarm-1775925175221",
+      "deferred_scan_s3_t3": {
+        "unblocked_not_harvested": ["D1 (policy_context wiring precondition met — awaits harness.rs task)", "D2 (memory_refs wiring precondition met since S3.T2 — awaits harness.rs task)"],
+        "new_items": ["D16", "D17", "D18", "D19", "D20", "D21", "D22", "D23", "D24", "D25", "D26"],
+        "phase3_scope_not_tracked": ["approval gates", "OPA/Rego", "evidence chain", "policy DSL compile", "PRE_POLICY_DEPLOY lifecycle emission", "deny-always-wins cross-scope resolver", "cross-tenant inheritance"]
+      }
     },
     "S4_E2E_Integration": {
       "tasks": 3,

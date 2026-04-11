@@ -751,7 +751,7 @@ S2 完成后扫描 `crates/grid-runtime` / `crates/grid-hook-bridge` / `crates/e
 
 | ID | 内容 | 前置条件 | 状态 |
 |----|------|---------|------|
-| D1 | `grid-runtime/src/harness.rs` 接入 `payload.policy_context` (P1) → L3 managed hooks attach | S3.T3 `eaasp-l3-governance` 实现 Contract 5 `POST /v1/sessions/{id}/validate` | ⏳ |
+| D1 | `grid-runtime/src/harness.rs` 接入 `payload.policy_context` (P1) → L3 managed hooks attach | S3.T3 `eaasp-l3-governance` 实现 Contract 5 `POST /v1/sessions/{id}/validate` ✅ (done @ 0907d13) — **前置条件已满足，待接入** | ⏳ |
 | D2 | `grid-runtime/src/harness.rs` 接入 `payload.memory_refs` (P3) → L2 memory projection 注入 engine context | S3.T2 `eaasp-l2-memory-engine` 提供 `memory_read` MCP tool + `POST /api/v1/memory/search` | ⏳ |
 | D3 | `grid-runtime/src/harness.rs` 接入 `payload.user_preferences` (P5) 并调用 `SessionPayload::trim_for_budget()` | 上下文预算/token 计数策略确定（engine 侧 context budget config） | ⏳ |
 | D4 | `grid-runtime/src/harness.rs` 接入 `payload.event_context` (P2) 路径 | Phase 1 ADR-V2-002（Session Event Stream backend）决议 | ⏳ |
@@ -767,4 +767,22 @@ S2 完成后扫描 `crates/grid-runtime` / `crates/grid-hook-bridge` / `crates/e
 | D14 | `eaasp-l2-memory-engine::index._row_to_memory` 通过 `from .files import _row_to_memory` 跨模块访问私有符号 | 提升为公共 `files.row_to_memory` 或抽到 shared `_rows.py`，避免后续重构连锁破坏 (N1) | ⏳ |
 | D15 | `eaasp-l2-memory-engine` 缺 `[tool.ruff]` / `[tool.mypy]` 配置块 | S3.T5 CI 接入前统一添加项目级 lint/typecheck 配置（与 skill-registry 对齐） (N7) | ⏳ |
 
-**检查纪律：** S3 每个 Task 开始前先 `grep "⏳" docs/plans/2026-04-11-v2-mvp-phase0-plan.md`，确认是否有条件已达成的项可以顺手补齐。S3.T2 完成后检查 D2，S3.T3 完成后检查 D1，S4 开始前检查 D6。
+### 来源：2026-04-12 S3.T3 reviewer findings
+
+S3.T3 `eaasp-l3-governance` (0907d13) APPROVE-WITH-COMMENTS, no Criticals. Reviewer M1-M3 + 4 Minor + 4 process items captured below. Items D1-D12 from coder's list that map to Phase 3 scope boundaries (approval gates / OPA / evidence chain / policy DSL compile / PRE_POLICY_DEPLOY emission) are **not tracked here** — they are explicit MVP exclusions in MVP_SCOPE.md §3.3 and belong to Phase 3 design work, not Phase 0 Deferred.
+
+| ID | 内容 | 前置条件 | 状态 |
+|----|------|---------|------|
+| D16 | `eaasp-l3-governance::policy_engine.deploy()` 读 `row["created_at"]` 发生在 `commit()` 之前（M1）。aiosqlite 单线程 connection 下正确，但 executor 升级后会从 pre-commit state 读到旧值 | 迁移到 SQLite ≥3.35 `RETURNING created_at` 子句消除 post-insert SELECT round-trip（L2 同时期迁移）| ⏳ |
+| D17 | `eaasp-l3-governance::api.validate_session()` 在 `latest.payload.get("hooks", [])` 里直接 `hook["hook_id"]`（M2），遗留 payload 缺字段时 `KeyError` → 500 | 增加 `hook.get("hook_id")` 守卫或在 `ManagedSettings` 反序列化时强制字段存在 | ⏳ |
+| D18 | `eaasp-l3-governance::validate_session()` 对 `session_id` path param 不做校验（M3），未验证值直接回显到 response body | 补充 `Path(..., min_length=1, pattern=r"^sess_[A-Za-z0-9_-]+$")` 守卫 | ⏳ |
+| D19 | `eaasp-l3-governance::policy_engine.switch_mode()` 接受任意 `hook_id`（未在任何已部署版本里），静默创建 override row（N3） | 真实 L3 使用场景明确后加 warn 或 404 返回 | ⏳ |
+| D20 | `_sanitize_errors()` 逻辑只在 `eaasp-l3-governance` 定义。S3.T2 也有 `ValidationError` 序列化风险 | 抽到共享 `eaasp_common` Python 包或复制到 L2 并标注 cross-service 关注点 | ⏳ |
+| D21 | `managed_settings_versions` / `telemetry_events` 均无保留策略，无限增长 | 观察到真实存储压力或 MVP E2E 后加 TTL/archive 策略（与 L2 memory_files archived 语义对齐） | ⏳ |
+| D22 | `eaasp-l3-governance` 无全局 FastAPI exception handler（对齐 S3.T2 M3），未捕获 `sqlite3.OperationalError` 会返回默认 500 而非 503 | 补充 `@app.exception_handler(OperationalError)` → 503 与 `@app.exception_handler(ValueError)` → 422 | ⏳ |
+| D23 | `eaasp-l3-governance` 无结构化日志（`main.py` 未 init loguru / logging），错误一旦 raise 完就静默 | S3.T5 CI 接入前统一加 loguru 初始化（与 S3.T1 / S3.T2 对齐） | ⏳ |
+| D24 | IDE Pyright 对 `tools/eaasp-l3-governance/` 报大量 missing-import 假阳性（不读 `.venv/lib/python3.14/site-packages`）。S3.T1 / S3.T2 同病 | 每个 Python tool 加一个 `pyrightconfig.json` 指向自己 `.venv`，或升级到 `uv pip install -e .` + workspace-level pyright 配置 | ⏳ |
+| D25 | `eaasp-l3-governance` 无并发部署 E2E 测试覆盖 `BEGIN IMMEDIATE` 正确性。单元层 R2 测试已验证 `asyncio.gather` 10-way，但没通过完整 HTTP 栈（TestClient vs real uvicorn） | L4 orchestrator 实际开始并发 policy deploy 时或做 load test 时补充 | ⏳ |
+| D26 | `eaasp-l3-governance::tests/test_api.py::test_query_newest_first` 使用 `time.sleep(1.1)` 防 `received_at` TEXT-second 粒度撞秒。可接受但脆弱 | 升级到单调递增 tiebreaker 列（`seq` 或 `event_id` DESC 作为次级排序，部分 API 已有） | ⏳ |
+
+**检查纪律：** S3 每个 Task 开始前先 `grep "⏳" docs/plans/2026-04-11-v2-mvp-phase0-plan.md`，确认是否有条件已达成的项可以顺手补齐。S3.T2 完成后检查 D2，**S3.T3 完成后检查 D1**（已检查：D1 前置条件 ✅ 满足，待接入 harness.rs；D2 precondition 同样已满足；均留至专门的 harness 接入 task 统一处理，不在 S3.T4 范围内），S4 开始前检查 D6。
