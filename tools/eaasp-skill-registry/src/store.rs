@@ -164,23 +164,30 @@ impl SkillStore {
             .context("read SKILL.md")?;
 
         let (frontmatter_yaml, prose) = parse_skill_md(&content);
+        let parsed_v2 = crate::skill_parser::parse_v2_frontmatter(&frontmatter_yaml).ok();
 
         Ok(Some(SkillContent {
             meta,
             frontmatter_yaml,
             prose,
+            parsed_v2,
         }))
     }
 
-    /// Search skills by optional tag, text query, and limit.
+    /// Search skills by optional tag, text query, status, scope, and limit.
+    ///
+    /// `scope` filters by the `access_scope` field parsed from a skill's v2
+    /// frontmatter. Because that field lives on the filesystem (not SQL),
+    /// scope filtering is applied as a post-query in-memory filter.
     pub async fn search(
         &self,
         tag: Option<String>,
         query: Option<String>,
         status: Option<String>,
+        scope: Option<String>,
         limit: Option<usize>,
     ) -> Result<Vec<SkillMeta>> {
-        self.db
+        let base: Vec<SkillMeta> = self.db
             .call(move |conn| {
                 let mut sql = "SELECT id, version, name, description, status, author, tags, created_at, updated_at FROM skills WHERE 1=1".to_string();
                 let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
@@ -228,7 +235,35 @@ impl SkillStore {
                 Ok(results)
             })
             .await
-            .context("search skills")
+            .context("search skills")?;
+
+        // Post-query scope filter: for each candidate, read its full content
+        // and compare `parsed_v2.access_scope`. O(N) — acceptable for MVP.
+        let Some(scope_value) = scope else {
+            return Ok(base);
+        };
+
+        let mut filtered = Vec::with_capacity(base.len());
+        for meta in base {
+            match self
+                .read_skill(meta.id.clone(), Some(meta.version.clone()))
+                .await?
+            {
+                Some(content) => {
+                    let matches = content
+                        .parsed_v2
+                        .as_ref()
+                        .and_then(|v| v.access_scope.as_ref())
+                        .map(|s| s == &scope_value)
+                        .unwrap_or(false);
+                    if matches {
+                        filtered.push(meta);
+                    }
+                }
+                None => continue,
+            }
+        }
+        Ok(filtered)
     }
 
     /// Promote a skill version to a new status.

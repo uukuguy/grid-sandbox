@@ -56,7 +56,7 @@ async fn store_search_by_tags() {
 
     // Search by tag "rust"
     let results = store
-        .search(Some("rust".to_string()), None, None, None)
+        .search(Some("rust".to_string()), None, None, None, None)
         .await
         .unwrap();
     assert_eq!(results.len(), 1);
@@ -64,7 +64,7 @@ async fn store_search_by_tags() {
 
     // Search by tag "code" should return both
     let results = store
-        .search(Some("code".to_string()), None, None, None)
+        .search(Some("code".to_string()), None, None, None, None)
         .await
         .unwrap();
     assert_eq!(results.len(), 2);

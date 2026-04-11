@@ -40,6 +40,8 @@ pub struct SkillContent {
     pub meta: SkillMeta,
     pub frontmatter_yaml: String,
     pub prose: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_v2: Option<crate::skill_parser::V2Frontmatter>,
 }
 
 /// Version entry for a skill.
@@ -73,8 +75,53 @@ pub struct PromoteRequest {
 /// Query parameters for skill search.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SearchQuery {
+    #[serde(default)]
     pub q: Option<String>,
+    #[serde(default)]
     pub tags: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
     pub limit: Option<usize>,
+}
+
+/// Generic (id, version) invocation payload used by several MCP-style tools.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InvokeById {
+    pub id: String,
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
+/// Payload for the `skill_read` MCP-style tool.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InvokeSkillRead {
+    pub id: String,
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
+/// Payload for the `skill_search` MCP-style tool.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InvokeSkillSearch {
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub tags: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// Payload for the `skill_promote` MCP-style tool.
+#[derive(Debug, Clone, Deserialize)]
+pub struct InvokePromote {
+    pub id: String,
+    pub version: String,
+    pub target_status: SkillStatus,
 }

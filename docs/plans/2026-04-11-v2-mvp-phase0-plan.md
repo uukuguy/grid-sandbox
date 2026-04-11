@@ -737,3 +737,30 @@ Phase 0 分为 4 个 Stage，Stage 内任务可并行，Stage 之间串行：
 - [ ] Git commit "docs(eaasp): Phase 0 MVP complete"
 
 完成后进入 **Phase 1: Event-driven foundation**（先解 ADR-V2-001/002/003，再动手）。
+
+---
+
+## Deferred（暂缓项）
+
+> 本阶段已知但暂未实现的功能点。每次开始新 Task 前先检查此列表。
+> 新增记录规则：发现即写入，不说"以后处理"。状态 `⏳` 待补 / `✅ 已补` 保留历史 / `❌ 取消` 记原因。
+
+### 来源：2026-04-11 S2→S3 过渡时 code-level scan
+
+S2 完成后扫描 `crates/grid-runtime` / `crates/grid-hook-bridge` / `crates/eaasp-certifier` / `lang/{claude-code,hermes}-runtime-python` 发现以下 landmine（Pattern 5：字段收到但在 harness 实现里被丢弃）。SessionPayload 定义了 12 个字段，`grid-runtime/src/harness.rs` 仅消费 3 个（`session_id` / `user_id` / `skill_instructions`），其余在文档注释中标注为 "wired in a later phase"。
+
+| ID | 内容 | 前置条件 | 状态 |
+|----|------|---------|------|
+| D1 | `grid-runtime/src/harness.rs` 接入 `payload.policy_context` (P1) → L3 managed hooks attach | S3.T3 `eaasp-l3-governance` 实现 Contract 5 `POST /v1/sessions/{id}/validate` | ⏳ |
+| D2 | `grid-runtime/src/harness.rs` 接入 `payload.memory_refs` (P3) → L2 memory projection 注入 engine context | S3.T2 `eaasp-l2-memory-engine` 提供 `memory_read` MCP tool + `POST /api/v1/memory/search` | ⏳ |
+| D3 | `grid-runtime/src/harness.rs` 接入 `payload.user_preferences` (P5) 并调用 `SessionPayload::trim_for_budget()` | 上下文预算/token 计数策略确定（engine 侧 context budget config） | ⏳ |
+| D4 | `grid-runtime/src/harness.rs` 接入 `payload.event_context` (P2) 路径 | Phase 1 ADR-V2-002（Session Event Stream backend）决议 | ⏳ |
+| D5 | 重写 `crates/grid-runtime/tests/grpc_integration.rs::test_terminate_includes_final_telemetry` 到 v2 telemetry envelope（当前 `#[ignore]`） | EmitTelemetry 在 Terminate 边界语义明确（Terminate → Empty/Empty，final_telemetry 改走 EmitTelemetry） | ⏳ |
+| D6 | `eaasp-certifier` 补充对 SessionPayload P1–P5 字段落地的断言（目前仅验证 12 MUST 方法签名，不验证 payload 字段是否被消费） | D1–D4 任意一项落地后才有可断言目标 | ⏳ |
+| D7 | EmitEvent 真实实现（当前返回 `Status::unimplemented("ADR-V2-001")`） | ADR-V2-001 决议 + Phase 1 Event Stream backend 上线 | ⏳ |
+| D8 | `access_scope` 真实 RBAC 执行（MVP 仅当 tag 透传，不做权限校验） | Phase 3 身份与租户模型 + L3 Authorization subsystem 就绪 | ⏳ |
+| D9 | `skill_usage` 返回真实遥测（MVP 返回 `{session_count: 0, last_used: null}`） | Phase 1 L3 telemetry ingest 管线打通 + L2 memory_engine 聚合实现 | ⏳ |
+| D10 | S3.T1 MCP 暴露由 REST facade 升级为真 rmcp ServerHandler（当前通过 `GET /tools` + `POST /tools/{name}/invoke` 近似） | 其他 L2/L3/L4 服务也需要真 MCP 时统一切换，避免半 MCP 状态 | ⏳ |
+| D11 | `eaasp-skill-registry::store.search` 的 `scope` 过滤器在 SQL `LIMIT` 之后执行：`scope=X&limit=10` 可能返回 <10 条即使数据库里有更多匹配项 | `access_scope` 迁移到 SQL 列（migration + 索引）后即可在 WHERE 子句里一起过滤，消除 O(N) read-back | ⏳ |
+
+**检查纪律：** S3 每个 Task 开始前先 `grep "⏳" docs/plans/2026-04-11-v2-mvp-phase0-plan.md`，确认是否有条件已达成的项可以顺手补齐。S3.T2 完成后检查 D2，S3.T3 完成后检查 D1，S4 开始前检查 D6。

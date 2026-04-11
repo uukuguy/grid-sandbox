@@ -26,3 +26,4 @@ tower-http = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 reqwest = { workspace = true }
 tempfile = "3"
+tower = { workspace = true, features = ["util"] }
