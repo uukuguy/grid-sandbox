@@ -85,6 +85,80 @@ fn parse_empty_string_returns_err() {
     assert!(matches!(result2, Err(V2ParseError::Empty)));
 }
 
+#[test]
+fn parse_threshold_calibration_example_skill() {
+    // Read the example skill file and split frontmatter from prose.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/skills/threshold-calibration/SKILL.md");
+    let content = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+
+    // Strip the --- frontmatter delimiters the same way store.rs does.
+    assert!(
+        content.starts_with("---\n"),
+        "SKILL.md must start with frontmatter"
+    );
+    let rest = &content[4..];
+    let end_idx = rest
+        .find("\n---\n")
+        .expect("SKILL.md must close frontmatter with ---");
+    let frontmatter_yaml = &rest[..end_idx + 1];
+
+    let fm = parse_v2_frontmatter(frontmatter_yaml)
+        .expect("threshold-calibration frontmatter must parse");
+
+    assert_eq!(fm.name.as_deref(), Some("threshold-calibration"));
+    assert_eq!(fm.version.as_deref(), Some("0.1.0"));
+    assert_eq!(
+        fm.runtime_affinity.preferred.as_deref(),
+        Some("grid-runtime")
+    );
+    assert!(fm
+        .runtime_affinity
+        .compatible
+        .contains(&"grid-runtime".to_string()));
+    assert!(fm
+        .runtime_affinity
+        .compatible
+        .contains(&"claude-code-runtime".to_string()));
+    assert_eq!(fm.access_scope.as_deref(), Some("org:eaasp-mvp"));
+
+    // Scoped hooks: 1 pre + 1 post + 1 stop
+    assert_eq!(fm.scoped_hooks.pre_tool_use.len(), 1);
+    assert_eq!(fm.scoped_hooks.pre_tool_use[0].name, "block_write_scada");
+    match &fm.scoped_hooks.pre_tool_use[0].body {
+        ScopedHookBody::Command { command } => {
+            assert!(command.contains("block_write_scada.sh"));
+        }
+        _ => panic!("PreToolUse[0] must be a command hook"),
+    }
+
+    assert_eq!(fm.scoped_hooks.post_tool_use.len(), 1);
+    assert_eq!(fm.scoped_hooks.post_tool_use[0].name, "require_evidence");
+    match &fm.scoped_hooks.post_tool_use[0].body {
+        ScopedHookBody::Prompt { prompt } => {
+            assert!(prompt.to_lowercase().contains("snapshot"));
+        }
+        _ => panic!("PostToolUse[0] must be a prompt hook"),
+    }
+
+    assert_eq!(fm.scoped_hooks.stop.len(), 1);
+    assert_eq!(fm.scoped_hooks.stop[0].name, "require_anchor");
+    match &fm.scoped_hooks.stop[0].body {
+        ScopedHookBody::Command { command } => {
+            assert!(command.contains("check_output_anchor.sh"));
+        }
+        _ => panic!("Stop[0] must be a command hook"),
+    }
+
+    assert_eq!(fm.dependencies.len(), 2);
+    assert!(fm.dependencies.iter().any(|d| d.contains("mock-scada")));
+    assert!(fm
+        .dependencies
+        .iter()
+        .any(|d| d.contains("eaasp-l2-memory")));
+}
+
 // ─── Integration tests ──────────────────────────────────────────────────────
 
 async fn build_test_app() -> (axum::Router, tempfile::TempDir) {
@@ -122,7 +196,12 @@ async fn v2_frontmatter_roundtrip_via_store() {
 async fn get_tools_returns_seven() {
     let (app, _tmp) = build_test_app().await;
     let resp = app
-        .oneshot(Request::builder().uri("/tools").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/tools")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -130,10 +209,7 @@ async fn get_tools_returns_seven() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let tools = json["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 7);
-    let names: Vec<&str> = tools
-        .iter()
-        .map(|t| t["name"].as_str().unwrap())
-        .collect();
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
     for expected in [
         "skill_search",
         "skill_read",
