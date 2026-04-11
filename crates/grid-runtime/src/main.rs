@@ -1,6 +1,6 @@
-//! grid-runtime — EAASP L1 gRPC server entry point.
+//! grid-runtime — EAASP v2 L1 gRPC server entry point.
 //!
-//! Starts a gRPC server exposing the 16-method RuntimeContract
+//! Starts a gRPC server exposing the v2.0 16-method RuntimeContract
 //! for the EAASP platform to manage.
 
 use std::sync::Arc;

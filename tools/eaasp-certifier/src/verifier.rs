@@ -1,4 +1,8 @@
-//! Verifier — 16-method contract verification engine.
+//! Verifier — v2.0 16-method contract verification engine.
+//!
+//! Reports are split into MUST (12) / OPTIONAL (4) / PLACEHOLDER (1).
+//! Failures on MUST produce a FAIL status; failures on OPTIONAL produce
+//! a WARN; placeholder status is informational only.
 
 use std::fmt;
 
@@ -6,18 +10,25 @@ use serde::{Deserialize, Serialize};
 use tonic::transport::Channel;
 use tracing::{error, info, warn};
 
-use crate::common_proto;
-use crate::runtime_proto;
-use crate::runtime_proto::runtime_service_client::RuntimeServiceClient;
+use crate::proto;
+use crate::proto::runtime_service_client::RuntimeServiceClient;
+use crate::v2_must_methods::MethodClass;
 
 /// Verification result for a single method.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MethodResult {
     pub method: String,
+    pub class: String,
     pub passed: bool,
     pub duration_ms: u64,
     pub error: Option<String>,
     pub notes: Option<String>,
+}
+
+impl MethodResult {
+    pub fn method_class(&self) -> MethodClass {
+        MethodClass::of(&self.method)
+    }
 }
 
 /// Full verification report.
@@ -32,14 +43,27 @@ pub struct VerificationReport {
     pub total: usize,
     pub passed_count: usize,
     pub failed_count: usize,
+    pub must_total: usize,
+    pub must_passed: usize,
+    pub optional_total: usize,
+    pub optional_present: usize,
+    pub placeholder_present: bool,
     pub results: Vec<MethodResult>,
     pub timestamp: String,
+}
+
+impl VerificationReport {
+    /// The report passes iff every MUST method passed. OPTIONAL and
+    /// PLACEHOLDER results do not affect this.
+    pub fn compute_passed(&self) -> bool {
+        self.must_passed == self.must_total
+    }
 }
 
 impl fmt::Display for VerificationReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "================================================================")?;
-        writeln!(f, " EAASP Contract Verification Report")?;
+        writeln!(f, " EAASP v2.0 Contract Verification Report")?;
         writeln!(f, "================================================================")?;
         writeln!(f, " Endpoint:    {}", self.endpoint)?;
         writeln!(
@@ -53,9 +77,20 @@ impl fmt::Display for VerificationReport {
         writeln!(f, "----------------------------------------------------------------")?;
         writeln!(
             f,
-            " Result:      {}/{} passed",
-            self.passed_count, self.total
+            " MUST methods: {}/{} PASS",
+            self.must_passed, self.must_total
         )?;
+        writeln!(
+            f,
+            " OPTIONAL methods: {}/{} present (bonus)",
+            self.optional_present, self.optional_total
+        )?;
+        let placeholder_note = if self.placeholder_present {
+            "present (ADR-V2-001 pending)"
+        } else {
+            "absent (ADR-V2-001 pending)"
+        };
+        writeln!(f, " EmitEvent placeholder: {placeholder_note}")?;
         writeln!(
             f,
             " Status:      {}",
@@ -67,8 +102,8 @@ impl fmt::Display for VerificationReport {
             let icon = if result.passed { "OK" } else { "FAIL" };
             write!(
                 f,
-                " [{icon:>4}] {:30} {:>6}ms",
-                result.method, result.duration_ms
+                " [{icon:>4}] [{:11}] {:18} {:>6}ms",
+                result.class, result.method, result.duration_ms
             )?;
             if let Some(err) = &result.error {
                 write!(f, "  ! {err}")?;
@@ -86,7 +121,8 @@ impl fmt::Display for VerificationReport {
     }
 }
 
-/// Verify all 16 methods of the RuntimeService contract.
+/// Verify all 16 methods of the v2 RuntimeService contract, plus the
+/// emit_event placeholder.
 pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationReport> {
     let channel = Channel::from_shared(endpoint.to_string())?
         .connect()
@@ -95,15 +131,15 @@ pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationRepor
 
     let mut results = Vec::new();
 
-    // 1. Health
+    // OPTIONAL: Health (run first for endpoint probing)
     results.push(verify_health(&mut client).await);
 
-    // 2. GetCapabilities
+    // MUST: GetCapabilities
     let caps = verify_get_capabilities(&mut client).await;
     let caps_info = caps.notes.clone().unwrap_or_default();
     results.push(caps);
 
-    // 3. Initialize
+    // MUST: Initialize (must run before session-bound tests)
     let init_result = verify_initialize(&mut client).await;
     let session_id = init_result
         .notes
@@ -111,7 +147,6 @@ pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationRepor
         .unwrap_or_else(|| "test-session".into());
     results.push(init_result);
 
-    // 4-16: remaining methods
     results.push(verify_send(&mut client, &session_id).await);
     results.push(verify_load_skill(&mut client, &session_id).await);
     results.push(verify_on_tool_call(&mut client, &session_id).await);
@@ -120,29 +155,59 @@ pub async fn verify_endpoint(endpoint: &str) -> anyhow::Result<VerificationRepor
     results.push(verify_connect_mcp(&mut client, &session_id).await);
     results.push(verify_disconnect_mcp(&mut client, &session_id).await);
     results.push(verify_emit_telemetry(&mut client, &session_id).await);
-    results.push(verify_get_state(&mut client, &session_id).await);
-    results.push(verify_pause_session(&mut client, &session_id).await);
-    results.push(verify_resume_session(&mut client, &session_id).await);
+    results.push(verify_get_state(&mut client).await);
+    results.push(verify_pause_session(&mut client).await);
+    results.push(verify_resume_session(&mut client).await);
     results.push(verify_restore_state(&mut client).await);
-    results.push(verify_terminate(&mut client, &session_id).await);
+    results.push(verify_terminate(&mut client).await);
+    results.push(verify_emit_event(&mut client, &session_id).await);
 
-    let passed_count = results.iter().filter(|r| r.passed).count();
+    // Tally results by classification.
     let total = results.len();
+    let passed_count = results.iter().filter(|r| r.passed).count();
+    let must_total = results
+        .iter()
+        .filter(|r| r.method_class() == MethodClass::Must)
+        .count();
+    let must_passed = results
+        .iter()
+        .filter(|r| r.method_class() == MethodClass::Must && r.passed)
+        .count();
+    let optional_total = results
+        .iter()
+        .filter(|r| r.method_class() == MethodClass::Optional)
+        .count();
+    let optional_present = results
+        .iter()
+        .filter(|r| r.method_class() == MethodClass::Optional && r.passed)
+        .count();
+    let placeholder_present = results
+        .iter()
+        .any(|r| r.method_class() == MethodClass::Placeholder && r.passed);
+
     let (runtime_id, runtime_name, tier, deployment_mode) = parse_caps_info(&caps_info);
 
-    Ok(VerificationReport {
+    let mut report = VerificationReport {
         endpoint: endpoint.to_string(),
         runtime_id,
         runtime_name,
         tier,
         deployment_mode,
-        passed: passed_count == total,
+        passed: false, // computed below
         total,
         passed_count,
         failed_count: total - passed_count,
+        must_total,
+        must_passed,
+        optional_total,
+        optional_present,
+        placeholder_present,
         results,
         timestamp: chrono::Utc::now().to_rfc3339(),
-    })
+    };
+
+    report.passed = report.compute_passed();
+    Ok(report)
 }
 
 fn parse_caps_info(info: &str) -> (String, String, String, String) {
@@ -174,9 +239,11 @@ macro_rules! timed_verify {
         let start = std::time::Instant::now();
         let result: Result<Option<String>, anyhow::Error> = (async { $block }).await;
         let duration_ms = start.elapsed().as_millis() as u64;
+        let class = MethodClass::of($name).label().to_string();
         match result {
             Ok(notes) => MethodResult {
                 method: $name.into(),
+                class,
                 passed: true,
                 duration_ms,
                 error: None,
@@ -186,6 +253,7 @@ macro_rules! timed_verify {
                 error!(method = $name, error = %e, "Verification failed");
                 MethodResult {
                     method: $name.into(),
+                    class,
                     passed: false,
                     duration_ms,
                     error: Some(e.to_string()),
@@ -197,9 +265,9 @@ macro_rules! timed_verify {
 }
 
 async fn verify_health(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
-    timed_verify!("Health", {
+    timed_verify!("health", {
         let resp = client
-            .health(common_proto::Empty {})
+            .health(proto::Empty {})
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         let status = resp.into_inner();
@@ -212,42 +280,49 @@ async fn verify_health(client: &mut RuntimeServiceClient<Channel>) -> MethodResu
     })
 }
 
-async fn verify_get_capabilities(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
-    timed_verify!("GetCapabilities", {
+async fn verify_get_capabilities(
+    client: &mut RuntimeServiceClient<Channel>,
+) -> MethodResult {
+    timed_verify!("get_capabilities", {
         let resp = client
-            .get_capabilities(common_proto::Empty {})
+            .get_capabilities(proto::Empty {})
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         let cap = resp.into_inner();
         info!(
-            runtime = %cap.runtime_name,
+            runtime_id = %cap.runtime_id,
             tier = %cap.tier,
-            tools = cap.supported_tools.len(),
+            tools = cap.tools.len(),
             "GetCapabilities OK"
         );
         Ok(Some(format!(
             "{}:{}:{}:{}",
-            cap.runtime_id, cap.runtime_name, cap.tier, cap.deployment_mode
+            cap.runtime_id, cap.runtime_id, cap.tier, cap.deployment_mode
         )))
     })
 }
 
 async fn verify_initialize(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
-    timed_verify!("Initialize", {
+    timed_verify!("initialize", {
         let resp = client
-            .initialize(runtime_proto::InitializeRequest {
-                payload: Some(runtime_proto::SessionPayload {
+            .initialize(proto::InitializeRequest {
+                payload: Some(proto::SessionPayload {
                     user_id: "certifier-user".into(),
-                    user_role: "tester".into(),
-                    org_unit: "qa".into(),
+                    runtime_id: "certifier".into(),
+                    user_preferences: Some(proto::UserPreferences {
+                        user_id: "certifier-user".into(),
+                        language: "en".into(),
+                        ..Default::default()
+                    }),
+                    allow_trim_p5: true,
                     ..Default::default()
                 }),
             })
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let session_id = resp.into_inner().session_id;
-        info!(session_id = %session_id, "Initialize OK");
-        Ok(Some(session_id))
+        let init = resp.into_inner();
+        info!(session_id = %init.session_id, "Initialize OK");
+        Ok(Some(init.session_id))
     })
 }
 
@@ -255,12 +330,12 @@ async fn verify_send(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("Send", {
+    timed_verify!("send", {
         use tokio_stream::StreamExt;
         let mut stream = client
-            .send(runtime_proto::SendRequest {
+            .send(proto::SendRequest {
                 session_id: session_id.into(),
-                message: Some(runtime_proto::UserMessage {
+                message: Some(proto::UserMessage {
                     content: "Say hello".into(),
                     message_type: "text".into(),
                     metadata: Default::default(),
@@ -294,15 +369,16 @@ async fn verify_load_skill(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("LoadSkill", {
+    timed_verify!("load_skill", {
         let resp = client
-            .load_skill(runtime_proto::LoadSkillRequest {
+            .load_skill(proto::LoadSkillRequest {
                 session_id: session_id.into(),
-                skill: Some(runtime_proto::SkillContent {
+                skill: Some(proto::SkillInstructions {
                     skill_id: "test-skill".into(),
                     name: "Test Skill".into(),
-                    frontmatter_yaml: "---\nname: test\n---".into(),
-                    prose: "Do a simple test.".into(),
+                    content: "Do a simple test.".into(),
+                    frontmatter_hooks: vec![],
+                    metadata: Default::default(),
                 }),
             })
             .await
@@ -320,9 +396,9 @@ async fn verify_on_tool_call(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("OnToolCall", {
+    timed_verify!("on_tool_call", {
         let resp = client
-            .on_tool_call(common_proto::ToolCallEvent {
+            .on_tool_call(proto::ToolCallEvent {
                 session_id: session_id.into(),
                 tool_name: "bash".into(),
                 tool_id: "t-cert-1".into(),
@@ -330,8 +406,8 @@ async fn verify_on_tool_call(
             })
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let decision = resp.into_inner();
-        info!(decision = %decision.decision, "OnToolCall OK");
+        let ack = resp.into_inner();
+        info!(decision = %ack.decision, "OnToolCall OK");
         Ok(None)
     })
 }
@@ -340,9 +416,9 @@ async fn verify_on_tool_result(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("OnToolResult", {
+    timed_verify!("on_tool_result", {
         let resp = client
-            .on_tool_result(common_proto::ToolResultEvent {
+            .on_tool_result(proto::ToolResultEvent {
                 session_id: session_id.into(),
                 tool_name: "bash".into(),
                 tool_id: "t-cert-1".into(),
@@ -351,8 +427,8 @@ async fn verify_on_tool_result(
             })
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let decision = resp.into_inner();
-        info!(decision = %decision.decision, "OnToolResult OK");
+        let ack = resp.into_inner();
+        info!(decision = %ack.decision, "OnToolResult OK");
         Ok(None)
     })
 }
@@ -361,15 +437,16 @@ async fn verify_on_stop(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("OnStop", {
+    timed_verify!("on_stop", {
         let resp = client
-            .on_stop(common_proto::StopRequest {
+            .on_stop(proto::StopEvent {
                 session_id: session_id.into(),
+                reason: "done".into(),
             })
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let decision = resp.into_inner();
-        info!(decision = %decision.decision, "OnStop OK");
+        let ack = resp.into_inner();
+        info!(decision = %ack.decision, "OnStop OK");
         Ok(None)
     })
 }
@@ -378,11 +455,11 @@ async fn verify_connect_mcp(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("ConnectMcp", {
+    timed_verify!("connect_mcp", {
         let resp = client
-            .connect_mcp(runtime_proto::ConnectMcpRequest {
+            .connect_mcp(proto::ConnectMcpRequest {
                 session_id: session_id.into(),
-                servers: vec![runtime_proto::McpServerConfig {
+                servers: vec![proto::McpServerConfig {
                     name: "certifier-test-mcp".into(),
                     transport: "stdio".into(),
                     command: "echo".into(),
@@ -403,9 +480,9 @@ async fn verify_disconnect_mcp(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("DisconnectMcp", {
+    timed_verify!("disconnect_mcp", {
         client
-            .disconnect_mcp(runtime_proto::DisconnectMcpRequest {
+            .disconnect_mcp(proto::DisconnectMcpRequest {
                 session_id: session_id.into(),
                 server_name: "certifier-test-mcp".into(),
             })
@@ -419,28 +496,22 @@ async fn verify_emit_telemetry(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("EmitTelemetry", {
-        let resp = client
-            .emit_telemetry(runtime_proto::EmitTelemetryRequest {
+    timed_verify!("emit_telemetry", {
+        client
+            .emit_telemetry(proto::TelemetryRequest {
                 session_id: session_id.into(),
+                events: vec![],
             })
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let batch = resp.into_inner();
-        info!(events = batch.events.len(), "EmitTelemetry OK");
-        Ok(Some(format!("{} events", batch.events.len())))
+        Ok(Some("fire-and-forget ok".into()))
     })
 }
 
-async fn verify_get_state(
-    client: &mut RuntimeServiceClient<Channel>,
-    session_id: &str,
-) -> MethodResult {
-    timed_verify!("GetState", {
+async fn verify_get_state(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
+    timed_verify!("get_state", {
         let resp = client
-            .get_state(runtime_proto::GetStateRequest {
-                session_id: session_id.into(),
-            })
+            .get_state(proto::Empty {})
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         let state = resp.into_inner();
@@ -457,44 +528,36 @@ async fn verify_get_state(
     })
 }
 
-async fn verify_pause_session(
-    client: &mut RuntimeServiceClient<Channel>,
-    session_id: &str,
-) -> MethodResult {
-    timed_verify!("PauseSession", {
+async fn verify_pause_session(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
+    timed_verify!("pause_session", {
         let resp = client
-            .pause_session(runtime_proto::PauseRequest {
-                session_id: session_id.into(),
-            })
+            .pause_session(proto::Empty {})
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let result = resp.into_inner();
-        if result.success {
-            Ok(None)
-        } else {
-            Err(anyhow::anyhow!("PauseSession returned success=false"))
-        }
+        let state = resp.into_inner();
+        info!(session_id = %state.session_id, "PauseSession OK");
+        Ok(None)
     })
 }
 
-async fn verify_resume_session(
-    client: &mut RuntimeServiceClient<Channel>,
-    session_id: &str,
-) -> MethodResult {
-    timed_verify!("ResumeSession", {
+async fn verify_resume_session(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
+    timed_verify!("resume_session", {
         let result = client
-            .resume_session(runtime_proto::ResumeRequest {
-                session_id: session_id.into(),
+            .resume_session(proto::StateResponse {
+                session_id: "certifier-resume-test".into(),
+                runtime_id: "certifier".into(),
+                state_data: vec![],
+                state_format: "rust-serde-v2".into(),
+                created_at: chrono::Utc::now().to_rfc3339(),
             })
             .await;
         match result {
-            Ok(resp) => {
-                let r = resp.into_inner();
-                info!(session_id = %r.session_id, "ResumeSession OK");
+            Ok(_) => {
+                info!("ResumeSession OK");
                 Ok(None)
             }
             Err(e) => {
-                warn!("ResumeSession returned error (expected for some runtimes): {e}");
+                warn!("ResumeSession returned error (expected for stubs): {e}");
                 Ok(Some("method exists but not fully implemented".into()))
             }
         }
@@ -502,19 +565,18 @@ async fn verify_resume_session(
 }
 
 async fn verify_restore_state(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
-    timed_verify!("RestoreState", {
-        let state = runtime_proto::SessionState {
+    timed_verify!("restore_state", {
+        let state = proto::StateResponse {
             session_id: "certifier-restore-test".into(),
             state_data: serde_json::to_vec(&serde_json::json!([]))?,
             runtime_id: "certifier".into(),
             created_at: chrono::Utc::now().to_rfc3339(),
-            state_format: "rust-serde-v1".into(),
+            state_format: "rust-serde-v2".into(),
         };
         let result = client.restore_state(state).await;
         match result {
-            Ok(resp) => {
-                let r = resp.into_inner();
-                info!(session_id = %r.session_id, "RestoreState OK");
+            Ok(_) => {
+                info!("RestoreState OK");
                 Ok(None)
             }
             Err(e) => {
@@ -525,37 +587,85 @@ async fn verify_restore_state(client: &mut RuntimeServiceClient<Channel>) -> Met
     })
 }
 
-async fn verify_terminate(
+async fn verify_terminate(client: &mut RuntimeServiceClient<Channel>) -> MethodResult {
+    timed_verify!("terminate", {
+        client
+            .terminate(proto::Empty {})
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        info!("Terminate OK");
+        Ok(None)
+    })
+}
+
+async fn verify_emit_event(
     client: &mut RuntimeServiceClient<Channel>,
     session_id: &str,
 ) -> MethodResult {
-    timed_verify!("Terminate", {
-        let resp = client
-            .terminate(runtime_proto::TerminateRequest {
-                session_id: session_id.into(),
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
-        let result = resp.into_inner();
-        if result.success {
-            let telemetry_count = result
-                .final_telemetry
-                .map(|b| b.events.len())
-                .unwrap_or(0);
-            info!(telemetry = telemetry_count, "Terminate OK");
-            Ok(Some(format!("{telemetry_count} final telemetry events")))
-        } else {
-            Err(anyhow::anyhow!("Terminate returned success=false"))
+    // ADR-V2-001 pending — both Unimplemented and success count as
+    // "placeholder present". Hard failure (connect error) counts as
+    // absence.
+    let start = std::time::Instant::now();
+    let result = client
+        .emit_event(proto::EventStreamEntry {
+            session_id: session_id.into(),
+            event_id: "evt-cert-1".into(),
+            event_type: proto::HookEventType::PreToolUse as i32,
+            payload_json: "{}".into(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+        .await;
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let class = MethodClass::of("emit_event").label().to_string();
+
+    match result {
+        Ok(_) => MethodResult {
+            method: "emit_event".into(),
+            class,
+            passed: true,
+            duration_ms,
+            error: None,
+            notes: Some("placeholder: present (implemented)".into()),
+        },
+        Err(status) if status.code() == tonic::Code::Unimplemented => MethodResult {
+            method: "emit_event".into(),
+            class,
+            passed: true,
+            duration_ms,
+            error: None,
+            notes: Some("placeholder: present (ADR-V2-001 pending)".into()),
+        },
+        Err(status) => {
+            warn!("EmitEvent placeholder returned hard error: {status}");
+            MethodResult {
+                method: "emit_event".into(),
+                class,
+                passed: false,
+                duration_ms,
+                error: Some(status.to_string()),
+                notes: None,
+            }
         }
-    })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn result(method: &str, passed: bool) -> MethodResult {
+        MethodResult {
+            method: method.into(),
+            class: MethodClass::of(method).label().to_string(),
+            passed,
+            duration_ms: 5,
+            error: None,
+            notes: None,
+        }
+    }
+
     #[test]
-    fn verification_report_display() {
+    fn report_display_passes_all_must() {
         let report = VerificationReport {
             endpoint: "http://localhost:50051".into(),
             runtime_id: "grid-harness".into(),
@@ -566,45 +676,87 @@ mod tests {
             total: 2,
             passed_count: 2,
             failed_count: 0,
+            must_total: 2,
+            must_passed: 2,
+            optional_total: 0,
+            optional_present: 0,
+            placeholder_present: true,
             results: vec![
-                MethodResult {
-                    method: "Health".into(),
-                    passed: true,
-                    duration_ms: 5,
-                    error: None,
-                    notes: None,
-                },
-                MethodResult {
-                    method: "Initialize".into(),
-                    passed: true,
-                    duration_ms: 12,
-                    error: None,
-                    notes: Some("session-123".into()),
-                },
+                result("initialize", true),
+                result("send", true),
             ],
-            timestamp: "2026-04-06T12:00:00Z".into(),
+            timestamp: "2026-04-11T12:00:00Z".into(),
         };
 
         let output = format!("{report}");
+        assert!(output.contains("MUST methods: 2/2 PASS"));
         assert!(output.contains("PASS"));
+        assert!(output.contains("EmitEvent placeholder: present"));
         assert!(output.contains("Grid"));
-        assert!(output.contains("Health"));
-        assert!(output.contains("2/2"));
+    }
+
+    #[test]
+    fn report_fails_when_must_missing() {
+        let mut report = VerificationReport {
+            endpoint: "http://localhost:50051".into(),
+            runtime_id: "rt".into(),
+            runtime_name: "RT".into(),
+            tier: "harness".into(),
+            deployment_mode: "shared".into(),
+            passed: false,
+            total: 1,
+            passed_count: 0,
+            failed_count: 1,
+            must_total: 1,
+            must_passed: 0,
+            optional_total: 0,
+            optional_present: 0,
+            placeholder_present: false,
+            results: vec![result("initialize", false)],
+            timestamp: "2026-04-11T12:00:00Z".into(),
+        };
+        report.passed = report.compute_passed();
+        assert!(!report.passed);
+    }
+
+    #[test]
+    fn report_passes_on_must_only_even_if_optional_fails() {
+        let mut report = VerificationReport {
+            endpoint: "rt".into(),
+            runtime_id: "rt".into(),
+            runtime_name: "rt".into(),
+            tier: "harness".into(),
+            deployment_mode: "shared".into(),
+            passed: false,
+            total: 2,
+            passed_count: 1,
+            failed_count: 1,
+            must_total: 1,
+            must_passed: 1,
+            optional_total: 1,
+            optional_present: 0,
+            placeholder_present: false,
+            results: vec![
+                result("initialize", true),
+                result("health", false),
+            ],
+            timestamp: "2026-04-11T12:00:00Z".into(),
+        };
+        report.passed = report.compute_passed();
+        assert!(report.passed, "optional failure must not block certification");
     }
 
     #[test]
     fn parse_caps_info_valid() {
-        let (id, name, tier, deploy) =
-            parse_caps_info("grid-harness:Grid:harness:shared");
+        let (id, _name, tier, deploy) = parse_caps_info("grid-harness:Grid:harness:shared");
         assert_eq!(id, "grid-harness");
-        assert_eq!(name, "Grid");
         assert_eq!(tier, "harness");
         assert_eq!(deploy, "shared");
     }
 
     #[test]
     fn parse_caps_info_without_deploy() {
-        let (id, name, tier, deploy) = parse_caps_info("grid-harness:Grid:harness");
+        let (id, _name, tier, deploy) = parse_caps_info("grid-harness:Grid:harness");
         assert_eq!(id, "grid-harness");
         assert_eq!(tier, "harness");
         assert_eq!(deploy, "unknown");

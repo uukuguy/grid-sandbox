@@ -9,9 +9,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::proto;
+use crate::proto::runtime_service_client::RuntimeServiceClient;
 use crate::runtime_pool::RuntimeEntry;
-use crate::runtime_proto;
-use crate::runtime_proto::runtime_service_client::RuntimeServiceClient;
 
 /// A single runtime's execution result (anonymized).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,13 +99,18 @@ async fn execute_single(
 
     let mut client = RuntimeServiceClient::connect(runtime.endpoint.clone()).await?;
 
-    // Initialize session
+    // Initialize session (v2 priority-block payload)
     let init_resp = client
-        .initialize(tonic::Request::new(runtime_proto::InitializeRequest {
-            payload: Some(runtime_proto::SessionPayload {
+        .initialize(tonic::Request::new(proto::InitializeRequest {
+            payload: Some(proto::SessionPayload {
                 user_id: "blindbox-user".into(),
-                user_role: "tester".into(),
-                org_unit: "qa".into(),
+                runtime_id: runtime.id.clone(),
+                user_preferences: Some(proto::UserPreferences {
+                    user_id: "blindbox-user".into(),
+                    language: "en".into(),
+                    ..Default::default()
+                }),
+                allow_trim_p5: true,
                 ..Default::default()
             }),
         }))
@@ -115,9 +120,9 @@ async fn execute_single(
 
     // Send prompt
     let mut stream = client
-        .send(tonic::Request::new(runtime_proto::SendRequest {
+        .send(tonic::Request::new(proto::SendRequest {
             session_id: session_id.clone(),
-            message: Some(runtime_proto::UserMessage {
+            message: Some(proto::UserMessage {
                 content: prompt.into(),
                 message_type: "text".into(),
                 metadata: Default::default(),
@@ -134,12 +139,8 @@ async fn execute_single(
         }
     }
 
-    // Terminate session
-    let _ = client
-        .terminate(tonic::Request::new(runtime_proto::TerminateRequest {
-            session_id,
-        }))
-        .await;
+    // Terminate session (v2 uses Empty — session tracking is implicit)
+    let _ = client.terminate(tonic::Request::new(proto::Empty {})).await;
 
     let duration = start.elapsed().as_millis() as u64;
 

@@ -1,9 +1,16 @@
-//! EAASP L1 Runtime Contract — 13-method interface.
+//! EAASP L1 Runtime Contract — v2.0 16-method interface.
 //!
 //! Any agent runtime that implements `RuntimeContract` can join the
 //! EAASP runtime pool. Grid implements this natively as `GridHarness`
 //! (zero serialization overhead). External adapters implement the
-//! mirrored gRPC service definition in `runtime.proto`.
+//! mirrored gRPC service definition in `proto/eaasp/runtime/v2/runtime.proto`.
+//!
+//! ## v2.0 Key Changes from v1
+//!
+//! - `SessionPayload` is now a **structured priority stack** of 5 blocks
+//!   (P1 PolicyContext → P5 UserPreferences). See §8.6.
+//! - 12 MUST + 4 OPTIONAL + 1 PLACEHOLDER (`EmitEvent`, ADR-V2-001 pending).
+//! - Deterministic context budget trimming: P5 → P4 → P3, never P1/P2.
 
 use std::pin::Pin;
 
@@ -13,12 +20,14 @@ use tokio_stream::Stream;
 
 // ── Core Contract Trait ──
 
-/// The 13-method runtime interface contract.
+/// The v2.0 16-method runtime interface contract.
 ///
 /// This is the Rust-native form. For external adapters (Python/TS),
-/// see `proto/eaasp/runtime/v1/runtime.proto`.
+/// see `proto/eaasp/runtime/v2/runtime.proto`.
 #[async_trait]
 pub trait RuntimeContract: Send + Sync {
+    // ── 12 MUST methods ──
+
     /// Accept session initialization payload, return session handle.
     async fn initialize(&self, payload: SessionPayload) -> anyhow::Result<SessionHandle>;
 
@@ -56,9 +65,6 @@ pub trait RuntimeContract: Send + Sync {
     /// Serialize full session state for persistence to L4 session store.
     async fn get_state(&self, handle: &SessionHandle) -> anyhow::Result<SessionState>;
 
-    /// Restore session from serialized state.
-    async fn restore_state(&self, state: SessionState) -> anyhow::Result<SessionHandle>;
-
     /// Connect to MCP servers.
     async fn connect_mcp(
         &self,
@@ -78,6 +84,11 @@ pub trait RuntimeContract: Send + Sync {
     /// Clean up resources, emit SessionEnd, flush all async telemetry.
     async fn terminate(&self, handle: &SessionHandle) -> anyhow::Result<()>;
 
+    /// Restore session from serialized state.
+    async fn restore_state(&self, state: SessionState) -> anyhow::Result<SessionHandle>;
+
+    // ── 4 OPTIONAL methods ──
+
     /// Health check.
     async fn health(&self) -> anyhow::Result<HealthStatus>;
 
@@ -93,39 +104,135 @@ pub trait RuntimeContract: Send + Sync {
 
     /// Resume a previously paused session.
     async fn resume_session(&self, session_id: &str) -> anyhow::Result<SessionHandle>;
+
+    // ── PLACEHOLDER method (ADR-V2-001 pending) ──
+
+    /// EmitEvent — exposed to L4 orchestration once ADR-V2-001 lands.
+    /// Phase 0 MVP: default impl returns `unimplemented`.
+    async fn emit_event(&self, _entry: EventStreamEntry) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "EmitEvent placeholder: not implemented (ADR-V2-001 pending)"
+        ))
+    }
 }
 
-// ── Types ──
+// ── SessionPayload (v2.0 structured P1-P5 blocks) ──
 
-/// Session initialization payload from L3 three-way handshake.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// v2.0 structured session payload.
+///
+/// Five priority blocks; context budget trimming is deterministic:
+/// P5 → P4 → P3 in that order when allowed. P1 and P2 are NEVER trimmed.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionPayload {
+    /// P1 — PolicyContext. Highest priority; never removable.
+    pub policy_context: Option<PolicyContext>,
+    /// P2 — EventContext. Only if session was event-triggered.
+    pub event_context: Option<EventContext>,
+    /// P3 — Cross-session memories (L2 Memory Engine).
+    pub memory_refs: Vec<MemoryRef>,
+    /// P4 — Skill prose + frontmatter-scoped hooks.
+    pub skill_instructions: Option<SkillInstructions>,
+    /// P5 — User preferences. Lowest priority; trimmed first.
+    pub user_preferences: Option<UserPreferences>,
+
+    /// When set, trim pass may remove P5. Default true.
+    pub allow_trim_p5: bool,
+    /// When set, trim pass may remove P4 after P5. Default false.
+    pub allow_trim_p4: bool,
+    /// When set, trim pass may remove P3 after P4. Default false.
+    pub allow_trim_p3: bool,
+
+    /// Session metadata (populated by L4 orchestration).
+    pub session_id: String,
     pub user_id: String,
-    pub user_role: String,
-    pub org_unit: String,
-    /// managed-settings.json content (hooks configuration).
-    pub managed_hooks_json: Option<String>,
-    /// Quota limits (e.g., "max_tokens" -> "100000").
-    pub quotas: std::collections::HashMap<String, String>,
-    /// Additional context key-values.
-    pub context: std::collections::HashMap<String, String>,
-    /// HookBridge URL (optional, from L3).
-    pub hook_bridge_url: Option<String>,
-    /// Telemetry endpoint (optional, from L3).
-    pub telemetry_endpoint: Option<String>,
-    /// L3-selected skill IDs to preload from L2 Skill Registry.
-    #[serde(default)]
-    pub skill_ids: Vec<String>,
-    /// L2 Skill Registry REST endpoint URL.
-    #[serde(default)]
-    pub skill_registry_url: Option<String>,
-    /// Whether the agent is allowed to search for additional skills at runtime.
-    #[serde(default)]
-    pub allowed_skill_search: bool,
-    /// Allowed search scope patterns (e.g. "org/erp/*").
-    #[serde(default)]
-    pub skill_search_scope: Vec<String>,
+    pub runtime_id: String,
+    pub created_at: String,
 }
+
+impl SessionPayload {
+    /// Construct an empty payload with `allow_trim_p5 = true`.
+    pub fn new() -> Self {
+        Self {
+            allow_trim_p5: true,
+            ..Default::default()
+        }
+    }
+}
+
+/// P1 — Policy context (L3 governance).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PolicyContext {
+    pub hooks: Vec<ManagedHook>,
+    pub org_unit: String,
+    pub policy_version: String,
+    pub quotas: std::collections::HashMap<String, String>,
+    pub deploy_timestamp: String,
+}
+
+/// L3-managed hook rule (P1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedHook {
+    pub hook_id: String,
+    pub hook_type: String,
+    pub condition: String,
+    pub action: String,
+    pub precedence: i32,
+    pub scope: String,
+}
+
+/// P2 — Event context (L4 orchestration trigger).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventContext {
+    pub event_id: String,
+    pub event_type: String,
+    pub severity: String,
+    pub source: String,
+    pub payload_json: String,
+    pub timestamp: String,
+}
+
+/// P3 — Cross-session memory reference (L2 Memory Engine).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryRef {
+    pub memory_id: String,
+    pub memory_type: String,
+    pub relevance_score: f64,
+    pub content: String,
+    pub source_session_id: String,
+    pub created_at: String,
+    pub tags: std::collections::HashMap<String, String>,
+}
+
+/// P4 — Skill instructions (L2 Skill Registry).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SkillInstructions {
+    pub skill_id: String,
+    pub name: String,
+    pub content: String,
+    pub frontmatter_hooks: Vec<ScopedHook>,
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+/// Skill-frontmatter scoped hook (P4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScopedHook {
+    pub hook_id: String,
+    pub hook_type: String,
+    pub condition: String,
+    pub action: String,
+    pub precedence: i32,
+}
+
+/// P5 — User preferences.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UserPreferences {
+    pub user_id: String,
+    pub prefs: std::collections::HashMap<String, String>,
+    pub language: String,
+    pub timezone: String,
+}
+
+// ── Opaque handle + runtime event types ──
 
 /// Opaque session handle returned by `initialize`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -153,7 +260,7 @@ pub struct ResponseChunk {
     pub is_error: bool,
 }
 
-/// Skill content (SKILL.md parsed).
+/// Skill content (SKILL.md parsed). Used by `load_skill`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillContent {
     pub skill_id: String,
@@ -203,7 +310,7 @@ pub struct SessionState {
     pub runtime_id: String,
     pub state_data: Vec<u8>,
     pub created_at: chrono::DateTime<chrono::Utc>,
-    /// Serialization format identifier (e.g., "rust-serde-v1").
+    /// Serialization format identifier (e.g., "rust-serde-v2").
     pub state_format: String,
 }
 
@@ -297,66 +404,282 @@ pub struct HealthStatus {
     pub checks: std::collections::HashMap<String, String>,
 }
 
+/// v2.0 EmitEvent placeholder payload (ADR-V2-001 pending).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventStreamEntry {
+    pub session_id: String,
+    pub event_id: String,
+    /// HookEventType as string (e.g., "PRE_TOOL_USE").
+    pub event_type: String,
+    pub payload_json: String,
+    pub timestamp: String,
+}
+
+// ── Proto ↔ contract conversions ──
+//
+// SessionPayload round-trips between the Rust-native contract form and
+// the generated `proto::SessionPayload` (v2 priority blocks).
+
+impl From<crate::proto::SessionPayload> for SessionPayload {
+    fn from(p: crate::proto::SessionPayload) -> Self {
+        SessionPayload {
+            policy_context: p.policy_context.map(Into::into),
+            event_context: p.event_context.map(Into::into),
+            memory_refs: p.memory_refs.into_iter().map(Into::into).collect(),
+            skill_instructions: p.skill_instructions.map(Into::into),
+            user_preferences: p.user_preferences.map(Into::into),
+            allow_trim_p5: p.allow_trim_p5,
+            allow_trim_p4: p.allow_trim_p4,
+            allow_trim_p3: p.allow_trim_p3,
+            session_id: p.session_id,
+            user_id: p.user_id,
+            runtime_id: p.runtime_id,
+            created_at: p.created_at,
+        }
+    }
+}
+
+impl From<SessionPayload> for crate::proto::SessionPayload {
+    fn from(p: SessionPayload) -> Self {
+        crate::proto::SessionPayload {
+            policy_context: p.policy_context.map(Into::into),
+            event_context: p.event_context.map(Into::into),
+            memory_refs: p.memory_refs.into_iter().map(Into::into).collect(),
+            skill_instructions: p.skill_instructions.map(Into::into),
+            user_preferences: p.user_preferences.map(Into::into),
+            allow_trim_p5: p.allow_trim_p5,
+            allow_trim_p4: p.allow_trim_p4,
+            allow_trim_p3: p.allow_trim_p3,
+            session_id: p.session_id,
+            user_id: p.user_id,
+            runtime_id: p.runtime_id,
+            created_at: p.created_at,
+        }
+    }
+}
+
+impl From<crate::proto::PolicyContext> for PolicyContext {
+    fn from(p: crate::proto::PolicyContext) -> Self {
+        PolicyContext {
+            hooks: p.hooks.into_iter().map(Into::into).collect(),
+            org_unit: p.org_unit,
+            policy_version: p.policy_version,
+            quotas: p.quotas,
+            deploy_timestamp: p.deploy_timestamp,
+        }
+    }
+}
+
+impl From<PolicyContext> for crate::proto::PolicyContext {
+    fn from(p: PolicyContext) -> Self {
+        crate::proto::PolicyContext {
+            hooks: p.hooks.into_iter().map(Into::into).collect(),
+            org_unit: p.org_unit,
+            policy_version: p.policy_version,
+            quotas: p.quotas,
+            deploy_timestamp: p.deploy_timestamp,
+        }
+    }
+}
+
+impl From<crate::proto::ManagedHook> for ManagedHook {
+    fn from(h: crate::proto::ManagedHook) -> Self {
+        ManagedHook {
+            hook_id: h.hook_id,
+            hook_type: h.hook_type,
+            condition: h.condition,
+            action: h.action,
+            precedence: h.precedence,
+            scope: h.scope,
+        }
+    }
+}
+
+impl From<ManagedHook> for crate::proto::ManagedHook {
+    fn from(h: ManagedHook) -> Self {
+        crate::proto::ManagedHook {
+            hook_id: h.hook_id,
+            hook_type: h.hook_type,
+            condition: h.condition,
+            action: h.action,
+            precedence: h.precedence,
+            scope: h.scope,
+        }
+    }
+}
+
+impl From<crate::proto::EventContext> for EventContext {
+    fn from(e: crate::proto::EventContext) -> Self {
+        EventContext {
+            event_id: e.event_id,
+            event_type: e.event_type,
+            severity: e.severity,
+            source: e.source,
+            payload_json: e.payload_json,
+            timestamp: e.timestamp,
+        }
+    }
+}
+
+impl From<EventContext> for crate::proto::EventContext {
+    fn from(e: EventContext) -> Self {
+        crate::proto::EventContext {
+            event_id: e.event_id,
+            event_type: e.event_type,
+            severity: e.severity,
+            source: e.source,
+            payload_json: e.payload_json,
+            timestamp: e.timestamp,
+        }
+    }
+}
+
+impl From<crate::proto::MemoryRef> for MemoryRef {
+    fn from(m: crate::proto::MemoryRef) -> Self {
+        MemoryRef {
+            memory_id: m.memory_id,
+            memory_type: m.memory_type,
+            relevance_score: m.relevance_score,
+            content: m.content,
+            source_session_id: m.source_session_id,
+            created_at: m.created_at,
+            tags: m.tags,
+        }
+    }
+}
+
+impl From<MemoryRef> for crate::proto::MemoryRef {
+    fn from(m: MemoryRef) -> Self {
+        crate::proto::MemoryRef {
+            memory_id: m.memory_id,
+            memory_type: m.memory_type,
+            relevance_score: m.relevance_score,
+            content: m.content,
+            source_session_id: m.source_session_id,
+            created_at: m.created_at,
+            tags: m.tags,
+        }
+    }
+}
+
+impl From<crate::proto::SkillInstructions> for SkillInstructions {
+    fn from(s: crate::proto::SkillInstructions) -> Self {
+        SkillInstructions {
+            skill_id: s.skill_id,
+            name: s.name,
+            content: s.content,
+            frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
+            metadata: s.metadata,
+        }
+    }
+}
+
+impl From<SkillInstructions> for crate::proto::SkillInstructions {
+    fn from(s: SkillInstructions) -> Self {
+        crate::proto::SkillInstructions {
+            skill_id: s.skill_id,
+            name: s.name,
+            content: s.content,
+            frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
+            metadata: s.metadata,
+        }
+    }
+}
+
+impl From<crate::proto::ScopedHook> for ScopedHook {
+    fn from(h: crate::proto::ScopedHook) -> Self {
+        ScopedHook {
+            hook_id: h.hook_id,
+            hook_type: h.hook_type,
+            condition: h.condition,
+            action: h.action,
+            precedence: h.precedence,
+        }
+    }
+}
+
+impl From<ScopedHook> for crate::proto::ScopedHook {
+    fn from(h: ScopedHook) -> Self {
+        crate::proto::ScopedHook {
+            hook_id: h.hook_id,
+            hook_type: h.hook_type,
+            condition: h.condition,
+            action: h.action,
+            precedence: h.precedence,
+        }
+    }
+}
+
+impl From<crate::proto::UserPreferences> for UserPreferences {
+    fn from(u: crate::proto::UserPreferences) -> Self {
+        UserPreferences {
+            user_id: u.user_id,
+            prefs: u.prefs,
+            language: u.language,
+            timezone: u.timezone,
+        }
+    }
+}
+
+impl From<UserPreferences> for crate::proto::UserPreferences {
+    fn from(u: UserPreferences) -> Self {
+        crate::proto::UserPreferences {
+            user_id: u.user_id,
+            prefs: u.prefs,
+            language: u.language,
+            timezone: u.timezone,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn session_payload_roundtrip() {
-        let payload = SessionPayload {
-            user_id: "user-1".into(),
-            user_role: "developer".into(),
-            org_unit: "engineering".into(),
-            managed_hooks_json: None,
-            quotas: Default::default(),
-            context: Default::default(),
-            hook_bridge_url: None,
-            telemetry_endpoint: None,
-            skill_ids: vec![],
-            skill_registry_url: None,
-            allowed_skill_search: false,
-            skill_search_scope: vec![],
-        };
-        let json = serde_json::to_string(&payload).unwrap();
-        let restored: SessionPayload = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.user_id, "user-1");
+    fn session_payload_default_is_trimmable_p5() {
+        let p = SessionPayload::new();
+        assert!(p.allow_trim_p5);
+        assert!(!p.allow_trim_p4);
+        assert!(!p.allow_trim_p3);
     }
 
     #[test]
-    fn session_payload_l2_fields_roundtrip() {
-        let payload = SessionPayload {
-            user_id: "user-1".into(),
-            user_role: "developer".into(),
-            org_unit: "engineering".into(),
-            managed_hooks_json: None,
-            quotas: Default::default(),
-            context: Default::default(),
-            hook_bridge_url: None,
-            telemetry_endpoint: None,
-            skill_ids: vec!["order-management".into(), "logistics".into()],
-            skill_registry_url: Some("http://l2-skill:8080".into()),
-            allowed_skill_search: false,
-            skill_search_scope: vec![],
-        };
-        let json = serde_json::to_string(&payload).unwrap();
+    fn session_payload_priority_blocks_default_none() {
+        let p = SessionPayload::new();
+        assert!(p.policy_context.is_none());
+        assert!(p.event_context.is_none());
+        assert!(p.memory_refs.is_empty());
+        assert!(p.skill_instructions.is_none());
+        assert!(p.user_preferences.is_none());
+    }
+
+    #[test]
+    fn session_payload_roundtrip_serde() {
+        let mut p = SessionPayload::new();
+        p.user_id = "u-1".into();
+        p.session_id = "s-1".into();
+        p.user_preferences = Some(UserPreferences {
+            user_id: "u-1".into(),
+            language: "en".into(),
+            ..Default::default()
+        });
+        let json = serde_json::to_string(&p).unwrap();
         let restored: SessionPayload = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.skill_ids.len(), 2);
+        assert_eq!(restored.user_id, "u-1");
         assert_eq!(
-            restored.skill_registry_url.as_deref(),
-            Some("http://l2-skill:8080")
+            restored.user_preferences.unwrap().language,
+            "en"
         );
-        assert!(!restored.allowed_skill_search);
     }
 
     #[test]
-    fn session_payload_l2_fields_default_empty() {
-        // Test backward compat: JSON without L2 fields should deserialize with defaults
-        let json = r#"{"user_id":"u","user_role":"r","org_unit":"o","managed_hooks_json":null,"quotas":{},"context":{},"hook_bridge_url":null,"telemetry_endpoint":null}"#;
-        let payload: SessionPayload = serde_json::from_str(json).unwrap();
-        assert!(payload.skill_ids.is_empty());
-        assert!(payload.skill_registry_url.is_none());
-        assert!(!payload.allowed_skill_search);
-        assert!(payload.skill_search_scope.is_empty());
+    fn session_payload_proto_roundtrip_empty() {
+        let p = SessionPayload::new();
+        let proto_p: crate::proto::SessionPayload = p.clone().into();
+        let back: SessionPayload = proto_p.into();
+        assert_eq!(back.allow_trim_p5, p.allow_trim_p5);
+        assert_eq!(back.session_id, p.session_id);
     }
 
     #[test]

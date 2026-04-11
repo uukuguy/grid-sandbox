@@ -6,30 +6,28 @@
 //!
 //! ## Architecture
 //!
-//! - `contract` — RuntimeContract trait + types (Rust-native form)
+//! - `contract` — RuntimeContract trait + Rust-native types (P1-P5 priority blocks)
+//! - `session_payload` — `SessionPayload::trim_for_budget()` helper
 //! - `harness` — GridHarness: impl RuntimeContract via grid-engine
-//! - `service` — gRPC service mapping
+//! - `service` — gRPC service mapping to v2 RuntimeService
 //! - `telemetry` — EAASP telemetry event collection and conversion
 //!
-//! ## Proto
+//! ## Proto (v2.0)
 //!
-//! The gRPC service definition lives at `proto/eaasp/runtime/v1/runtime.proto`
-//! with shared types in `proto/eaasp/common/v1/common.proto`.
-//! Both are compiled by `build.rs` via tonic-build.
+//! The gRPC service + shared types live under a single
+//! `eaasp.runtime.v2` package sourced from `proto/eaasp/runtime/v2/`.
+//! v2 collapses v1's `common`/`runtime` split into one flat package and
+//! introduces the 5-block structured SessionPayload (P1-P5) per spec §8.6.
 
 pub mod config;
 pub mod contract;
 pub mod harness;
 pub mod l2_client;
 pub mod service;
+pub mod session_payload;
 pub mod telemetry;
 
-/// Generated gRPC types from common.proto (shared types).
-pub mod common_proto {
-    tonic::include_proto!("eaasp.common.v1");
-}
-
-/// Generated gRPC types from runtime.proto.
+/// Generated gRPC types from EAASP v2 proto (common + runtime).
 pub mod proto {
-    tonic::include_proto!("eaasp.runtime.v1");
+    tonic::include_proto!("eaasp.runtime.v2");
 }

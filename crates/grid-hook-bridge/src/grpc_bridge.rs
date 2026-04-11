@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use tonic::transport::Channel;
 use tracing::warn;
 
-use crate::hook_proto;
-use crate::hook_proto::hook_bridge_service_client::HookBridgeServiceClient;
+use crate::proto;
+use crate::proto::hook_bridge_service_client::HookBridgeServiceClient;
 use crate::traits::*;
 
 /// gRPC client to an external HookBridge sidecar.
@@ -20,11 +20,11 @@ impl GrpcHookBridge {
         Ok(Self { client })
     }
 
-    fn to_native_decision(d: crate::common_proto::HookDecision) -> HookDecision {
+    fn to_native_decision(d: proto::HookDecision) -> HookDecision {
         match d.decision.as_str() {
             "deny" => HookDecision::Deny { reason: d.reason },
-            "modify" => HookDecision::Modify {
-                transformed_input: serde_json::from_str(&d.modified_input)
+            "mutate" | "modify" => HookDecision::Modify {
+                transformed_input: serde_json::from_str(&d.mutated_input_json)
                     .unwrap_or(serde_json::Value::Null),
             },
             _ => HookDecision::Allow,
@@ -41,9 +41,9 @@ impl HookBridge for GrpcHookBridge {
         tool_id: &str,
         input: &serde_json::Value,
     ) -> anyhow::Result<HookDecision> {
-        let request = hook_proto::HookEvaluateRequest {
+        let request = proto::HookEvaluateRequest {
             session_id: session_id.into(),
-            hook_type: "pre_tool_call".into(),
+            event_type: proto::HookEventType::PreToolUse as i32,
             tool_name: tool_name.into(),
             tool_id: tool_id.into(),
             input_json: serde_json::to_string(input)?,
@@ -62,9 +62,9 @@ impl HookBridge for GrpcHookBridge {
         output: &str,
         is_error: bool,
     ) -> anyhow::Result<HookDecision> {
-        let request = hook_proto::HookEvaluateRequest {
+        let request = proto::HookEvaluateRequest {
             session_id: session_id.into(),
-            hook_type: "post_tool_result".into(),
+            event_type: proto::HookEventType::PostToolUse as i32,
             tool_name: tool_name.into(),
             tool_id: tool_id.into(),
             input_json: String::new(),
@@ -76,9 +76,9 @@ impl HookBridge for GrpcHookBridge {
     }
 
     async fn evaluate_stop(&self, session_id: &str) -> anyhow::Result<StopDecision> {
-        let request = hook_proto::HookEvaluateRequest {
+        let request = proto::HookEvaluateRequest {
             session_id: session_id.into(),
-            hook_type: "stop".into(),
+            event_type: proto::HookEventType::Stop as i32,
             tool_name: String::new(),
             tool_id: String::new(),
             input_json: String::new(),
@@ -104,7 +104,7 @@ impl HookBridge for GrpcHookBridge {
         match self
             .client
             .clone()
-            .get_policy_summary(hook_proto::PolicySummaryRequest {
+            .get_policy_summary(proto::PolicySummaryRequest {
                 session_id: String::new(),
             })
             .await

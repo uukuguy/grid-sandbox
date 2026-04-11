@@ -1,14 +1,23 @@
-//! gRPC service implementation for EAASP RuntimeService.
+//! gRPC service implementation for EAASP v2.0 RuntimeService (16 methods).
 //!
-//! Maps tonic-generated types ↔ contract types, delegates to RuntimeContract.
+//! Maps tonic-generated v2 types ↔ Rust-native contract types and
+//! delegates to `RuntimeContract` implementations (e.g. `GridHarness`).
+//!
+//! ## v2 quirks
+//!
+//! Several v2 methods take `Empty` (GetState, Terminate, Pause, Health,
+//! Capabilities). For the shared-process case we track a "last-initialized"
+//! session as the implicit context — good enough for Phase 0 MVP since
+//! the certifier drives one session at a time. Phase 1 will add an
+//! explicit session_id header / metadata channel.
 
 use std::pin::Pin;
 use std::sync::Arc;
 
+use tokio::sync::RwLock;
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
-use crate::common_proto;
 use crate::contract::{self, RuntimeContract};
 use crate::proto;
 use crate::proto::runtime_service_server::RuntimeService;
@@ -16,48 +25,34 @@ use crate::proto::runtime_service_server::RuntimeService;
 /// gRPC service wrapping a RuntimeContract implementation.
 pub struct RuntimeGrpcService<C: RuntimeContract> {
     contract: Arc<C>,
+    /// Last initialized session — provides implicit context for
+    /// v2 methods whose request is `Empty` (GetState, Terminate, …).
+    current_session: Arc<RwLock<Option<String>>>,
 }
 
 impl<C: RuntimeContract + 'static> RuntimeGrpcService<C> {
     pub fn new(contract: Arc<C>) -> Self {
-        Self { contract }
+        Self {
+            contract,
+            current_session: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    async fn remember_session(&self, session_id: &str) {
+        let mut lock = self.current_session.write().await;
+        *lock = Some(session_id.to_string());
+    }
+
+    async fn current_session_or(&self) -> Result<String, Status> {
+        self.current_session
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| Status::failed_precondition("no active session; call Initialize first"))
     }
 }
 
 // ── Type conversion helpers ──
-
-fn to_session_payload(p: proto::SessionPayload) -> contract::SessionPayload {
-    contract::SessionPayload {
-        user_id: p.user_id,
-        user_role: p.user_role,
-        org_unit: p.org_unit,
-        managed_hooks_json: if p.managed_hooks_json.is_empty() {
-            None
-        } else {
-            Some(p.managed_hooks_json)
-        },
-        quotas: p.quotas,
-        context: p.context,
-        hook_bridge_url: if p.hook_bridge_url.is_empty() {
-            None
-        } else {
-            Some(p.hook_bridge_url)
-        },
-        telemetry_endpoint: if p.telemetry_endpoint.is_empty() {
-            None
-        } else {
-            Some(p.telemetry_endpoint)
-        },
-        skill_ids: p.skill_ids,
-        skill_registry_url: if p.skill_registry_url.is_empty() {
-            None
-        } else {
-            Some(p.skill_registry_url)
-        },
-        allowed_skill_search: p.allowed_skill_search,
-        skill_search_scope: p.skill_search_scope,
-    }
-}
 
 fn to_user_message(m: proto::UserMessage) -> contract::UserMessage {
     contract::UserMessage {
@@ -67,12 +62,16 @@ fn to_user_message(m: proto::UserMessage) -> contract::UserMessage {
     }
 }
 
-fn to_skill_content(s: proto::SkillContent) -> contract::SkillContent {
+fn to_skill_content(s: proto::SkillInstructions) -> contract::SkillContent {
+    // Convert typed SkillInstructions → native SkillContent.
+    // v2 no longer carries raw frontmatter YAML; we serialize the
+    // contract-native ScopedHook list as JSON for downstream consumers.
+    let native: contract::SkillInstructions = s.into();
     contract::SkillContent {
-        skill_id: s.skill_id,
-        name: s.name,
-        frontmatter_yaml: s.frontmatter_yaml,
-        prose: s.prose,
+        skill_id: native.skill_id,
+        name: native.name,
+        frontmatter_yaml: serde_json::to_string(&native.frontmatter_hooks).unwrap_or_default(),
+        prose: native.content,
     }
 }
 
@@ -94,70 +93,89 @@ fn to_mcp_configs(servers: Vec<proto::McpServerConfig>) -> Vec<contract::McpServ
         .collect()
 }
 
-fn hook_decision_to_proto(d: contract::HookDecision) -> common_proto::HookDecision {
+fn hook_decision_to_tool_call_ack(d: contract::HookDecision) -> proto::ToolCallAck {
     match d {
-        contract::HookDecision::Allow => common_proto::HookDecision {
+        contract::HookDecision::Allow => proto::ToolCallAck {
+            decision: "allow".into(),
+            mutated_input_json: String::new(),
+            reason: String::new(),
+        },
+        contract::HookDecision::Deny { reason } => proto::ToolCallAck {
+            decision: "deny".into(),
+            mutated_input_json: String::new(),
+            reason,
+        },
+        contract::HookDecision::Modify { transformed_input } => proto::ToolCallAck {
+            decision: "mutate".into(),
+            mutated_input_json: serde_json::to_string(&transformed_input).unwrap_or_default(),
+            reason: String::new(),
+        },
+    }
+}
+
+fn hook_decision_to_tool_result_ack(d: contract::HookDecision) -> proto::ToolResultAck {
+    match d {
+        contract::HookDecision::Allow => proto::ToolResultAck {
             decision: "allow".into(),
             reason: String::new(),
-            modified_input: String::new(),
         },
-        contract::HookDecision::Deny { reason } => common_proto::HookDecision {
+        contract::HookDecision::Deny { reason } => proto::ToolResultAck {
             decision: "deny".into(),
             reason,
-            modified_input: String::new(),
         },
-        contract::HookDecision::Modify { transformed_input } => common_proto::HookDecision {
-            decision: "modify".into(),
+        contract::HookDecision::Modify { .. } => proto::ToolResultAck {
+            // post_tool_result has no mutate semantics; collapse to allow.
+            decision: "allow".into(),
             reason: String::new(),
-            modified_input: serde_json::to_string(&transformed_input).unwrap_or_default(),
         },
     }
 }
 
-fn stop_decision_to_proto(d: contract::StopDecision) -> common_proto::StopDecision {
+fn stop_decision_to_ack(d: contract::StopDecision) -> proto::StopAck {
     match d {
-        contract::StopDecision::Complete => common_proto::StopDecision {
-            decision: "complete".into(),
-            feedback: String::new(),
+        contract::StopDecision::Complete => proto::StopAck {
+            decision: "allow".into(),
+            reason: String::new(),
         },
-        contract::StopDecision::Continue { feedback } => common_proto::StopDecision {
-            decision: "continue".into(),
-            feedback,
+        contract::StopDecision::Continue { feedback } => proto::StopAck {
+            decision: "deny".into(),
+            reason: feedback,
         },
     }
 }
 
-fn session_state_to_proto(s: contract::SessionState) -> proto::SessionState {
-    proto::SessionState {
+fn session_state_to_proto(s: contract::SessionState) -> proto::StateResponse {
+    proto::StateResponse {
         session_id: s.session_id,
         state_data: s.state_data,
         runtime_id: s.runtime_id,
-        created_at: s.created_at.to_rfc3339(),
         state_format: s.state_format,
+        created_at: s.created_at.to_rfc3339(),
     }
 }
 
-fn capability_to_proto(c: contract::CapabilityManifest) -> proto::CapabilityManifest {
-    proto::CapabilityManifest {
+fn capability_to_proto(c: contract::CapabilityManifest) -> proto::Capabilities {
+    use proto::capabilities::CredentialMode;
+    proto::Capabilities {
         runtime_id: c.runtime_id,
-        runtime_name: c.runtime_name,
+        model: c.model,
+        context_window: c.context_window as i32,
+        tools: c.supported_tools,
+        supports_native_hooks: c.native_hooks,
+        supports_native_mcp: c.native_mcp,
+        supports_native_skills: c.native_skills,
+        cost_per_1k_tokens: c
+            .cost
+            .map(|c| (c.input_cost_per_1k + c.output_cost_per_1k) / 2.0)
+            .unwrap_or(0.0),
+        credential_mode: CredentialMode::Direct as i32,
+        strengths: vec![],
+        limitations: vec![],
         tier: match c.tier {
             contract::RuntimeTier::Harness => "harness".into(),
             contract::RuntimeTier::Aligned => "aligned".into(),
             contract::RuntimeTier::Framework => "framework".into(),
         },
-        model: c.model,
-        context_window: c.context_window,
-        supported_tools: c.supported_tools,
-        native_hooks: c.native_hooks,
-        native_mcp: c.native_mcp,
-        native_skills: c.native_skills,
-        cost: c.cost.map(|c| proto::CostEstimate {
-            input_cost_per_1k: c.input_cost_per_1k,
-            output_cost_per_1k: c.output_cost_per_1k,
-        }),
-        metadata: c.metadata,
-        requires_hook_bridge: c.requires_hook_bridge,
         deployment_mode: match c.deployment_mode {
             contract::DeploymentMode::Shared => "shared".into(),
             contract::DeploymentMode::PerSession => "per_session".into(),
@@ -165,29 +183,8 @@ fn capability_to_proto(c: contract::CapabilityManifest) -> proto::CapabilityMani
     }
 }
 
-fn telemetry_to_proto(events: Vec<contract::TelemetryEvent>) -> common_proto::TelemetryBatch {
-    common_proto::TelemetryBatch {
-        events: events
-            .into_iter()
-            .map(|e| common_proto::TelemetryEvent {
-                session_id: e.session_id,
-                runtime_id: e.runtime_id,
-                user_id: e.user_id.unwrap_or_default(),
-                event_type: e.event_type,
-                timestamp: e.timestamp.to_rfc3339(),
-                payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
-                resource_usage: Some(common_proto::ResourceUsage {
-                    input_tokens: e.resource_usage.input_tokens,
-                    output_tokens: e.resource_usage.output_tokens,
-                    compute_ms: e.resource_usage.compute_ms,
-                }),
-            })
-            .collect(),
-    }
-}
-
-fn health_to_proto(h: contract::HealthStatus) -> proto::HealthStatus {
-    proto::HealthStatus {
+fn health_to_proto(h: contract::HealthStatus) -> proto::HealthResponse {
+    proto::HealthResponse {
         healthy: h.healthy,
         runtime_id: h.runtime_id,
         checks: h.checks,
@@ -196,7 +193,7 @@ fn health_to_proto(h: contract::HealthStatus) -> proto::HealthStatus {
 
 // ── gRPC Service Implementation ──
 
-type SendStream = Pin<Box<dyn Stream<Item = Result<proto::ResponseChunk, Status>> + Send>>;
+type SendStream = Pin<Box<dyn Stream<Item = Result<proto::SendResponse, Status>> + Send>>;
 
 #[tonic::async_trait]
 impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
@@ -213,12 +210,16 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
 
         let handle = self
             .contract
-            .initialize(to_session_payload(payload))
+            .initialize(payload.into())
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
+        self.remember_session(&handle.session_id).await;
+        let runtime_id = self.contract.get_capabilities().runtime_id;
+
         Ok(Response::new(proto::InitializeResponse {
             session_id: handle.session_id,
+            runtime_id,
         }))
     }
 
@@ -241,12 +242,13 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let proto_stream = tokio_stream::StreamExt::map(stream, |chunk| {
-            Ok(proto::ResponseChunk {
+            Ok(proto::SendResponse {
                 chunk_type: chunk.chunk_type,
                 content: chunk.content,
                 tool_name: chunk.tool_name.unwrap_or_default(),
                 tool_id: chunk.tool_id.unwrap_or_default(),
                 is_error: chunk.is_error,
+                error: None,
             })
         });
 
@@ -283,8 +285,8 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
 
     async fn on_tool_call(
         &self,
-        request: Request<common_proto::ToolCallEvent>,
-    ) -> Result<Response<common_proto::HookDecision>, Status> {
+        request: Request<proto::ToolCallEvent>,
+    ) -> Result<Response<proto::ToolCallAck>, Status> {
         let req = request.into_inner();
         let handle = contract::SessionHandle {
             session_id: req.session_id,
@@ -301,13 +303,13 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(hook_decision_to_proto(decision)))
+        Ok(Response::new(hook_decision_to_tool_call_ack(decision)))
     }
 
     async fn on_tool_result(
         &self,
-        request: Request<common_proto::ToolResultEvent>,
-    ) -> Result<Response<common_proto::HookDecision>, Status> {
+        request: Request<proto::ToolResultEvent>,
+    ) -> Result<Response<proto::ToolResultAck>, Status> {
         let req = request.into_inner();
         let handle = contract::SessionHandle {
             session_id: req.session_id,
@@ -325,15 +327,16 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(hook_decision_to_proto(decision)))
+        Ok(Response::new(hook_decision_to_tool_result_ack(decision)))
     }
 
     async fn on_stop(
         &self,
-        request: Request<common_proto::StopRequest>,
-    ) -> Result<Response<common_proto::StopDecision>, Status> {
+        request: Request<proto::StopEvent>,
+    ) -> Result<Response<proto::StopAck>, Status> {
+        let req = request.into_inner();
         let handle = contract::SessionHandle {
-            session_id: request.into_inner().session_id,
+            session_id: req.session_id,
         };
 
         let decision = self
@@ -342,16 +345,15 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(stop_decision_to_proto(decision)))
+        Ok(Response::new(stop_decision_to_ack(decision)))
     }
 
     async fn get_state(
         &self,
-        request: Request<proto::GetStateRequest>,
-    ) -> Result<Response<proto::SessionState>, Status> {
-        let handle = contract::SessionHandle {
-            session_id: request.into_inner().session_id,
-        };
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::StateResponse>, Status> {
+        let session_id = self.current_session_or().await?;
+        let handle = contract::SessionHandle { session_id };
 
         let state = self
             .contract
@@ -360,30 +362,6 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         Ok(Response::new(session_state_to_proto(state)))
-    }
-
-    async fn restore_state(
-        &self,
-        request: Request<proto::SessionState>,
-    ) -> Result<Response<proto::InitializeResponse>, Status> {
-        let ps = request.into_inner();
-        let state = contract::SessionState {
-            session_id: ps.session_id,
-            runtime_id: ps.runtime_id,
-            state_data: ps.state_data,
-            created_at: chrono::Utc::now(),
-            state_format: ps.state_format,
-        };
-
-        let handle = self
-            .contract
-            .restore_state(state)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-
-        Ok(Response::new(proto::InitializeResponse {
-            session_id: handle.session_id,
-        }))
     }
 
     async fn connect_mcp(
@@ -416,59 +394,78 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
 
     async fn emit_telemetry(
         &self,
-        request: Request<proto::EmitTelemetryRequest>,
-    ) -> Result<Response<common_proto::TelemetryBatch>, Status> {
+        request: Request<proto::TelemetryRequest>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        // v2 EmitTelemetry is fire-and-forget from the runtime's POV.
+        // We still pull telemetry out of the contract for legacy
+        // consumers, but discard the result on the wire.
+        let req = request.into_inner();
         let handle = contract::SessionHandle {
-            session_id: request.into_inner().session_id,
+            session_id: req.session_id,
         };
 
-        let events = self
+        let _events = self
             .contract
             .emit_telemetry(&handle)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(telemetry_to_proto(events)))
+        Ok(Response::new(proto::Empty {}))
     }
 
     async fn get_capabilities(
         &self,
-        _request: Request<common_proto::Empty>,
-    ) -> Result<Response<proto::CapabilityManifest>, Status> {
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::Capabilities>, Status> {
         let manifest = self.contract.get_capabilities();
         Ok(Response::new(capability_to_proto(manifest)))
     }
 
     async fn terminate(
         &self,
-        request: Request<proto::TerminateRequest>,
-    ) -> Result<Response<proto::TerminateResponse>, Status> {
-        let req = request.into_inner();
-        let handle = contract::SessionHandle {
-            session_id: req.session_id.clone(),
-        };
-
-        let final_telemetry = self
-            .contract
-            .emit_telemetry(&handle)
-            .await
-            .unwrap_or_default();
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        let session_id = self.current_session_or().await?;
+        let handle = contract::SessionHandle { session_id };
 
         self.contract
             .terminate(&handle)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(proto::TerminateResponse {
-            success: true,
-            final_telemetry: Some(telemetry_to_proto(final_telemetry)),
-        }))
+        // Clear current session tracker.
+        *self.current_session.write().await = None;
+
+        Ok(Response::new(proto::Empty {}))
+    }
+
+    async fn restore_state(
+        &self,
+        request: Request<proto::StateResponse>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        let ps = request.into_inner();
+        let state = contract::SessionState {
+            session_id: ps.session_id,
+            runtime_id: ps.runtime_id,
+            state_data: ps.state_data,
+            created_at: chrono::Utc::now(),
+            state_format: ps.state_format,
+        };
+
+        let handle = self
+            .contract
+            .restore_state(state)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        self.remember_session(&handle.session_id).await;
+        Ok(Response::new(proto::Empty {}))
     }
 
     async fn health(
         &self,
-        _request: Request<common_proto::Empty>,
-    ) -> Result<Response<proto::HealthStatus>, Status> {
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::HealthResponse>, Status> {
         let status = self
             .contract
             .health()
@@ -481,7 +478,7 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
     async fn disconnect_mcp(
         &self,
         request: Request<proto::DisconnectMcpRequest>,
-    ) -> Result<Response<proto::DisconnectMcpResponse>, Status> {
+    ) -> Result<Response<proto::Empty>, Status> {
         let req = request.into_inner();
         let handle = contract::SessionHandle {
             session_id: req.session_id,
@@ -492,31 +489,35 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(proto::DisconnectMcpResponse {
-            success: true,
-        }))
+        Ok(Response::new(proto::Empty {}))
     }
 
     async fn pause_session(
         &self,
-        request: Request<proto::PauseRequest>,
-    ) -> Result<Response<proto::PauseResponse>, Status> {
-        let handle = contract::SessionHandle {
-            session_id: request.into_inner().session_id,
-        };
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::StateResponse>, Status> {
+        let session_id = self.current_session_or().await?;
+        let handle = contract::SessionHandle { session_id };
 
+        // Pause and then return current state per v2 contract.
         self.contract
             .pause_session(&handle)
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(proto::PauseResponse { success: true }))
+        let state = self
+            .contract
+            .get_state(&handle)
+            .await
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(session_state_to_proto(state)))
     }
 
     async fn resume_session(
         &self,
-        request: Request<proto::ResumeRequest>,
-    ) -> Result<Response<proto::ResumeResponse>, Status> {
+        request: Request<proto::StateResponse>,
+    ) -> Result<Response<proto::Empty>, Status> {
         let session_id = request.into_inner().session_id;
 
         let handle = self
@@ -525,9 +526,20 @@ impl<C: RuntimeContract + 'static> RuntimeService for RuntimeGrpcService<C> {
             .await
             .map_err(|e| Status::internal(e.to_string()))?;
 
-        Ok(Response::new(proto::ResumeResponse {
-            success: true,
-            session_id: handle.session_id,
-        }))
+        self.remember_session(&handle.session_id).await;
+        Ok(Response::new(proto::Empty {}))
+    }
+
+    // ── PLACEHOLDER — ADR-V2-001 pending ──
+    //
+    // emit_event returns Unimplemented for Phase 0 MVP. Runtimes MAY
+    // override via their RuntimeContract::emit_event implementation.
+    async fn emit_event(
+        &self,
+        _request: Request<proto::EventStreamEntry>,
+    ) -> Result<Response<proto::Empty>, Status> {
+        Err(Status::unimplemented(
+            "EmitEvent placeholder — ADR-V2-001 pending",
+        ))
     }
 }

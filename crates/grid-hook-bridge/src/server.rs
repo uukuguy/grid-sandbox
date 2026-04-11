@@ -7,9 +7,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{debug, warn};
 
-use crate::common_proto;
-use crate::hook_proto;
-use crate::hook_proto::hook_bridge_service_server::HookBridgeService;
+use crate::proto;
+use crate::proto::hook_bridge_service_server::HookBridgeService;
 use crate::traits::*;
 
 /// gRPC server wrapping a HookBridge implementation.
@@ -23,7 +22,7 @@ impl<B: HookBridge + 'static> HookBridgeGrpcServer<B> {
     }
 }
 
-type StreamHooksResponseStream = ReceiverStream<Result<hook_proto::HookResponse, Status>>;
+type StreamHooksResponseStream = ReceiverStream<Result<proto::HookResponse, Status>>;
 
 #[tonic::async_trait]
 impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
@@ -31,7 +30,7 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
 
     async fn stream_hooks(
         &self,
-        request: Request<Streaming<hook_proto::HookEvent>>,
+        request: Request<Streaming<proto::HookEvent>>,
     ) -> Result<Response<Self::StreamHooksStream>, Status> {
         let bridge = self.bridge.clone();
         let mut in_stream = request.into_inner();
@@ -43,7 +42,7 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
                 let session_id = event.session_id.clone();
 
                 let response = match event.event {
-                    Some(hook_proto::hook_event::Event::PreToolCall(hook)) => {
+                    Some(proto::hook_event::Event::PreToolCall(hook)) => {
                         let input = serde_json::from_str(&hook.input_json)
                             .unwrap_or(serde_json::Value::Null);
                         match bridge
@@ -55,16 +54,16 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
                             )
                             .await
                         {
-                            Ok(d) => hook_proto::HookResponse {
+                            Ok(d) => proto::HookResponse {
                                 request_id,
-                                response: Some(hook_proto::hook_response::Response::Decision(
+                                response: Some(proto::hook_response::Response::Decision(
                                     decision_to_proto(d),
                                 )),
                             },
                             Err(e) => error_response(&request_id, &e.to_string()),
                         }
                     }
-                    Some(hook_proto::hook_event::Event::PostToolResult(hook)) => {
+                    Some(proto::hook_event::Event::PostToolResult(hook)) => {
                         match bridge
                             .evaluate_post_tool_result(
                                 &session_id,
@@ -75,42 +74,52 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
                             )
                             .await
                         {
-                            Ok(d) => hook_proto::HookResponse {
+                            Ok(d) => proto::HookResponse {
                                 request_id,
-                                response: Some(hook_proto::hook_response::Response::Decision(
+                                response: Some(proto::hook_response::Response::Decision(
                                     decision_to_proto(d),
                                 )),
                             },
                             Err(e) => error_response(&request_id, &e.to_string()),
                         }
                     }
-                    Some(hook_proto::hook_event::Event::Stop(_)) => {
+                    Some(proto::hook_event::Event::Stop(_)) => {
                         match bridge.evaluate_stop(&session_id).await {
-                            Ok(d) => hook_proto::HookResponse {
+                            // v2 collapses StopDecision into HookDecision:
+                            // Complete → allow, Continue → deny with feedback as reason.
+                            Ok(d) => proto::HookResponse {
                                 request_id,
-                                response: Some(
-                                    hook_proto::hook_response::Response::StopDecision(
-                                        stop_decision_to_proto(d),
-                                    ),
-                                ),
+                                response: Some(proto::hook_response::Response::Decision(
+                                    stop_decision_to_proto(d),
+                                )),
                             },
                             Err(e) => error_response(&request_id, &e.to_string()),
                         }
                     }
-                    Some(hook_proto::hook_event::Event::SessionStart(_)) => {
+                    Some(proto::hook_event::Event::SessionStart(_)) => {
                         debug!(session_id = %session_id, "Session start hook received");
-                        hook_proto::HookResponse {
+                        proto::HookResponse {
                             request_id,
-                            response: Some(hook_proto::hook_response::Response::Decision(
+                            response: Some(proto::hook_response::Response::Decision(
                                 decision_to_proto(HookDecision::Allow),
                             )),
                         }
                     }
-                    Some(hook_proto::hook_event::Event::SessionEnd(_)) => {
+                    Some(proto::hook_event::Event::SessionEnd(_)) => {
                         debug!(session_id = %session_id, "Session end hook received");
-                        hook_proto::HookResponse {
+                        proto::HookResponse {
                             request_id,
-                            response: Some(hook_proto::hook_response::Response::Decision(
+                            response: Some(proto::hook_response::Response::Decision(
+                                decision_to_proto(HookDecision::Allow),
+                            )),
+                        }
+                    }
+                    // v2 adds PrePolicyDeploy / PreApproval / EventReceived — stub to Allow.
+                    Some(_) => {
+                        debug!(session_id = %session_id, "Unhandled v2 hook event received, defaulting to allow");
+                        proto::HookResponse {
+                            request_id,
+                            response: Some(proto::hook_response::Response::Decision(
                                 decision_to_proto(HookDecision::Allow),
                             )),
                         }
@@ -132,12 +141,15 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
 
     async fn evaluate_hook(
         &self,
-        request: Request<hook_proto::HookEvaluateRequest>,
-    ) -> Result<Response<common_proto::HookDecision>, Status> {
+        request: Request<proto::HookEvaluateRequest>,
+    ) -> Result<Response<proto::HookDecision>, Status> {
         let req = request.into_inner();
 
-        let decision = match req.hook_type.as_str() {
-            "pre_tool_call" => {
+        let event_type = proto::HookEventType::try_from(req.event_type)
+            .unwrap_or(proto::HookEventType::PreToolUse);
+
+        let decision = match event_type {
+            proto::HookEventType::PreToolUse => {
                 let input = serde_json::from_str(&req.input_json)
                     .unwrap_or(serde_json::Value::Null);
                 self.bridge
@@ -149,7 +161,7 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
                     )
                     .await
             }
-            "post_tool_result" => {
+            proto::HookEventType::PostToolUse | proto::HookEventType::PostToolUseFailure => {
                 self.bridge
                     .evaluate_post_tool_result(
                         &req.session_id,
@@ -160,20 +172,20 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
                     )
                     .await
             }
-            "stop" => {
+            proto::HookEventType::Stop => {
                 return match self.bridge.evaluate_stop(&req.session_id).await {
-                    Ok(StopDecision::Complete) => {
-                        Ok(Response::new(common_proto::HookDecision {
-                            decision: "allow".into(),
-                            reason: String::new(),
-                            modified_input: String::new(),
-                        }))
-                    }
+                    Ok(StopDecision::Complete) => Ok(Response::new(proto::HookDecision {
+                        decision: "allow".into(),
+                        reason: String::new(),
+                        mutated_input_json: String::new(),
+                        precedence: 0,
+                    })),
                     Ok(StopDecision::Continue { feedback }) => {
-                        Ok(Response::new(common_proto::HookDecision {
+                        Ok(Response::new(proto::HookDecision {
                             decision: "deny".into(),
                             reason: feedback,
-                            modified_input: String::new(),
+                            mutated_input_json: String::new(),
+                            precedence: 0,
                         }))
                     }
                     Err(e) => Err(Status::internal(e.to_string())),
@@ -181,7 +193,7 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
             }
             other => {
                 return Err(Status::invalid_argument(format!(
-                    "unknown hook_type: {other}"
+                    "unsupported hook event_type: {other:?}"
                 )));
             }
         };
@@ -194,9 +206,9 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
 
     async fn report_telemetry(
         &self,
-        _request: Request<common_proto::TelemetryBatch>,
-    ) -> Result<Response<hook_proto::TelemetryAck>, Status> {
-        Ok(Response::new(hook_proto::TelemetryAck {
+        _request: Request<proto::HookTelemetryBatch>,
+    ) -> Result<Response<proto::TelemetryAck>, Status> {
+        Ok(Response::new(proto::TelemetryAck {
             accepted: 1,
             rejected: 0,
         }))
@@ -204,54 +216,62 @@ impl<B: HookBridge + 'static> HookBridgeService for HookBridgeGrpcServer<B> {
 
     async fn get_policy_summary(
         &self,
-        _request: Request<hook_proto::PolicySummaryRequest>,
-    ) -> Result<Response<hook_proto::PolicySummary>, Status> {
+        _request: Request<proto::PolicySummaryRequest>,
+    ) -> Result<Response<proto::PolicySummary>, Status> {
         let count = self.bridge.policy_count().await;
-        Ok(Response::new(hook_proto::PolicySummary {
+        Ok(Response::new(proto::PolicySummary {
             total_policies: count as u32,
             policies: vec![],
         }))
     }
 }
 
-fn decision_to_proto(d: HookDecision) -> common_proto::HookDecision {
+fn decision_to_proto(d: HookDecision) -> proto::HookDecision {
     match d {
-        HookDecision::Allow => common_proto::HookDecision {
+        HookDecision::Allow => proto::HookDecision {
             decision: "allow".into(),
             reason: String::new(),
-            modified_input: String::new(),
+            mutated_input_json: String::new(),
+            precedence: 0,
         },
-        HookDecision::Deny { reason } => common_proto::HookDecision {
+        HookDecision::Deny { reason } => proto::HookDecision {
             decision: "deny".into(),
             reason,
-            modified_input: String::new(),
+            mutated_input_json: String::new(),
+            precedence: 0,
         },
-        HookDecision::Modify { transformed_input } => common_proto::HookDecision {
-            decision: "modify".into(),
+        HookDecision::Modify { transformed_input } => proto::HookDecision {
+            decision: "mutate".into(),
             reason: String::new(),
-            modified_input: serde_json::to_string(&transformed_input).unwrap_or_default(),
+            mutated_input_json: serde_json::to_string(&transformed_input).unwrap_or_default(),
+            precedence: 0,
         },
     }
 }
 
-fn stop_decision_to_proto(d: StopDecision) -> common_proto::StopDecision {
+fn stop_decision_to_proto(d: StopDecision) -> proto::HookDecision {
+    // v2 collapses StopDecision into HookDecision on the wire.
     match d {
-        StopDecision::Complete => common_proto::StopDecision {
-            decision: "complete".into(),
-            feedback: String::new(),
+        StopDecision::Complete => proto::HookDecision {
+            decision: "allow".into(),
+            reason: String::new(),
+            mutated_input_json: String::new(),
+            precedence: 0,
         },
-        StopDecision::Continue { feedback } => common_proto::StopDecision {
-            decision: "continue".into(),
-            feedback,
+        StopDecision::Continue { feedback } => proto::HookDecision {
+            decision: "deny".into(),
+            reason: feedback,
+            mutated_input_json: String::new(),
+            precedence: 0,
         },
     }
 }
 
-fn error_response(request_id: &str, message: &str) -> hook_proto::HookResponse {
-    hook_proto::HookResponse {
+fn error_response(request_id: &str, message: &str) -> proto::HookResponse {
+    proto::HookResponse {
         request_id: request_id.into(),
-        response: Some(hook_proto::hook_response::Response::Error(
-            hook_proto::ErrorResponse {
+        response: Some(proto::hook_response::Response::Error(
+            proto::ErrorResponse {
                 code: "INTERNAL".into(),
                 message: message.into(),
             },

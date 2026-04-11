@@ -1,8 +1,17 @@
 //! GridHarness — Tier 1 Harness implementation of RuntimeContract.
 //!
-//! Bridges grid-engine's AgentRuntime/AgentExecutor to the 13-method
-//! EAASP RuntimeContract. This is a zero-adapter implementation:
+//! Bridges grid-engine's AgentRuntime/AgentExecutor to the 16-method
+//! EAASP v2.0 RuntimeContract. This is a zero-adapter implementation:
 //! all calls are direct Rust function calls with no serialization.
+//!
+//! ## v2 SessionPayload mapping
+//!
+//! The v2 payload is a 5-block priority stack (P1 PolicyContext → P5
+//! UserPreferences). GridHarness unpacks it as follows:
+//! - `payload.user_id` or `payload.user_preferences.user_id` → engine `UserId`
+//! - `payload.policy_context` (P1) → managed hooks (wired in a later phase)
+//! - `payload.skill_instructions` (P4) → directly `load_skill` into engine
+//! - `payload.memory_refs` (P3) → Phase 1 L2 Memory Engine projection
 
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,7 +31,7 @@ use crate::telemetry::TelemetryCollector;
 
 /// Grid Tier 1 Harness — native RuntimeContract implementation.
 ///
-/// Wraps an `AgentRuntime` and exposes it through the 13-method contract.
+/// Wraps an `AgentRuntime` and exposes it through the 16-method contract.
 /// Hooks, MCP, and skills are handled natively by grid-engine internals;
 /// `on_tool_call`, `on_tool_result`, and `on_stop` are no-ops for Grid.
 pub struct GridHarness {
@@ -130,7 +139,19 @@ impl GridHarness {
 impl RuntimeContract for GridHarness {
     async fn initialize(&self, payload: SessionPayload) -> anyhow::Result<SessionHandle> {
         let session_id = SessionId::new();
-        let user_id = UserId::from_string(&payload.user_id);
+
+        // Resolve user_id from v2 priority blocks, preferring the
+        // top-level session metadata, then P5 UserPreferences.
+        let user_id_str = if !payload.user_id.is_empty() {
+            payload.user_id.clone()
+        } else {
+            payload
+                .user_preferences
+                .as_ref()
+                .map(|u| u.user_id.clone())
+                .unwrap_or_else(|| "anonymous".into())
+        };
+        let user_id = UserId::from_string(&user_id_str);
         let sandbox_id = SandboxId::from_string("default");
 
         let _handle = self
@@ -145,41 +166,37 @@ impl RuntimeContract for GridHarness {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start session: {}", e))?;
 
+        let org_unit = payload
+            .policy_context
+            .as_ref()
+            .map(|p| p.org_unit.clone())
+            .unwrap_or_default();
+
         info!(
             session_id = %session_id,
-            user = %payload.user_id,
-            role = %payload.user_role,
-            "GridHarness: session initialized"
+            user = %user_id_str,
+            org_unit = %org_unit,
+            "GridHarness: session initialized (v2)"
         );
 
         let handle = SessionHandle {
             session_id: session_id.as_str().to_string(),
         };
 
-        // L2 Skill preloading: fetch skills from L2 Registry if specified
-        if !payload.skill_ids.is_empty() {
-            if let Some(ref url) = payload.skill_registry_url {
-                let client = crate::l2_client::L2SkillClient::new(url);
-                for (id, result) in client.fetch_skills(&payload.skill_ids).await {
-                    match result {
-                        Ok(content) => {
-                            let skill = SkillContent {
-                                skill_id: content.meta.id,
-                                name: content.meta.name,
-                                frontmatter_yaml: content.frontmatter_yaml,
-                                prose: content.prose,
-                            };
-                            if let Err(e) = self.load_skill(&handle, skill).await {
-                                warn!(skill_id = %id, error = %e, "Failed to load L2 skill");
-                            }
-                        }
-                        Err(e) => {
-                            warn!(skill_id = %id, error = %e, "Failed to fetch skill from L2");
-                        }
-                    }
-                }
-            } else {
-                warn!("skill_ids provided but no skill_registry_url in SessionPayload");
+        // If the payload arrived with an inline P4 SkillInstructions block,
+        // hand it off directly to `load_skill`.
+        if let Some(skill) = payload.skill_instructions {
+            let content = SkillContent {
+                skill_id: skill.skill_id,
+                name: skill.name,
+                // v2 no longer carries raw YAML — round-trip the frontmatter
+                // hooks through JSON so downstream engines keep working.
+                frontmatter_yaml: serde_json::to_string(&skill.frontmatter_hooks)
+                    .unwrap_or_default(),
+                prose: skill.content,
+            };
+            if let Err(e) = self.load_skill(&handle, content).await {
+                warn!(error = %e, "Failed to load inline P4 skill instructions");
             }
         }
 
@@ -274,7 +291,7 @@ impl RuntimeContract for GridHarness {
             runtime_id: self.runtime_id.clone(),
             state_data,
             created_at: chrono::Utc::now(),
-            state_format: "rust-serde-v1".into(),
+            state_format: "rust-serde-v2".into(),
         })
     }
 
