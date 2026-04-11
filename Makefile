@@ -831,30 +831,52 @@ sdk-build:
 	cd sdk/python && python -m build
 
 # ============================================================
-# EAASP L3 Governance Service (Python)
+# EAASP v2.0 L3 Governance Plane (Python — v2 skeleton, S3.T2)
 # ============================================================
 
 l3-setup:
-	cd tools/eaasp-governance && uv venv .venv && uv pip install -e ".[dev]"
+	cd tools/eaasp-l3-governance && uv venv .venv && uv pip install -e ".[dev]"
 
 l3-start:
-	cd tools/eaasp-governance && .venv/bin/python -m eaasp_governance --port 8083
+	@echo "l3-start: eaasp-l3-governance not yet implemented (Phase 0 S3.T2)"
+	@exit 1
 
 l3-test:
-	cd tools/eaasp-governance && .venv/bin/python -m pytest tests/ -xvs
+	cd tools/eaasp-l3-governance && .venv/bin/python -m pytest tests/ -xvs
 
 # ============================================================
-# EAASP L4 Session Manager (Python)
+# EAASP v2.0 L4 Orchestration Plane (Python — v2 skeleton, S3.T3)
 # ============================================================
 
 l4-setup:
-	cd tools/eaasp-session-manager && uv venv .venv && uv pip install -e ".[dev]"
+	cd tools/eaasp-l4-orchestration && uv venv .venv && uv pip install -e ".[dev]"
 
 l4-start:
-	cd tools/eaasp-session-manager && .venv/bin/python -m eaasp_session --port 8084
+	@echo "l4-start: eaasp-l4-orchestration not yet implemented (Phase 0 S3.T3)"
+	@exit 1
 
 l4-test:
-	cd tools/eaasp-session-manager && .venv/bin/python -m pytest tests/ -xvs
+	cd tools/eaasp-l4-orchestration && .venv/bin/python -m pytest tests/ -xvs
+
+# ============================================================
+# EAASP v2.0 L2 Memory Engine (Python — v2 skeleton, S3.T1)
+# ============================================================
+
+l2-memory-setup:
+	cd tools/eaasp-l2-memory-engine && uv venv .venv && uv pip install -e ".[dev]"
+
+l2-memory-test:
+	cd tools/eaasp-l2-memory-engine && .venv/bin/python -m pytest tests/ -xvs
+
+# ============================================================
+# EAASP v2.0 CLI (Python — v2 skeleton, S3.T4)
+# ============================================================
+
+cli-v2-setup:
+	cd tools/eaasp-cli-v2 && uv venv .venv && uv pip install -e ".[dev]"
+
+cli-v2-test:
+	cd tools/eaasp-cli-v2 && .venv/bin/python -m pytest tests/ -xvs
 
 # ============================================================
 # EAASP Build All — 构建所有 EAASP 组件
@@ -865,21 +887,9 @@ build-eaasp-all: runtime-build-binary skill-registry-build mcp-orch-build certif
 	@echo "  grid-runtime, eaasp-skill-registry, eaasp-mcp-orchestrator, eaasp-certifier"
 
 # ============================================================
-# EAASP E2E Tests
+# EAASP v2.0 E2E MVP (Phase 0 S4 will implement)
 # ============================================================
 
-e2e-setup: l3-setup l4-setup sdk-setup
-
-e2e-test:
-	cd tools/eaasp-governance && .venv/bin/python -m pytest ../../tests/e2e/ -xvs -m mock_llm
-
-e2e-run:
-	bash scripts/e2e-mvp.sh --mock-llm
-
-e2e-teardown:
-	@echo "Stopping L3/L4 services..."
-	@pkill -f "eaasp_governance" 2>/dev/null || true
-	@pkill -f "eaasp_session" 2>/dev/null || true
-	@echo "Done."
-
-e2e-full: e2e-setup e2e-test
+v2-mvp-e2e:
+	@echo "v2-mvp-e2e: will be wired up in Phase 0 S4 (threshold calibration skill + 15 assertions)"
+	@exit 1
