@@ -62,7 +62,11 @@ def create_app(
         await init_db(db_path)
         owned_client = False
         if http_client is None:
-            client = httpx.AsyncClient(timeout=5.0)
+            # trust_env=False prevents L4 from picking up macOS system proxies
+            # (Clash etc.) when calling L2/L3 over 127.0.0.1. Without this guard
+            # the proxy turns localhost calls into 502 upstream_error reports —
+            # see MEMORY.md "Ollama 本地模型已知问题" for the reqwest precedent.
+            client = httpx.AsyncClient(timeout=5.0, trust_env=False)
             owned_client = True
         else:
             client = http_client

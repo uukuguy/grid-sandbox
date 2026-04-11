@@ -37,6 +37,17 @@ class Session:
     hook_bridge_url: str = ""
     telemetry_endpoint: str = ""
 
+    # D2-py — P3 memory_refs from SessionPayload (v2.0 Phase 0 S4.T2)
+    memory_refs: list[dict] = field(default_factory=list)
+    # D2-py — P1 policy_context from SessionPayload (metadata only, no hook
+    # execution at this layer; HookExecutor continues to run off
+    # managed_hooks_json)
+    policy_context: dict | None = None
+    # D2-py — tracks whether the cross-session memory preamble has already
+    # been prepended to the system prompt for this session. The preamble is
+    # injected only on the first Send to avoid duplication across turns.
+    preamble_injected: bool = False
+
     def to_dict(self) -> dict:
         """Serialize session to dict for state persistence."""
         return {
@@ -51,6 +62,9 @@ class Session:
             "mcp_servers": self.mcp_servers,
             "telemetry_events": self.telemetry_events,
             "context": self.context,
+            "memory_refs": self.memory_refs,
+            "policy_context": self.policy_context,
+            "preamble_injected": self.preamble_injected,
         }
 
     @classmethod
@@ -69,6 +83,9 @@ class Session:
             mcp_servers=data.get("mcp_servers", []),
             telemetry_events=data.get("telemetry_events", []),
             context=data.get("context", {}),
+            memory_refs=data.get("memory_refs", []),
+            policy_context=data.get("policy_context"),
+            preamble_injected=data.get("preamble_injected", False),
         )
 
 
@@ -87,6 +104,8 @@ class SessionManager:
         context: dict[str, str] | None = None,
         hook_bridge_url: str = "",
         telemetry_endpoint: str = "",
+        memory_refs: list[dict] | None = None,
+        policy_context: dict | None = None,
     ) -> Session:
         """Create a new session."""
         session_id = f"crt-{uuid.uuid4().hex[:12]}"
@@ -99,6 +118,8 @@ class SessionManager:
             context=context or {},
             hook_bridge_url=hook_bridge_url,
             telemetry_endpoint=telemetry_endpoint,
+            memory_refs=memory_refs or [],
+            policy_context=policy_context,
         )
         self._sessions[session_id] = session
         logger.info("Session created: %s (user=%s)", session_id, user_id)

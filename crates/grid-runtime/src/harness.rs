@@ -25,6 +25,7 @@ use grid_engine::{
     McpServerConfigV2, McpTransport as EngineMcpTransport,
 };
 use grid_types::id::{SandboxId, SessionId, UserId};
+use grid_types::{ChatMessage, ContentBlock, MessageRole};
 
 use crate::contract::*;
 use crate::telemetry::TelemetryCollector;
@@ -75,6 +76,30 @@ impl GridHarness {
                 }
             });
         Box::pin(stream)
+    }
+
+    /// Build a system-prompt preamble from P3 memory_refs.
+    ///
+    /// Format:
+    /// ```text
+    /// ## Prior memories from previous sessions
+    ///
+    /// - [{memory_type}] {content}
+    /// - [{memory_type}] {content}
+    /// ```
+    ///
+    /// Returns an empty string when `memory_refs` is empty. Exposed at
+    /// `pub(crate)` so D2 behavior can be covered by unit tests without
+    /// spinning up a full AgentRuntime.
+    pub(crate) fn build_memory_preamble(memory_refs: &[MemoryRef]) -> String {
+        if memory_refs.is_empty() {
+            return String::new();
+        }
+        let mut s = String::from("## Prior memories from previous sessions\n\n");
+        for m in memory_refs {
+            s.push_str(&format!("- [{}] {}\n", m.memory_type, m.content));
+        }
+        s
     }
 
     /// Map a single AgentEvent to an optional ResponseChunk.
@@ -154,28 +179,63 @@ impl RuntimeContract for GridHarness {
         let user_id = UserId::from_string(&user_id_str);
         let sandbox_id = SandboxId::from_string("default");
 
+        // D1 — read P1 PolicyContext metadata (best-effort, read-only).
+        // Hook installation/execution is deferred to Phase 2 (D50/D53).
+        let org_unit = payload
+            .policy_context
+            .as_ref()
+            .map(|p| p.org_unit.clone())
+            .unwrap_or_default();
+        let policy_version = payload
+            .policy_context
+            .as_ref()
+            .map(|p| p.policy_version.clone())
+            .unwrap_or_default();
+        let hooks_count = payload
+            .policy_context
+            .as_ref()
+            .map(|p| p.hooks.len())
+            .unwrap_or(0);
+
+        info!(
+            session_id = %session_id,
+            org_unit = %org_unit,
+            policy_version = %policy_version,
+            hooks_count = hooks_count,
+            "GridHarness: policy_context metadata (D1)"
+        );
+
+        // D2 — build a system-prompt preamble from P3 memory_refs and
+        // inject it as the first ChatMessage in the session's initial
+        // history. When memory_refs is empty, the history stays empty.
+        let initial_history: Vec<ChatMessage> = if payload.memory_refs.is_empty() {
+            vec![]
+        } else {
+            let preamble = Self::build_memory_preamble(&payload.memory_refs);
+            vec![ChatMessage {
+                role: MessageRole::System,
+                content: vec![ContentBlock::Text { text: preamble }],
+            }]
+        };
+        let memory_refs_count = payload.memory_refs.len();
+
         let _handle = self
             .runtime
             .start_session(
                 session_id.clone(),
                 user_id,
                 sandbox_id,
-                vec![], // empty initial history
-                None,   // no agent_id override
+                initial_history,
+                None, // no agent_id override
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start session: {}", e))?;
-
-        let org_unit = payload
-            .policy_context
-            .as_ref()
-            .map(|p| p.org_unit.clone())
-            .unwrap_or_default();
 
         info!(
             session_id = %session_id,
             user = %user_id_str,
             org_unit = %org_unit,
+            memory_refs_count = memory_refs_count,
             "GridHarness: session initialized (v2)"
         );
 
@@ -525,6 +585,44 @@ mod tests {
         let event = AgentEvent::ThinkingDelta { text: "analyzing...".into() };
         let chunk = GridHarness::event_to_chunk(event).unwrap();
         assert_eq!(chunk.chunk_type, "thinking");
+    }
+
+    #[test]
+    fn build_memory_preamble_empty_returns_empty_string() {
+        // D2 — empty memory_refs must produce an empty preamble so the
+        // harness can unconditionally skip adding a system message.
+        let out = GridHarness::build_memory_preamble(&[]);
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn build_memory_preamble_formats_entries() {
+        // D2 — preamble must contain the exact header plus one bullet
+        // per memory, each prefixed with the memory_type in brackets.
+        let refs = vec![
+            MemoryRef {
+                memory_id: "mem-1".into(),
+                memory_type: "fact".into(),
+                relevance_score: 0.95,
+                content: "Device XYZ temperature threshold is 75C".into(),
+                source_session_id: "s-prev".into(),
+                created_at: "2026-04-10T00:00:00Z".into(),
+                tags: Default::default(),
+            },
+            MemoryRef {
+                memory_id: "mem-2".into(),
+                memory_type: "preference".into(),
+                relevance_score: 0.80,
+                content: "User prefers conservative thresholds".into(),
+                source_session_id: "s-prev".into(),
+                created_at: "2026-04-10T00:00:00Z".into(),
+                tags: Default::default(),
+            },
+        ];
+        let out = GridHarness::build_memory_preamble(&refs);
+        assert!(out.starts_with("## Prior memories from previous sessions\n"));
+        assert!(out.contains("- [fact] Device XYZ temperature threshold is 75C"));
+        assert!(out.contains("- [preference] User prefers conservative thresholds"));
     }
 
     #[test]

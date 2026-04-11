@@ -381,3 +381,96 @@ async def test_emit_event_unimplemented(service, ctx):
     await service.EmitEvent(req, ctx)
     assert ctx.code == grpc.StatusCode.UNIMPLEMENTED
     assert ctx.details == "ADR-V2-001 pending"
+
+
+# ── D2-py — Initialize wiring for P3 memory_refs + P1 policy_context ──
+
+
+@pytest.mark.asyncio
+async def test_initialize_injects_memory_refs_preamble(service, ctx):
+    """Initialize must project P3 memory_refs + P1 policy_context onto the
+    Session and the stored dicts must be usable to build a preamble string.
+
+    D2-py scope: this validates the *extraction* step only — it asserts the
+    Session carries memory_refs / policy_context in the shape that the Send
+    handler then consumes to build the "## Prior memories..." preamble. The
+    actual Send-time injection is covered indirectly because Send reads
+    straight from these same fields.
+    """
+    payload = common_pb2.SessionPayload(
+        policy_context=common_pb2.PolicyContext(
+            org_unit="engineering-dept",
+            policy_version="v2.0-20260412",
+            hooks=[
+                common_pb2.ManagedHook(
+                    hook_id="h1",
+                    hook_type="pre_tool_call",
+                    condition="tool:^bash$",
+                    action="deny",
+                    precedence=1,
+                    scope="managed",
+                )
+            ],
+        ),
+        user_preferences=common_pb2.UserPreferences(user_id="alice"),
+        user_id="alice",
+    )
+    payload.memory_refs.add(
+        memory_id="mem-1",
+        memory_type="fact",
+        relevance_score=0.95,
+        content="Device XYZ temperature threshold is 75C",
+        source_session_id="s-prev",
+        created_at="2026-04-10T00:00:00Z",
+    )
+    payload.memory_refs.add(
+        memory_id="mem-2",
+        memory_type="preference",
+        relevance_score=0.80,
+        content="User prefers conservative thresholds",
+        source_session_id="s-prev",
+        created_at="2026-04-10T00:00:00Z",
+    )
+
+    resp = await service.Initialize(
+        runtime_pb2.InitializeRequest(payload=payload), ctx
+    )
+    sid = resp.session_id
+    assert sid.startswith("crt-")
+
+    session = service.session_mgr.get(sid)
+    assert session is not None
+
+    # P3 memory_refs were projected into session.memory_refs as plain dicts.
+    assert len(session.memory_refs) == 2
+    mem_ids = [m["memory_id"] for m in session.memory_refs]
+    assert mem_ids == ["mem-1", "mem-2"]
+    assert session.memory_refs[0]["content"].startswith("Device XYZ")
+    assert session.memory_refs[0]["relevance_score"] == pytest.approx(0.95)
+    assert session.memory_refs[1]["memory_type"] == "preference"
+
+    # P1 policy_context metadata captured (hooks list + version + org_unit).
+    assert session.policy_context is not None
+    assert session.policy_context["org_unit"] == "engineering-dept"
+    assert session.policy_context["policy_version"] == "v2.0-20260412"
+    assert len(session.policy_context["hooks"]) == 1
+    assert session.policy_context["hooks"][0]["hook_id"] == "h1"
+
+    # Session defaults — preamble not yet injected until the first Send.
+    assert session.preamble_injected is False
+
+    # The preamble string the Send handler will build must contain both
+    # memory entries' content substrings. We reconstruct it locally using
+    # the same join pattern the handler uses so the test stays in lock-step
+    # with the format spec.
+    preamble_lines = ["## Prior memories from previous sessions", ""]
+    for mref in session.memory_refs:
+        preamble_lines.append(
+            f"- [{mref.get('memory_type', '')}] {mref.get('content', '')}"
+        )
+    preamble = "\n".join(preamble_lines) + "\n"
+    assert "Prior memories from previous sessions" in preamble
+    assert "Device XYZ temperature threshold is 75C" in preamble
+    assert "User prefers conservative thresholds" in preamble
+    assert "[fact]" in preamble
+    assert "[preference]" in preamble

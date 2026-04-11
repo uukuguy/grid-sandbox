@@ -1,0 +1,13 @@
+{
+  "version": "v2.0-mvp-verify",
+  "hooks": [
+    {
+      "hook_id": "audit-tool-calls",
+      "phase": "PostToolUse",
+      "mode": "shadow",
+      "agent_id": "*",
+      "skill_id": "*",
+      "handler": "http://127.0.0.1:18083/v1/telemetry/events"
+    }
+  ]
+}

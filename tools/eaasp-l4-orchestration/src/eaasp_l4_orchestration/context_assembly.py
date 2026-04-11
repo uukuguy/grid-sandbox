@@ -59,14 +59,27 @@ def _normalize_memory_ref(hit: dict[str, Any]) -> dict[str, Any]:
 
     L2 hits vary in shape across versions; fall back to sensible defaults so
     the payload is always well-formed.
+
+    L2's actual response shape (post S3.T2):
+        {"hits": [{"memory": {"memory_id": ..., "category": ..., "content": ...},
+                   "score": 0.99, "fts_score": 1.0, "time_decay": 0.99}, ...]}
+    The L2 hybrid search wraps each memory file inside a ``"memory"`` key
+    alongside the ranking signals. Earlier versions surfaced these fields
+    flat at the top level (S2 prototype). Both shapes are accepted here so
+    L4 stays compatible across L2 minor versions.
     """
+    nested = hit.get("memory")
+    inner: dict[str, Any] = nested if isinstance(nested, dict) else hit
     return {
-        "memory_id": str(hit.get("memory_id") or hit.get("id") or ""),
-        "memory_type": str(hit.get("memory_type") or hit.get("category") or ""),
+        "memory_id": str(inner.get("memory_id") or inner.get("id") or ""),
+        "memory_type": str(inner.get("memory_type") or inner.get("category") or ""),
         "relevance_score": float(
-            hit.get("relevance_score") or hit.get("score") or 0.0
+            hit.get("score")
+            or hit.get("relevance_score")
+            or inner.get("relevance_score")
+            or 0.0
         ),
-        "summary": str(hit.get("summary") or hit.get("content") or ""),
+        "summary": str(inner.get("summary") or inner.get("content") or ""),
     }
 
 

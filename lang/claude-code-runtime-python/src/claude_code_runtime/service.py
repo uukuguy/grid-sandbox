@@ -143,18 +143,68 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         payload = request.payload
 
         user_id = _extract_user_id(payload)
-        org_unit = (
-            payload.policy_context.org_unit if payload.policy_context else ""
+
+        # M1 (reviewer R2) — proto3 submessage presence uses HasField, NOT
+        # truthy fallback. Accessing an unset singular submessage returns a
+        # default instance that is always truthy in google.protobuf, so the
+        # previous `if payload.policy_context:` branch would always enter.
+        has_policy_context = payload.HasField("policy_context")
+        has_event_context = payload.HasField("event_context")
+
+        org_unit = payload.policy_context.org_unit if has_policy_context else ""
+        # NOTE: empty fallback is "" (not "[]"). HookExecutor.load_rules treats
+        # ""/None/"{}" as zero rules; "[]" would parse as a list and fail
+        # `data.get("rules", [])` with AttributeError. Reviewer M1 introduced
+        # the wrong fallback string and the certifier caught it (S4.T2 E2E run).
+        managed_hooks_json = (
+            _managed_hooks_to_rules_json(payload.policy_context)
+            if has_policy_context
+            else ""
         )
-        managed_hooks_json = _managed_hooks_to_rules_json(payload.policy_context)
 
         # Cache the P4 skill if the orchestrator pre-populated one.
         context_dict: dict[str, str] = {}
-        if payload.policy_context and payload.policy_context.policy_version:
+        if has_policy_context and payload.policy_context.policy_version:
             context_dict["policy_version"] = payload.policy_context.policy_version
-        if payload.event_context and payload.event_context.event_id:
+        if has_event_context and payload.event_context.event_id:
             context_dict["event_id"] = payload.event_context.event_id
             context_dict["event_type"] = payload.event_context.event_type
+
+        # D2-py — Extract P3 memory_refs into a plain-dict projection that
+        # SessionManager.create() can persist on the Session dataclass.
+        memory_refs_list = [
+            {
+                "memory_id": m.memory_id,
+                "memory_type": m.memory_type,
+                "relevance_score": m.relevance_score,
+                "content": m.content,
+                "source_session_id": m.source_session_id,
+                "created_at": m.created_at,
+                "tags": dict(m.tags) if m.tags else {},
+            }
+            for m in payload.memory_refs
+        ]
+
+        # D2-py — Extract P1 policy_context metadata (read-only; hook
+        # execution still happens via HookExecutor + managed_hooks_json).
+        policy_context_dict: dict | None = None
+        if has_policy_context:
+            pc = payload.policy_context
+            policy_context_dict = {
+                "org_unit": pc.org_unit,
+                "policy_version": pc.policy_version,
+                "hooks": [
+                    {
+                        "hook_id": h.hook_id,
+                        "hook_type": h.hook_type,
+                        "condition": h.condition,
+                        "action": h.action,
+                        "precedence": h.precedence,
+                        "scope": h.scope,
+                    }
+                    for h in pc.hooks
+                ],
+            }
 
         session = self.session_mgr.create(
             user_id=user_id,
@@ -164,8 +214,28 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
             context=context_dict,
             hook_bridge_url="",
             telemetry_endpoint="",
+            memory_refs=memory_refs_list,
+            policy_context=policy_context_dict,
         )
         sid = session.session_id
+
+        # D1-py — Log policy_context metadata (hooks count / org_unit /
+        # policy_version). Mirrors the Rust harness D1 log line so the
+        # certifier / verify script can assert both runtimes emit it.
+        if policy_context_dict is not None:
+            logger.info(
+                "GridHarness(py): policy_context metadata "
+                "session_id=%s org_unit=%s policy_version=%s hooks_count=%d (D1)",
+                sid,
+                policy_context_dict.get("org_unit", ""),
+                policy_context_dict.get("policy_version", ""),
+                len(policy_context_dict.get("hooks", [])),
+            )
+        logger.info(
+            "GridHarness(py): memory_refs injected session_id=%s count=%d (D2)",
+            sid,
+            len(memory_refs_list),
+        )
 
         hook_exe = HookExecutor()
         hook_exe.load_rules(managed_hooks_json)
@@ -229,6 +299,42 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         system_prompt = None
         if skill_loader and skill_loader.count > 0:
             system_prompt = skill_loader.all_system_prompt_fragments()
+
+        # D2-py — On the FIRST Send of a session, prepend a system-prompt
+        # preamble built from P3 memory_refs so the underlying claude-agent
+        # sees prior-session context. Subsequent Sends reuse the SDK's own
+        # conversation state, so we must NOT re-inject (avoid duplication).
+        #
+        # Injection strategy: option 1 from the blueprint — prepend to the
+        # system_prompt string passed to ClaudeAgentOptions.system_prompt.
+        # This is the simplest integration point: SdkWrapper already wires
+        # system_prompt straight through to ClaudeAgentOptions, and the
+        # claude-agent-sdk `query()` call does not accept a pre-seeded
+        # history list, so a leading system-role message would have no
+        # delivery vehicle. Prepending to system_prompt keeps the preamble
+        # in the same "out-of-band" channel the SDK already honors.
+        if not session.preamble_injected and session.memory_refs:
+            memory_preamble_lines = [
+                "## Prior memories from previous sessions",
+                "",
+            ]
+            for mref in session.memory_refs:
+                memory_preamble_lines.append(
+                    f"- [{mref.get('memory_type', '')}] {mref.get('content', '')}"
+                )
+            memory_preamble = "\n".join(memory_preamble_lines) + "\n"
+
+            if system_prompt:
+                system_prompt = memory_preamble + "\n" + system_prompt
+            else:
+                system_prompt = memory_preamble
+            session.preamble_injected = True
+            logger.info(
+                "Injected memory_refs preamble into system_prompt "
+                "session_id=%s memory_refs=%d",
+                sid,
+                len(session.memory_refs),
+            )
 
         async for chunk in self.sdk.send_message(
             prompt=message.content, system_prompt=system_prompt

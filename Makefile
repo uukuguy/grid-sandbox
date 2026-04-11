@@ -17,7 +17,9 @@
         certifier-build certifier-verify certifier-blindbox \
         build-eaasp-all \
         sdk-setup sdk-test sdk-validate sdk-build \
+        l2-memory-setup l2-memory-test l2-memory-start \
         l3-setup l3-start l3-test l4-setup l4-start l4-test \
+        cli-v2-setup cli-v2-test v2-mvp-e2e \
         mock-scada-setup mock-scada-test mock-scada-start \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
         hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build hermes-runtime-run \
@@ -779,7 +781,7 @@ skill-registry-build:
 	cargo build -p eaasp-skill-registry
 
 skill-registry-start:
-	cargo run -p eaasp-skill-registry -- --data-dir ./data/skill-registry --port 8081
+	cargo run -p eaasp-skill-registry -- --data-dir ./data/skill-registry --port 18081
 
 skill-registry-test:
 	cargo test -p eaasp-skill-registry -- --test-threads=1
@@ -839,8 +841,7 @@ l3-setup:
 	cd tools/eaasp-l3-governance && uv venv .venv && uv pip install -e ".[dev]"
 
 l3-start:
-	@echo "l3-start: eaasp-l3-governance not yet implemented (Phase 0 S3.T2)"
-	@exit 1
+	cd tools/eaasp-l3-governance && .venv/bin/python -m eaasp_l3_governance.main
 
 l3-test:
 	cd tools/eaasp-l3-governance && .venv/bin/python -m pytest tests/ -xvs
@@ -853,8 +854,7 @@ l4-setup:
 	cd tools/eaasp-l4-orchestration && uv venv .venv && uv pip install -e ".[dev]"
 
 l4-start:
-	@echo "l4-start: eaasp-l4-orchestration not yet implemented (Phase 0 S3.T3)"
-	@exit 1
+	cd tools/eaasp-l4-orchestration && .venv/bin/python -m eaasp_l4_orchestration.main
 
 l4-test:
 	cd tools/eaasp-l4-orchestration && .venv/bin/python -m pytest tests/ -xvs
@@ -868,6 +868,9 @@ l2-memory-setup:
 
 l2-memory-test:
 	cd tools/eaasp-l2-memory-engine && .venv/bin/python -m pytest tests/ -xvs
+
+l2-memory-start:
+	cd tools/eaasp-l2-memory-engine && .venv/bin/python -m eaasp_l2_memory_engine.main
 
 # ============================================================
 # Mock SCADA MCP stdio server (Python — Phase 0 S4.T1 / D47)
@@ -905,5 +908,4 @@ build-eaasp-all: runtime-build-binary skill-registry-build mcp-orch-build certif
 # ============================================================
 
 v2-mvp-e2e:
-	@echo "v2-mvp-e2e: will be wired up in Phase 0 S4 (threshold calibration skill + 15 assertions)"
-	@exit 1
+	@bash scripts/verify-v2-mvp.sh

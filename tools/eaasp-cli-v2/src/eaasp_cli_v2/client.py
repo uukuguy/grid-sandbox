@@ -39,7 +39,10 @@ class ServiceClient:
     # ─── Constructors ──────────────────────────────────────────────────────
     @classmethod
     def from_config(cls, cfg: CliConfig) -> "ServiceClient":
-        return cls(httpx.AsyncClient(timeout=cfg.timeout))
+        # trust_env=False — see MEMORY.md "Ollama 本地模型已知问题": macOS system
+        # proxies (Clash etc.) route 127.0.0.1 through HTTP proxy and the cli-v2
+        # commands surface this as confusing "502 server error" lines.
+        return cls(httpx.AsyncClient(timeout=cfg.timeout, trust_env=False))
 
     @classmethod
     def from_httpx(cls, client: httpx.AsyncClient) -> "ServiceClient":
