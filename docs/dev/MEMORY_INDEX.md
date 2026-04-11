@@ -6,6 +6,7 @@
 ---
 
 ## [Active Work]
+- 23:20 | EAASP v2.0 Phase 0 Stage S1 COMPLETE (3/3) — v1.8 archived, v2 proto defined (16 methods, 5-block SessionPayload), v1 removed. S2 surface in docs/plans/s2-refactor-surface.md. Commits: 483882d, a459f84, 4b4f6a1, 04c89d7, 13afdc2.
 - 22:35 | EAASP v2.0 MVP Phase 0 design checkpoint saved (Ring-2 scope locked, 15 tasks queued)
 
 - 2026-04-07 23:00 | **Phase BH-MVP COMPLETE (7/7)** — E2E 全流程验证 @ 1124c62. 58 new tests. L3 governance (5 API), L4 session manager (4 planes), SDK eaasp run, E2E integration (14), HR example (audit+PII). Makefile: l3/l4/e2e targets. Deferred: BH-D1~D12.
