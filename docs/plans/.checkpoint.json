@@ -2,7 +2,7 @@
   "plan_file": "docs/plans/2026-04-11-v2-mvp-phase0-plan.md",
   "phase": "execution",
   "created_at": "2026-04-11T21:00:00+08:00",
-  "updated_at": "2026-04-12T04:30:00+08:00",
+  "updated_at": "2026-04-12T04:40:00+08:00",
   "completed_tasks": ["S1.T1", "S1.T2", "S1.T3", "S2.T1", "S2.T2", "S2.T3", "S2.T4", "S3.T1", "S3.T2", "S3.T3", "S3.T4", "S3.T4.5", "S3.T5", "S4.T1"],
   "current_task": "S4.T2",
   "total_tasks": 15,
@@ -92,8 +92,9 @@
       "S4.T1_style_commit": "98b594b",
       "S4.T1_swarm": "swarm-1775937332511",
       "S4.T1_tests": "9/9 v2_frontmatter_test (was 8, +1 parse_threshold_calibration_example_skill)",
-      "S4.T1_deferred_new": ["D46", "D47", "D48", "D49", "D50", "D51"],
-      "S4.T1_reviewer_proposed_deferred": ["D52"],
+      "S4.T1_deferred_new": ["D46", "D47", "D48", "D49", "D50", "D51", "D52"],
+      "S4.T1_deferred_scan_at": "2026-04-12T04:40:00+08:00",
+      "S4.T1_deferred_scan_result": "52 items D1-D52 all ⏳, zero ready-to-harvest. D47+D49+D52 are S4.T2 hard preconditions. D1/D2/D6 preconditions met but parked for dedicated harness-wiring task per plan discipline line 841.",
       "S4.T2_preconditions_from_S4.T1": ["D47 (real mock-scada MCP stdio)", "D49 (${SKILL_DIR} runtime substitution)"]
     }
   },
