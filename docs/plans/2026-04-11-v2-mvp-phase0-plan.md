@@ -762,5 +762,9 @@ S2 完成后扫描 `crates/grid-runtime` / `crates/grid-hook-bridge` / `crates/e
 | D9 | `skill_usage` 返回真实遥测（MVP 返回 `{session_count: 0, last_used: null}`） | Phase 1 L3 telemetry ingest 管线打通 + L2 memory_engine 聚合实现 | ⏳ |
 | D10 | S3.T1 MCP 暴露由 REST facade 升级为真 rmcp ServerHandler（当前通过 `GET /tools` + `POST /tools/{name}/invoke` 近似） | 其他 L2/L3/L4 服务也需要真 MCP 时统一切换，避免半 MCP 状态 | ⏳ |
 | D11 | `eaasp-skill-registry::store.search` 的 `scope` 过滤器在 SQL `LIMIT` 之后执行：`scope=X&limit=10` 可能返回 <10 条即使数据库里有更多匹配项 | `access_scope` 迁移到 SQL 列（migration + 索引）后即可在 WHERE 子句里一起过滤，消除 O(N) read-back | ⏳ |
+| D12 | `eaasp-l2-memory-engine` 每次 RPC 都开/关 aiosqlite 连接（connection-per-call）。对 SQLite 可接受但浪费延迟；阻塞了把 `BEGIN IMMEDIATE` 改成 store 级事务的更彻底方案 | 负载升高或 L4 batch context assembly 出现明显尾延迟时，改为 store 级长连接 + shared `aiosqlite.Connection` (M1) | ⏳ |
+| D13 | `eaasp-l2-memory-engine` 的 `archive()` 创建 "archive of archive" 版本，归档内容仍保留在 `memory_fts` 中可被搜到 | 明确归档的检索语义（完全下架 vs 低优先级）后，决定是否在归档时跳过 FTS insert 并在 search 默认过滤 archived (M5) | ⏳ |
+| D14 | `eaasp-l2-memory-engine::index._row_to_memory` 通过 `from .files import _row_to_memory` 跨模块访问私有符号 | 提升为公共 `files.row_to_memory` 或抽到 shared `_rows.py`，避免后续重构连锁破坏 (N1) | ⏳ |
+| D15 | `eaasp-l2-memory-engine` 缺 `[tool.ruff]` / `[tool.mypy]` 配置块 | S3.T5 CI 接入前统一添加项目级 lint/typecheck 配置（与 skill-registry 对齐） (N7) | ⏳ |
 
 **检查纪律：** S3 每个 Task 开始前先 `grep "⏳" docs/plans/2026-04-11-v2-mvp-phase0-plan.md`，确认是否有条件已达成的项可以顺手补齐。S3.T2 完成后检查 D2，S3.T3 完成后检查 D1，S4 开始前检查 D6。
