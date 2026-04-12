@@ -77,14 +77,14 @@ cd /Users/sujiangwen/sandbox/LLM/speechless.ai/SGAI/grid-sandbox/tools/eaasp-cli
 .venv/bin/eaasp skill submit \
   ../../examples/skills/threshold-calibration/SKILL.md
 
-# 记录返回的 SKILL_ID（例如：threshold-calibration）
-# 推进版本
-.venv/bin/eaasp skill promote <SKILL_ID> 0.1.0
+# 返回的 id 应为 "threshold-calibration"（从 frontmatter name 推导）
+# 将 skill 状态从 draft 推进到 tested
+.venv/bin/eaasp skill promote threshold-calibration 0.1.0 tested
 ```
 
 **验收标准**：
-- [ ] skill submit 成功，返回有效 ID
-- [ ] skill promote 成功，version = 0.1.0
+- [ ] skill submit 成功，返回 `id: "threshold-calibration"`（非 "SKILL"）
+- [ ] skill promote 成功，status 变为 `tested`
 
 ---
 

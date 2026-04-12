@@ -82,7 +82,7 @@ def submit(
     meta = _parse_simple_yaml(frontmatter_yaml)
 
     body: dict[str, Any] = {
-        "id": str(meta.get("id") or path.stem),
+        "id": str(meta.get("id") or meta.get("name") or path.stem),
         "name": str(meta.get("name") or path.stem),
         "description": str(meta.get("description") or ""),
         "version": str(meta.get("version") or "0.1.0"),
