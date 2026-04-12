@@ -9,7 +9,8 @@ Strategy:
   intercept. It is injected into ``create_app`` so L2/L3 calls from inside
   the ASGI app also flow through respx.
 - ``app_client`` wraps the FastAPI app in an ASGI transport AsyncClient for
-  in-process HTTP calls.
+  in-process HTTP calls. A mock L1 factory is injected so tests don't need
+  a real gRPC runtime.
 """
 
 from __future__ import annotations
@@ -18,12 +19,38 @@ import os
 import tempfile
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import pytest_asyncio
 
 from eaasp_l4_orchestration.api import create_app
 from eaasp_l4_orchestration.db import connect, init_db
+
+
+class _StubL1Client:
+    """Stub L1 client for tests that don't care about real gRPC."""
+
+    def __init__(self, runtime_id: str) -> None:
+        self.runtime_id = runtime_id
+
+    async def initialize(self, payload_dict: dict[str, Any]) -> dict[str, str]:
+        sid = payload_dict.get("session_id", "mock")
+        return {"session_id": sid, "runtime_id": self.runtime_id}
+
+    async def send(self, session_id: str, content: str, message_type: str = "text"):
+        yield {"chunk_type": "text_delta", "content": content}
+        yield {"chunk_type": "done", "content": ""}
+
+    async def terminate(self) -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
+def _stub_l1_factory(runtime_id: str) -> _StubL1Client:
+    return _StubL1Client(runtime_id)
 
 
 @pytest_asyncio.fixture
@@ -96,8 +123,13 @@ async def app_client(
 
     ``httpx.ASGITransport`` does not emit lifespan events, so we enter the
     FastAPI router lifespan context manually to hydrate ``app.state``.
+    A stub L1 factory is injected so tests don't need a real gRPC runtime.
     """
-    application = create_app(tmp_db_path, http_client=l4_http_client)
+    application = create_app(
+        tmp_db_path,
+        http_client=l4_http_client,
+        l1_factory=_stub_l1_factory,
+    )
     async with application.router.lifespan_context(application):
         transport = httpx.ASGITransport(app=application)
         async with httpx.AsyncClient(

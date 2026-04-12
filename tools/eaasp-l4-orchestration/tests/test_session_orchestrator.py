@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 import pytest
 import respx
@@ -17,13 +19,35 @@ L2_BASE = "http://l2.test"
 L3_BASE = "http://l3.test"
 
 
+class _StubL1:
+    def __init__(self, runtime_id: str) -> None:
+        self.runtime_id = runtime_id
+
+    async def initialize(self, payload_dict: dict[str, Any]) -> dict[str, str]:
+        sid = payload_dict.get("session_id", "mock")
+        return {"session_id": sid, "runtime_id": self.runtime_id}
+
+    async def send(self, session_id: str, content: str, message_type: str = "text"):
+        yield {"chunk_type": "text_delta", "content": content}
+        yield {"chunk_type": "done", "content": ""}
+
+    async def terminate(self) -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
 async def _make_orchestrator(
     tmp_db_path: str, http_client: httpx.AsyncClient
 ) -> SessionOrchestrator:
     l2 = L2Client(http_client, base_url=L2_BASE)
     l3 = L3Client(http_client, base_url=L3_BASE)
     stream = SessionEventStream(tmp_db_path)
-    return SessionOrchestrator(tmp_db_path, l2=l2, l3=l3, event_stream=stream)
+    return SessionOrchestrator(
+        tmp_db_path, l2=l2, l3=l3, event_stream=stream,
+        l1_factory=lambda rid: _StubL1(rid),
+    )
 
 
 @respx.mock
@@ -64,29 +88,29 @@ async def test_create_session_happy_path(tmp_db_path: str) -> None:
         )
 
     assert out["session_id"].startswith("sess_")
-    assert out["status"] == "created"
+    assert out["status"] == "active"  # Phase 0.5: L1 Initialize → active
     payload = out["payload"]
     assert len(payload["memory_refs"]) == 2
     assert payload["memory_refs"][0]["memory_id"] == "m1"
     assert len(payload["policy_context"]["hooks"]) == 1
     assert payload["policy_context"]["policy_version"] == "3"
-    # Sessions row persisted as "created".
+    # Sessions row persisted as "active" after L1 Initialize.
     fetched = await orch.get_session(out["session_id"])
-    assert fetched["status"] == "created"
-    # Boot events present: SESSION_CREATED + RUNTIME_INITIALIZE_STUBBED.
+    assert fetched["status"] == "active"
+    # Boot events present: SESSION_CREATED + RUNTIME_INITIALIZED.
     events = await orch.list_events(out["session_id"])
     types = [e["event_type"] for e in events]
     assert "SESSION_CREATED" in types
-    assert "RUNTIME_INITIALIZE_STUBBED" in types
+    assert "RUNTIME_INITIALIZED" in types
     # N3 (reviewer): enforce boot-event ordering — SESSION_CREATED must
-    # always land at a lower seq than RUNTIME_INITIALIZE_STUBBED so that
+    # always land at a lower seq than RUNTIME_INITIALIZED so that
     # consumers replaying the stream see handshake completion before the
-    # runtime stub marker.
+    # runtime initialization marker.
     seq_created = next(
         e["seq"] for e in events if e["event_type"] == "SESSION_CREATED"
     )
     seq_init = next(
-        e["seq"] for e in events if e["event_type"] == "RUNTIME_INITIALIZE_STUBBED"
+        e["seq"] for e in events if e["event_type"] == "RUNTIME_INITIALIZED"
     )
     assert seq_created < seq_init
 
@@ -156,13 +180,13 @@ async def test_send_message_happy_path(tmp_db_path: str) -> None:
         result = await orch.send_message(sid, "hello world")
 
     assert result["session_id"] == sid
-    assert result["seq"] > 0
+    assert "response_text" in result  # Phase 0.5: real L1 Send
     assert any(e["event_type"] == "USER_MESSAGE" for e in result["events"])
 
     events = await orch.list_events(sid)
     types = [e["event_type"] for e in events]
     assert "USER_MESSAGE" in types
-    assert "RUNTIME_SEND_STUBBED" in types
+    assert "RESPONSE_CHUNK" in types  # Phase 0.5: replaces RUNTIME_SEND_STUBBED
 
 
 async def test_send_message_unknown_session_raises(tmp_db_path: str) -> None:

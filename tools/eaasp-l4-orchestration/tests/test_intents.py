@@ -43,7 +43,7 @@ async def test_dispatch_intent_happy_path(app_client: httpx.AsyncClient) -> None
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["session_id"].startswith("sess_")
-    assert body["status"] == "created"
+    assert body["status"] == "active"  # Phase 0.5: L1 Initialize succeeds → active
     # Same payload shape as /v1/sessions/create.
     assert "memory_refs" in body["payload"]
     assert "policy_context" in body["payload"]

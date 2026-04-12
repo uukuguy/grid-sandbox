@@ -47,13 +47,13 @@ async def test_create_session_happy_path(app_client: httpx.AsyncClient) -> None:
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["status"] == "created"
+    assert body["status"] == "active"  # Phase 0.5: L1 Initialize succeeds → active
     sid = body["session_id"]
 
     # GET /v1/sessions/{id} returns the persisted row.
     get_resp = await app_client.get(f"/v1/sessions/{sid}")
     assert get_resp.status_code == 200
-    assert get_resp.json()["status"] == "created"
+    assert get_resp.json()["status"] == "active"
 
 
 @respx.mock
@@ -126,7 +126,8 @@ async def test_send_message_happy_path(app_client: httpx.AsyncClient) -> None:
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["session_id"] == sid
-    assert body["seq"] > 0
+    assert "response_text" in body  # Phase 0.5: real L1 Send returns text
+    assert len(body["events"]) > 0
 
 
 async def test_send_message_unknown_session_404(app_client: httpx.AsyncClient) -> None:

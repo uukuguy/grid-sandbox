@@ -18,7 +18,7 @@
         build-eaasp-all \
         sdk-setup sdk-test sdk-validate sdk-build \
         l2-memory-setup l2-memory-test l2-memory-start \
-        l3-setup l3-start l3-test l4-setup l4-start l4-test \
+        l3-setup l3-start l3-test l4-setup l4-proto-gen l4-start l4-test \
         cli-v2-setup cli-v2-test v2-mvp-e2e \
         mock-scada-setup mock-scada-test mock-scada-start \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
@@ -852,6 +852,9 @@ l3-test:
 
 l4-setup:
 	cd tools/eaasp-l4-orchestration && uv venv .venv && uv pip install -e ".[dev]"
+
+l4-proto-gen:
+	cd tools/eaasp-l4-orchestration && uv run python build_proto.py
 
 l4-start:
 	cd tools/eaasp-l4-orchestration && .venv/bin/python -m eaasp_l4_orchestration.main

@@ -23,7 +23,12 @@ from pydantic import BaseModel, Field, ValidationError
 from .db import init_db
 from .event_stream import SessionEventStream
 from .handshake import L2_URL_DEFAULT, L3_URL_DEFAULT, L2Client, L3Client, UpstreamError
-from .session_orchestrator import SessionNotFound, SessionOrchestrator
+from .l1_client import L1RuntimeError
+from .session_orchestrator import (
+    InvalidStateTransition,
+    SessionNotFound,
+    SessionOrchestrator,
+)
 
 # ─── Request models ─────────────────────────────────────────────────────────
 
@@ -49,6 +54,7 @@ def create_app(
     l2_base_url: str | None = None,
     l3_base_url: str | None = None,
     http_client: httpx.AsyncClient | None = None,
+    l1_factory: Any | None = None,
 ) -> FastAPI:
     """Build the FastAPI app.
 
@@ -79,6 +85,7 @@ def create_app(
             l2=app.state.l2,
             l3=app.state.l3,
             event_stream=app.state.event_stream,
+            l1_factory=l1_factory,
         )
         try:
             yield
@@ -133,6 +140,40 @@ def create_app(
             raise HTTPException(
                 status_code=404,
                 detail={"code": "session_not_found", "session_id": exc.session_id},
+            ) from exc
+        except L1RuntimeError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "l1_runtime_error",
+                    "runtime_id": exc.runtime_id,
+                    "method": exc.method,
+                    "detail": exc.detail,
+                },
+            ) from exc
+
+    # ─── Contract 5: close session ───────────────────────────────────────
+    @app.post("/v1/sessions/{session_id}/close")
+    async def close_session(
+        session_id: str,
+        orchestrator: SessionOrchestrator = Depends(get_orchestrator),
+    ) -> dict[str, Any]:
+        try:
+            return await orchestrator.close_session(session_id)
+        except SessionNotFound as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "session_not_found", "session_id": exc.session_id},
+            ) from exc
+        except InvalidStateTransition as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "invalid_state_transition",
+                    "session_id": exc.session_id,
+                    "current": exc.current,
+                    "target": exc.target,
+                },
             ) from exc
 
     # ─── Contract 5: list events ─────────────────────────────────────────
@@ -194,6 +235,16 @@ async def _run_create_session(
         ) from exc
     except UpstreamError as exc:
         raise _upstream_to_http(exc) from exc
+    except L1RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "l1_runtime_error",
+                "runtime_id": exc.runtime_id,
+                "method": exc.method,
+                "detail": exc.detail,
+            },
+        ) from exc
 
 
 def _upstream_to_http(exc: UpstreamError) -> HTTPException:
