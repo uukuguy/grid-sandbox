@@ -240,6 +240,30 @@ eaasp-cli session send "再校准一次 Transformer-001"
 
 ---
 
+## 5.1 L1 Runtime 后续研究待办
+
+> 来源：`L1_RUNTIME_CANDIDATE_ANALYSIS.md` §12.8 未决问题 + `L1_RUNTIME_STRATEGY.md` §5 工作线。
+> 每项完成后在此表标注 ✅ 并附结论文档链接。
+
+| # | 待办 | 内容 | 启动时机 | 状态 |
+|---|------|------|---------|------|
+| R1 | OpenCode 源码评估 | 本地 clone，确认 T1/T2 归属（`tool.execute.before` hook + MCP OAuth） | Phase 0.5 期间（并行，2 天） | ⏸ |
+| R2 | Agno 2.0 源码评估 | 本地 clone，确认 T1/T2 归属（`pre_hook/post_hook` + AgentOS FastAPI） | Phase 0.5 期间（并行，2 天） | ⏸ |
+| R3 | Microsoft AGT 白皮书深读 | `agentmesh-mcp` Rust crate 接口面 → L3 对接可行性备忘录 | Phase 0.5 完成后 | ⏸ |
+| R4 | HexAgent Computer 协议评估 | 本地 clone，与 SANDBOX_EXECUTION_DESIGN 四种模式对比 | Phase 1 启动时 | ⏸ |
+| R5 | T0-T3 中英文修正附录 | 供合入 v2.0 spec docx §8.5，含代表项目更新 | R1+R2 完成后 | ⏸ |
+| R6 | 各 tier 实例说明文档 | 每个 tier 首选候选的 2-3 页架构摘要（贡献者入门包） | Phase 1 早期 | ⏸ |
+| R7 | L1 贡献者指南 | `L1_RUNTIME_CONTRIBUTOR_GUIDE.md`：如何把 framework 包装成 L1 | R5+R6 完成后 | ⏸ |
+| R8 | Wippy / datalayer 二次深挖 | 证据不足的两个 T2 候选，视 R1+R2 结果决定是否值得 | Phase 1（低优先级） | ⏸ |
+| R9 | Google ADK / Agno bug 跟踪 | Issue #4704 / #5568 修复节奏持续观察 | 持续 | ⏸ |
+
+**时机选择原则**：
+- R1+R2 与 Phase 0.5 并行，不阻塞 MVP 开发，但结果影响 ADR-V2-013 (L1 Pool 策略) 和 ADR-V2-014 (T0-T3 定义)
+- R3 不阻塞 MVP，但 Phase 1 Event Engine 设计可能参考 AGT 策略模式
+- R5-R7 需要 R1+R2 结论，自然落在 Phase 1 早期
+
+---
+
 ## 六、非目标（v2.0 明确不做）
 
 v2.0 规范第 20 章 "Design Anti-Patterns" 列出 22 个反模式。本文档摘取对实施有强约束的几条：
