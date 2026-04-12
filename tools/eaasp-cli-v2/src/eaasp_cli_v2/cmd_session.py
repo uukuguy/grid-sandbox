@@ -51,17 +51,32 @@ def create(
 
 
 @app.command("list")
-def list_cmd() -> None:
-    """(Deferred D41) — L4 has no ``GET /v1/sessions`` in MVP Phase 0."""
-    print_panel(
-        "[yellow]session list[/yellow] is not available in MVP Phase 0.\n"
-        "L4 has no [cyan]GET /v1/sessions[/cyan] endpoint "
-        "(tracked as [bold]Deferred D41[/bold]).\n"
-        "Use [cyan]eaasp session show <id>[/cyan] with a known session_id instead.",
-        title="D41",
-        style="yellow",
+def list_cmd(
+    limit: int = typer.Option(50, "--limit", "-n", help="Max rows to return"),
+    status: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
+) -> None:
+    """List all sessions (newest first)."""
+    cfg = CliConfig.from_env()
+
+    async def _do() -> Any:
+        client = _main.make_client(cfg)
+        try:
+            params: dict[str, Any] = {"limit": limit}
+            if status is not None:
+                params["status"] = status
+            return await client.call(
+                "GET", f"{cfg.l4_url}/v1/sessions", params=params
+            )
+        finally:
+            await client.aclose()
+
+    result = _main.run_async(_do())
+    rows = result.get("sessions", []) if isinstance(result, dict) else []
+    print_table(
+        "Sessions",
+        rows,
+        ["session_id", "status", "skill_id", "runtime_id", "created_at"],
     )
-    raise typer.Exit(0)
 
 
 @app.command("show")
@@ -201,3 +216,76 @@ def send(
             await client.aclose()
 
     _main.run_async(_do_stream())
+
+
+@app.command("run")
+def run(
+    message: str = typer.Argument(...),
+    skill: str = typer.Option(..., "--skill", "-s"),
+    runtime: str = typer.Option("grid-runtime", "--runtime", "-r"),
+    no_stream: bool = typer.Option(False, "--no-stream"),
+) -> None:
+    """Create a session and immediately send a message (create + send in one step)."""
+    cfg = CliConfig.from_env()
+    console = Console()
+
+    async def _do() -> None:
+        client = _main.make_client(cfg)
+        try:
+            # Step 1: create session
+            create_body: dict[str, Any] = {
+                "intent_text": message,
+                "skill_id": skill,
+                "runtime_pref": runtime,
+            }
+            result = await client.call(
+                "POST", f"{cfg.l4_url}/v1/sessions/create", json=create_body
+            )
+            session_id = result["session_id"] if isinstance(result, dict) else str(result)
+            console.print(f"[dim]session created: {session_id}[/dim]")
+
+            # Step 2: send message
+            if no_stream:
+                resp = await client.call(
+                    "POST",
+                    f"{cfg.l4_url}/v1/sessions/{session_id}/message",
+                    json={"content": message},
+                )
+                print_json(resp)
+            else:
+                err_console = Console(stderr=True)
+                async for msg in client.stream_sse(
+                    f"{cfg.l4_url}/v1/sessions/{session_id}/message/stream",
+                    json_body={"content": message},
+                ):
+                    event = msg.get("event", "chunk")
+                    data = msg.get("data", {})
+
+                    if event == "chunk":
+                        chunk_type = data.get("chunk_type", "")
+                        content = data.get("content", "")
+                        if chunk_type == "text_delta":
+                            sys.stdout.write(content)
+                            sys.stdout.flush()
+                        elif chunk_type == "done":
+                            sys.stdout.write("\n")
+                            sys.stdout.flush()
+                        elif chunk_type == "error":
+                            err_console.print(f"[red][error] {content}[/red]")
+                    elif event == "done":
+                        sys.stdout.write("\n")
+                        resp_text = data.get("response_text", "")
+                        n_events = len(data.get("events", []))
+                        console.print(
+                            f"[dim]── {n_events} events, "
+                            f"{len(resp_text)} chars total[/dim]"
+                        )
+                    elif event == "error":
+                        err_console.print(
+                            f"[bold red]runtime error:[/bold red] "
+                            f"{data.get('error', '?')}",
+                        )
+        finally:
+            await client.aclose()
+
+    _main.run_async(_do())

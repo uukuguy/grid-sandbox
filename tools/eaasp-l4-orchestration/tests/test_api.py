@@ -183,6 +183,61 @@ async def test_get_session_unknown_404(app_client: httpx.AsyncClient) -> None:
     assert resp.status_code == 404
 
 
+@respx.mock
+async def test_list_sessions(app_client: httpx.AsyncClient) -> None:
+    """GET /v1/sessions returns all sessions, newest first."""
+    # Empty at start.
+    resp = await app_client.get("/v1/sessions")
+    assert resp.status_code == 200
+    assert resp.json()["sessions"] == []
+
+    # Create two sessions.
+    respx.post(f"{L2_DEFAULT}/api/v1/memory/search").mock(
+        return_value=httpx.Response(200, json={"hits": []})
+    )
+    respx.post(url__regex=rf"{L3_DEFAULT}/v1/sessions/.*/validate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "placeholder",
+                "hooks_to_attach": [],
+                "managed_settings_version": 1,
+                "validated_at": "2026-04-12 02:00:00",
+                "runtime_tier": "strict",
+            },
+        )
+    )
+    r1 = await app_client.post(
+        "/v1/sessions/create",
+        json={"intent_text": "a", "skill_id": "skill.a", "runtime_pref": "strict"},
+    )
+    r2 = await app_client.post(
+        "/v1/sessions/create",
+        json={"intent_text": "b", "skill_id": "skill.b", "runtime_pref": "strict"},
+    )
+    sid1 = r1.json()["session_id"]
+    sid2 = r2.json()["session_id"]
+
+    # List all — both should be present.
+    resp = await app_client.get("/v1/sessions")
+    assert resp.status_code == 200
+    sessions = resp.json()["sessions"]
+    assert len(sessions) == 2
+    returned_ids = {s["session_id"] for s in sessions}
+    assert returned_ids == {sid1, sid2}
+
+    # Filter by status.
+    resp_active = await app_client.get("/v1/sessions?status=active")
+    assert resp_active.status_code == 200
+    for s in resp_active.json()["sessions"]:
+        assert s["status"] == "active"
+
+    # Limit.
+    resp_limit = await app_client.get("/v1/sessions?limit=1")
+    assert resp_limit.status_code == 200
+    assert len(resp_limit.json()["sessions"]) == 1
+
+
 async def test_create_session_missing_field_422(app_client: httpx.AsyncClient) -> None:
     resp = await app_client.post(
         "/v1/sessions/create",

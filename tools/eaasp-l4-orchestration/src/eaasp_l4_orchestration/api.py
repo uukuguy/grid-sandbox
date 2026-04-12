@@ -9,6 +9,7 @@ Endpoints (MVP scope):
 - ``POST /v1/sessions/{session_id}/message/stream``   — SSE streaming message
 - ``GET  /v1/sessions/{session_id}/events``           — list events in range
 - ``GET  /v1/sessions/{session_id}``                  — fetch session + payload
+- ``GET  /v1/sessions``                               — list all sessions
 """
 
 from __future__ import annotations
@@ -244,6 +245,17 @@ def create_app(
                 status_code=404,
                 detail={"code": "session_not_found", "session_id": exc.session_id},
             ) from exc
+
+    # ─── List sessions (closes D41) ─────────────────────────────────────
+    @app.get("/v1/sessions")
+    async def list_sessions(
+        limit: int = Query(default=50, ge=1, le=500),
+        status: str | None = Query(default=None),
+        orchestrator: SessionOrchestrator = Depends(get_orchestrator),
+    ) -> dict[str, Any]:
+        """List all sessions, newest first."""
+        rows = await orchestrator.list_sessions(limit=limit, status=status)
+        return {"sessions": rows}
 
     return app
 

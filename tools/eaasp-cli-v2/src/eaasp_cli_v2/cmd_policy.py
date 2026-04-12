@@ -10,7 +10,7 @@ import typer
 
 from . import main as _main
 from .config import CliConfig
-from .output import print_json
+from .output import print_json, print_table
 
 app = typer.Typer(help="L3 policy management")
 
@@ -38,6 +38,23 @@ def deploy(
             await client.aclose()
 
     print_json(_main.run_async(_do()))
+
+
+@app.command("list")
+def list_cmd() -> None:
+    """List deployed policy versions."""
+    cfg = CliConfig.from_env()
+
+    async def _do() -> Any:
+        client = _main.make_client(cfg)
+        try:
+            return await client.call("GET", f"{cfg.l3_url}/v1/policies/versions")
+        finally:
+            await client.aclose()
+
+    result = _main.run_async(_do())
+    rows = result if isinstance(result, list) else []
+    print_table("Policy versions", rows, ["version", "created_at", "hook_count"])
 
 
 @app.command("mode")

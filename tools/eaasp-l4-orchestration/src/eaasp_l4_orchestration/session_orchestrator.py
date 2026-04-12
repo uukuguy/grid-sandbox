@@ -418,6 +418,57 @@ class SessionOrchestrator:
         )
         return {"session_id": session_id, "status": "closed"}
 
+    # ─── List sessions (D41) ──────────────────────────────────────────────
+    async def list_sessions(
+        self,
+        *,
+        limit: int = 50,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return sessions ordered by created_at DESC, optionally filtered."""
+        db = await connect(self.db_path)
+        try:
+            if status is not None:
+                cur = await db.execute(
+                    """
+                    SELECT session_id, status, runtime_id, skill_id,
+                           created_at, closed_at
+                    FROM sessions
+                    WHERE status = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (status, limit),
+                )
+            else:
+                cur = await db.execute(
+                    """
+                    SELECT session_id, status, runtime_id, skill_id,
+                           created_at, closed_at
+                    FROM sessions
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+            rows = await cur.fetchall()
+        finally:
+            await db.close()
+
+        return [
+            {
+                "session_id": row["session_id"],
+                "status": row["status"],
+                "runtime_id": row["runtime_id"],
+                "skill_id": row["skill_id"],
+                "created_at": int(row["created_at"]),
+                "closed_at": (
+                    int(row["closed_at"]) if row["closed_at"] is not None else None
+                ),
+            }
+            for row in rows
+        ]
+
     # ─── Internal helpers ────────────────────────────────────────────────────
     async def _require_session(self, session_id: str) -> None:
         """Raise ``SessionNotFound`` if the session row is missing."""
