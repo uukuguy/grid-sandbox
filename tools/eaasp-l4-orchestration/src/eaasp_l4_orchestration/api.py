@@ -26,7 +26,15 @@ from pydantic import BaseModel, Field, ValidationError
 
 from .db import init_db
 from .event_stream import SessionEventStream
-from .handshake import L2_URL_DEFAULT, L3_URL_DEFAULT, L2Client, L3Client, UpstreamError
+from .handshake import (
+    L2_URL_DEFAULT,
+    L3_URL_DEFAULT,
+    SKILL_REGISTRY_URL_DEFAULT,
+    L2Client,
+    L3Client,
+    SkillRegistryClient,
+    UpstreamError,
+)
 from .l1_client import L1RuntimeError
 from .session_orchestrator import (
     InvalidStateTransition,
@@ -57,6 +65,7 @@ def create_app(
     *,
     l2_base_url: str | None = None,
     l3_base_url: str | None = None,
+    skill_registry_base_url: str | None = None,
     http_client: httpx.AsyncClient | None = None,
     l1_factory: Any | None = None,
 ) -> FastAPI:
@@ -83,11 +92,15 @@ def create_app(
         app.state.http_client = client
         app.state.l2 = L2Client(client, base_url=l2_base_url or L2_URL_DEFAULT)
         app.state.l3 = L3Client(client, base_url=l3_base_url or L3_URL_DEFAULT)
+        app.state.skill_registry = SkillRegistryClient(
+            client, base_url=skill_registry_base_url or SKILL_REGISTRY_URL_DEFAULT
+        )
         app.state.event_stream = SessionEventStream(db_path)
         app.state.orchestrator = SessionOrchestrator(
             db_path,
             l2=app.state.l2,
             l3=app.state.l3,
+            skill_registry=app.state.skill_registry,
             event_stream=app.state.event_stream,
             l1_factory=l1_factory,
         )

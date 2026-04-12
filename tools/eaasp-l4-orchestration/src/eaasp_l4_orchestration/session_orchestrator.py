@@ -36,7 +36,7 @@ from typing import Any
 from .context_assembly import build_session_payload
 from .db import connect
 from .event_stream import SessionEventStream
-from .handshake import L2Client, L3Client
+from .handshake import L2Client, L3Client, SkillRegistryClient
 from .l1_client import L1RuntimeClient, L1RuntimeError, create_l1_client
 
 
@@ -68,11 +68,13 @@ class SessionOrchestrator:
         l3: L3Client,
         event_stream: SessionEventStream,
         *,
+        skill_registry: SkillRegistryClient | None = None,
         l1_factory: Any | None = None,
     ) -> None:
         self.db_path = db_path
         self.l2 = l2
         self.l3 = l3
+        self.skill_registry = skill_registry
         self.event_stream = event_stream
         # l1_factory: callable(runtime_id) → L1RuntimeClient.
         # Default: create_l1_client. Tests can inject a mock factory.
@@ -114,6 +116,43 @@ class SessionOrchestrator:
             "quotas": {},
         }
 
+        # Step 2b — P4: Fetch skill content from Skill Registry.
+        skill_instructions: dict[str, Any] = {
+            "skill_id": skill_id,
+            "name": "",
+            "content": "",
+            "frontmatter_hooks": [],
+            "metadata": {},
+            "dependencies": [],
+        }
+        if self.skill_registry is not None:
+            try:
+                skill_data = await self.skill_registry.read_skill(skill_id)
+                # skill_data shape: {meta, frontmatter_yaml, prose, parsed_v2?}
+                parsed_v2 = skill_data.get("parsed_v2") or {}
+                scoped_hooks = parsed_v2.get("scoped_hooks") or {}
+                # Flatten scoped hooks into the list format context_assembly expects.
+                frontmatter_hooks: list[dict[str, Any]] = []
+                for scope in ("PreToolUse", "PostToolUse", "Stop"):
+                    for hook in scoped_hooks.get(scope) or scoped_hooks.get(scope.lower()) or []:
+                        frontmatter_hooks.append({**hook, "scope": scope})
+
+                skill_instructions = {
+                    "skill_id": skill_id,
+                    "name": skill_data.get("meta", {}).get("name", skill_id),
+                    "content": skill_data.get("prose", ""),
+                    "frontmatter_hooks": frontmatter_hooks,
+                    "metadata": {},
+                    "dependencies": parsed_v2.get("dependencies") or [],
+                }
+            except Exception as exc:
+                # Skill fetch failure is non-fatal for MVP — log and continue
+                # with empty instructions. Agent will run without skill context.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to fetch skill '%s' from registry: %s", skill_id, exc
+                )
+
         # Step 3 — assemble payload (P1..P5 + budget flags).
         payload = build_session_payload(
             session_id=session_id,
@@ -122,14 +161,7 @@ class SessionOrchestrator:
             policy_context=policy_context,
             event_context=None,
             memory_refs=memory_refs,
-            skill_instructions={
-                "skill_id": skill_id,
-                "name": "",
-                "content": "",
-                "frontmatter_hooks": [],
-                "metadata": {},
-                "dependencies": [],
-            },
+            skill_instructions=skill_instructions,
             user_preferences={
                 "user_id": user_id or "",
                 "prefs": {},

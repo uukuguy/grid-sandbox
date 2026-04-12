@@ -21,6 +21,9 @@ import httpx
 
 L2_URL_DEFAULT = os.environ.get("EAASP_L2_URL", "http://127.0.0.1:18085")
 L3_URL_DEFAULT = os.environ.get("EAASP_L3_URL", "http://127.0.0.1:18083")
+SKILL_REGISTRY_URL_DEFAULT = os.environ.get(
+    "EAASP_SKILL_REGISTRY_URL", "http://127.0.0.1:18081"
+)
 
 
 class UpstreamError(Exception):
@@ -138,4 +141,43 @@ class L3Client:
         data = resp.json()
         if not isinstance(data, dict):
             raise UpstreamError("l3", "error", "unexpected response shape")
+        return data
+
+
+class SkillRegistryClient:
+    """Thin wrapper around the Skill Registry MCP tool facade."""
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        base_url: str = SKILL_REGISTRY_URL_DEFAULT,
+    ) -> None:
+        self._client = client
+        self._base = base_url.rstrip("/")
+
+    async def read_skill(self, skill_id: str) -> dict[str, Any]:
+        """Call ``POST /tools/skill_read/invoke`` and return skill content.
+
+        Returns a dict with ``meta``, ``frontmatter_yaml``, ``prose``,
+        and optionally ``parsed_v2`` (V2Frontmatter with dependencies,
+        scoped_hooks, runtime_affinity, access_scope).
+        """
+        body = {"id": skill_id}
+        try:
+            resp = await self._client.post(
+                f"{self._base}/tools/skill_read/invoke", json=body
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise UpstreamError("skill-registry", "unavailable", str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise UpstreamError("skill-registry", "unavailable", str(exc)) from exc
+
+        if resp.status_code == 404:
+            raise UpstreamError("skill-registry", "not_found", f"skill '{skill_id}' not found")
+        if resp.status_code >= 400:
+            raise UpstreamError("skill-registry", "error", resp.text)
+
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise UpstreamError("skill-registry", "error", "unexpected response shape")
         return data
