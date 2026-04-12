@@ -62,27 +62,20 @@ def list_cmd(
 
 @app.command("submit")
 def submit(
-    path: Path = typer.Argument(..., exists=True, readable=True),
+    path: Path = typer.Argument(..., exists=True, file_okay=False, readable=True),
 ) -> None:
-    """Submit a skill from a directory (containing SKILL.md) or a SKILL.md file.
+    """Submit a skill directory (must contain SKILL.md).
 
-    Examples:
+    Example:
 
         eaasp skill submit examples/skills/threshold-calibration/
-        eaasp skill submit examples/skills/threshold-calibration/SKILL.md
     """
     cfg = CliConfig.from_env()
-
-    # Accept both directory and file path.
-    if path.is_dir():
-        skill_dir = path.resolve()
-        skill_file = skill_dir / "SKILL.md"
-        if not skill_file.exists():
-            typer.echo(f"ERROR: {skill_dir}/SKILL.md not found.", err=True)
-            raise typer.Exit(1)
-    else:
-        skill_file = path.resolve()
-        skill_dir = skill_file.parent
+    skill_dir = path.resolve()
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.exists():
+        typer.echo(f"ERROR: {skill_dir}/SKILL.md not found.", err=True)
+        raise typer.Exit(1)
 
     content = skill_file.read_text(encoding="utf-8")
     frontmatter_yaml, prose = _split_frontmatter(content)
