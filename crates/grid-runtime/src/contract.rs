@@ -211,6 +211,10 @@ pub struct SkillInstructions {
     pub content: String,
     pub frontmatter_hooks: Vec<ScopedHook>,
     pub metadata: std::collections::HashMap<String, String>,
+    /// MCP and other dependencies declared in skill frontmatter.
+    /// Convention: `mcp:<name>` for MCP server dependencies.
+    #[serde(default)]
+    pub dependencies: Vec<String>,
 }
 
 /// Skill-frontmatter scoped hook (P4).
@@ -574,6 +578,7 @@ impl From<crate::proto::SkillInstructions> for SkillInstructions {
             content: s.content,
             frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
             metadata: s.metadata,
+            dependencies: s.dependencies,
         }
     }
 }
@@ -586,6 +591,7 @@ impl From<SkillInstructions> for crate::proto::SkillInstructions {
             content: s.content,
             frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
             metadata: s.metadata,
+            dependencies: s.dependencies,
         }
     }
 }

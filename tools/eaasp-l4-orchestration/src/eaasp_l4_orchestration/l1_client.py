@@ -239,6 +239,8 @@ def _dict_to_session_payload(d: dict[str, Any]) -> common_pb2.SessionPayload:
             hook.condition = str(hook_dict.get("condition", ""))
             hook.action = str(hook_dict.get("action", ""))
             hook.precedence = int(hook_dict.get("precedence", 0))
+        for dep in si.get("dependencies") or []:
+            payload.skill_instructions.dependencies.append(str(dep))
 
     # P5 — UserPreferences
     up = d.get("user_preferences") or {}

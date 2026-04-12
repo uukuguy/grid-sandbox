@@ -68,6 +68,7 @@ message SkillInstructions {
   string content = 3;                 // skill natural language body (SKILL.md prose)
   repeated ScopedHook frontmatter_hooks = 4;
   map<string, string> metadata = 5;
+  repeated string dependencies = 6;   // e.g. "mcp:mock-scada", "mcp:eaasp-l2-memory"
 }
 
 message ScopedHook {

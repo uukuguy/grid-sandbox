@@ -255,6 +255,7 @@ async fn test_load_skill_succeeds() {
                 content: "Review code for quality.".into(),
                 frontmatter_hooks: vec![],
                 metadata: Default::default(),
+                dependencies: vec![],
             }),
         })
         .await

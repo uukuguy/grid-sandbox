@@ -85,7 +85,7 @@ class MemoryRef(_message.Message):
     def __init__(self, memory_id: _Optional[str] = ..., memory_type: _Optional[str] = ..., relevance_score: _Optional[float] = ..., content: _Optional[str] = ..., source_session_id: _Optional[str] = ..., created_at: _Optional[str] = ..., tags: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class SkillInstructions(_message.Message):
-    __slots__ = ("skill_id", "name", "content", "frontmatter_hooks", "metadata")
+    __slots__ = ("skill_id", "name", "content", "frontmatter_hooks", "metadata", "dependencies")
     class MetadataEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -98,12 +98,14 @@ class SkillInstructions(_message.Message):
     CONTENT_FIELD_NUMBER: _ClassVar[int]
     FRONTMATTER_HOOKS_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
+    DEPENDENCIES_FIELD_NUMBER: _ClassVar[int]
     skill_id: str
     name: str
     content: str
     frontmatter_hooks: _containers.RepeatedCompositeFieldContainer[ScopedHook]
     metadata: _containers.ScalarMap[str, str]
-    def __init__(self, skill_id: _Optional[str] = ..., name: _Optional[str] = ..., content: _Optional[str] = ..., frontmatter_hooks: _Optional[_Iterable[_Union[ScopedHook, _Mapping]]] = ..., metadata: _Optional[_Mapping[str, str]] = ...) -> None: ...
+    dependencies: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, skill_id: _Optional[str] = ..., name: _Optional[str] = ..., content: _Optional[str] = ..., frontmatter_hooks: _Optional[_Iterable[_Union[ScopedHook, _Mapping]]] = ..., metadata: _Optional[_Mapping[str, str]] = ..., dependencies: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class ScopedHook(_message.Message):
     __slots__ = ("hook_id", "hook_type", "condition", "action", "precedence")

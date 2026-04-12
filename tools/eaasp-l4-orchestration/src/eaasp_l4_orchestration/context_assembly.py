@@ -45,7 +45,7 @@ def build_session_payload(
         # P3 — MemoryRefs (from L2 hybrid search).
         "memory_refs": normalized_refs,
         # P4 — SkillInstructions (resolved from L2 registry in later phases).
-        "skill_instructions": skill_instructions or {},
+        "skill_instructions": _normalize_skill_instructions(skill_instructions or {}),
         # P5 — UserPreferences (with LLM provider hint from env).
         "user_preferences": _enrich_user_preferences(
             user_preferences or {"user_id": user_id, "prefs": {}}
@@ -83,6 +83,20 @@ def _normalize_memory_ref(hit: dict[str, Any]) -> dict[str, Any]:
             or 0.0
         ),
         "summary": str(inner.get("summary") or inner.get("content") or ""),
+    }
+
+
+def _normalize_skill_instructions(raw: dict[str, Any]) -> dict[str, Any]:
+    """Ensure SkillInstructions always carries the ``dependencies`` key."""
+    if not raw:
+        return raw
+    return {
+        "skill_id": str(raw.get("skill_id") or ""),
+        "name": str(raw.get("name") or ""),
+        "content": str(raw.get("content") or ""),
+        "frontmatter_hooks": list(raw.get("frontmatter_hooks") or []),
+        "metadata": dict(raw.get("metadata") or {}),
+        "dependencies": list(raw.get("dependencies") or []),
     }
 
 

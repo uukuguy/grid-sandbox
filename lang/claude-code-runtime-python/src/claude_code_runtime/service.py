@@ -30,6 +30,7 @@ import grpc
 from ._proto.eaasp.runtime.v2 import common_pb2, runtime_pb2, runtime_pb2_grpc
 from .config import RuntimeConfig
 from .hook_executor import HookExecutor
+from .l2_memory_client import L2MemoryClient
 from .mapper import chunk_to_proto, telemetry_batch_to_proto
 from .sdk_wrapper import SdkWrapper
 from .session import SessionManager
@@ -116,6 +117,8 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         # Active session for Empty-input lifecycle methods (per_session tier)
         self._active_session_id: str | None = None
         self._start_time = time.time()
+        # L2 Memory Engine client for tool execution evidence writes
+        self._l2_client = L2MemoryClient()
 
     # ── helpers ──
 
@@ -239,6 +242,24 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
 
         hook_exe = HookExecutor()
         hook_exe.load_rules(managed_hooks_json)
+
+        # S3.T2 — Load P4 scoped hooks from skill frontmatter into the
+        # same HookExecutor. Scoped hooks use tool_pattern/input_pattern
+        # matching just like P1 managed hooks (deny-always-wins).
+        skill_for_hooks = payload.skill_instructions
+        if skill_for_hooks and skill_for_hooks.frontmatter_hooks:
+            scoped_rules = self._scoped_hooks_to_rules(
+                skill_for_hooks.frontmatter_hooks
+            )
+            if scoped_rules:
+                hook_exe.load_rules(json.dumps({"rules": scoped_rules}))
+                logger.info(
+                    "Loaded %d scoped hooks from P4 skill frontmatter "
+                    "session_id=%s",
+                    len(scoped_rules),
+                    sid,
+                )
+
         self._hooks[sid] = hook_exe
 
         self._telemetry[sid] = TelemetryCollector(
@@ -421,9 +442,27 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
                         "decision": decision,
                     },
                 )
-            return runtime_pb2.ToolResultAck(decision=decision, reason=reason)
+        else:
+            decision = "allow"
+            reason = ""
 
-        return runtime_pb2.ToolResultAck(decision="allow", reason="")
+        # Fire-and-forget: write tool execution evidence to L2 Memory Engine.
+        # Only for successful (non-error) tool calls. L2 failure is non-fatal.
+        if self._l2_client and not request.is_error:
+            event_id = f"tool-{request.tool_name}-{int(time.time() * 1000)}"
+            # Truncate output to avoid oversized payloads
+            data_ref = request.output[:500] if request.output else None
+            try:
+                await self._l2_client.write_anchor(
+                    event_id=event_id,
+                    session_id=sid,
+                    anchor_type="tool_execution",
+                    data_ref=data_ref,
+                )
+            except Exception as e:
+                logger.warning("L2 anchor write failed (non-fatal): %s", e)
+
+        return runtime_pb2.ToolResultAck(decision=decision, reason=reason)
 
     # 6. OnStop
     async def OnStop(self, request, context):
@@ -605,6 +644,63 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         return common_pb2.Empty()
 
     # ── internal ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _scoped_hooks_to_rules(frontmatter_hooks) -> list[dict]:
+        """Convert P4 frontmatter ScopedHook messages to HookExecutor rule dicts.
+
+        Maps scoped hook fields to the rule format consumed by
+        HookExecutor.load_rules(). The ``action`` field in the proto is a
+        shell command; we derive the hook action (allow/deny) from its
+        content:
+        - Commands containing "exit 2" or the literal "deny" → deny rule
+        - Everything else → allow rule (informational only)
+
+        The ``condition`` field is mapped to ``tool_pattern`` using regex
+        conversion: trailing ``*`` becomes ``.*`` for regex matching.
+        """
+        rules: list[dict] = []
+        for idx, h in enumerate(frontmatter_hooks):
+            hook_id = h.hook_id or f"scoped-{idx}"
+
+            # Map condition glob to regex tool_pattern
+            condition = h.condition or ""
+            if condition.endswith("*"):
+                tool_pattern = "^" + condition[:-1] + ".*"
+            elif condition and condition != "*":
+                tool_pattern = "^" + condition + "$"
+            else:
+                tool_pattern = ""  # match all
+
+            # Derive action from command content
+            cmd = h.action or ""
+            is_deny = "exit 2" in cmd or "deny" in cmd.lower()
+
+            # Map hook_type to HookExecutor's naming
+            hook_type = h.hook_type or ""
+            type_map = {
+                "PreToolUse": "pre_tool_call",
+                "pre_tool_call": "pre_tool_call",
+                "PostToolUse": "post_tool_result",
+                "post_tool_result": "post_tool_result",
+                "Stop": "stop",
+                "stop": "stop",
+            }
+            mapped_type = type_map.get(hook_type, hook_type)
+
+            rules.append(
+                {
+                    "id": hook_id,
+                    "name": hook_id,
+                    "hook_type": mapped_type,
+                    "action": "deny" if is_deny else "allow",
+                    "reason": f"Scoped hook: {hook_id}",
+                    "tool_pattern": tool_pattern,
+                    "input_pattern": "",
+                    "enabled": True,
+                }
+            )
+        return rules
 
     def _teardown_session(self, sid: str) -> None:
         tc = self._telemetry.pop(sid, None)

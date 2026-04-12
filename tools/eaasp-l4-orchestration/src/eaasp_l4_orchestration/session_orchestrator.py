@@ -125,6 +125,7 @@ class SessionOrchestrator:
                 "content": "",
                 "frontmatter_hooks": [],
                 "metadata": {},
+                "dependencies": [],
             },
             user_preferences={
                 "user_id": user_id or "",

@@ -214,6 +214,158 @@ async fn initialize_with_empty_memory_refs_keeps_history_empty() {
     harness.terminate(&handle).await.ok();
 }
 
+use grid_runtime::contract::{ScopedHook, SkillInstructions};
+
+#[tokio::test]
+async fn initialize_with_mcp_dependencies_does_not_panic() {
+    // S3.T1 — initialize() with a SkillInstructions containing MCP
+    // dependencies must run the resolve + connect_mcp code path without
+    // panicking. The actual MCP server won't exist, so connection will
+    // fail gracefully (warn log), but initialize() itself must succeed.
+
+    let harness = build_harness().await;
+    let mut payload = SessionPayload::new();
+    payload.user_id = "mcp-dep-user".into();
+    payload.runtime_id = "grid-harness".into();
+    payload.skill_instructions = Some(SkillInstructions {
+        skill_id: "threshold-calibration".into(),
+        name: "Threshold Calibration".into(),
+        content: "Calibrate transformer thresholds".into(),
+        frontmatter_hooks: vec![],
+        metadata: std::collections::HashMap::new(),
+        dependencies: vec![
+            "mcp:mock-scada".to_string(),
+            "mcp:eaasp-l2-memory".to_string(),
+        ],
+    });
+
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must succeed even when MCP servers are unavailable");
+    assert!(!handle.session_id.is_empty());
+
+    harness.terminate(&handle).await.ok();
+}
+
+#[tokio::test]
+async fn initialize_with_skill_no_dependencies() {
+    // Negative case: SkillInstructions with empty dependencies should
+    // skip the connect_mcp path entirely.
+
+    let harness = build_harness().await;
+    let mut payload = SessionPayload::new();
+    payload.user_id = "no-dep-user".into();
+    payload.runtime_id = "grid-harness".into();
+    payload.skill_instructions = Some(SkillInstructions {
+        skill_id: "simple-skill".into(),
+        name: "Simple".into(),
+        content: "A skill with no MCP deps".into(),
+        frontmatter_hooks: vec![],
+        metadata: std::collections::HashMap::new(),
+        dependencies: vec![],
+    });
+
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must succeed with empty dependencies");
+    assert!(!handle.session_id.is_empty());
+
+    harness.terminate(&handle).await.ok();
+}
+
+#[tokio::test]
+async fn initialize_with_scoped_hooks_registers_handlers() {
+    // S3.T2 — initialize() with SkillInstructions carrying frontmatter
+    // scoped hooks must register them into the AgentRuntime's HookRegistry.
+    // We verify that PreToolUse and Stop hook points have handlers after
+    // initialize completes.
+
+    let harness = build_harness().await;
+    let mut payload = SessionPayload::new();
+    payload.user_id = "hook-user".into();
+    payload.runtime_id = "grid-harness".into();
+    payload.skill_instructions = Some(SkillInstructions {
+        skill_id: "threshold-calibration".into(),
+        name: "Threshold Calibration".into(),
+        content: "Calibrate thresholds".into(),
+        frontmatter_hooks: vec![
+            ScopedHook {
+                hook_id: "block-scada-write".into(),
+                hook_type: "PreToolUse".into(),
+                condition: "scada_write*".into(),
+                action: "exit 2".into(),
+                precedence: 0,
+            },
+            ScopedHook {
+                hook_id: "check-output-anchor".into(),
+                hook_type: "Stop".into(),
+                condition: "".into(),
+                action: r#"echo '{"decision":"allow"}'"#.into(),
+                precedence: 10,
+            },
+        ],
+        metadata: std::collections::HashMap::new(),
+        dependencies: vec![],
+    });
+
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must succeed with scoped hooks");
+    assert!(!handle.session_id.is_empty());
+
+    // Verify hooks were registered at the expected hook points.
+    let registry = harness.runtime().hook_registry();
+    assert!(
+        registry
+            .has_handlers(grid_engine::HookPoint::PreToolUse)
+            .await,
+        "PreToolUse must have handlers after scoped hook registration"
+    );
+    assert!(
+        registry
+            .has_handlers(grid_engine::HookPoint::Stop)
+            .await,
+        "Stop must have handlers after scoped hook registration"
+    );
+
+    harness.terminate(&handle).await.ok();
+}
+
+#[tokio::test]
+async fn initialize_with_unknown_hook_type_skips_gracefully() {
+    // Negative: unknown hook_type should be skipped without error.
+
+    let harness = build_harness().await;
+    let mut payload = SessionPayload::new();
+    payload.user_id = "unknown-hook-user".into();
+    payload.runtime_id = "grid-harness".into();
+    payload.skill_instructions = Some(SkillInstructions {
+        skill_id: "test-skill".into(),
+        name: "Test".into(),
+        content: "Test skill".into(),
+        frontmatter_hooks: vec![ScopedHook {
+            hook_id: "unknown-hook".into(),
+            hook_type: "SomeUnknownType".into(),
+            condition: "".into(),
+            action: "exit 2".into(),
+            precedence: 0,
+        }],
+        metadata: std::collections::HashMap::new(),
+        dependencies: vec![],
+    });
+
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must succeed even with unknown hook types");
+    assert!(!handle.session_id.is_empty());
+
+    harness.terminate(&handle).await.ok();
+}
+
 /// Mirrors `GridHarness::build_memory_preamble` for cross-crate assertions.
 /// Kept in sync with the harness implementation; if the format ever
 /// changes, this helper and `build_memory_preamble_formats_entries` in

@@ -115,6 +115,87 @@ impl GridHarness {
         s
     }
 
+    /// Parse `mcp:*` dependencies into McpServerConfig list.
+    ///
+    /// Convention: `mcp:<name>` maps to a stdio MCP server with
+    /// `command = "uv run <name>"` (overridable via metadata keys
+    /// `mcp.<name>.command` and `mcp.<name>.args`).
+    /// Non-mcp dependencies are silently filtered out.
+    fn resolve_mcp_dependencies(
+        dependencies: &[String],
+        metadata: &std::collections::HashMap<String, String>,
+    ) -> Vec<McpServerConfig> {
+        dependencies
+            .iter()
+            .filter(|d| d.starts_with("mcp:"))
+            .map(|d| {
+                let name = d.strip_prefix("mcp:").unwrap();
+                // Check metadata for explicit command override: mcp.<name>.command
+                let command_key = format!("mcp.{}.command", name);
+                let command = metadata
+                    .get(&command_key)
+                    .cloned()
+                    .unwrap_or_else(|| format!("uv run {}", name));
+
+                // Check for explicit args override: mcp.<name>.args
+                let args_key = format!("mcp.{}.args", name);
+                let args: Vec<String> = metadata
+                    .get(&args_key)
+                    .map(|a| a.split_whitespace().map(String::from).collect())
+                    .unwrap_or_default();
+
+                McpServerConfig {
+                    name: name.to_string(),
+                    transport: "stdio".to_string(),
+                    command: Some(command),
+                    args,
+                    env: std::collections::HashMap::new(),
+                    url: None,
+                }
+            })
+            .collect()
+    }
+
+    /// Register skill-frontmatter scoped hooks into the engine's HookRegistry.
+    ///
+    /// Each `ScopedHook` from P4 SkillInstructions is wrapped in a
+    /// `ScopedHookHandler` and registered at the corresponding `HookPoint`.
+    async fn register_scoped_hooks(&self, hooks: &[ScopedHook]) {
+        use crate::scoped_hook_handler::ScopedHookHandler;
+        use grid_engine::hooks::HookPoint;
+
+        let registry = self.runtime.hook_registry();
+
+        for hook in hooks {
+            let hook_point = match hook.hook_type.as_str() {
+                "pre_tool_call" | "PreToolUse" => HookPoint::PreToolUse,
+                "post_tool_result" | "PostToolUse" => HookPoint::PostToolUse,
+                "stop" | "Stop" => HookPoint::Stop,
+                other => {
+                    warn!(hook_type = %other, "Unknown scoped hook type, skipping");
+                    continue;
+                }
+            };
+
+            let handler = ScopedHookHandler::new(
+                hook.hook_id.clone(),
+                hook.action.clone(),
+                hook.condition.clone(),
+                hook.precedence,
+            );
+
+            registry
+                .register(hook_point, Arc::new(handler))
+                .await;
+            info!(
+                hook_id = %hook.hook_id,
+                hook_type = %hook.hook_type,
+                condition = %hook.condition,
+                "Scoped hook registered"
+            );
+        }
+    }
+
     /// Map a single AgentEvent to an optional ResponseChunk.
     fn event_to_chunk(event: AgentEvent) -> Option<ResponseChunk> {
         match event {
@@ -244,6 +325,22 @@ impl RuntimeContract for GridHarness {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start session: {}", e))?;
 
+        // Register PostToolUse memory write hook (fire-and-forget, FailOpen).
+        // Writes tool execution evidence to L2 Memory Engine after each
+        // successful tool call. Non-blocking: L2 failure never aborts agent.
+        let l2_mem_client = crate::l2_memory_client::L2MemoryClient::from_env();
+        let memory_hook = crate::memory_write_hook::MemoryWriteHook::new(
+            l2_mem_client,
+            session_id.as_str().to_string(),
+        );
+        self.runtime
+            .hook_registry()
+            .register(
+                grid_engine::hooks::HookPoint::PostToolUse,
+                std::sync::Arc::new(memory_hook),
+            )
+            .await;
+
         info!(
             session_id = %session_id,
             user = %user_id_str,
@@ -255,6 +352,19 @@ impl RuntimeContract for GridHarness {
         let handle = SessionHandle {
             session_id: session_id.as_str().to_string(),
         };
+
+        // Extract MCP dependencies and scoped hooks from P4 before consuming skill_instructions.
+        let skill_mcp_deps: Vec<McpServerConfig> = payload
+            .skill_instructions
+            .as_ref()
+            .map(|skill| Self::resolve_mcp_dependencies(&skill.dependencies, &skill.metadata))
+            .unwrap_or_default();
+
+        let scoped_hooks: Vec<ScopedHook> = payload
+            .skill_instructions
+            .as_ref()
+            .map(|s| s.frontmatter_hooks.clone())
+            .unwrap_or_default();
 
         // If the payload arrived with an inline P4 SkillInstructions block,
         // hand it off directly to `load_skill`.
@@ -271,6 +381,19 @@ impl RuntimeContract for GridHarness {
             if let Err(e) = self.load_skill(&handle, content).await {
                 warn!(error = %e, "Failed to load inline P4 skill instructions");
             }
+        }
+
+        // Connect MCP servers declared in skill dependencies.
+        if !skill_mcp_deps.is_empty() {
+            info!(count = skill_mcp_deps.len(), "Connecting MCP servers from skill dependencies");
+            if let Err(e) = self.connect_mcp(&handle, skill_mcp_deps).await {
+                warn!(error = %e, "Failed to connect MCP servers from skill dependencies");
+            }
+        }
+
+        // Register scoped hooks from P4 frontmatter into AgentRuntime's HookRegistry.
+        if !scoped_hooks.is_empty() {
+            self.register_scoped_hooks(&scoped_hooks).await;
         }
 
         Ok(handle)
@@ -636,6 +759,54 @@ mod tests {
         assert!(out.starts_with("## Prior memories from previous sessions\n"));
         assert!(out.contains("- [fact] Device XYZ temperature threshold is 75C"));
         assert!(out.contains("- [preference] User prefers conservative thresholds"));
+    }
+
+    #[test]
+    fn resolve_mcp_dependencies_basic() {
+        let deps = vec!["mcp:mock-scada".to_string(), "mcp:eaasp-l2-memory".to_string()];
+        let metadata = std::collections::HashMap::new();
+        let configs = GridHarness::resolve_mcp_dependencies(&deps, &metadata);
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].name, "mock-scada");
+        assert_eq!(configs[0].transport, "stdio");
+        assert_eq!(configs[0].command.as_deref(), Some("uv run mock-scada"));
+        assert!(configs[0].args.is_empty());
+        assert_eq!(configs[1].name, "eaasp-l2-memory");
+        assert_eq!(configs[1].command.as_deref(), Some("uv run eaasp-l2-memory"));
+    }
+
+    #[test]
+    fn resolve_mcp_dependencies_with_metadata_override() {
+        let deps = vec!["mcp:bar".to_string()];
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("mcp.bar.command".to_string(), "python -m bar".to_string());
+        metadata.insert("mcp.bar.args".to_string(), "--verbose --port 8080".to_string());
+        let configs = GridHarness::resolve_mcp_dependencies(&deps, &metadata);
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name, "bar");
+        assert_eq!(configs[0].command.as_deref(), Some("python -m bar"));
+        assert_eq!(configs[0].args, vec!["--verbose", "--port", "8080"]);
+    }
+
+    #[test]
+    fn resolve_mcp_dependencies_filters_non_mcp() {
+        let deps = vec![
+            "mcp:foo".to_string(),
+            "pip:numpy".to_string(),
+            "npm:lodash".to_string(),
+        ];
+        let metadata = std::collections::HashMap::new();
+        let configs = GridHarness::resolve_mcp_dependencies(&deps, &metadata);
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name, "foo");
+    }
+
+    #[test]
+    fn resolve_mcp_dependencies_empty_input() {
+        let deps: Vec<String> = vec![];
+        let metadata = std::collections::HashMap::new();
+        let configs = GridHarness::resolve_mcp_dependencies(&deps, &metadata);
+        assert!(configs.is_empty());
     }
 
     #[test]
