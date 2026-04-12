@@ -21,6 +21,7 @@
         l3-setup l3-start l3-test l4-setup l4-proto-gen l4-start l4-test \
         cli-v2-setup cli-v2-test v2-mvp-e2e \
         mock-scada-setup mock-scada-test mock-scada-start \
+        dev-eaasp dev-eaasp-stop \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
         hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build hermes-runtime-run \
         runtime-verify claude-runtime-verify hermes-runtime-verify
@@ -912,3 +913,17 @@ build-eaasp-all: runtime-build-binary skill-registry-build mcp-orch-build certif
 
 v2-mvp-e2e:
 	@bash scripts/verify-v2-mvp.sh
+
+# ============================================================
+# EAASP v2.0 Dev Server — start/stop all services interactively
+# ============================================================
+
+dev-eaasp:
+	@bash scripts/dev-eaasp.sh
+
+dev-eaasp-stop:
+	@echo "Stopping EAASP services..."
+	@for port in 18081 18083 18084 18085 50051; do \
+		lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null | xargs kill -TERM 2>/dev/null || true; \
+	done
+	@echo "Done."

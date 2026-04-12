@@ -1,15 +1,15 @@
 {
   "plan_file": "docs/plans/2026-04-12-v2-mvp-phase0.5-plan.md",
-  "phase": "phase-0.5-started",
+  "phase": "phase-0.5-s5-in-progress",
   "created_at": "2026-04-12T15:30:00+08:00",
-  "updated_at": "2026-04-12T18:10:00+08:00",
-  "completed_tasks": ["S1.T1", "S1.T2", "S1.T3", "S2.T1", "S2.T2", "S3.T1", "S3.T2", "S3.T3", "S4.T1", "S4.T2"],
-  "current_task": null,
+  "updated_at": "2026-04-12T19:30:00+08:00",
+  "completed_tasks": ["S1.T1", "S1.T2", "S1.T3", "S2.T1", "S2.T2", "S3.T1", "S3.T2", "S3.T3", "S4.T1", "S4.T2", "S5.T1"],
+  "current_task": "S5.T2",
   "total_tasks": 12,
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 0.5 — MVP 全层贯通",
-  "status": "S4 COMPLETE (2/2). SSE streaming endpoint POST /message/stream + CLI stream_sse() + cmd_session --stream default. L4 56 pass / CLI 20 pass. Next: S5 Acceptance.",
-  "notes": "Phase 0 archived (15/15 PASS @ a955c44). Phase 0.5 S1-S4 complete. G3/G4/D53/D54/D40 CLOSED. G5 (streaming) CLOSED via S4 SSE endpoint + CLI consumer. Next: S5 dev-eaasp one-click + human acceptance.",
+  "status": "S5.T1 DONE (dev-eaasp.sh + Makefile). R1 OpenCode=T1 + R2 Agno=T2 评估完成. S5.T2 人工验收 pending.",
+  "notes": "S5.T1: scripts/dev-eaasp.sh 创建完成（5 服务顺序启动 + trap cleanup + health check + 状态表）。R1: OpenCode 确认 T1（per-tool hook + Permission Deny + MCP 3 transport，adapter 3-4 天）。R2: Agno 确认 T2（MCP+Skills 达标但 hooks 是 agent-run 级别，adapter 5-7 天）。评估报告已写入 docs/design/EAASP/L1_RUNTIME_R1_OPENCODE_EVAL.md 和 L1_RUNTIME_R2_AGNO_EVAL.md。EVOLUTION_PATH §5.1 R1/R2 状态已更新。Next: S5.T2 人工验收。",
   "last_phase": {
     "name": "Phase 0 — Infrastructure Foundation",
     "completed_at": "2026-04-12T14:00:00+08:00",
@@ -34,8 +34,7 @@
       "status": "complete",
       "completed_at": "2026-04-12T16:20:00+08:00",
       "commit": "53d510f",
-      "tests": "62 Rust (2 ignored LLM live) + 52 L4 (4 new context_assembly) + 54 claude-code-runtime",
-      "key_finding": "LLM 通路已在 Phase 0 连通 (main.rs → ProviderConfig → AgentRuntime). S2 主要是 config passthrough + capabilities 修正 + 测试覆盖."
+      "tests": "62 Rust (2 ignored LLM live) + 52 L4 (4 new context_assembly) + 54 claude-code-runtime"
     },
     "S3_MCP_Hook_Executor": {
       "tasks": 3,
@@ -43,7 +42,7 @@
       "status": "complete",
       "completed_at": "2026-04-12T17:40:00+08:00",
       "commit": "0bee83a",
-      "tests": "93 Rust (50 new: 4 unit resolve_mcp + 10 unit scoped_hook + 12 unit l2_client+memory_hook + 4 integration + 2 grpc) + 75 Python (21 new: 11 scoped_hooks + 10 l2_memory) + 52 L4",
+      "tests": "93 Rust + 75 Python + 52 L4",
       "closes_deferred": ["D53", "G3", "G4"]
     },
     "S4_Streaming": {
@@ -52,14 +51,33 @@
       "status": "complete",
       "completed_at": "2026-04-12T18:10:00+08:00",
       "commit": "747b2d9",
-      "tests": "L4 56/56 (+4 new: stream_message async gen + SSE endpoint + SSE 404 + stream_unknown) / CLI 20/20 (+2 new: send_stream_default + send_no_stream)",
-      "key_finding": "Proto Send RPC + grid-runtime harness + L1 client already server-streaming. Only needed L4 API SSE layer + CLI SSE consumer."
+      "tests": "L4 56/56 / CLI 20/20"
     },
     "S5_Acceptance": {
       "tasks": 2,
       "description": "dev-eaasp make target + human acceptance + doc closeout",
-      "status": "pending"
+      "status": "in_progress",
+      "t1_dev_eaasp": "complete",
+      "t2_human_acceptance": "pending"
     }
+  },
+  "research_tasks": {
+    "R1_OpenCode": {
+      "status": "complete",
+      "completed_at": "2026-04-12T19:15:00+08:00",
+      "conclusion": "T1 — per-tool hook + Permission Allow/Deny/Ask + MCP 3 transport. Adapter 3-4 days.",
+      "report": "docs/design/EAASP/L1_RUNTIME_R1_OPENCODE_EVAL.md"
+    },
+    "R2_Agno": {
+      "status": "complete",
+      "completed_at": "2026-04-12T19:10:00+08:00",
+      "conclusion": "T2 — MCP+Skills fully qualified, Hooks agent-run level not per-tool. Adapter 5-7 days.",
+      "report": "docs/design/EAASP/L1_RUNTIME_R2_AGNO_EVAL.md"
+    },
+    "R3_Microsoft_AGT": { "status": "pending", "trigger": "Phase 0.5 complete" },
+    "R4_HexAgent": { "status": "pending", "trigger": "Phase 1 start" },
+    "R5_T0T3_Appendix": { "status": "pending", "trigger": "R1+R2 complete (satisfied)" },
+    "R6_Tier_Instance_Docs": { "status": "pending", "trigger": "Phase 1 early" }
   },
   "exit_gate": "Human acceptance: eaasp-cli session send → see agent streaming output with tool calls, memory writes, hook triggers, cross-session memory recall",
   "next_phase": {
@@ -74,6 +92,9 @@
     "docs/design/EAASP/EAASP-Design-Specification-v2.0.docx",
     "docs/design/EAASP/EAASP_v2_0_EVOLUTION_PATH.md",
     "docs/design/EAASP/EAASP_v2_0_MVP_SCOPE.md",
+    "docs/design/EAASP/L1_RUNTIME_STRATEGY.md",
+    "docs/design/EAASP/L1_RUNTIME_R1_OPENCODE_EVAL.md",
+    "docs/design/EAASP/L1_RUNTIME_R2_AGNO_EVAL.md",
     "docs/plans/2026-04-11-v2-mvp-phase0-plan.md",
     "docs/plans/2026-04-12-v2-mvp-phase0.5-plan.md"
   ]

@@ -1,0 +1,273 @@
+#!/bin/bash
+# dev-eaasp.sh — Start all EAASP v2.0 services for interactive development.
+#
+# Services (in start order):
+#   skill-registry    :${EAASP_SKILL_REGISTRY_PORT:-18081}
+#   L2 memory-engine  :${EAASP_L2_PORT:-18085}
+#   L3 governance     :${EAASP_L3_PORT:-18083}
+#   grid-runtime      :${GRID_RUNTIME_PORT:-50051}
+#   L4 orchestration  :${EAASP_L4_PORT:-18084}
+#
+# After all services are up, the script stays foreground. Ctrl+C kills everything.
+#
+# Usage:
+#   ./scripts/dev-eaasp.sh
+#   ./scripts/dev-eaasp.sh --skip-build        # skip cargo build
+#   make dev-eaasp                              # via Makefile
+
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# ── Colors ────────────────────────────────────────────────────────────────
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# ── Port assignments (env-overridable, must match verify-v2-mvp.sh) ───────
+SKILL_REG_PORT="${EAASP_SKILL_REGISTRY_PORT:-18081}"
+L2_MEM_PORT="${EAASP_L2_PORT:-18085}"
+L3_GOV_PORT="${EAASP_L3_PORT:-18083}"
+L4_ORCH_PORT="${EAASP_L4_PORT:-18084}"
+GRID_RT_PORT="${GRID_RUNTIME_PORT:-50051}"
+
+# ── Runtime flags ─────────────────────────────────────────────────────────
+SKIP_BUILD=false
+
+# ── Background PIDs (for cleanup) ────────────────────────────────────────
+SKILL_REG_PID=""
+L2_PID=""
+L3_PID=""
+L4_PID=""
+GRID_PID=""
+
+# ── Cleanup helpers (reused from verify-v2-mvp.sh) ───────────────────────
+_kill_tree() {
+    local name=$1
+    local pid=$2
+    [ -z "$pid" ] && return 0
+    pkill -TERM -P "$pid" 2>/dev/null || true
+    kill -TERM "$pid" 2>/dev/null && echo -e "  ${GREEN}Stopped${RESET} $name (PID $pid)" || true
+}
+
+_kill_port() {
+    local name=$1
+    local port=$2
+    local stragglers
+    stragglers=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)
+    if [ -n "$stragglers" ]; then
+        echo -e "  ${YELLOW}Reaping${RESET} $name leftover listeners on :$port: $stragglers"
+        kill -TERM $stragglers 2>/dev/null || true
+        sleep 0.3
+        kill -KILL $stragglers 2>/dev/null || true
+    fi
+}
+
+cleanup() {
+    echo ""
+    echo -e "${BOLD}=== Stopping EAASP services ===${RESET}"
+    _kill_tree "L4 orchestration" "$L4_PID"
+    _kill_tree "grid-runtime" "$GRID_PID"
+    _kill_tree "L3 governance" "$L3_PID"
+    _kill_tree "L2 memory-engine" "$L2_PID"
+    _kill_tree "skill-registry" "$SKILL_REG_PID"
+    # Sweep orphaned listeners
+    _kill_port "L4 orchestration" "$L4_ORCH_PORT"
+    _kill_port "grid-runtime" "$GRID_RT_PORT"
+    _kill_port "L3 governance" "$L3_GOV_PORT"
+    _kill_port "L2 memory-engine" "$L2_MEM_PORT"
+    _kill_port "skill-registry" "$SKILL_REG_PORT"
+    echo -e "${GREEN}All services stopped.${RESET}"
+}
+trap cleanup EXIT INT TERM
+
+# ── Arg parsing ───────────────────────────────────────────────────────────
+for arg in "$@"; do
+    case "$arg" in
+        --skip-build) SKIP_BUILD=true ;;
+        -h|--help)
+            cat <<EOF
+Usage: $0 [--skip-build]
+
+  --skip-build  Skip 'cargo build' step (use existing binaries).
+
+Starts all EAASP v2.0 services and stays foreground. Ctrl+C kills everything.
+
+Ports (override via env vars):
+  EAASP_SKILL_REGISTRY_PORT  (default: 18081)
+  EAASP_L2_PORT              (default: 18085)
+  EAASP_L3_PORT              (default: 18083)
+  EAASP_L4_PORT              (default: 18084)
+  GRID_RUNTIME_PORT          (default: 50051)
+EOF
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown flag: $arg${RESET}" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# ── Pre-flight: .venv checks ─────────────────────────────────────────────
+check_venv() {
+    local svc_dir=$1
+    local make_target=$2
+    if [ ! -x "$PROJECT_ROOT/$svc_dir/.venv/bin/python" ]; then
+        echo -e "${RED}ERROR${RESET}: $svc_dir/.venv is missing. Run: make $make_target" >&2
+        return 1
+    fi
+}
+
+# ── Pre-flight: port collision check ──────────────────────────────────────
+check_port_free() {
+    local port=$1
+    local name=$2
+    local holder
+    holder=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
+    if [ -n "$holder" ]; then
+        echo -e "${RED}ERROR${RESET}: port $port ($name) already in use by PID $holder." >&2
+        echo "       Run: make dev-eaasp-stop   or   lsof -nP -iTCP:$port -sTCP:LISTEN" >&2
+        return 1
+    fi
+}
+
+# ── wait_for_port helper ──────────────────────────────────────────────────
+wait_for_port() {
+    local port=$1
+    local name=$2
+    local max_wait=20
+    local waited=0
+
+    echo -ne "  ${YELLOW}Waiting${RESET} for $name on :${port}..."
+    while ! nc -z 127.0.0.1 "$port" 2>/dev/null; do
+        sleep 1
+        waited=$((waited + 1))
+        if [ $waited -ge $max_wait ]; then
+            echo -e " ${RED}TIMEOUT (${max_wait}s)${RESET}" >&2
+            return 1
+        fi
+    done
+    echo -e " ${GREEN}ready${RESET} (${waited}s)"
+}
+
+# ── Banner ────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════${RESET}"
+echo -e "${BOLD}${CYAN}  EAASP v2.0 — Development Server${RESET}"
+echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════${RESET}"
+echo ""
+
+# ── Pre-flight checks ────────────────────────────────────────────────────
+echo -e "${BOLD}=== Pre-flight: port availability ===${RESET}"
+check_port_free $SKILL_REG_PORT "skill-registry"
+check_port_free $L2_MEM_PORT "L2 memory-engine"
+check_port_free $L3_GOV_PORT "L3 governance"
+check_port_free $L4_ORCH_PORT "L4 orchestration"
+check_port_free $GRID_RT_PORT "grid-runtime"
+echo -e "  ${GREEN}All ports free.${RESET}"
+echo ""
+
+echo -e "${BOLD}=== Pre-flight: Python .venv checks ===${RESET}"
+check_venv "tools/eaasp-l2-memory-engine" "l2-memory-setup"
+check_venv "tools/eaasp-l3-governance" "l3-setup"
+check_venv "tools/eaasp-l4-orchestration" "l4-setup"
+echo -e "  ${GREEN}All .venvs present.${RESET}"
+echo ""
+
+# ── Step 1: Cargo build ──────────────────────────────────────────────────
+if [ "$SKIP_BUILD" = false ]; then
+    echo -e "${BOLD}=== Building Rust binaries ===${RESET}"
+    cd "$PROJECT_ROOT"
+    cargo build -p grid-runtime -p eaasp-skill-registry 2>&1 | tail -5
+    echo -e "  ${GREEN}Build complete.${RESET}"
+    echo ""
+else
+    echo -e "${BOLD}=== Skipping Rust build (--skip-build) ===${RESET}"
+    echo ""
+fi
+
+# ── Step 2: Start skill-registry ─────────────────────────────────────────
+echo -e "${BOLD}=== Starting skill-registry on :${SKILL_REG_PORT} ===${RESET}"
+cd "$PROJECT_ROOT"
+mkdir -p "$PROJECT_ROOT/data/dev-skill-registry"
+EAASP_SKILL_REGISTRY_PORT=$SKILL_REG_PORT \
+EAASP_SKILL_REGISTRY_HOST=127.0.0.1 \
+    ./target/debug/eaasp-skill-registry \
+        --data-dir "$PROJECT_ROOT/data/dev-skill-registry" 2>&1 | sed 's/^/  [skill-reg] /' &
+SKILL_REG_PID=$!
+echo "  PID: $SKILL_REG_PID"
+wait_for_port $SKILL_REG_PORT "skill-registry"
+
+# ── Step 3: Start L2 memory-engine ───────────────────────────────────────
+echo ""
+echo -e "${BOLD}=== Starting L2 memory-engine on :${L2_MEM_PORT} ===${RESET}"
+cd "$PROJECT_ROOT/tools/eaasp-l2-memory-engine"
+mkdir -p "$PROJECT_ROOT/data"
+EAASP_L2_PORT=$L2_MEM_PORT \
+EAASP_L2_HOST=127.0.0.1 \
+EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
+    .venv/bin/python -m eaasp_l2_memory_engine.main 2>&1 | sed 's/^/  [l2-mem]    /' &
+L2_PID=$!
+echo "  PID: $L2_PID"
+wait_for_port $L2_MEM_PORT "L2 memory-engine"
+
+# ── Step 4: Start L3 governance ──────────────────────────────────────────
+echo ""
+echo -e "${BOLD}=== Starting L3 governance on :${L3_GOV_PORT} ===${RESET}"
+cd "$PROJECT_ROOT/tools/eaasp-l3-governance"
+EAASP_L3_PORT=$L3_GOV_PORT \
+EAASP_L3_HOST=127.0.0.1 \
+EAASP_L3_DB_PATH="$PROJECT_ROOT/data/dev-l3.db" \
+    .venv/bin/python -m eaasp_l3_governance.main 2>&1 | sed 's/^/  [l3-gov]    /' &
+L3_PID=$!
+echo "  PID: $L3_PID"
+wait_for_port $L3_GOV_PORT "L3 governance"
+
+# ── Step 5: Start grid-runtime ───────────────────────────────────────────
+echo ""
+echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
+cd "$PROJECT_ROOT"
+GRID_RUNTIME_PORT=$GRID_RT_PORT \
+RUST_LOG=grid_runtime=info \
+    ./target/debug/grid-runtime 2>&1 | sed 's/^/  [grid-rt]   /' &
+GRID_PID=$!
+echo "  PID: $GRID_PID"
+wait_for_port $GRID_RT_PORT "grid-runtime"
+
+# ── Step 6: Start L4 orchestration ───────────────────────────────────────
+echo ""
+echo -e "${BOLD}=== Starting L4 orchestration on :${L4_ORCH_PORT} ===${RESET}"
+cd "$PROJECT_ROOT/tools/eaasp-l4-orchestration"
+EAASP_L4_PORT=$L4_ORCH_PORT \
+EAASP_L4_HOST=127.0.0.1 \
+EAASP_L4_DB_PATH="$PROJECT_ROOT/data/dev-l4.db" \
+EAASP_L2_URL="http://127.0.0.1:${L2_MEM_PORT}" \
+EAASP_L3_URL="http://127.0.0.1:${L3_GOV_PORT}" \
+    .venv/bin/python -m eaasp_l4_orchestration.main 2>&1 | sed 's/^/  [l4-orch]   /' &
+L4_PID=$!
+echo "  PID: $L4_PID"
+wait_for_port $L4_ORCH_PORT "L4 orchestration"
+
+# ── Status table ─────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════${RESET}"
+echo -e "${BOLD}${CYAN}  All EAASP services running${RESET}"
+echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════${RESET}"
+echo ""
+printf "  ${BOLD}%-22s %-8s %-8s %-8s${RESET}\n" "SERVICE" "PORT" "PID" "STATUS"
+printf "  %-22s %-8s %-8s %-8s\n"   "──────────────────────" "────────" "────────" "────────"
+printf "  %-22s %-8s %-8s ${GREEN}%-8s${RESET}\n" "skill-registry"   "$SKILL_REG_PORT" "$SKILL_REG_PID" "UP"
+printf "  %-22s %-8s %-8s ${GREEN}%-8s${RESET}\n" "L2 memory-engine"  "$L2_MEM_PORT"    "$L2_PID"        "UP"
+printf "  %-22s %-8s %-8s ${GREEN}%-8s${RESET}\n" "L3 governance"     "$L3_GOV_PORT"    "$L3_PID"        "UP"
+printf "  %-22s %-8s %-8s ${GREEN}%-8s${RESET}\n" "grid-runtime"      "$GRID_RT_PORT"   "$GRID_PID"      "UP"
+printf "  %-22s %-8s %-8s ${GREEN}%-8s${RESET}\n" "L4 orchestration"  "$L4_ORCH_PORT"   "$L4_PID"        "UP"
+echo ""
+echo -e "  ${YELLOW}Press Ctrl+C to stop all services.${RESET}"
+echo ""
+
+# ── Stay foreground — wait for any child to exit ─────────────────────────
+wait

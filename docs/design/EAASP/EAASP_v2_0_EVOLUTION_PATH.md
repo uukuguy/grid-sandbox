@@ -114,7 +114,7 @@
 | Phase | 名称 | 圈层 | 关键交付 | 人工验证标准 | 资产状态 |
 |---|---|---|---|---|---|
 | **Phase 0** | Infrastructure Foundation | **圈 2** | 接口契约 + 5 层服务骨架 + 15 断言脚本验证 | ⚠️ 仅脚本验证（历史遗留，已标注为 Foundation 而非 MVP） | 🟢 Completed (2026-04-12) |
-| **Phase 0.5** | **MVP — 全层贯通** | **圈 2+** | L4→L1 真 gRPC + LLM agent 执行 + tool 调用 + memory 读写 + hook 触发 + 流式输出 | 用户 `eaasp-cli session send` → 看到 agent 调 tool、写 memory、流式输出结果 | 🔵 In Progress (2026-04-12) |
+| **Phase 0.5** | **MVP — 全层贯通** | **圈 2+** | L4→L1 真 gRPC + LLM agent 执行 + tool 调用 + memory 读写 + hook 触发 + 流式输出 | 用户 `eaasp-cli session send` → 看到 agent 调 tool、写 memory、流式输出结果 | 🟡 S5 验收中 (2026-04-12) |
 | **Phase 1** | Event-driven foundation | 圈 3 | L4 Event Engine + Session Event Stream + L4 hooks | 用户能在 CLI 观察事件流实时更新；event 从 ingest 到 clustering 的全过程可查 | ⏸ |
 | **Phase 2** | Memory and evidence | 圈 2 增强 + 圈 3 | Memory 完整三层 + Skill extraction + PreCompact | 用户能搜索/浏览 semantic 检索结果；skill extraction 产出可人工审阅 | ⏸ |
 | **Phase 3** | Approval and verification | 圈 4 | 审批链 + Verifier + OPA + Sandbox Tiers | 用户能触发审批流程并看到 approve/deny 决策路径；sandbox 隔离可演示 | ⏸ |
@@ -247,8 +247,8 @@ eaasp-cli session send "再校准一次 Transformer-001"
 
 | # | 待办 | 内容 | 启动时机 | 状态 |
 |---|------|------|---------|------|
-| R1 | OpenCode 源码评估 | 本地 clone，确认 T1/T2 归属（`tool.execute.before` hook + MCP OAuth） | Phase 0.5 期间（并行，2 天） | ⏸ |
-| R2 | Agno 2.0 源码评估 | 本地 clone，确认 T1/T2 归属（`pre_hook/post_hook` + AgentOS FastAPI） | Phase 0.5 期间（并行，2 天） | ⏸ |
+| R1 | OpenCode 源码评估 | 本地 clone，确认 **T1** 归属（per-tool `tool.execute.before/after` hook + 独立 Permission Allow/Deny/Ask + MCP 3 transport + SKILL.md frontmatter）。Adapter 3-4 天。详见 `L1_RUNTIME_R1_OPENCODE_EVAL.md` | Phase 0.5 期间（并行） | ✅ 2026-04-12 |
+| R2 | Agno 2.0 源码评估 | 本地 clone，确认维持 **T2**（MCP+Skills 完全达标，但 Hooks 是 agent-run 级别非 per-tool — `pre_hooks/post_hooks` 在 `agent.run()` 入口/出口各一次，无 `tool_name` 参数）。Adapter 5-7 天。详见 `L1_RUNTIME_R2_AGNO_EVAL.md` | Phase 0.5 期间（并行） | ✅ 2026-04-12 |
 | R3 | Microsoft AGT 白皮书深读 | `agentmesh-mcp` Rust crate 接口面 → L3 对接可行性备忘录 | Phase 0.5 完成后 | ⏸ |
 | R4 | HexAgent Computer 协议评估 | 本地 clone，与 SANDBOX_EXECUTION_DESIGN 四种模式对比 | Phase 1 启动时 | ⏸ |
 | R5 | T0-T3 中英文修正附录 | 供合入 v2.0 spec docx §8.5，含代表项目更新 | R1+R2 完成后 | ⏸ |
