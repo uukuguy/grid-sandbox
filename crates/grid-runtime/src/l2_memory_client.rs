@@ -41,9 +41,11 @@ pub struct WriteFileRequest {
     pub status: Option<String>,
 }
 
+/// L2 returns AnchorOut with many fields; we only care about anchor_id.
+/// anchor_id is a string in L2 (not i64).
 #[derive(Debug, Deserialize)]
 pub struct WriteAnchorResponse {
-    pub anchor_id: Option<i64>,
+    pub anchor_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -245,9 +247,10 @@ mod tests {
 
     #[test]
     fn write_anchor_response_deserialize() {
-        let json = r#"{"anchor_id": 42}"#;
+        // L2 returns anchor_id as string + many extra fields; we ignore extras.
+        let json = r#"{"anchor_id": "anc-42", "event_id": "e1", "session_id": "s1", "type": "tool_execution", "created_at": 123}"#;
         let resp: WriteAnchorResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.anchor_id, Some(42));
+        assert_eq!(resp.anchor_id.as_deref(), Some("anc-42"));
     }
 
     #[test]
