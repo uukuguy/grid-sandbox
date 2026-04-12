@@ -6,18 +6,21 @@ Endpoints (MVP scope):
 - ``POST /v1/intents/dispatch``                       — Contract 2 intent dispatch
 - ``POST /v1/sessions/create``                        — Contract 5 handshake (alias)
 - ``POST /v1/sessions/{session_id}/message``          — append user message
+- ``POST /v1/sessions/{session_id}/message/stream``   — SSE streaming message
 - ``GET  /v1/sessions/{session_id}/events``           — list events in range
 - ``GET  /v1/sessions/{session_id}``                  — fetch session + payload
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from .db import init_db
@@ -151,6 +154,38 @@ def create_app(
                     "detail": exc.detail,
                 },
             ) from exc
+
+    # ─── Contract 5: send message (SSE streaming) ─────────────────────────
+    @app.post("/v1/sessions/{session_id}/message/stream")
+    async def send_message_stream(
+        session_id: str,
+        body: SendMessageRequest,
+        orchestrator: SessionOrchestrator = Depends(get_orchestrator),
+    ) -> StreamingResponse:
+        """SSE endpoint — streams response chunks as ``text/event-stream``."""
+        # Validate session existence up front (fail fast with 404).
+        try:
+            await orchestrator._require_session(session_id)
+        except SessionNotFound as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "session_not_found", "session_id": exc.session_id},
+            ) from exc
+
+        async def _sse_generator() -> AsyncIterator[str]:
+            async for msg in orchestrator.stream_message(session_id, body.content):
+                event = msg.get("event", "chunk")
+                data = json.dumps(msg.get("data", {}), ensure_ascii=False, default=str)
+                yield f"event: {event}\ndata: {data}\n\n"
+
+        return StreamingResponse(
+            _sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # ─── Contract 5: close session ───────────────────────────────────────
     @app.post("/v1/sessions/{session_id}/close")

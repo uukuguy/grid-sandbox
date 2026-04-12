@@ -94,7 +94,8 @@ def test_show(runner: CliRunner, install_mock) -> None:
     assert "anchor_2" in result.stdout
 
 
-def test_send(runner: CliRunner, install_mock) -> None:
+def test_send_no_stream(runner: CliRunner, install_mock) -> None:
+    """--no-stream should use the legacy non-streaming path."""
     captured: dict = {}
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -105,8 +106,40 @@ def test_send(runner: CliRunner, install_mock) -> None:
     install_mock(handler)
     result = runner.invoke(
         cli_main.app,
-        ["session", "send", "sess_xyz", "hello"],
+        ["session", "send", "--no-stream", "sess_xyz", "hello"],
     )
     assert result.exit_code == 0, result.stdout + result.stderr
     assert captured["body"] == {"content": "hello"}
     assert "sess_xyz" in result.stdout
+
+
+def test_send_stream_default(runner: CliRunner, install_mock) -> None:
+    """Default send (--stream) should hit /message/stream and display chunks."""
+    sse_body = (
+        "event: chunk\n"
+        'data: {"chunk_type": "text_delta", "content": "Hello "}\n\n'
+        "event: chunk\n"
+        'data: {"chunk_type": "text_delta", "content": "world"}\n\n'
+        "event: chunk\n"
+        'data: {"chunk_type": "done", "content": ""}\n\n'
+        "event: done\n"
+        'data: {"session_id": "sess_xyz", "response_text": "Hello world", "events": [{"seq": 1}]}\n\n'
+    )
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/v1/sessions/sess_xyz/message/stream"
+        return httpx.Response(
+            200,
+            content=sse_body.encode("utf-8"),
+            headers={"content-type": "text/event-stream"},
+        )
+
+    install_mock(handler)
+    result = runner.invoke(
+        cli_main.app,
+        ["session", "send", "sess_xyz", "hello stream"],
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    # Should contain the streamed text.
+    assert "Hello " in result.output
+    assert "world" in result.output

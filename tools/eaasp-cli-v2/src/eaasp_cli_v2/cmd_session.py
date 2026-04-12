@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Optional
 
 import typer
+from rich.console import Console
 
 from . import main as _main
 from .config import CliConfig
@@ -124,20 +126,78 @@ def show(session_id: str = typer.Argument(...)) -> None:
 def send(
     session_id: str = typer.Argument(...),
     message: str = typer.Argument(...),
+    stream: bool = typer.Option(True, "--stream/--no-stream", help="Stream output via SSE"),
 ) -> None:
-    """Append a user message to a session."""
+    """Append a user message to a session (streaming by default)."""
     cfg = CliConfig.from_env()
 
-    async def _do() -> Any:
+    if not stream:
+        # Legacy non-streaming path.
+        async def _do_sync() -> Any:
+            client = _main.make_client(cfg)
+            try:
+                return await client.call(
+                    "POST",
+                    f"{cfg.l4_url}/v1/sessions/{session_id}/message",
+                    json={"content": message},
+                )
+            finally:
+                await client.aclose()
+
+        result = _main.run_async(_do_sync())
+        print_json(result)
+        return
+
+    # ── SSE streaming path (default) ──────────────────────────────────────
+    console = Console()
+
+    async def _do_stream() -> None:
         client = _main.make_client(cfg)
         try:
-            return await client.call(
-                "POST",
-                f"{cfg.l4_url}/v1/sessions/{session_id}/message",
-                json={"content": message},
-            )
+            async for msg in client.stream_sse(
+                f"{cfg.l4_url}/v1/sessions/{session_id}/message/stream",
+                json_body={"content": message},
+            ):
+                event = msg.get("event", "chunk")
+                data = msg.get("data", {})
+
+                if event == "chunk":
+                    chunk_type = data.get("chunk_type", "")
+                    content = data.get("content", "")
+                    if chunk_type == "text_delta":
+                        # Print text without newline for streaming effect.
+                        sys.stdout.write(content)
+                        sys.stdout.flush()
+                    elif chunk_type == "thinking":
+                        console.print(f"[dim][thinking] {content}[/dim]")
+                    elif chunk_type == "tool_start":
+                        tool = data.get("tool_name", "?")
+                        console.print(f"[cyan][tool_call: {tool}][/cyan]")
+                    elif chunk_type == "tool_result":
+                        tool = data.get("tool_name", "?")
+                        console.print(f"[green][tool_result: {tool}][/green]")
+                    elif chunk_type == "done":
+                        sys.stdout.write("\n")
+                        sys.stdout.flush()
+                    elif chunk_type == "error":
+                        console.print(f"[red][error] {content}[/red]", stderr=True)
+
+                elif event == "done":
+                    # Final summary — print a newline + summary info.
+                    sys.stdout.write("\n")
+                    resp_text = data.get("response_text", "")
+                    n_events = len(data.get("events", []))
+                    console.print(
+                        f"[dim]── {n_events} events, "
+                        f"{len(resp_text)} chars total[/dim]"
+                    )
+
+                elif event == "error":
+                    console.print(
+                        f"[bold red]runtime error:[/bold red] {data.get('error', '?')}",
+                        stderr=True,
+                    )
         finally:
             await client.aclose()
 
-    result = _main.run_async(_do())
-    print_json(result)
+    _main.run_async(_do_stream())

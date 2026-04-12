@@ -8,6 +8,8 @@ Exit code taxonomy used by ``CliError``:
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -98,6 +100,55 @@ class ServiceClient:
             f"{response.status_code} server error: {url}",
             body,
         )
+
+    # ─── SSE streaming call ───────────────────────────────────────────────
+    async def stream_sse(
+        self,
+        url: str,
+        *,
+        json_body: Any = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """POST to an SSE endpoint and yield parsed ``{event, data}`` dicts.
+
+        Each SSE message is expected as ``event: <type>\\ndata: <json>\\n\\n``.
+        """
+        try:
+            async with self._client.stream(
+                "POST", url, json=json_body
+            ) as response:
+                if response.status_code >= 400:
+                    body = await response.aread()
+                    try:
+                        detail = json.loads(body)
+                    except ValueError:
+                        detail = {"text": body.decode("utf-8", errors="replace")}
+                    exit_code = 2 if response.status_code < 500 else 4
+                    raise CliError(
+                        exit_code,
+                        f"{response.status_code} error: {url}",
+                        detail,
+                    )
+
+                current_event = "chunk"
+                async for line in response.aiter_lines():
+                    line = line.rstrip("\r\n")
+                    if line.startswith("event: "):
+                        current_event = line[7:]
+                    elif line.startswith("data: "):
+                        raw = line[6:]
+                        try:
+                            data = json.loads(raw)
+                        except ValueError:
+                            data = {"raw": raw}
+                        yield {"event": current_event, "data": data}
+                        current_event = "chunk"
+                    # blank lines (SSE separator) are skipped
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise CliError(
+                3,
+                f"service unavailable: {url}",
+                {"error": str(exc) or exc.__class__.__name__},
+            ) from exc
 
 
 def _safe_json(response: httpx.Response) -> Any:

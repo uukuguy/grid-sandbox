@@ -208,3 +208,50 @@ async def test_list_events_unknown_raises(tmp_db_path: str) -> None:
         orch = await _make_orchestrator(tmp_db_path, client)
         with pytest.raises(SessionNotFound):
             await orch.list_events("sess_nope")
+
+
+@respx.mock
+async def test_stream_message_yields_chunks(tmp_db_path: str) -> None:
+    """stream_message should yield chunk events then a done event."""
+    respx.post(f"{L2_BASE}/api/v1/memory/search").mock(
+        return_value=httpx.Response(200, json={"hits": []})
+    )
+    respx.post(url__regex=rf"{L3_BASE}/v1/sessions/.*/validate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "placeholder",
+                "hooks_to_attach": [],
+                "managed_settings_version": 1,
+                "validated_at": "2026-04-12 01:00:00",
+                "runtime_tier": "strict",
+            },
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        orch = await _make_orchestrator(tmp_db_path, client)
+        created = await orch.create_session(
+            intent_text="x", skill_id="skill.s", runtime_pref="strict"
+        )
+        sid = created["session_id"]
+
+        messages: list[dict[str, Any]] = []
+        async for msg in orch.stream_message(sid, "hello stream"):
+            messages.append(msg)
+
+    # Should have at least 2 chunk events + 1 done event.
+    chunk_msgs = [m for m in messages if m["event"] == "chunk"]
+    done_msgs = [m for m in messages if m["event"] == "done"]
+    assert len(chunk_msgs) >= 2  # text_delta + done chunk
+    assert len(done_msgs) == 1
+    assert done_msgs[0]["data"]["session_id"] == sid
+    assert "response_text" in done_msgs[0]["data"]
+
+
+async def test_stream_message_unknown_session_yields_nothing(tmp_db_path: str) -> None:
+    """stream_message on non-existent session should raise SessionNotFound."""
+    async with httpx.AsyncClient() as client:
+        orch = await _make_orchestrator(tmp_db_path, client)
+        with pytest.raises(SessionNotFound):
+            async for _ in orch.stream_message("sess_ghost", "hi"):
+                pass

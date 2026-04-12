@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from .context_assembly import build_session_payload
@@ -265,6 +266,73 @@ class SessionOrchestrator:
             "response_text": "".join(full_text_parts),
             "chunks": chunks,
             "events": events,
+        }
+
+    # ─── Contract 5 (partial): stream_message (SSE-friendly) ──────────────────
+    async def stream_message(
+        self, session_id: str, content: str
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Send a user message and yield each response chunk as it arrives.
+
+        Unlike ``send_message`` which buffers everything, this is an async
+        generator that yields dicts suitable for SSE serialisation:
+
+            {"event": "chunk", "data": {chunk_type, content, ...}}
+            {"event": "done",  "data": {response_text, events}}
+        """
+        await self._require_session(session_id)
+
+        seq_user = await self.event_stream.append(
+            session_id,
+            "USER_MESSAGE",
+            {"content": content},
+        )
+
+        l1 = self._l1_clients.get(session_id)
+        if l1 is None:
+            session_info = await self.get_session(session_id)
+            runtime_id = session_info.get("runtime_id", "grid-runtime")
+            l1 = self._l1_factory(runtime_id)
+            self._l1_clients[session_id] = l1
+
+        full_text_parts: list[str] = []
+        events: list[dict[str, Any]] = [
+            {"seq": seq_user, "event_type": "USER_MESSAGE"},
+        ]
+
+        try:
+            async for chunk in l1.send(session_id, content):
+                if chunk.get("chunk_type") == "text_delta":
+                    full_text_parts.append(chunk.get("content", ""))
+
+                seq = await self.event_stream.append(
+                    session_id,
+                    "RESPONSE_CHUNK",
+                    chunk,
+                )
+                events.append({"seq": seq, "event_type": "RESPONSE_CHUNK", **chunk})
+
+                yield {"event": "chunk", "data": chunk}
+        except L1RuntimeError as exc:
+            seq_err = await self.event_stream.append(
+                session_id,
+                "RUNTIME_SEND_FAILED",
+                {"error": str(exc)},
+            )
+            events.append({"seq": seq_err, "event_type": "RUNTIME_SEND_FAILED"})
+            yield {
+                "event": "error",
+                "data": {"error": str(exc), "runtime_id": exc.runtime_id},
+            }
+            return
+
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": session_id,
+                "response_text": "".join(full_text_parts),
+                "events": events,
+            },
         }
 
     # ─── Contract 5 (partial): get_session ───────────────────────────────────

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import respx
 
@@ -187,3 +189,66 @@ async def test_create_session_missing_field_422(app_client: httpx.AsyncClient) -
         json={"intent_text": "x", "runtime_pref": "strict"},  # missing skill_id
     )
     assert resp.status_code == 422
+
+
+# ─── SSE streaming tests ────────────────────────────────────────────────────
+
+
+@respx.mock
+async def test_send_message_stream_sse(app_client: httpx.AsyncClient) -> None:
+    """POST /message/stream should return text/event-stream with SSE events."""
+    respx.post(f"{L2_DEFAULT}/api/v1/memory/search").mock(
+        return_value=httpx.Response(200, json={"hits": []})
+    )
+    respx.post(url__regex=rf"{L3_DEFAULT}/v1/sessions/.*/validate").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "session_id": "placeholder",
+                "hooks_to_attach": [],
+                "managed_settings_version": 1,
+                "validated_at": "2026-04-12 02:00:00",
+                "runtime_tier": "strict",
+            },
+        )
+    )
+    created = await app_client.post(
+        "/v1/sessions/create",
+        json={"intent_text": "x", "skill_id": "skill.s", "runtime_pref": "strict"},
+    )
+    sid = created.json()["session_id"]
+
+    resp = await app_client.post(
+        f"/v1/sessions/{sid}/message/stream", json={"content": "hello sse"}
+    )
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers.get("content-type", "")
+
+    # Parse SSE events from the response body.
+    lines = resp.text.strip().split("\n")
+    sse_events: list[dict] = []
+    current_event = "chunk"
+    for line in lines:
+        if line.startswith("event: "):
+            current_event = line[7:]
+        elif line.startswith("data: "):
+            data = json.loads(line[6:])
+            sse_events.append({"event": current_event, "data": data})
+            current_event = "chunk"
+
+    # Should have chunk events and a done event.
+    chunk_events = [e for e in sse_events if e["event"] == "chunk"]
+    done_events = [e for e in sse_events if e["event"] == "done"]
+    assert len(chunk_events) >= 1
+    assert len(done_events) == 1
+    assert done_events[0]["data"]["session_id"] == sid
+
+
+async def test_send_message_stream_unknown_session_404(
+    app_client: httpx.AsyncClient,
+) -> None:
+    resp = await app_client.post(
+        "/v1/sessions/sess_ghost/message/stream", json={"content": "hi"}
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "session_not_found"
