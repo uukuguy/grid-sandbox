@@ -29,6 +29,7 @@ async fn main() -> anyhow::Result<()> {
         addr = %config.grpc_addr,
         runtime_id = %config.runtime_id,
         provider = %config.provider,
+        base_url = config.base_url.as_deref().unwrap_or("(default)"),
         model = %config.model,
         "grid-runtime starting (EAASP L1 Tier 1 Harness)"
     );
@@ -40,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     let provider_config = ProviderConfig {
         name: config.provider.clone(),
         api_key: config.api_key.clone(),
-        base_url: None,
+        base_url: config.base_url.clone(),
         model: Some(config.model.clone()),
     };
 

@@ -13,9 +13,11 @@ pub struct RuntimeConfig {
     pub runtime_id: String,
     /// LLM provider API key.
     pub api_key: Option<String>,
-    /// LLM provider (default: "anthropic").
+    /// LLM provider base URL (e.g. "https://openrouter.ai/api/v1").
+    pub base_url: Option<String>,
+    /// LLM provider (default: "openai").
     pub provider: String,
-    /// LLM model (default: "claude-sonnet-4-20250514").
+    /// LLM model (default: "gpt-4o").
     pub model: String,
 }
 
@@ -45,6 +47,12 @@ impl RuntimeConfig {
                 .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
         };
 
+        let base_url = if provider == "anthropic" {
+            std::env::var("ANTHROPIC_BASE_URL").ok()
+        } else {
+            std::env::var("OPENAI_BASE_URL").ok()
+        };
+
         let model = std::env::var("LLM_MODEL").unwrap_or_else(|_| {
             if provider == "anthropic" {
                 "claude-sonnet-4-20250514".into()
@@ -57,6 +65,7 @@ impl RuntimeConfig {
             grpc_addr,
             runtime_id,
             api_key,
+            base_url,
             provider,
             model,
         }
