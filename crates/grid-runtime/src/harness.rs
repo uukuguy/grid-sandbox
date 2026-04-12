@@ -130,12 +130,20 @@ impl GridHarness {
             .filter(|d| d.starts_with("mcp:"))
             .map(|d| {
                 let name = d.strip_prefix("mcp:").unwrap();
-                // Check metadata for explicit command override: mcp.<name>.command
+                // Resolve MCP server command from (in priority order):
+                // 1. Skill metadata: mcp.<name>.command
+                // 2. Environment variable: EAASP_MCP_SERVER_<NAME>_CMD
+                // 3. Default: <name> (bare executable name)
                 let command_key = format!("mcp.{}.command", name);
+                let env_key = format!(
+                    "EAASP_MCP_SERVER_{}_CMD",
+                    name.to_uppercase().replace('-', "_")
+                );
                 let command = metadata
                     .get(&command_key)
                     .cloned()
-                    .unwrap_or_else(|| format!("uv run {}", name));
+                    .or_else(|| std::env::var(&env_key).ok())
+                    .unwrap_or_else(|| name.to_string());
 
                 // Check for explicit args override: mcp.<name>.args
                 let args_key = format!("mcp.{}.args", name);
@@ -147,7 +155,7 @@ impl GridHarness {
                 McpServerConfig {
                     name: name.to_string(),
                     transport: "stdio".to_string(),
-                    command: Some(command),
+                    command: if command.is_empty() { None } else { Some(command) },
                     args,
                     env: std::collections::HashMap::new(),
                     url: None,
@@ -406,9 +414,14 @@ impl RuntimeContract for GridHarness {
         }
 
         // Connect MCP servers declared in skill dependencies.
-        if !skill_mcp_deps.is_empty() {
-            info!(count = skill_mcp_deps.len(), "Connecting MCP servers from skill dependencies");
-            if let Err(e) = self.connect_mcp(&handle, skill_mcp_deps).await {
+        // Skip servers with no command (e.g. eaasp-l2-memory is REST, not MCP stdio).
+        let mcp_to_connect: Vec<_> = skill_mcp_deps
+            .into_iter()
+            .filter(|s| s.command.as_ref().map_or(false, |c| !c.is_empty()))
+            .collect();
+        if !mcp_to_connect.is_empty() {
+            info!(count = mcp_to_connect.len(), "Connecting MCP servers from skill dependencies");
+            if let Err(e) = self.connect_mcp(&handle, mcp_to_connect).await {
                 warn!(error = %e, "Failed to connect MCP servers from skill dependencies");
             }
         }
@@ -791,10 +804,10 @@ mod tests {
         assert_eq!(configs.len(), 2);
         assert_eq!(configs[0].name, "mock-scada");
         assert_eq!(configs[0].transport, "stdio");
-        assert_eq!(configs[0].command.as_deref(), Some("uv run mock-scada"));
+        assert_eq!(configs[0].command.as_deref(), Some("mock-scada"));
         assert!(configs[0].args.is_empty());
         assert_eq!(configs[1].name, "eaasp-l2-memory");
-        assert_eq!(configs[1].command.as_deref(), Some("uv run eaasp-l2-memory"));
+        assert_eq!(configs[1].command.as_deref(), Some("eaasp-l2-memory"));
     }
 
     #[test]

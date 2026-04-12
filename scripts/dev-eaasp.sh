@@ -300,7 +300,9 @@ wait_for_port $L3_GOV_PORT "L3 governance"
 echo ""
 echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
 GRID_RUNTIME_PORT=$GRID_RT_PORT \
-RUST_LOG=grid_runtime=info \
+RUST_LOG=grid_runtime=info,grid_engine=info \
+EAASP_MCP_SERVER_MOCK_SCADA_CMD="$PROJECT_ROOT/tools/mock-scada/.venv/bin/mock-scada" \
+EAASP_MCP_SERVER_EAASP_L2_MEMORY_CMD="" \
     "$PROJECT_ROOT/target/debug/grid-runtime" 2>&1 | sed 's/^/  [grid-rt]   /' &
 GRID_PID=$!
 echo "  PID: $GRID_PID"
