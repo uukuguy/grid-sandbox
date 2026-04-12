@@ -22,6 +22,8 @@
         cli-v2-setup cli-v2-test v2-mvp-e2e \
         mock-scada-setup mock-scada-test mock-scada-start \
         dev-eaasp dev-eaasp-stop \
+        eaasp-skill-list eaasp-skill-submit eaasp-policy-list eaasp-policy-deploy \
+        eaasp-session-list eaasp-session-run eaasp-session-send eaasp-memory-search \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
         hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build hermes-runtime-run \
         runtime-verify claude-runtime-verify hermes-runtime-verify
@@ -927,3 +929,42 @@ dev-eaasp-stop:
 		lsof -nP -iTCP:$$port -sTCP:LISTEN -t 2>/dev/null | xargs kill -TERM 2>/dev/null || true; \
 	done
 	@echo "Done."
+
+# ============================================================
+# EAASP CLI shortcuts (wraps tools/eaasp-cli-v2/.venv/bin/eaasp)
+# Usage:
+#   make eaasp-skill-list
+#   make eaasp-skill-submit SKILL=examples/skills/threshold-calibration/SKILL.md
+#   make eaasp-policy-deploy CONFIG=scripts/assets/mvp-managed-settings.json
+#   make eaasp-session-run SKILL=threshold-calibration MSG="校准温度"
+#   make eaasp-session-run SKILL=threshold-calibration RUNTIME=claude-code-runtime MSG="校准温度"
+#   make eaasp-session-send SID=sess_xxx MSG="再校准一次"
+#   make eaasp-memory-search Q="Transformer-001"
+# ============================================================
+
+EAASP_CLI = tools/eaasp-cli-v2/.venv/bin/eaasp
+RUNTIME ?= grid-runtime
+
+eaasp-skill-list:
+	$(EAASP_CLI) skill list
+
+eaasp-skill-submit:
+	$(EAASP_CLI) skill submit $(SKILL)
+
+eaasp-policy-list:
+	$(EAASP_CLI) policy list
+
+eaasp-policy-deploy:
+	$(EAASP_CLI) policy deploy $(CONFIG)
+
+eaasp-session-list:
+	$(EAASP_CLI) session list
+
+eaasp-session-run:
+	$(EAASP_CLI) session run -s $(SKILL) -r $(RUNTIME) "$(MSG)"
+
+eaasp-session-send:
+	$(EAASP_CLI) session send $(SID) "$(MSG)"
+
+eaasp-memory-search:
+	$(EAASP_CLI) memory search "$(Q)"
