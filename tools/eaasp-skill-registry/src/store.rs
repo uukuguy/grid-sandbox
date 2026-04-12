@@ -69,6 +69,23 @@ impl SkillStore {
         let skill_md = format!("---\n{yaml}---\n\n{}", req.prose);
         std::fs::write(skill_dir.join("SKILL.md"), &skill_md).context("write SKILL.md")?;
 
+        // Copy subdirectories (hooks/, scripts/, etc.) from source_dir if provided.
+        if let Some(ref src) = req.source_dir {
+            let src_path = std::path::Path::new(src);
+            if src_path.is_dir() {
+                for entry in std::fs::read_dir(src_path).into_iter().flatten() {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            let dir_name = path.file_name().unwrap_or_default();
+                            let dest = skill_dir.join(dir_name);
+                            copy_dir_recursive(&path, &dest).ok();
+                        }
+                    }
+                }
+            }
+        }
+
         let now = chrono::Utc::now().to_rfc3339();
         let tags_json = serde_json::to_string(&req.tags.unwrap_or_default())?;
 
@@ -176,11 +193,18 @@ impl SkillStore {
         let (frontmatter_yaml, prose) = parse_skill_md(&content);
         let parsed_v2 = crate::skill_parser::parse_v2_frontmatter(&frontmatter_yaml).ok();
 
+        // skill_dir = parent directory of SKILL.md (absolute path).
+        let skill_dir = skill_path
+            .parent()
+            .and_then(|p| p.canonicalize().ok())
+            .map(|p| p.to_string_lossy().into_owned());
+
         Ok(Some(SkillContent {
             meta,
             frontmatter_yaml,
             prose,
             parsed_v2,
+            skill_dir,
         }))
     }
 
@@ -355,6 +379,21 @@ fn parse_status(s: &str) -> SkillStatus {
         "production" => SkillStatus::Production,
         _ => SkillStatus::Draft,
     }
+}
+
+/// Recursively copy a directory tree.
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let dest_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            std::fs::copy(entry.path(), dest_path)?;
+        }
+    }
+    Ok(())
 }
 
 /// Parse a SKILL.md file into (frontmatter_yaml, prose).

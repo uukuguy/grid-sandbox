@@ -180,6 +180,7 @@ async fn v2_frontmatter_roundtrip_via_store() {
         tags: None,
         frontmatter_yaml: FULL_V2_YAML.to_string(),
         prose: "body".into(),
+        source_dir: None,
     };
     store.submit_draft(req).await.unwrap();
     let content = store

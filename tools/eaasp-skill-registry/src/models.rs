@@ -42,6 +42,10 @@ pub struct SkillContent {
     pub prose: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parsed_v2: Option<crate::skill_parser::V2Frontmatter>,
+    /// Absolute path to the skill version directory on the filesystem.
+    /// Used by L4 to resolve `${SKILL_DIR}` in hook commands.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill_dir: Option<String>,
 }
 
 /// Version entry for a skill.
@@ -61,6 +65,10 @@ pub struct SubmitDraftRequest {
     pub description: String,
     pub version: String,
     pub author: Option<String>,
+    /// Source directory of the SKILL.md file (optional). When provided,
+    /// subdirectories like `hooks/` and `scripts/` are copied alongside
+    /// SKILL.md into the registry storage.
+    pub source_dir: Option<String>,
     pub tags: Option<Vec<String>>,
     pub frontmatter_yaml: String,
     pub prose: String,

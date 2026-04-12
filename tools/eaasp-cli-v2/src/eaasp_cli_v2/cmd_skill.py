@@ -88,6 +88,8 @@ def submit(
         "version": str(meta.get("version") or "0.1.0"),
         "frontmatter_yaml": frontmatter_yaml,
         "prose": prose,
+        # Pass the source directory so skill-registry can copy hooks/ etc.
+        "source_dir": str(path.resolve().parent),
     }
     if "author" in meta:
         body["author"] = str(meta["author"])

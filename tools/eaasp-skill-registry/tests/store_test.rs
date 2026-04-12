@@ -11,6 +11,7 @@ fn make_draft(id: &str, name: &str, version: &str, tags: Vec<&str>) -> SubmitDra
         tags: Some(tags.into_iter().map(String::from).collect()),
         frontmatter_yaml: format!("name: {name}\nversion: {version}\n"),
         prose: format!("# {name}\n\nThis is the prose for {name}."),
+        source_dir: None,
     }
 }
 

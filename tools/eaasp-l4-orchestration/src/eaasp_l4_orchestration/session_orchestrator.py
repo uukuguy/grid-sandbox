@@ -132,10 +132,22 @@ class SessionOrchestrator:
                 parsed_v2 = skill_data.get("parsed_v2") or {}
                 scoped_hooks = parsed_v2.get("scoped_hooks") or {}
                 # Flatten scoped hooks into the list format context_assembly expects.
+                # Resolve ${SKILL_DIR} using skill_dir from L2 registry.
+                skill_dir = skill_data.get("skill_dir") or ""
                 frontmatter_hooks: list[dict[str, Any]] = []
                 for scope in ("PreToolUse", "PostToolUse", "Stop"):
                     for hook in scoped_hooks.get(scope) or scoped_hooks.get(scope.lower()) or []:
-                        frontmatter_hooks.append({**hook, "scope": scope})
+                        resolved_hook = dict(hook)
+                        # Substitute ${SKILL_DIR} in command hooks.
+                        if "command" in resolved_hook and skill_dir:
+                            resolved_hook["command"] = resolved_hook["command"].replace(
+                                "${SKILL_DIR}", skill_dir
+                            )
+                        if "prompt" in resolved_hook and skill_dir:
+                            resolved_hook["prompt"] = resolved_hook["prompt"].replace(
+                                "${SKILL_DIR}", skill_dir
+                            )
+                        frontmatter_hooks.append({**resolved_hook, "scope": scope})
 
                 skill_instructions = {
                     "skill_id": skill_id,
