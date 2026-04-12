@@ -231,10 +231,12 @@ echo -e "  OPENAI_BASE_URL=${CYAN}${OPENAI_BASE_URL:-'(not set)'}${RESET}"
 echo -e "  ${GREEN}All LLM config present.${RESET}"
 echo ""
 
+# All services launch from $PROJECT_ROOT — no cd.
+cd "$PROJECT_ROOT"
+
 # ── Step 1: Cargo build ──────────────────────────────────────────────────
 if [ "$SKIP_BUILD" = false ]; then
     echo -e "${BOLD}=== Building Rust binaries ===${RESET}"
-    cd "$PROJECT_ROOT"
     cargo build -p grid-runtime -p eaasp-skill-registry 2>&1 | tail -5
     echo -e "  ${GREEN}Build complete.${RESET}"
     echo ""
@@ -245,11 +247,10 @@ fi
 
 # ── Step 2: Start skill-registry ─────────────────────────────────────────
 echo -e "${BOLD}=== Starting skill-registry on :${SKILL_REG_PORT} ===${RESET}"
-cd "$PROJECT_ROOT"
 mkdir -p "$PROJECT_ROOT/data/dev-skill-registry"
 EAASP_SKILL_REGISTRY_PORT=$SKILL_REG_PORT \
 EAASP_SKILL_REGISTRY_HOST=127.0.0.1 \
-    ./target/debug/eaasp-skill-registry \
+    "$PROJECT_ROOT/target/debug/eaasp-skill-registry" \
         --data-dir "$PROJECT_ROOT/data/dev-skill-registry" 2>&1 | sed 's/^/  [skill-reg] /' &
 SKILL_REG_PID=$!
 echo "  PID: $SKILL_REG_PID"
@@ -258,12 +259,12 @@ wait_for_port $SKILL_REG_PORT "skill-registry"
 # ── Step 3: Start L2 memory-engine ───────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting L2 memory-engine on :${L2_MEM_PORT} ===${RESET}"
-cd "$PROJECT_ROOT/tools/eaasp-l2-memory-engine"
 mkdir -p "$PROJECT_ROOT/data"
 EAASP_L2_PORT=$L2_MEM_PORT \
 EAASP_L2_HOST=127.0.0.1 \
 EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
-    .venv/bin/python -m eaasp_l2_memory_engine.main 2>&1 | sed 's/^/  [l2-mem]    /' &
+    "$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin/python" \
+        -m eaasp_l2_memory_engine.main 2>&1 | sed 's/^/  [l2-mem]    /' &
 L2_PID=$!
 echo "  PID: $L2_PID"
 wait_for_port $L2_MEM_PORT "L2 memory-engine"
@@ -271,11 +272,11 @@ wait_for_port $L2_MEM_PORT "L2 memory-engine"
 # ── Step 4: Start L3 governance ──────────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting L3 governance on :${L3_GOV_PORT} ===${RESET}"
-cd "$PROJECT_ROOT/tools/eaasp-l3-governance"
 EAASP_L3_PORT=$L3_GOV_PORT \
 EAASP_L3_HOST=127.0.0.1 \
 EAASP_L3_DB_PATH="$PROJECT_ROOT/data/dev-l3.db" \
-    .venv/bin/python -m eaasp_l3_governance.main 2>&1 | sed 's/^/  [l3-gov]    /' &
+    "$PROJECT_ROOT/tools/eaasp-l3-governance/.venv/bin/python" \
+        -m eaasp_l3_governance.main 2>&1 | sed 's/^/  [l3-gov]    /' &
 L3_PID=$!
 echo "  PID: $L3_PID"
 wait_for_port $L3_GOV_PORT "L3 governance"
@@ -283,10 +284,9 @@ wait_for_port $L3_GOV_PORT "L3 governance"
 # ── Step 5: Start grid-runtime ───────────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
-cd "$PROJECT_ROOT"
 GRID_RUNTIME_PORT=$GRID_RT_PORT \
 RUST_LOG=grid_runtime=info \
-    ./target/debug/grid-runtime 2>&1 | sed 's/^/  [grid-rt]   /' &
+    "$PROJECT_ROOT/target/debug/grid-runtime" 2>&1 | sed 's/^/  [grid-rt]   /' &
 GRID_PID=$!
 echo "  PID: $GRID_PID"
 wait_for_port $GRID_RT_PORT "grid-runtime"
@@ -294,9 +294,9 @@ wait_for_port $GRID_RT_PORT "grid-runtime"
 # ── Step 6: Start claude-code-runtime ────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting claude-code-runtime on :${CLAUDE_RT_PORT} ===${RESET}"
-cd "$PROJECT_ROOT/lang/claude-code-runtime-python"
 CLAUDE_RUNTIME_PORT=$CLAUDE_RT_PORT \
-    .venv/bin/python -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | sed 's/^/  [claude-rt] /' &
+    "$PROJECT_ROOT/lang/claude-code-runtime-python/.venv/bin/python" \
+        -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | sed 's/^/  [claude-rt] /' &
 CLAUDE_PID=$!
 echo "  PID: $CLAUDE_PID"
 wait_for_port $CLAUDE_RT_PORT "claude-code-runtime"
@@ -304,9 +304,9 @@ wait_for_port $CLAUDE_RT_PORT "claude-code-runtime"
 # ── Step 7: Start hermes-runtime ────────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting hermes-runtime on :${HERMES_RT_PORT} ===${RESET}"
-cd "$PROJECT_ROOT/lang/hermes-runtime-python"
 HERMES_RUNTIME_PORT=$HERMES_RT_PORT \
-    .venv/bin/python -m hermes_runtime --port "$HERMES_RT_PORT" 2>&1 | sed 's/^/  [hermes-rt] /' &
+    "$PROJECT_ROOT/lang/hermes-runtime-python/.venv/bin/python" \
+        -m hermes_runtime --port "$HERMES_RT_PORT" 2>&1 | sed 's/^/  [hermes-rt] /' &
 HERMES_PID=$!
 echo "  PID: $HERMES_PID"
 wait_for_port $HERMES_RT_PORT "hermes-runtime"
@@ -314,13 +314,13 @@ wait_for_port $HERMES_RT_PORT "hermes-runtime"
 # ── Step 8: Start L4 orchestration ───────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting L4 orchestration on :${L4_ORCH_PORT} ===${RESET}"
-cd "$PROJECT_ROOT/tools/eaasp-l4-orchestration"
 EAASP_L4_PORT=$L4_ORCH_PORT \
 EAASP_L4_HOST=127.0.0.1 \
 EAASP_L4_DB_PATH="$PROJECT_ROOT/data/dev-l4.db" \
 EAASP_L2_URL="http://127.0.0.1:${L2_MEM_PORT}" \
 EAASP_L3_URL="http://127.0.0.1:${L3_GOV_PORT}" \
-    .venv/bin/python -m eaasp_l4_orchestration.main 2>&1 | sed 's/^/  [l4-orch]   /' &
+    "$PROJECT_ROOT/tools/eaasp-l4-orchestration/.venv/bin/python" \
+        -m eaasp_l4_orchestration.main 2>&1 | sed 's/^/  [l4-orch]   /' &
 L4_PID=$!
 echo "  PID: $L4_PID"
 wait_for_port $L4_ORCH_PORT "L4 orchestration"
