@@ -150,6 +150,7 @@ def send(
 
     # ── SSE streaming path (default) ──────────────────────────────────────
     console = Console()
+    err_console = Console(stderr=True)
 
     async def _do_stream() -> None:
         client = _main.make_client(cfg)
@@ -180,7 +181,7 @@ def send(
                         sys.stdout.write("\n")
                         sys.stdout.flush()
                     elif chunk_type == "error":
-                        console.print(f"[red][error] {content}[/red]", stderr=True)
+                        err_console.print(f"[red][error] {content}[/red]")
 
                 elif event == "done":
                     # Final summary — print a newline + summary info.
@@ -193,9 +194,8 @@ def send(
                     )
 
                 elif event == "error":
-                    console.print(
+                    err_console.print(
                         f"[bold red]runtime error:[/bold red] {data.get('error', '?')}",
-                        stderr=True,
                     )
         finally:
             await client.aclose()
