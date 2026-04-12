@@ -230,6 +230,10 @@ pub struct UserPreferences {
     pub prefs: std::collections::HashMap<String, String>,
     pub language: String,
     pub timezone: String,
+    /// LLM provider hint (e.g. "anthropic", "openai"). L1 runtime env takes precedence.
+    pub llm_provider: String,
+    /// LLM model hint (e.g. "claude-sonnet-4-20250514"). L1 runtime env takes precedence.
+    pub llm_model: String,
 }
 
 // ── Opaque handle + runtime event types ──
@@ -617,6 +621,8 @@ impl From<crate::proto::UserPreferences> for UserPreferences {
             prefs: u.prefs,
             language: u.language,
             timezone: u.timezone,
+            llm_provider: u.llm_provider,
+            llm_model: u.llm_model,
         }
     }
 }
@@ -628,6 +634,8 @@ impl From<UserPreferences> for crate::proto::UserPreferences {
             prefs: u.prefs,
             language: u.language,
             timezone: u.timezone,
+            llm_provider: u.llm_provider,
+            llm_model: u.llm_model,
         }
     }
 }

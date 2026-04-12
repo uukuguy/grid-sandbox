@@ -120,7 +120,7 @@ class ScopedHook(_message.Message):
     def __init__(self, hook_id: _Optional[str] = ..., hook_type: _Optional[str] = ..., condition: _Optional[str] = ..., action: _Optional[str] = ..., precedence: _Optional[int] = ...) -> None: ...
 
 class UserPreferences(_message.Message):
-    __slots__ = ("user_id", "prefs", "language", "timezone")
+    __slots__ = ("user_id", "prefs", "language", "timezone", "llm_provider", "llm_model")
     class PrefsEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -132,11 +132,15 @@ class UserPreferences(_message.Message):
     PREFS_FIELD_NUMBER: _ClassVar[int]
     LANGUAGE_FIELD_NUMBER: _ClassVar[int]
     TIMEZONE_FIELD_NUMBER: _ClassVar[int]
+    LLM_PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    LLM_MODEL_FIELD_NUMBER: _ClassVar[int]
     user_id: str
     prefs: _containers.ScalarMap[str, str]
     language: str
     timezone: str
-    def __init__(self, user_id: _Optional[str] = ..., prefs: _Optional[_Mapping[str, str]] = ..., language: _Optional[str] = ..., timezone: _Optional[str] = ...) -> None: ...
+    llm_provider: str
+    llm_model: str
+    def __init__(self, user_id: _Optional[str] = ..., prefs: _Optional[_Mapping[str, str]] = ..., language: _Optional[str] = ..., timezone: _Optional[str] = ..., llm_provider: _Optional[str] = ..., llm_model: _Optional[str] = ...) -> None: ...
 
 class SessionPayload(_message.Message):
     __slots__ = ("policy_context", "event_context", "memory_refs", "skill_instructions", "user_preferences", "allow_trim_p5", "allow_trim_p4", "allow_trim_p3", "session_id", "user_id", "runtime_id", "created_at")

@@ -85,6 +85,8 @@ message UserPreferences {
   map<string, string> prefs = 2;      // free-form preferences
   string language = 3;
   string timezone = 4;
+  string llm_provider = 5;            // hint: "anthropic" | "openai" (env fallback)
+  string llm_model = 6;              // hint: e.g. "claude-sonnet-4-20250514" (env fallback)
 }
 
 // ── Structured SessionPayload ───────────────────────────────

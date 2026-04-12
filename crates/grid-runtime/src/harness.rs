@@ -39,6 +39,10 @@ pub struct GridHarness {
     runtime: Arc<AgentRuntime>,
     runtime_id: String,
     telemetry: TelemetryCollector,
+    /// LLM provider name (e.g. "anthropic", "openai") — read from RuntimeConfig.
+    provider: String,
+    /// LLM model name (e.g. "claude-sonnet-4-20250514") — read from RuntimeConfig.
+    model: String,
 }
 
 impl GridHarness {
@@ -49,6 +53,8 @@ impl GridHarness {
             runtime,
             telemetry: TelemetryCollector::new(&runtime_id),
             runtime_id,
+            provider: "anthropic".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
         }
     }
 
@@ -56,6 +62,13 @@ impl GridHarness {
     pub fn with_runtime_id(mut self, id: impl Into<String>) -> Self {
         self.runtime_id = id.into();
         self.telemetry = TelemetryCollector::new(&self.runtime_id);
+        self
+    }
+
+    /// Set the LLM provider and model (from RuntimeConfig).
+    pub fn with_provider(mut self, provider: impl Into<String>, model: impl Into<String>) -> Self {
+        self.provider = provider.into();
+        self.model = model.into();
         self
     }
 
@@ -447,7 +460,7 @@ impl RuntimeContract for GridHarness {
             runtime_id: self.runtime_id.clone(),
             runtime_name: "Grid".into(),
             tier: RuntimeTier::Harness,
-            model: "claude-sonnet-4-20250514".into(),
+            model: self.model.clone(),
             context_window: 200_000,
             supported_tools: tool_names,
             native_hooks: true,

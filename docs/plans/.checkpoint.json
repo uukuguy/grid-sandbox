@@ -2,13 +2,13 @@
   "plan_file": "docs/plans/2026-04-12-v2-mvp-phase0.5-plan.md",
   "phase": "phase-0.5-started",
   "created_at": "2026-04-12T15:30:00+08:00",
-  "updated_at": "2026-04-12T15:30:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-04-12T16:00:00+08:00",
+  "completed_tasks": ["S1.T1", "S1.T2", "S1.T3", "S2.T1", "S2.T2"],
   "current_task": null,
   "total_tasks": 12,
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 0.5 — MVP 全层贯通",
-  "status": "Phase started. 12 tasks across 5 stages. Goal: upgrade Infrastructure Foundation to real MVP with human-executable agent experience. 5 gaps to close: G1 L4→L1 gRPC / G2 LLM provider / G3 MCP connect / G4 hook execution / G5 streaming output.",
+  "status": "S2 COMPLETE (2/2). Proto UserPreferences += llm_provider/llm_model. GridHarness.get_capabilities() reads model from config. context_assembly injects provider hint from env. config.rs reads OPENAI_API_KEY fallback. 62 Rust + 52 L4 + 54 claude-code-runtime tests pass. Next: S3 MCP + Hook executor.",
   "notes": "Phase 0 archived (15/15 PASS @ a955c44). Phase 0.5 created from EVOLUTION_PATH §3.3 gap analysis. Key Deferred targets: D54 (L4→L1 gRPC), D53 (scoped-hook executor), D40 (session state machine). Iron rule: must be human-executable, observable, verifiable — not just script assertions.",
   "last_phase": {
     "name": "Phase 0 — Infrastructure Foundation",
@@ -22,13 +22,17 @@
     "S1_L4_L1_gRPC": {
       "tasks": 3,
       "description": "Proto Python gen + L1RuntimeClient + session state machine",
-      "status": "pending",
-      "closes_deferred": ["D54", "D40"]
+      "status": "complete",
+      "completed_at": "2026-04-12T16:00:00+08:00",
+      "commit": "376a5e5",
+      "tests": "48/48 (11 new l1_client + 6 new session_state + 31 updated)",
+      "closes_deferred": ["D54.a-d", "D40"]
     },
     "S2_LLM_Provider": {
       "tasks": 2,
       "description": "Provider config passthrough + grid-runtime agent loop LLM integration",
-      "status": "pending"
+      "status": "complete",
+      "tests": "62 Rust (2 ignored LLM live) + 52 L4 (4 new context_assembly) + 54 claude-code-runtime"
     },
     "S3_MCP_Hook_Executor": {
       "tasks": 3,

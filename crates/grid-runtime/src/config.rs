@@ -32,7 +32,10 @@ impl RuntimeConfig {
         let runtime_id =
             std::env::var("GRID_RUNTIME_ID").unwrap_or_else(|_| "grid-harness".into());
 
-        let api_key = std::env::var("ANTHROPIC_API_KEY").ok();
+        // Read API key based on configured provider; fall back across providers.
+        let api_key = std::env::var("ANTHROPIC_API_KEY")
+            .ok()
+            .or_else(|| std::env::var("OPENAI_API_KEY").ok());
 
         let provider = std::env::var("LLM_PROVIDER").unwrap_or_else(|_| "anthropic".into());
 

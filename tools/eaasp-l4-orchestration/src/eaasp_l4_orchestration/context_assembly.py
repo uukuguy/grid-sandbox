@@ -10,6 +10,7 @@ shape. Budget flags default per blueprint:
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
@@ -45,8 +46,10 @@ def build_session_payload(
         "memory_refs": normalized_refs,
         # P4 — SkillInstructions (resolved from L2 registry in later phases).
         "skill_instructions": skill_instructions or {},
-        # P5 — UserPreferences.
-        "user_preferences": user_preferences or {"user_id": user_id, "prefs": {}},
+        # P5 — UserPreferences (with LLM provider hint from env).
+        "user_preferences": _enrich_user_preferences(
+            user_preferences or {"user_id": user_id, "prefs": {}}
+        ),
         # Budget trim flags — P5 first, P4/P3 locked in MVP.
         "allow_trim_p5": True,
         "allow_trim_p4": False,
@@ -92,3 +95,20 @@ def _normalize_policy_context(raw: dict[str, Any]) -> dict[str, Any]:
         "org_unit": str(raw.get("org_unit") or ""),
         "quotas": dict(raw.get("quotas") or {}),
     }
+
+
+def _enrich_user_preferences(prefs: dict[str, Any]) -> dict[str, Any]:
+    """Inject LLM provider/model hints from environment into P5 UserPreferences.
+
+    L1 runtimes read these as hints; env vars on the runtime side take
+    precedence. This allows L4 to suggest a provider/model without forcing it.
+    """
+    if not prefs.get("llm_provider"):
+        llm_provider = os.environ.get("LLM_PROVIDER", "")
+        if llm_provider:
+            prefs["llm_provider"] = llm_provider
+    if not prefs.get("llm_model"):
+        llm_model = os.environ.get("LLM_MODEL", "")
+        if llm_model:
+            prefs["llm_model"] = llm_model
+    return prefs

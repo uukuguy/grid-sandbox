@@ -28,6 +28,8 @@ async fn main() -> anyhow::Result<()> {
     info!(
         addr = %config.grpc_addr,
         runtime_id = %config.runtime_id,
+        provider = %config.provider,
+        model = %config.model,
         "grid-runtime starting (EAASP L1 Tier 1 Harness)"
     );
 
@@ -62,7 +64,9 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to build AgentRuntime: {}", e))?;
 
     let harness = Arc::new(
-        GridHarness::new(Arc::new(engine_runtime)).with_runtime_id(&config.runtime_id),
+        GridHarness::new(Arc::new(engine_runtime))
+            .with_runtime_id(&config.runtime_id)
+            .with_provider(&config.provider, &config.model),
     );
 
     let grpc_service = RuntimeGrpcService::new(harness);
