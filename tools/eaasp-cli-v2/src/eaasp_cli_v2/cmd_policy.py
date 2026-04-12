@@ -53,7 +53,7 @@ def list_cmd() -> None:
             await client.aclose()
 
     result = _main.run_async(_do())
-    rows = result if isinstance(result, list) else []
+    rows = result.get("versions", []) if isinstance(result, dict) else (result if isinstance(result, list) else [])
     print_table("Policy versions", rows, ["version", "created_at", "hook_count"])
 
 
