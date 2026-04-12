@@ -262,6 +262,19 @@ eaasp-cli session send "再校准一次 Transformer-001"
 - R3 不阻塞 MVP，但 Phase 1 Event Engine 设计可能参考 AGT 策略模式
 - R5-R7 需要 R1+R2 结论，自然落在 Phase 1 早期
 
+### 5.2 ADR 治理机制演进待办
+
+> ADR 治理机制（D18）需要随实践持续演进，最终转化为 Claude Code Skill。
+
+| # | 待办 | 内容 | 启动时机 | 状态 |
+|---|------|------|---------|------|
+| A1 | ADR 模板试运行 | 用 ADR-V2-014 (T0-T3 定义) 作为首个按模板撰写的 ADR，验证模板可用性 | Phase 0.5 期间 | ⏸ |
+| A2 | ADR 编写流程沉淀 | 3-5 个 ADR 落地后，回顾模板和流程，修正不合理之处 | ≥5 个 ADR 落地后 | ⏸ |
+| A3 | ADR 校验集成 | 在 reviewer 流程中增加 ADR 合规检查（变更涉及 ADR 影响范围时提醒） | A2 完成后 | ⏸ |
+| A4 | ADR Skill 落地 | 转为 Claude Code Skill（`/adr create` / `/adr list` / `/adr check`），提醒用户 make skill | ≥10 个 ADR 落地 + 模板稳定 | ⏸ |
+
+**演进路径**：模板试运行 → 实践验证 → 流程沉淀 → 校验集成 → Skill 自动化
+
 ---
 
 ## 六、非目标（v2.0 明确不做）
