@@ -354,6 +354,7 @@ echo ""
 echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
 GRID_RUNTIME_PORT=$GRID_RT_PORT \
 RUST_LOG=grid_runtime=info,grid_engine=info \
+EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
 PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
     "$PROJECT_ROOT/target/debug/grid-runtime" 2>&1 | sed 's/^/  [grid-rt]   /' &
 GRID_PID=$!
@@ -364,6 +365,7 @@ wait_for_port $GRID_RT_PORT "grid-runtime"
 echo ""
 echo -e "${BOLD}=== Starting claude-code-runtime on :${CLAUDE_RT_PORT} ===${RESET}"
 CLAUDE_RUNTIME_PORT=$CLAUDE_RT_PORT \
+EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
 PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
     "$PROJECT_ROOT/lang/claude-code-runtime-python/.venv/bin/python" \
         -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | sed 's/^/  [claude-rt] /' &
