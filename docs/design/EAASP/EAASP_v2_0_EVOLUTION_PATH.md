@@ -116,7 +116,7 @@
 | **Phase 0** | Infrastructure Foundation | **圈 2** | 接口契约 + 5 层服务骨架 + 15 断言脚本验证 | ⚠️ 仅脚本验证（历史遗留，已标注为 Foundation 而非 MVP） | 🟢 Completed (2026-04-12) |
 | **Phase 0.5** | **MVP — 全层贯通** | **圈 2+** | L4→L1 真 gRPC + LLM agent 执行 + tool 调用 + memory 读写 + hook 触发 + 流式输出 | 用户 `eaasp-cli session send` → 看到 agent 调 tool、写 memory、流式输出结果 | 🟢 Completed (2026-04-13) |
 | **Phase 0.75** | **L2 MCP 编排与部署架构** | **圈 2 补强** | L2 MCP Orchestrator 职责定义 + MCP transport 统一策略 + 容器化 runtime MCP 发现机制 + claude-code-runtime MCP 通路修复 | 三个 runtime 的 MCP tool call 全部通过真实 MCP server（非 workaround）；`eaasp-cli session send` 在 claude-code-runtime 上调用 mock-scada 成功 | 🟢 Completed (2026-04-13) |
-| **Phase 1** | Event-driven foundation | 圈 3 | L4 Event Engine + Session Event Stream + L4 hooks | 用户能在 CLI 观察事件流实时更新；event 从 ingest 到 clustering 的全过程可查 | ⏸ |
+| **Phase 1** | Event-driven foundation | 圈 3 | L4 Event Engine + Session Event Stream + L4 hooks | 用户能在 CLI 观察事件流实时更新；event 从 ingest 到 clustering 的全过程可查 | 🟡 Started (2026-04-13) |
 | **Phase 2** | Memory and evidence | 圈 2 增强 + 圈 3 | Memory 完整三层 + Skill extraction + PreCompact | 用户能搜索/浏览 semantic 检索结果；skill extraction 产出可人工审阅 | ⏸ |
 | **Phase 3** | Approval and verification | 圈 4 | 审批链 + Verifier + OPA + Sandbox Tiers | 用户能触发审批流程并看到 approve/deny 决策路径；sandbox 隔离可演示 | ⏸ |
 | **Phase 4** | Multi-agent collaboration | 圈 4 | A2A Router + ReviewSet + T0 Harness | 用户能发起多 agent 评审任务并观察协作过程和汇总结果 | ⏸ |
@@ -281,6 +281,17 @@ eaasp-cli session send "校准 Transformer-001"
 | **D71** | claude-code-runtime 接受 **SDK 自管 MCP 连接**，只要配置来源统一为 L4 ConnectMCP 下发即可 | SDK 内部 MCP 实现成熟（Anthropic 官方），重写无必要。配置来源统一 = 平台级统一 |
 | **D72** | 验收标准：三 runtime MCP 配置**全部来自 L4 ConnectMCP**，**零 env var workaround** | Phase 0.5 的 env var workaround 不是平台级行为，L1 不应自己找 MCP server |
 
+### 2026-04-13 Brainstorming — Phase 1 Event-driven Foundation
+
+| ID | 决策 | 理由/上下文 |
+|---|---|---|
+| **D73** | **Event Room 推迟 Phase 4**，Phase 1 session = event 最小容器 | Event Room 是多 agent 协作的长生命周期容器，Phase 1 只有单 session 场景 |
+| **D74** | **Event Pipeline 异步队列处理**，不阻塞 EmitEvent 调用方 | EmitEvent fire-and-forget 语义，agent loop 不应等待 Event Engine 处理完成 |
+| **D75** | **Clusterer Phase 1 只做时间窗口**（30 秒），topology-aware 推迟 Phase 5 | topology-aware 需要 L2 Ontology Service（Phase 6 交付），Phase 1 没有 ontology 输入 |
+| **D76** | **EmitEvent 保持 OPTIONAL**，T1 runtime 必须实装，T2/T3 通过 L4 拦截器自动覆盖核心事件 | 不增加 certifier MUST 门槛（维持 12），同时 T1 示范全量事件 emit |
+| **D77** | **Session Event Stream Phase 1 用 SQLite WAL 增强**，通过 EventStreamBackend Protocol 抽象接口 | 零外部依赖、渐进式改进、接口保留切换能力（Phase 6 切 NATS/Kafka） |
+| **D78** | **Event 接收路径 Phase 1 用 REST**（POST /v1/events/ingest），gRPC 反向通道推迟 Phase 2 | 当前架构只有 L4→L1 gRPC，L1→L4 需要新通道。REST fallback 简单、对 fire-and-forget 可接受 |
+
 ---
 
 ## 五、ADR 注册表
@@ -298,9 +309,9 @@ eaasp-cli session send "校准 Transformer-001"
 
 | ADR ID | 主题 | 状态 | 目标 Phase | 阻塞什么 |
 |---|---|---|---|---|
-| **ADR-V2-001** | `emitEvent()` 是新 MUST 方法 vs hook-bridge 副作用 vs 平台拦截器 | Proposed | Phase 1 | L1→Session Event Stream 写入接口 |
-| **ADR-V2-002** | Session Event Stream 后端选型（Kafka / NATS JetStream / S3 append-only） | Proposed | Phase 1 | L4 持久化平面 |
-| **ADR-V2-003** | Event clustering strategies 的插件化接口（4 handler types 支持） | Proposed | Phase 1 | L4 Event Engine pipeline |
+| **ADR-V2-001** | EmitEvent 接口形式：混合拦截器 + OPTIONAL RPC | **Accepted** | Phase 1 | [`adrs/ADR-V2-001-emit-event-interface.md`](adrs/ADR-V2-001-emit-event-interface.md) |
+| **ADR-V2-002** | Session Event Stream 后端选型：SQLite WAL + 接口抽象 | **Accepted** | Phase 1 | [`adrs/ADR-V2-002-event-stream-backend.md`](adrs/ADR-V2-002-event-stream-backend.md) |
+| **ADR-V2-003** | Event Clustering 插件化接口：4 Handler Pipeline | **Accepted** | Phase 1 | [`adrs/ADR-V2-003-event-clustering-interface.md`](adrs/ADR-V2-003-event-clustering-interface.md) |
 | **ADR-V2-004** | L4→L1 真 gRPC 绑定的 4b-lite scope 决策 | **Accepted** | Phase 0 ✅ | [`adrs/ADR-V2-004-l4-to-l1-real-grpc-binding.md`](adrs/ADR-V2-004-l4-to-l1-real-grpc-binding.md) |
 | **ADR-V2-005** | OPA/Rego 作为 command hook backend 的部署拓扑（sidecar vs shared cluster OPA） | Proposed | Phase 3 | L3 Policy Engine |
 | **ADR-V2-006** | Sandbox Isolation Tier 实现（gVisor 优先 vs Kata 优先 vs Firecracker） | Proposed | Phase 3 | L1 execution zone |
