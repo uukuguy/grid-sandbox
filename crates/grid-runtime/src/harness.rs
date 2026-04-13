@@ -377,16 +377,20 @@ impl RuntimeContract for GridHarness {
             self.register_scoped_hooks(&scoped_hooks).await;
         }
 
-        // Collect MCP tool names for tool filter.
-        // When skill declares MCP dependencies, restrict agent to only MCP tools
-        // (prevents LLM from choosing generic tools like grep/bash over MCP tools).
+        // Tool filter: default is OFF (all tools visible).
+        // When enabled via EAASP_TOOL_FILTER=on, restricts agent to MCP tools only.
+        // In production, this should be a platform-level policy (L3 managed-settings
+        // or skill allowed-tools), not a runtime env var.
         let tool_filter: Option<Vec<String>> = {
-            let mcp_guard = self.runtime.mcp_manager().lock().await;
-            let mcp_tools = mcp_guard.tool_names();
-            if mcp_tools.is_empty() {
-                None // No MCP tools → full tool set
+            let filter_enabled = std::env::var("EAASP_TOOL_FILTER")
+                .map(|v| v == "on" || v == "true" || v == "1")
+                .unwrap_or(false);
+            if filter_enabled {
+                let mcp_guard = self.runtime.mcp_manager().lock().await;
+                let mcp_tools = mcp_guard.tool_names();
+                if mcp_tools.is_empty() { None } else { Some(mcp_tools) }
             } else {
-                Some(mcp_tools)
+                None
             }
         };
 
