@@ -491,15 +491,30 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
             event_id = f"tool-{request.tool_name}-{int(time.time() * 1000)}"
             # Truncate output to avoid oversized payloads
             data_ref = request.output[:500] if request.output else None
+            anchor_id = None
             try:
-                await self._l2_client.write_anchor(
+                resp = await self._l2_client.write_anchor(
                     event_id=event_id,
                     session_id=sid,
                     anchor_type="tool_execution",
                     data_ref=data_ref,
                 )
+                anchor_id = resp.get("anchor_id")
             except Exception as e:
                 logger.warning("L2 anchor write failed (non-fatal): %s", e)
+
+            # Write memory file so memory_search (FTS5) can find this evidence.
+            # Anchors alone are not searchable — only memory_files have FTS index.
+            content = f"Tool: {request.tool_name}\nSession: {sid}\nResult: {data_ref or '(no output)'}"
+            try:
+                await self._l2_client.write_file(
+                    scope=f"session:{sid}",
+                    category="tool_evidence",
+                    content=content,
+                    evidence_refs=[anchor_id] if anchor_id else None,
+                )
+            except Exception as e:
+                logger.warning("L2 memory file write failed (non-fatal): %s", e)
 
         return runtime_pb2.ToolResultAck(decision=decision, reason=reason)
 

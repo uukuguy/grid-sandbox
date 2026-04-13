@@ -1,26 +1,40 @@
-FROM python:3.11-slim
+# hermes-runtime — EAASP L1 Tier 2 Aligned adapter container image.
+#
+# Build from PROJECT ROOT:
+#   docker build -f lang/hermes-runtime-python/Dockerfile -t hermes-runtime .
+#
+# Rebuilds on top of existing hermes-runtime:latest (which has hermes-agent).
+# Updates: runtime adapter code + v2 proto stubs.
 
-# System deps for hermes-agent
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential nodejs npm ripgrep git && \
-    rm -rf /var/lib/apt/lists/*
+ARG HERMES_BASE=hermes-runtime:latest
+FROM ${HERMES_BASE}
 
-# Install hermes-agent from local source
-COPY 3th-party/harnesses/hermes-agent /opt/hermes
-WORKDIR /opt/hermes
-RUN pip install --no-cache-dir -e ".[all]"
+USER root
 
-# Install hermes-runtime
-COPY lang/hermes-runtime-python /opt/hermes-runtime
+# Remove old hermes-runtime code
+RUN rm -rf /opt/hermes-runtime
+
+# Copy updated hermes-runtime adapter
+COPY lang/hermes-runtime-python/ /opt/hermes-runtime/
+
+# Copy claude-code-runtime proto stubs (shared via _fix_proto_imports.py).
+# _fix_proto_imports resolves: <here>.parent^4 / "claude-code-runtime-python" / "src"
+# <here> = /opt/hermes-runtime/src/hermes_runtime/_fix_proto_imports.py
+# parent^4 = /opt → looks for /opt/claude-code-runtime-python/src/
+COPY lang/claude-code-runtime-python/src/claude_code_runtime/ \
+     /opt/claude-code-runtime-python/src/claude_code_runtime/
+
 WORKDIR /opt/hermes-runtime
-RUN pip install --no-cache-dir -e ".[dev]"
+RUN uv pip install --no-cache-dir -e ".[dev]" 2>/dev/null || pip install --no-cache-dir -e ".[dev]"
 
-# Link governance plugin into hermes plugin directory
+# Link governance plugin
 ENV HERMES_HOME=/opt/data
 RUN mkdir -p /opt/data/plugins && \
-    ln -s /opt/hermes-runtime/src/hermes_runtime/governance_plugin /opt/data/plugins/grid-governance
+    ln -sf /opt/hermes-runtime/src/hermes_runtime/governance_plugin /opt/data/plugins/grid-governance
 
+# Use hermes user if it exists (hermes-agent base), otherwise root.
+RUN id hermes >/dev/null 2>&1 && echo "hermes user exists" || echo "no hermes user, running as root"
+USER root
 EXPOSE 50053
 
 CMD ["python", "-m", "hermes_runtime"]

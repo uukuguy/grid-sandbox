@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use grid_engine::hooks::{HookAction, HookContext, HookFailureMode, HookHandler};
 use tracing::{debug, warn};
 
-use crate::l2_memory_client::{L2MemoryClient, WriteAnchorRequest};
+use crate::l2_memory_client::{L2MemoryClient, WriteAnchorRequest, WriteFileRequest};
 
 /// PostToolUse hook that writes tool execution evidence to L2.
 pub struct MemoryWriteHook {
@@ -72,7 +72,7 @@ impl HookHandler for MemoryWriteHook {
             event_id,
             session_id: self.session_id.clone(),
             anchor_type: "tool_execution".to_string(),
-            data_ref,
+            data_ref: data_ref.clone(),
             snapshot_hash: None,
             source_system: Some("grid-runtime".to_string()),
         };
@@ -83,8 +83,34 @@ impl HookHandler for MemoryWriteHook {
             "Writing tool execution evidence to L2"
         );
 
-        if let Err(e) = self.client.write_anchor(&req).await {
-            warn!(error = %e, tool = %tool_name, "Failed to write evidence anchor to L2 (non-fatal)");
+        // Step 1: write anchor (evidence metadata)
+        let anchor_id = match self.client.write_anchor(&req).await {
+            Ok(resp) => resp.anchor_id,
+            Err(e) => {
+                warn!(error = %e, tool = %tool_name, "Failed to write evidence anchor to L2 (non-fatal)");
+                None
+            }
+        };
+
+        // Step 2: write memory file (searchable content for FTS5 index).
+        // Without this, memory_search returns nothing because it only
+        // searches memory_files, not anchors.
+        let content = format!(
+            "Tool: {}\nSession: {}\nResult: {}",
+            tool_name,
+            self.session_id,
+            data_ref.as_deref().unwrap_or("(no output)")
+        );
+        let file_req = WriteFileRequest {
+            memory_id: None,
+            scope: format!("session:{}", self.session_id),
+            category: "tool_evidence".to_string(),
+            content,
+            evidence_refs: anchor_id.map(|id| vec![id]),
+            status: Some("agent_suggested".to_string()),
+        };
+        if let Err(e) = self.client.write_file(&file_req).await {
+            warn!(error = %e, tool = %tool_name, "Failed to write memory file to L2 (non-fatal)");
         }
 
         Ok(HookAction::Continue)

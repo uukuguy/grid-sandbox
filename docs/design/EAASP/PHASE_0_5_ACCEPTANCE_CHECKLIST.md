@@ -12,7 +12,7 @@
 |---------|----------|---------|-------|
 | grid-runtime | `OPENAI_*` | `OPENAI_API_KEY` | `OPENAI_MODEL_NAME` |
 | claude-code-runtime | `ANTHROPIC_*` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL_NAME` |
-| hermes-runtime | OpenRouter | `HERMES_API_KEY` / `OPENROUTER_API_KEY` | `HERMES_MODEL` |
+| hermes-runtime | `HERMES_*` → `OPENAI_*` | `HERMES_API_KEY` → `OPENAI_API_KEY` | `HERMES_MODEL` → `OPENAI_MODEL_NAME` |
 
 所有 key 在 `.env` 文件中，通过 OpenRouter 统一接入。
 

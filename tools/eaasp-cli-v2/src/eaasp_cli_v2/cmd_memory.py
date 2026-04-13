@@ -38,15 +38,28 @@ def search(
             await client.aclose()
 
     result = _main.run_async(_do())
-    hits: list[Any] = []
+    raw_hits: list[Any] = []
     if isinstance(result, dict):
-        hits = result.get("hits", []) or []
+        raw_hits = result.get("hits", []) or []
     elif isinstance(result, list):
-        hits = result
+        raw_hits = result
+
+    # SearchHit has nested structure: {"memory": {...}, "score": ...}
+    # Flatten for table display.
+    hits: list[dict[str, Any]] = []
+    for h in raw_hits:
+        mem = h.get("memory", {}) if isinstance(h, dict) else {}
+        hits.append({
+            "memory_id": mem.get("memory_id", ""),
+            "scope": mem.get("scope", ""),
+            "category": mem.get("category", ""),
+            "content": (mem.get("content", "") or "")[:80],
+            "score": h.get("score", ""),
+        })
     print_table(
         "Memory hits",
         hits,
-        ["memory_id", "scope", "category", "score"],
+        ["memory_id", "scope", "category", "content", "score"],
     )
 
 

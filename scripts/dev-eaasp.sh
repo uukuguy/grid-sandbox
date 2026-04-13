@@ -35,6 +35,7 @@ L4_ORCH_PORT="${EAASP_L4_PORT:-18084}"
 GRID_RT_PORT="${GRID_RUNTIME_PORT:-50051}"
 CLAUDE_RT_PORT="${CLAUDE_RUNTIME_PORT:-50052}"
 HERMES_RT_PORT="${HERMES_RUNTIME_PORT:-50053}"
+MOCK_SCADA_SSE_PORT="${EAASP_MOCK_SCADA_SSE_PORT:-18090}"
 
 # ── Runtime flags ─────────────────────────────────────────────────────────
 SKIP_BUILD=false
@@ -47,6 +48,7 @@ L4_PID=""
 GRID_PID=""
 CLAUDE_PID=""
 HERMES_PID=""
+MOCK_SCADA_SSE_PID=""
 
 # ── Cleanup helpers (reused from verify-v2-mvp.sh) ───────────────────────
 _kill_tree() {
@@ -74,7 +76,8 @@ cleanup() {
     echo ""
     echo -e "${BOLD}=== Stopping EAASP services ===${RESET}"
     _kill_tree "L4 orchestration" "$L4_PID"
-    _kill_tree "hermes-runtime" "$HERMES_PID"
+    docker stop eaasp-hermes-runtime >/dev/null 2>&1 || true
+    _kill_tree "mock-scada-sse" "$MOCK_SCADA_SSE_PID"
     _kill_tree "claude-code-runtime" "$CLAUDE_PID"
     _kill_tree "grid-runtime" "$GRID_PID"
     _kill_tree "L3 governance" "$L3_PID"
@@ -83,6 +86,7 @@ cleanup() {
     # Sweep orphaned listeners
     _kill_port "L4 orchestration" "$L4_ORCH_PORT"
     _kill_port "hermes-runtime" "$HERMES_RT_PORT"
+    _kill_port "mock-scada-sse" "$MOCK_SCADA_SSE_PORT"
     _kill_port "claude-code-runtime" "$CLAUDE_RT_PORT"
     _kill_port "grid-runtime" "$GRID_RT_PORT"
     _kill_port "L3 governance" "$L3_GOV_PORT"
@@ -178,6 +182,7 @@ check_port_free $L4_ORCH_PORT "L4 orchestration"
 check_port_free $GRID_RT_PORT "grid-runtime"
 check_port_free $CLAUDE_RT_PORT "claude-code-runtime"
 check_port_free $HERMES_RT_PORT "hermes-runtime"
+check_port_free $MOCK_SCADA_SSE_PORT "mock-scada-sse"
 echo -e "  ${GREEN}All ports free.${RESET}"
 echo ""
 
@@ -186,7 +191,13 @@ check_venv "tools/eaasp-l2-memory-engine" "l2-memory-setup"
 check_venv "tools/eaasp-l3-governance" "l3-setup"
 check_venv "tools/eaasp-l4-orchestration" "l4-setup"
 check_venv "lang/claude-code-runtime-python" "claude-runtime-setup"
-check_venv "lang/hermes-runtime-python" "hermes-runtime-setup"
+# hermes-runtime uses Docker — check image exists
+if ! docker image inspect hermes-runtime:latest >/dev/null 2>&1; then
+    echo -e "  ${RED}ERROR${RESET}: Docker image hermes-runtime:latest not found."
+    echo "         Run: make hermes-runtime-build"
+    exit 1
+fi
+echo -e "  ${GREEN}hermes-runtime:latest Docker image found.${RESET}"
 echo -e "  ${GREEN}All .venvs present.${RESET}"
 echo ""
 
@@ -307,6 +318,16 @@ L3_PID=$!
 echo "  PID: $L3_PID"
 wait_for_port $L3_GOV_PORT "L3 governance"
 
+# ── Step 4b: Start mock-scada SSE (tool-sandbox for hermes-runtime) ──────
+echo ""
+echo -e "${BOLD}=== Starting mock-scada SSE on :${MOCK_SCADA_SSE_PORT} ===${RESET}"
+NO_PROXY=127.0.0.1,localhost \
+    "$PROJECT_ROOT/tools/mock-scada/.venv/bin/mock-scada" \
+        --transport sse --host 0.0.0.0 --port "$MOCK_SCADA_SSE_PORT" 2>&1 | sed 's/^/  [scada-sse] /' &
+MOCK_SCADA_SSE_PID=$!
+echo "  PID: $MOCK_SCADA_SSE_PID"
+wait_for_port $MOCK_SCADA_SSE_PORT "mock-scada-sse"
+
 # ── Step 5: Start grid-runtime ───────────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
@@ -331,14 +352,31 @@ CLAUDE_PID=$!
 echo "  PID: $CLAUDE_PID"
 wait_for_port $CLAUDE_RT_PORT "claude-code-runtime"
 
-# ── Step 7: Start hermes-runtime ────────────────────────────────────────
+# ── Step 7: Start hermes-runtime (Docker) ───────────────────────────────
 echo ""
-echo -e "${BOLD}=== Starting hermes-runtime on :${HERMES_RT_PORT} ===${RESET}"
-HERMES_RUNTIME_PORT=$HERMES_RT_PORT \
-    "$PROJECT_ROOT/lang/hermes-runtime-python/.venv/bin/python" \
-        -m hermes_runtime --port "$HERMES_RT_PORT" 2>&1 | sed 's/^/  [hermes-rt] /' &
+echo -e "${BOLD}=== Starting hermes-runtime on :${HERMES_RT_PORT} (Docker) ===${RESET}"
+HERMES_CONTAINER="eaasp-hermes-runtime"
+# Remove stale container if exists
+docker rm -f "$HERMES_CONTAINER" >/dev/null 2>&1 || true
+# macOS Docker Desktop does not support --network host; use -p port mapping.
+# Run in detached mode, stream logs via docker logs -f.
+docker run --rm -d \
+    --name "$HERMES_CONTAINER" \
+    -p "${HERMES_RT_PORT}:${HERMES_RT_PORT}" \
+    -e HERMES_RUNTIME_PORT="$HERMES_RT_PORT" \
+    -e HERMES_API_KEY="${HERMES_API_KEY:-${OPENAI_API_KEY:-}}" \
+    -e HERMES_BASE_URL="${HERMES_BASE_URL:-${OPENAI_BASE_URL:-}}" \
+    -e HERMES_MODEL="${HERMES_MODEL:-${OPENAI_MODEL_NAME:-anthropic/claude-sonnet-4-20250514}}" \
+    -e HERMES_PROVIDER="${HERMES_PROVIDER:-}" \
+    -e HOOK_BRIDGE_URL="${HOOK_BRIDGE_URL:-}" \
+    -e EAASP_MCP_MOCK_SCADA_SSE_URL="http://host.docker.internal:${MOCK_SCADA_SSE_PORT}/sse" \
+    -e NO_PROXY=host.docker.internal,127.0.0.1,localhost \
+    hermes-runtime:latest \
+    python -m hermes_runtime --port "$HERMES_RT_PORT" >/dev/null 2>&1
+# Stream container logs in background
+docker logs -f "$HERMES_CONTAINER" 2>&1 | sed 's/^/  [hermes-rt] /' &
 HERMES_PID=$!
-echo "  PID: $HERMES_PID"
+echo "  Container: $HERMES_CONTAINER"
 wait_for_port $HERMES_RT_PORT "hermes-runtime"
 
 # ── Step 8: Start L4 orchestration ───────────────────────────────────────
@@ -366,9 +404,11 @@ printf "  %-24s %-8s %-8s %-10s %-8s\n"   "────────────�
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "skill-registry"       "$SKILL_REG_PORT" "$SKILL_REG_PID" "-"          "UP"
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "L2 memory-engine"     "$L2_MEM_PORT"    "$L2_PID"        "-"          "UP"
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "L3 governance"        "$L3_GOV_PORT"    "$L3_PID"        "-"          "UP"
+printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "mock-scada(SSE)"      "$MOCK_SCADA_SSE_PORT" "$MOCK_SCADA_SSE_PID" "tool-sandbox" "UP"
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "grid-runtime"         "$GRID_RT_PORT"   "$GRID_PID"      "OPENAI_*"   "UP"
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "claude-code-runtime"  "$CLAUDE_RT_PORT" "$CLAUDE_PID"    "ANTHROPIC_*" "UP"
-printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "hermes-runtime"       "$HERMES_RT_PORT" "$HERMES_PID"    "OPENROUTER" "UP"
+HERMES_CID=$(docker inspect --format '{{.State.Pid}}' eaasp-hermes-runtime 2>/dev/null || echo "?")
+printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "hermes-runtime(docker)" "$HERMES_RT_PORT" "$HERMES_CID"    "HERMES→OPENAI" "UP"
 printf "  %-24s %-8s %-8s %-10s ${GREEN}%-8s${RESET}\n" "L4 orchestration"     "$L4_ORCH_PORT"   "$L4_PID"        "-"          "UP"
 echo ""
 echo -e "  ${YELLOW}Press Ctrl+C to stop all services.${RESET}"

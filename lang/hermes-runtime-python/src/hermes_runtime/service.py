@@ -18,6 +18,8 @@ _fix_proto_imports()
 from eaasp.runtime.v2 import common_pb2, runtime_pb2, runtime_pb2_grpc  # noqa: E402
 
 from hermes_runtime.adapter import HermesAdapter
+from hermes_runtime.l2_memory_client import L2MemoryClient
+from hermes_runtime.mcp_bridge import L2MemoryToolProxy, McpBridge, inject_mcp_tools, resolve_mcp_sse_urls
 from hermes_runtime.config import HermesRuntimeConfig
 from hermes_runtime.mapper import (
     chunk_to_proto,
@@ -110,6 +112,7 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         self.adapter = HermesAdapter(config)
         self.session_mgr = SessionManager()
         self._telemetry: dict[str, TelemetryCollector] = {}
+        self._l2_client = L2MemoryClient()
         self._current_session: str = ""  # tracked for Empty-request methods
         self._start_time = time.time()
 
@@ -211,15 +214,35 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
                 }
             )
 
-        # Create AIAgent instance for this session
+        # Create AIAgent instance for this session, inject skill prose as system prompt
         try:
-            self.adapter.create_agent(sid)
+            self.adapter.create_agent(sid, skill_prose=skill_content)
         except Exception as e:
             logger.error("Failed to create AIAgent for %s: %s", sid, e)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
             self.session_mgr.terminate(sid)
             return runtime_pb2.InitializeResponse(session_id="", runtime_id=self.config.runtime_id)
+
+        # Auto-connect MCP servers from environment (EAASP_MCP_*_SSE_URL)
+        mcp_urls = resolve_mcp_sse_urls()
+        agent = self.adapter.get_agent(sid)
+        bridges = []
+        for server_name, sse_url in mcp_urls.items():
+            bridge = McpBridge(server_name, sse_url)
+            try:
+                await bridge.connect()
+                bridges.append(bridge)
+            except Exception as e:
+                logger.warning("MCP bridge %s connect failed: %s", server_name, e)
+
+        # L2 memory tools via REST proxy (always inject, regardless of MCP SSE)
+        l2_proxy = L2MemoryToolProxy()
+
+        if agent is not None:
+            inject_mcp_tools(agent, bridges, l2_proxy=l2_proxy)
+            session.mcp_bridges = bridges
+            logger.info("MCP tools injected for session %s: %d bridges + L2 memory", sid, len(bridges))
 
         self._telemetry[sid] = TelemetryCollector(
             session_id=sid,
@@ -229,11 +252,12 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         self._telemetry[sid].record("session_start")
 
         logger.info(
-            "Session initialized: %s (user=%s, model=%s, managed_hooks=%d)",
+            "Session initialized: %s (user=%s, model=%s, managed_hooks=%d, mcp=%d)",
             sid,
             user_id,
             self.config.hermes_model,
             len(extract_policy_hooks(payload)),
+            len(mcp_urls),
         )
         return runtime_pb2.InitializeResponse(
             session_id=sid,
@@ -295,6 +319,35 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
     # ── 7. OnToolResult (MUST) ──
 
     async def OnToolResult(self, request, context):
+        sid = request.session_id
+
+        # Fire-and-forget: write tool execution evidence to L2 Memory Engine.
+        if not request.is_error:
+            event_id = f"tool-{request.tool_name}-{int(time.time() * 1000)}"
+            data_ref = request.output[:500] if request.output else None
+            anchor_id = None
+            try:
+                resp = await self._l2_client.write_anchor(
+                    event_id=event_id,
+                    session_id=sid,
+                    anchor_type="tool_execution",
+                    data_ref=data_ref,
+                )
+                anchor_id = resp.get("anchor_id")
+            except Exception as e:
+                logger.warning("L2 anchor write failed (non-fatal): %s", e)
+
+            content = f"Tool: {request.tool_name}\nSession: {sid}\nResult: {data_ref or '(no output)'}"
+            try:
+                await self._l2_client.write_file(
+                    scope=f"session:{sid}",
+                    category="tool_evidence",
+                    content=content,
+                    evidence_refs=[anchor_id] if anchor_id else None,
+                )
+            except Exception as e:
+                logger.warning("L2 memory file write failed (non-fatal): %s", e)
+
         return runtime_pb2.ToolResultAck(decision="allow", reason="")
 
     # ── 8. OnStop (MUST) ──
@@ -308,9 +361,44 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         session = self._get_or_404(request.session_id, context)
         if session is None:
             return runtime_pb2.ConnectMCPResponse(success=False)
-        connected = [s.name for s in request.servers]
-        session.mcp_servers.extend(connected)
-        return runtime_pb2.ConnectMCPResponse(success=True, connected=connected, failed=[])
+
+        connected = []
+        failed = []
+        agent = self.adapter.get_agent(session.session_id)
+        bridges = []
+
+        for server_cfg in request.servers:
+            # For SSE/HTTP transport, connect via MCP bridge
+            if server_cfg.transport in ("sse", "streamable-http") and server_cfg.url:
+                bridge = McpBridge(server_cfg.name, server_cfg.url)
+                try:
+                    await bridge.connect()
+                    bridges.append(bridge)
+                    connected.append(server_cfg.name)
+                except Exception as e:
+                    logger.warning("ConnectMCP %s failed: %s", server_cfg.name, e)
+                    failed.append(server_cfg.name)
+            else:
+                # stdio transport not supported in container — record as connected
+                # but log warning
+                logger.warning(
+                    "ConnectMCP: stdio transport not supported in container for %s",
+                    server_cfg.name,
+                )
+                session.mcp_servers.append(server_cfg.name)
+                connected.append(server_cfg.name)
+
+        if bridges and agent is not None:
+            inject_mcp_tools(agent, bridges)
+            if not hasattr(session, 'mcp_bridges'):
+                session.mcp_bridges = []
+            session.mcp_bridges.extend(bridges)
+
+        return runtime_pb2.ConnectMCPResponse(
+            success=len(failed) == 0,
+            connected=connected,
+            failed=failed,
+        )
 
     # ── 10. DisconnectMcp (OPTIONAL) ──
 

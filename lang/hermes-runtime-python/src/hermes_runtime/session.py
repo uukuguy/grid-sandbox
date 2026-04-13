@@ -25,6 +25,7 @@ class HermesSession:
     # Runtime state
     skills: list = field(default_factory=list)  # dynamically loaded skills (LoadSkill RPC)
     mcp_servers: list = field(default_factory=list)
+    mcp_bridges: list = field(default_factory=list)  # McpBridge instances for SSE connections
     conversation_history: list = field(default_factory=list)
     created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ"))
     paused: bool = False

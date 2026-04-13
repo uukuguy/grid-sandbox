@@ -366,6 +366,82 @@ async fn initialize_with_unknown_hook_type_skips_gracefully() {
     harness.terminate(&handle).await.ok();
 }
 
+// ── Hook Deny Integration Tests ──
+
+use grid_engine::hooks::HookHandler;
+use grid_runtime::scoped_hook_handler::ScopedHookHandler;
+
+#[tokio::test]
+async fn block_write_scada_hook_denies_scada_write() {
+    // Integration test: the real block_write_scada.sh script must deny
+    // scada_write tool calls (exit 2) and allow everything else (exit 0).
+    //
+    // This validates the full chain: ScopedHookHandler → shell subprocess →
+    // exit code → HookAction::Block. Proves that PreToolUse hook deny works
+    // at the unit level even if the LLM never triggers it in E2E tests.
+
+    let script = format!(
+        "{}/examples/skills/threshold-calibration/hooks/block_write_scada.sh",
+        env!("CARGO_MANIFEST_DIR").replace("/crates/grid-runtime", ""),
+    );
+
+    // Case 1: scada_write → deny (exit 2)
+    let deny_hook = ScopedHookHandler::new(
+        "block-scada-write".into(),
+        script.clone(),
+        "scada_write*".into(),
+        0,
+    );
+    let deny_ctx = grid_engine::hooks::HookContext::new()
+        .with_tool("scada_write", serde_json::json!({"device_id": "xfmr-042", "value": 75.0}));
+    let action = deny_hook.execute(&deny_ctx).await.unwrap();
+    // block_write_scada.sh exits 2 for scada_write* — command_executor reads
+    // stderr as reason (which is empty here), so we just check Block variant.
+    assert!(
+        matches!(action, grid_engine::hooks::HookAction::Block(_)),
+        "scada_write must be denied (Block) by block_write_scada.sh, got {:?}",
+        action
+    );
+
+    // Case 2: scada_read_snapshot → allow (condition mismatch, skip)
+    let allow_ctx = grid_engine::hooks::HookContext::new()
+        .with_tool("scada_read_snapshot", serde_json::json!({"device_id": "xfmr-042"}));
+    let action = deny_hook.execute(&allow_ctx).await.unwrap();
+    assert!(
+        matches!(action, grid_engine::hooks::HookAction::Continue),
+        "scada_read_snapshot must be allowed (condition mismatch), got {:?}",
+        action
+    );
+}
+
+#[tokio::test]
+async fn block_write_scada_hook_allows_non_scada_tools() {
+    // The script itself also allows non-scada tools via the `*) exit 0` branch.
+    // Test with condition="*" so the script actually runs for any tool.
+
+    let script = format!(
+        "{}/examples/skills/threshold-calibration/hooks/block_write_scada.sh",
+        env!("CARGO_MANIFEST_DIR").replace("/crates/grid-runtime", ""),
+    );
+
+    let hook = ScopedHookHandler::new(
+        "block-scada-write-all".into(),
+        script,
+        "*".into(), // match all tools, let the script decide
+        0,
+    );
+
+    // bash tool → script reads tool_name="bash" → falls through to *) exit 0
+    let ctx = grid_engine::hooks::HookContext::new()
+        .with_tool("bash", serde_json::json!({"command": "ls"}));
+    let action = hook.execute(&ctx).await.unwrap();
+    assert!(
+        matches!(action, grid_engine::hooks::HookAction::Continue),
+        "bash tool must be allowed by block_write_scada.sh, got {:?}",
+        action
+    );
+}
+
 /// Mirrors `GridHarness::build_memory_preamble` for cross-crate assertions.
 /// Kept in sync with the harness implementation; if the format ever
 /// changes, this helper and `build_memory_preamble_formats_entries` in

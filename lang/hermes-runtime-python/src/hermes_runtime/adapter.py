@@ -45,8 +45,18 @@ class HermesAdapter:
         self._config = config
         self._agents: dict[str, object] = {}  # session_id → AIAgent
 
-    def create_agent(self, session_id: str, **session_kwargs) -> None:
-        """Create and store an AIAgent for this session."""
+    def create_agent(
+        self,
+        session_id: str,
+        skill_prose: str | None = None,
+        **session_kwargs,
+    ) -> None:
+        """Create and store an AIAgent for this session.
+
+        Args:
+            session_id: Unique session identifier.
+            skill_prose: Skill instructions (prose) to inject as ephemeral system prompt.
+        """
         if _HAS_HERMES:
             from run_agent import AIAgent
 
@@ -64,6 +74,7 @@ class HermesAdapter:
                 max_iterations=self._config.hermes_max_iterations,
                 enabled_toolsets=enabled_toolsets,
                 session_id=session_id,
+                ephemeral_system_prompt=skill_prose or None,
                 quiet_mode=True,
                 skip_context_files=True,
                 skip_memory=True,

@@ -134,7 +134,7 @@ def build_server() -> Server:
     return server
 
 
-async def _serve() -> None:
+async def _serve_stdio() -> None:
     _log.info("Starting mock-scada MCP server v%s (stdio transport)", SERVER_VERSION)
     server = build_server()
     init_options = InitializationOptions(
@@ -149,9 +149,69 @@ async def _serve() -> None:
         await server.run(read_stream, write_stream, init_options)
 
 
+def _serve_sse(host: str, port: int) -> None:
+    """Run mock-scada as SSE transport (network MCP for container-to-container)."""
+    from starlette.applications import Starlette
+    from starlette.responses import Response
+    from starlette.routing import Mount, Route
+    from mcp.server.sse import SseServerTransport
+
+    _log.info(
+        "Starting mock-scada MCP server v%s (SSE transport on %s:%d)",
+        SERVER_VERSION, host, port,
+    )
+
+    sse = SseServerTransport("/messages/")
+    server = build_server()
+    init_options = InitializationOptions(
+        server_name=SERVER_NAME,
+        server_version=SERVER_VERSION,
+        capabilities=server.get_capabilities(
+            notification_options=NotificationOptions(),
+            experimental_capabilities={},
+        ),
+    )
+
+    async def handle_sse(request):
+        async with sse.connect_sse(
+            request.scope, request.receive, request._send,
+        ) as streams:
+            await server.run(streams[0], streams[1], init_options)
+        return Response()
+
+    starlette_routes = [
+        Route("/sse", endpoint=handle_sse, methods=["GET"]),
+        Mount("/messages/", app=sse.handle_post_message),
+    ]
+    app = Starlette(routes=starlette_routes)
+
+    import uvicorn
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 def run() -> None:
-    """Console-script entry point; blocks until stdio streams close."""
-    asyncio.run(_serve())
+    """Console-script entry point.
+
+    Usage:
+        mock-scada                         # stdio (default)
+        mock-scada --transport sse         # SSE on 0.0.0.0:8090
+        mock-scada --transport sse --port 9090 --host 127.0.0.1
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Mock SCADA MCP server")
+    parser.add_argument(
+        "--transport", choices=["stdio", "sse"], default="stdio",
+        help="MCP transport mode (default: stdio)",
+    )
+    parser.add_argument("--host", default="0.0.0.0", help="SSE bind host")
+    parser.add_argument("--port", type=int, default=18090, help="SSE bind port")
+    args = parser.parse_args()
+
+    if args.transport == "sse":
+        _serve_sse(args.host, args.port)
+    else:
+        asyncio.run(_serve_stdio())
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ description = "EAASP v2.0 Phase 0 — Mock SCADA MCP stdio server for threshold-
 requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.2",
+    "starlette>=0.36",
+    "uvicorn>=0.27",
 ]
 
 [project.optional-dependencies]
