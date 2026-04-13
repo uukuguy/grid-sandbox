@@ -301,10 +301,7 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         has_si = payload.HasField("skill_instructions")
         skill_deps = list(payload.skill_instructions.dependencies) if has_si else []
         mcp_deps = [d for d in skill_deps if d.startswith("mcp:")]
-        logger.info(
-            "MCP auto-connect: has_skill_instructions=%s skill_deps=%s mcp_deps=%s",
-            has_si, skill_deps, mcp_deps,
-        )
+        logger.info("MCP auto-connect: has_si=%s deps=%s mcp=%s", has_si, skill_deps, mcp_deps)
         if mcp_deps:
             import tempfile, os
             mcp_dir = tempfile.mkdtemp(prefix=f"eaasp-mcp-{sid}-")
