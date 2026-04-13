@@ -29,6 +29,16 @@ from mcp.types import TextContent, Tool
 
 from .snapshots import SCADA_WRITE_ERROR_MARKER, build_snapshot, snapshot_hash
 
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[mock-scada] %(message)s",
+    stream=sys.stderr,
+)
+_log = logging.getLogger("mock-scada")
+
 SERVER_NAME = "mock-scada"
 SERVER_VERSION = "0.1.0"
 
@@ -83,12 +93,14 @@ def _handle_scada_read_snapshot(args: dict[str, Any]) -> dict[str, Any]:
     time_window = args.get("time_window", "5m")
     if not isinstance(time_window, str) or not time_window:
         time_window = "5m"
+    _log.info("scada_read_snapshot device_id=%s time_window=%s", device_id, time_window)
     snapshot = build_snapshot(device_id, time_window)
     snapshot["snapshot_hash"] = snapshot_hash(snapshot)
     return snapshot
 
 
 def _handle_scada_write(args: dict[str, Any]) -> dict[str, Any]:
+    _log.warning("scada_write BLOCKED device_id=%s", args.get("device_id", "?"))
     raise RuntimeError(
         f"{SCADA_WRITE_ERROR_MARKER}: scada_write is blocked; "
         f"args={json.dumps(args, sort_keys=True)}"
@@ -105,6 +117,7 @@ def build_server() -> Server:
 
     @server.call_tool()
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+        _log.info("call_tool: %s args=%s", name, arguments)
         if name == "scada_read_snapshot":
             result = _handle_scada_read_snapshot(arguments or {})
         elif name == "scada_write":
@@ -122,6 +135,7 @@ def build_server() -> Server:
 
 
 async def _serve() -> None:
+    _log.info("Starting mock-scada MCP server v%s (stdio transport)", SERVER_VERSION)
     server = build_server()
     init_options = InitializationOptions(
         server_name=SERVER_NAME,
