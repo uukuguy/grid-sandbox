@@ -364,6 +364,7 @@ wait_for_port $GRID_RT_PORT "grid-runtime"
 echo ""
 echo -e "${BOLD}=== Starting claude-code-runtime on :${CLAUDE_RT_PORT} ===${RESET}"
 CLAUDE_RUNTIME_PORT=$CLAUDE_RT_PORT \
+PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
     "$PROJECT_ROOT/lang/claude-code-runtime-python/.venv/bin/python" \
         -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | sed 's/^/  [claude-rt] /' &
 CLAUDE_PID=$!
