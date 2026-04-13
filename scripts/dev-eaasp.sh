@@ -50,6 +50,7 @@ GRID_PID=""
 CLAUDE_PID=""
 HERMES_PID=""
 MOCK_SCADA_SSE_PID=""
+MCP_ORCH_PID=""
 
 # ── Cleanup helpers (reused from verify-v2-mvp.sh) ───────────────────────
 _kill_tree() {
@@ -197,13 +198,15 @@ check_venv "tools/eaasp-l2-memory-engine" "l2-memory-setup"
 check_venv "tools/eaasp-l3-governance" "l3-setup"
 check_venv "tools/eaasp-l4-orchestration" "l4-setup"
 check_venv "lang/claude-code-runtime-python" "claude-runtime-setup"
-# hermes-runtime uses Docker — check image exists
+# hermes-runtime uses Docker — check image exists (non-fatal: skip if missing)
+SKIP_HERMES=false
 if ! docker image inspect hermes-runtime:latest >/dev/null 2>&1; then
-    echo -e "  ${RED}ERROR${RESET}: Docker image hermes-runtime:latest not found."
-    echo "         Run: make hermes-runtime-build"
-    exit 1
+    echo -e "  ${YELLOW}WARN${RESET}: Docker image hermes-runtime:latest not found. Hermes will be skipped."
+    echo "         To enable: make hermes-runtime-build"
+    SKIP_HERMES=true
+else
+    echo -e "  ${GREEN}hermes-runtime:latest Docker image found.${RESET}"
 fi
-echo -e "  ${GREEN}hermes-runtime:latest Docker image found.${RESET}"
 echo -e "  ${GREEN}All .venvs present.${RESET}"
 echo ""
 
@@ -368,30 +371,35 @@ echo "  PID: $CLAUDE_PID"
 wait_for_port $CLAUDE_RT_PORT "claude-code-runtime"
 
 # ── Step 7: Start hermes-runtime (Docker) ───────────────────────────────
-echo ""
-echo -e "${BOLD}=== Starting hermes-runtime on :${HERMES_RT_PORT} (Docker) ===${RESET}"
-HERMES_CONTAINER="eaasp-hermes-runtime"
-# Remove stale container if exists
-docker rm -f "$HERMES_CONTAINER" >/dev/null 2>&1 || true
-# macOS Docker Desktop does not support --network host; use -p port mapping.
-# Run in detached mode, stream logs via docker logs -f.
-docker run --rm -d \
-    --name "$HERMES_CONTAINER" \
-    -p "${HERMES_RT_PORT}:${HERMES_RT_PORT}" \
-    -e HERMES_RUNTIME_PORT="$HERMES_RT_PORT" \
-    -e HERMES_API_KEY="${HERMES_API_KEY:-${OPENAI_API_KEY:-}}" \
-    -e HERMES_BASE_URL="${HERMES_BASE_URL:-${OPENAI_BASE_URL:-}}" \
-    -e HERMES_MODEL="${HERMES_MODEL:-${OPENAI_MODEL_NAME:-anthropic/claude-sonnet-4-20250514}}" \
-    -e HERMES_PROVIDER="${HERMES_PROVIDER:-}" \
-    -e HOOK_BRIDGE_URL="${HOOK_BRIDGE_URL:-}" \
-    -e NO_PROXY=host.docker.internal,127.0.0.1,localhost \
-    hermes-runtime:latest \
-    python -m hermes_runtime --port "$HERMES_RT_PORT" >/dev/null 2>&1
-# Stream container logs in background
-docker logs -f "$HERMES_CONTAINER" 2>&1 | sed 's/^/  [hermes-rt] /' &
-HERMES_PID=$!
-echo "  Container: $HERMES_CONTAINER"
-wait_for_port $HERMES_RT_PORT "hermes-runtime"
+if [ "$SKIP_HERMES" = "false" ]; then
+    echo ""
+    echo -e "${BOLD}=== Starting hermes-runtime on :${HERMES_RT_PORT} (Docker) ===${RESET}"
+    HERMES_CONTAINER="eaasp-hermes-runtime"
+    # Remove stale container if exists
+    docker rm -f "$HERMES_CONTAINER" >/dev/null 2>&1 || true
+    # macOS Docker Desktop does not support --network host; use -p port mapping.
+    # Run in detached mode, stream logs via docker logs -f.
+    docker run --rm -d \
+        --name "$HERMES_CONTAINER" \
+        -p "${HERMES_RT_PORT}:${HERMES_RT_PORT}" \
+        -e HERMES_RUNTIME_PORT="$HERMES_RT_PORT" \
+        -e HERMES_API_KEY="${HERMES_API_KEY:-${OPENAI_API_KEY:-}}" \
+        -e HERMES_BASE_URL="${HERMES_BASE_URL:-${OPENAI_BASE_URL:-}}" \
+        -e HERMES_MODEL="${HERMES_MODEL:-${OPENAI_MODEL_NAME:-anthropic/claude-sonnet-4-20250514}}" \
+        -e HERMES_PROVIDER="${HERMES_PROVIDER:-}" \
+        -e HOOK_BRIDGE_URL="${HOOK_BRIDGE_URL:-}" \
+        -e NO_PROXY=host.docker.internal,127.0.0.1,localhost \
+        hermes-runtime:latest \
+        python -m hermes_runtime --port "$HERMES_RT_PORT" >/dev/null 2>&1
+    # Stream container logs in background
+    docker logs -f "$HERMES_CONTAINER" 2>&1 | sed 's/^/  [hermes-rt] /' &
+    HERMES_PID=$!
+    echo "  Container: $HERMES_CONTAINER"
+    wait_for_port $HERMES_RT_PORT "hermes-runtime"
+else
+    echo ""
+    echo -e "${YELLOW}=== Skipping hermes-runtime (Docker image not found) ===${RESET}"
+fi
 
 # ── Step 8: Start L4 orchestration ───────────────────────────────────────
 echo ""
