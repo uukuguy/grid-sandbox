@@ -1,48 +1,50 @@
 {
-  "plan_file": "docs/plans/2026-04-13-v2-phase0.75-plan.md",
-  "phase": "phase-0.75",
-  "created_at": "2026-04-13T20:30:00+08:00",
-  "updated_at": "2026-04-13T22:20:00+08:00",
-  "completed_tasks": ["S1.T1", "S1.T2", "S2.T1", "S2.T2", "S3.T1", "S3.T2", "S3.T3", "S4.T1", "S4.T2"],
-  "current_task": null,
-  "total_tasks": 9,
+  "plan_file": "docs/plans/2026-04-13-v2-phase1-plan.md",
+  "implementation_plan": "docs/plans/2026-04-13-v2-phase1-implementation.md",
+  "design_doc": "docs/design/EAASP/PHASE1_EVENT_ENGINE_DESIGN.md",
+  "phase": "phase-1",
+  "created_at": "2026-04-13T22:30:00+08:00",
+  "updated_at": "2026-04-13T23:30:00+08:00",
+  "completed_tasks": ["S0.T1", "S0.T2", "S0.T3", "S1.T1", "S1.T2", "S2.T1_prep", "S3.T1", "S3.T2_prep"],
+  "current_task": "Task 6 (wire into SessionOrchestrator + API)",
+  "total_tasks": 13,
   "execution_mode": "ruflo-orchestrated",
-  "phase_name": "EAASP v2.0 Phase 0.75 — 平台级统一 Runtime MCP 行为",
-  "status": "ARCHIVED — Phase 0.75 closed. 9/9 tasks, acceptance all PASS.",
+  "phase_name": "EAASP v2.0 Phase 1 — Event-driven Foundation",
+  "status": "IN PROGRESS — Task 1-5 complete (110 tests). Next: wire into Orchestrator + API.",
 
-  "acceptance_results": {
-    "grid_runtime": "PASS — mock-scada(2 tools) + eaasp-l2-memory(6 tools) MCP stdio connected + scada_read_snapshot 真实调用 + L2 memory write 实际写入",
-    "claude_code_runtime": "PASS — ConnectMCP connected=['mock-scada','eaasp-l2-memory'] + agent 输出完整校准 JSON",
-    "hermes_runtime": "PASS (REST) — L4 SESSION_MCP_CONNECTED + REST proxy 写入 L2 成功 (容器 MCP stdio Phase 1)",
-    "zero_env_var": "PASS — grep EAASP_MCP_SERVER_ / EAASP_MCP_*_SSE_URL → 零匹配",
-    "stream_termination": "PASS — grid-runtime done chunk 后 stream 正确终止"
+  "implementation_tasks_completed": {
+    "Task 1": "event_models.py — Event + EventMetadata (7 tests) @ 1480280",
+    "Task 2": "event_backend.py + event_backend_sqlite.py — SqliteWalBackend (8 tests) @ 1480280",
+    "Task 3": "event_handlers.py — 4 handlers: Ingestor/Dedup/Clusterer/Indexer (12 tests) @ 1480280",
+    "Task 4": "event_engine.py — async pipeline orchestrator (5 tests) @ c68328a",
+    "Task 5": "event_interceptor.py — L4 chunk→event extractor (8 tests) @ c68328a"
+  },
+
+  "test_results": {
+    "L4_total": "110 PASS, 0 FAIL",
+    "new_tests": 40,
+    "existing_tests": 70,
+    "regression": "zero"
   },
 
   "commits": [
-    "b7035e6 — S1-S3 parallel: resolve API + Memory MCP wrapper + connect_mcp + 3 runtime 统一",
-    "166d031 — S2.T2: McpResolver + SessionOrchestrator Step 6",
-    "9787783 — S4.T1: dev-eaasp.sh 启动 MCP Orchestrator",
-    "78c188e — fix: mcp-servers.yaml mode→ondemand (D69)",
-    "cfa811c — fix: Makefile mcp-orch-start port + l2-memory-mcp targets",
-    "4d3926e — feat: eaasp-mcp-health/list/resolve Makefile 入口",
-    "eb706eb — fix: grid-runtime PATH 注入",
-    "cd06c9a — fix: Docker stop --time=2",
-    "9efbd45 — fix: MCP_ORCH_PID 初始化 + hermes skip",
-    "f24ef19 — fix: L4 api.py 注入 McpResolver + hermes EAASP_L2_HOST",
-    "7138ca2 — fix: claude-code PATH 注入",
-    "8460215 — fix: EAASP_L2_DB_PATH 注入",
-    "4d9e0c6 — fix: stream done chunk 后终止",
-    "6e942a5 — docs: end-phase 🟢"
+    "1480280 — Task 1-3: Event models + SqliteWalBackend + 4 handlers",
+    "c68328a — Task 4-5: EventEngine pipeline + EventInterceptor"
   ],
 
-  "test_results": {
-    "eaasp_mcp_orchestrator_rust": "6 PASS",
-    "grid_runtime_rust": "97 PASS, 2 ignored",
-    "l4_python": "70 PASS",
-    "claude_code_runtime_python": "25 PASS",
-    "hermes_runtime_python": "7 PASS",
-    "l2_memory_mcp_python": "11 PASS"
+  "remaining_tasks": {
+    "Task 6": "Wire EventEngine + Interceptor into SessionOrchestrator + API",
+    "Task 7": "CLI session events command + follow mode",
+    "Task 8": "Checkpoint + full suite run",
+    "Task 9": "grid-runtime EventEmitter (Rust)",
+    "Task 10": "E2E verification + dev-eaasp.sh update"
   },
 
-  "next_phase": "Phase 1 — Event Engine + 容器化 MCP + 多租户基础"
+  "prerequisite_adrs": {
+    "ADR-V2-001": "Accepted — 混合拦截器 + OPTIONAL RPC",
+    "ADR-V2-002": "Accepted — SQLite WAL + EventStreamBackend 接口抽象",
+    "ADR-V2-003": "Accepted — 4 Handler Pipeline"
+  },
+
+  "next_phase": "Phase 2 — Memory and Evidence"
 }
