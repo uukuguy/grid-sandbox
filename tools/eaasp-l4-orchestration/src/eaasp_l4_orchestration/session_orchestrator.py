@@ -28,16 +28,20 @@ with real gRPC calls via ``L1RuntimeClient``.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .context_assembly import build_session_payload
 from .db import connect
 from .event_stream import SessionEventStream
 from .handshake import L2Client, L3Client, SkillRegistryClient
 from .l1_client import L1RuntimeClient, L1RuntimeError, create_l1_client
+from .mcp_resolver import McpResolver, McpResolveError
 
 
 class SessionNotFound(Exception):
@@ -70,6 +74,7 @@ class SessionOrchestrator:
         *,
         skill_registry: SkillRegistryClient | None = None,
         l1_factory: Any | None = None,
+        mcp_resolver: McpResolver | None = None,
     ) -> None:
         self.db_path = db_path
         self.l2 = l2
@@ -79,6 +84,8 @@ class SessionOrchestrator:
         # l1_factory: callable(runtime_id) → L1RuntimeClient.
         # Default: create_l1_client. Tests can inject a mock factory.
         self._l1_factory = l1_factory or create_l1_client
+        # McpResolver for wiring MCP servers after L1 Initialize.
+        self.mcp_resolver = mcp_resolver
         # Active L1 clients keyed by session_id.
         self._l1_clients: dict[str, L1RuntimeClient] = {}
         # L4 session_id → L1 session_id mapping (L1 may generate its own).
@@ -255,6 +262,46 @@ class SessionOrchestrator:
             )
             await self._update_status(session_id, "failed")
             raise
+
+        # Step 6 — ConnectMCP: wire MCP servers from skill dependencies.
+        # skill_instructions["dependencies"] was populated in Step 2b from
+        # the skill registry (or left as [] when registry is absent).
+        skill_deps = skill_instructions.get("dependencies") or []
+        if self.mcp_resolver and skill_deps:
+            mcp_deps = [d for d in skill_deps if d.startswith("mcp:")]
+            if mcp_deps:
+                try:
+                    servers = await self.mcp_resolver.resolve(
+                        mcp_deps, runtime_id=runtime_pref,
+                    )
+                    if servers:
+                        l1_sid = self._l1_session_ids[session_id]
+                        mcp_result = await l1.connect_mcp(l1_sid, servers)
+                        await self.event_stream.append(
+                            session_id,
+                            "SESSION_MCP_CONNECTED",
+                            {
+                                "connected": mcp_result.get("connected", []),
+                                "failed": mcp_result.get("failed", []),
+                            },
+                        )
+                        logger.info(
+                            "ConnectMCP: session=%s connected=%s failed=%s",
+                            session_id,
+                            mcp_result.get("connected"),
+                            mcp_result.get("failed"),
+                        )
+                except (McpResolveError, Exception) as exc:
+                    # MCP connection failure is non-fatal — session remains active.
+                    logger.warning(
+                        "ConnectMCP failed for session %s: %s (non-fatal)",
+                        session_id, exc,
+                    )
+                    await self.event_stream.append(
+                        session_id,
+                        "SESSION_MCP_CONNECT_FAILED",
+                        {"error": str(exc)},
+                    )
 
         return {
             "session_id": session_id,
