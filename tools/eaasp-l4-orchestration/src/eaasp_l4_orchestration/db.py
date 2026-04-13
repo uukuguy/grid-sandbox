@@ -49,6 +49,41 @@ CREATE INDEX IF NOT EXISTS idx_session_seq
 """
 
 
+# Phase 1 Event Engine columns — idempotent migration via ALTER TABLE ADD COLUMN.
+# SQLite silently fails on duplicate column names via try/except.
+_V2_COLUMNS = [
+    "ALTER TABLE session_events ADD COLUMN event_id TEXT",
+    "ALTER TABLE session_events ADD COLUMN source TEXT DEFAULT ''",
+    "ALTER TABLE session_events ADD COLUMN metadata_json TEXT DEFAULT '{}'",
+    "ALTER TABLE session_events ADD COLUMN cluster_id TEXT",
+]
+
+_V2_FTS = """
+CREATE VIRTUAL TABLE IF NOT EXISTS session_events_fts USING fts5(
+    event_type, payload_json,
+    content='session_events', content_rowid='seq'
+);
+"""
+
+_V2_FTS_TRIGGER = """
+CREATE TRIGGER IF NOT EXISTS session_events_fts_ai
+AFTER INSERT ON session_events BEGIN
+    INSERT INTO session_events_fts(rowid, event_type, payload_json)
+    VALUES (new.seq, new.event_type, new.payload_json);
+END;
+"""
+
+_V2_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_session_events_cluster
+    ON session_events(cluster_id) WHERE cluster_id IS NOT NULL;
+"""
+
+_V2_EVENT_ID_INDEX = """
+CREATE INDEX IF NOT EXISTS idx_session_events_event_id
+    ON session_events(event_id) WHERE event_id IS NOT NULL;
+"""
+
+
 async def init_db(path: str) -> None:
     """Create schema if absent. Ensures the parent directory exists."""
     parent = os.path.dirname(os.path.abspath(path))
@@ -56,6 +91,19 @@ async def init_db(path: str) -> None:
         os.makedirs(parent, exist_ok=True)
     async with aiosqlite.connect(path) as db:
         await db.executescript(SCHEMA)
+        await db.commit()
+        # Phase 1 migration — add new columns (idempotent).
+        for stmt in _V2_COLUMNS:
+            try:
+                await db.execute(stmt)
+            except Exception:
+                pass  # Column already exists
+        await db.commit()
+        # FTS5 + trigger + indices
+        await db.executescript(_V2_FTS)
+        await db.executescript(_V2_FTS_TRIGGER)
+        await db.executescript(_V2_INDEX)
+        await db.executescript(_V2_EVENT_ID_INDEX)
         await db.commit()
 
 
