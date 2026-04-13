@@ -298,8 +298,13 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
         # MCP server auto-connect from P4 skill dependencies.
         # Create a .mcp.json in a temp dir so the Claude Agent SDK (which
         # runs Claude Code CLI underneath) auto-discovers the MCP servers.
-        skill_deps = list(payload.skill_instructions.dependencies) if payload.HasField("skill_instructions") else []
+        has_si = payload.HasField("skill_instructions")
+        skill_deps = list(payload.skill_instructions.dependencies) if has_si else []
         mcp_deps = [d for d in skill_deps if d.startswith("mcp:")]
+        logger.info(
+            "MCP auto-connect: has_skill_instructions=%s skill_deps=%s mcp_deps=%s",
+            has_si, skill_deps, mcp_deps,
+        )
         if mcp_deps:
             import tempfile, os
             mcp_dir = tempfile.mkdtemp(prefix=f"eaasp-mcp-{sid}-")
