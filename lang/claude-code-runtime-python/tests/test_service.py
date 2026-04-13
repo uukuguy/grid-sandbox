@@ -474,3 +474,56 @@ async def test_initialize_injects_memory_refs_preamble(service, ctx):
     assert "User prefers conservative thresholds" in preamble
     assert "[fact]" in preamble
     assert "[preference]" in preamble
+
+
+@pytest.mark.asyncio
+async def test_initialize_creates_isolated_workspace(service, ctx):
+    """Initialize must create an isolated workspace directory for the session.
+    L1 Runtime is designed to run in a container; bare-metal isolation prevents
+    development environment (.claude/, hooks) from leaking into skill context.
+    """
+    sid = await _init_session(service, ctx)
+    session = service.session_mgr.get(sid)
+    assert session is not None
+    assert session.workspace is not None
+    import os
+    assert os.path.isdir(session.workspace), f"workspace must be a directory: {session.workspace}"
+    assert "eaasp-workspace" in session.workspace
+
+
+@pytest.mark.asyncio
+async def test_initialize_mcp_servers_from_dependencies(service, ctx):
+    """Initialize must extract mcp:* dependencies from P4 skill_instructions
+    and populate session.mcp_servers_config for SDK --mcp-config."""
+    import os
+    os.environ["EAASP_MCP_SERVER_MOCK_SCADA_CMD"] = "/usr/bin/mock-scada"
+    try:
+        payload = _payload()
+        payload.skill_instructions.skill_id = "cal"
+        payload.skill_instructions.content = "calibrate"
+        payload.skill_instructions.dependencies.append("mcp:mock-scada")
+        payload.skill_instructions.dependencies.append("mcp:eaasp-l2-memory")
+        resp = await service.Initialize(
+            runtime_pb2.InitializeRequest(payload=payload), ctx
+        )
+        sid = resp.session_id
+        session = service.session_mgr.get(sid)
+        assert session is not None
+        # mock-scada should be configured (has env var CMD)
+        assert session.mcp_servers_config is not None
+        assert "mock-scada" in session.mcp_servers_config
+        assert session.mcp_servers_config["mock-scada"]["command"] == "/usr/bin/mock-scada"
+        # eaasp-l2-memory should NOT be configured (empty CMD)
+        assert "eaasp-l2-memory" not in session.mcp_servers_config
+    finally:
+        os.environ.pop("EAASP_MCP_SERVER_MOCK_SCADA_CMD", None)
+
+
+@pytest.mark.asyncio
+async def test_sdk_wrapper_sets_bare_mode():
+    """SdkWrapper must set CLAUDE_CODE_SIMPLE=1 for L1 Runtime isolation."""
+    from claude_code_runtime.sdk_wrapper import SdkWrapper
+    config = RuntimeConfig()
+    wrapper = SdkWrapper(config)
+    opts = wrapper._build_options(system_prompt="test")
+    assert opts.env.get("CLAUDE_CODE_SIMPLE") == "1"
