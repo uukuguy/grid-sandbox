@@ -89,6 +89,132 @@ class TestDictToSessionPayload:
         assert len(payload.memory_refs) == 0
 
 
+class TestSkillScopedHooksProtoMapping:
+    """断点 1: Verify skill scoped hook fields map correctly to proto ScopedHook.
+
+    The original bug was that L4 dict keys (name/type/scope/command/prompt)
+    differ from proto field names (hook_id/hook_type/condition/action).
+    _dict_to_session_payload must map them correctly.
+    """
+
+    def test_command_and_prompt_hooks(self):
+        payload = _dict_to_session_payload(
+            {
+                "session_id": "s1",
+                "skill_instructions": {
+                    "skill_id": "test-skill",
+                    "name": "Test Skill",
+                    "content": "You are a test assistant.",
+                    "frontmatter_hooks": [
+                        {
+                            "name": "block_write",
+                            "type": "command",
+                            "scope": "PreToolUse",
+                            "command": "/path/to/hook.sh",
+                        },
+                        {
+                            "name": "check_output",
+                            "type": "prompt",
+                            "scope": "PostToolUse",
+                            "prompt": "Verify output has device_id",
+                        },
+                    ],
+                    "dependencies": ["mcp:mock-scada"],
+                },
+            }
+        )
+        hooks = payload.skill_instructions.frontmatter_hooks
+
+        assert len(hooks) == 2
+
+        # Hook 1: command type — name→hook_id, type→hook_type, scope→condition, command→action
+        assert hooks[0].hook_id == "block_write"
+        assert hooks[0].hook_type == "command"
+        assert hooks[0].condition == "PreToolUse"
+        assert hooks[0].action == "/path/to/hook.sh"
+
+        # Hook 2: prompt type — prompt→action
+        assert hooks[1].hook_id == "check_output"
+        assert hooks[1].hook_type == "prompt"
+        assert hooks[1].condition == "PostToolUse"
+        assert hooks[1].action == "Verify output has device_id"
+
+        # Dependencies pass through
+        assert list(payload.skill_instructions.dependencies) == ["mcp:mock-scada"]
+
+        # Content (prose) preserved
+        assert payload.skill_instructions.content == "You are a test assistant."
+
+    def test_stop_hook_maps_correctly(self):
+        """Stop scope must also map via the same path."""
+        payload = _dict_to_session_payload(
+            {
+                "session_id": "s2",
+                "skill_instructions": {
+                    "skill_id": "s",
+                    "name": "s",
+                    "content": "",
+                    "frontmatter_hooks": [
+                        {
+                            "name": "require_anchor",
+                            "type": "command",
+                            "scope": "Stop",
+                            "command": "hooks/check_output_anchor.sh",
+                        },
+                    ],
+                },
+            }
+        )
+        hook = payload.skill_instructions.frontmatter_hooks[0]
+        assert hook.hook_id == "require_anchor"
+        assert hook.condition == "Stop"
+        assert hook.action == "hooks/check_output_anchor.sh"
+
+    def test_fallback_to_proto_field_names(self):
+        """When dict already uses proto field names (hook_id/hook_type/condition/action),
+        they should still work — this is the P1 policy_context path."""
+        payload = _dict_to_session_payload(
+            {
+                "session_id": "s3",
+                "skill_instructions": {
+                    "skill_id": "s",
+                    "name": "s",
+                    "content": "",
+                    "frontmatter_hooks": [
+                        {
+                            "hook_id": "proto_style",
+                            "hook_type": "command",
+                            "condition": "PreToolUse",
+                            "action": "/bin/true",
+                        },
+                    ],
+                },
+            }
+        )
+        hook = payload.skill_instructions.frontmatter_hooks[0]
+        assert hook.hook_id == "proto_style"
+        assert hook.hook_type == "command"
+        assert hook.condition == "PreToolUse"
+        assert hook.action == "/bin/true"
+
+    def test_empty_frontmatter_hooks(self):
+        """No hooks should produce empty repeated field."""
+        payload = _dict_to_session_payload(
+            {
+                "session_id": "s4",
+                "skill_instructions": {
+                    "skill_id": "s",
+                    "name": "s",
+                    "content": "prose",
+                    "frontmatter_hooks": [],
+                    "dependencies": [],
+                },
+            }
+        )
+        assert len(payload.skill_instructions.frontmatter_hooks) == 0
+        assert list(payload.skill_instructions.dependencies) == []
+
+
 class TestSendResponseToDict:
     def test_text_delta(self):
         from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import runtime_pb2

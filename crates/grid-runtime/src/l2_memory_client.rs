@@ -253,6 +253,37 @@ mod tests {
         assert_eq!(resp.anchor_id.as_deref(), Some("anc-42"));
     }
 
+    /// 断点 7: L2 AnchorOut has many fields that WriteAnchorResponse must
+    /// tolerate (serde deny_unknown_fields would break this).
+    #[test]
+    fn write_anchor_response_deserialize_full_l2_format() {
+        let json = r#"{
+            "anchor_id": "anc-123",
+            "event_id": "tool-bash-1234",
+            "session_id": "sess-abc",
+            "type": "tool_execution",
+            "data_ref": "output data",
+            "snapshot_hash": null,
+            "source_system": "grid-runtime",
+            "tool_version": null,
+            "model_version": null,
+            "rule_version": null,
+            "created_at": 1776000000,
+            "metadata": {}
+        }"#;
+        let resp: WriteAnchorResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.anchor_id.as_deref(), Some("anc-123"));
+    }
+
+    /// L2 anchor_id could be null in edge cases; WriteAnchorResponse should
+    /// deserialize without panicking.
+    #[test]
+    fn write_anchor_response_deserialize_null_anchor_id() {
+        let json = r#"{"anchor_id": null, "event_id": "e1"}"#;
+        let resp: WriteAnchorResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.anchor_id, None);
+    }
+
     #[test]
     fn write_file_response_deserialize() {
         let json = r#"{"memory_id": "mem-abc", "version": 3}"#;

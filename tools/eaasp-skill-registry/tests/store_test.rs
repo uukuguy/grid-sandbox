@@ -139,3 +139,88 @@ async fn store_promote_lifecycle() {
     assert_eq!(versions.len(), 1);
     assert_eq!(versions[0].status, SkillStatus::Production);
 }
+
+/// 断点 2: frontmatter_yaml WITHOUT trailing newline must not cause the
+/// closing `---` to fuse with the last YAML line, breaking parse.
+#[tokio::test]
+async fn submit_and_read_preserves_v2_frontmatter_no_trailing_newline() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = SkillStore::open(tmp.path()).await.unwrap();
+
+    // frontmatter WITHOUT trailing newline — this was the bug case
+    let req = SubmitDraftRequest {
+        id: "no-newline-skill".into(),
+        name: "NoNewline".into(),
+        description: "".into(),
+        version: "0.1.0".into(),
+        author: None,
+        tags: None,
+        frontmatter_yaml: "name: NoNewline\nversion: 0.1.0\ndependencies:\n  - mcp:mock-scada"
+            .into(),
+        prose: "# Test\nProse body".into(),
+        source_dir: None,
+    };
+    store.submit_draft(req).await.unwrap();
+
+    let content = store
+        .read_skill("no-newline-skill".into(), Some("0.1.0".into()))
+        .await
+        .unwrap()
+        .expect("should read back");
+
+    // CRITICAL: parsed_v2 must not be None (would fail if --- fused with last line)
+    assert!(
+        content.parsed_v2.is_some(),
+        "parsed_v2 must be present after roundtrip with no trailing newline"
+    );
+    let v2 = content.parsed_v2.unwrap();
+    assert_eq!(v2.dependencies, vec!["mcp:mock-scada"]);
+
+    // frontmatter_yaml must not be empty
+    assert!(
+        !content.frontmatter_yaml.is_empty(),
+        "frontmatter_yaml must not be empty"
+    );
+
+    // prose must be clean (no frontmatter leaking)
+    assert!(
+        content.prose.starts_with("# Test"),
+        "prose should start with content, not ---; got: {:?}",
+        &content.prose[..content.prose.len().min(40)]
+    );
+}
+
+/// Verify roundtrip when frontmatter_yaml already HAS trailing newline.
+#[tokio::test]
+async fn submit_and_read_preserves_v2_frontmatter_with_trailing_newline() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = SkillStore::open(tmp.path()).await.unwrap();
+
+    let req = SubmitDraftRequest {
+        id: "with-newline-skill".into(),
+        name: "WithNewline".into(),
+        description: "".into(),
+        version: "0.1.0".into(),
+        author: None,
+        tags: None,
+        // HAS trailing newline — the normal case
+        frontmatter_yaml: "name: WithNewline\nversion: 0.1.0\nruntime_affinity:\n  preferred: grid-runtime\n  compatible:\n    - grid-runtime\n".into(),
+        prose: "# Guide\nSome content".into(),
+        source_dir: None,
+    };
+    store.submit_draft(req).await.unwrap();
+
+    let content = store
+        .read_skill("with-newline-skill".into(), Some("0.1.0".into()))
+        .await
+        .unwrap()
+        .expect("should read back");
+
+    assert!(content.parsed_v2.is_some());
+    let v2 = content.parsed_v2.unwrap();
+    assert_eq!(
+        v2.runtime_affinity.preferred.as_deref(),
+        Some("grid-runtime")
+    );
+    assert!(content.prose.starts_with("# Guide"));
+}
