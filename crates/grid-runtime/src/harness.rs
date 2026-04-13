@@ -377,15 +377,29 @@ impl RuntimeContract for GridHarness {
             self.register_scoped_hooks(&scoped_hooks).await;
         }
 
+        // Collect MCP tool names for tool filter.
+        // When skill declares MCP dependencies, restrict agent to only MCP tools
+        // (prevents LLM from choosing generic tools like grep/bash over MCP tools).
+        let tool_filter: Option<Vec<String>> = {
+            let mcp_guard = self.runtime.mcp_manager().lock().await;
+            let mcp_tools = mcp_guard.tool_names();
+            if mcp_tools.is_empty() {
+                None // No MCP tools → full tool set
+            } else {
+                Some(mcp_tools)
+            }
+        };
+
         // NOW start session — ToolRegistry snapshot will include MCP tools.
         let _handle = self
             .runtime
-            .start_session(
+            .start_session_with_tool_filter(
                 session_id.clone(),
                 user_id,
                 sandbox_id,
                 initial_history,
                 None, // no agent_id override
+                tool_filter.as_deref(),
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to start session: {}", e))?;

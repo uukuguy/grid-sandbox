@@ -1353,6 +1353,21 @@ impl AgentRuntime {
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
     ) -> (AgentExecutorHandle, Arc<StdMutex<ToolRegistry>>) {
+        self.build_and_spawn_executor_filtered(session_id, user_id, sandbox_id, initial_history, agent_id, None)
+    }
+
+    /// Like `build_and_spawn_executor` but with optional tool filter.
+    /// When `tool_filter` is Some, only the named tools are included in the
+    /// session snapshot (EAASP skill allowed-tools enforcement).
+    fn build_and_spawn_executor_filtered(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+        tool_filter: Option<&[String]>,
+    ) -> (AgentExecutorHandle, Arc<StdMutex<ToolRegistry>>) {
         // 从 manifest 解析运行时配置（不含 tools，使用全局共享引用）
         let (_, system_prompt, model, config) = self.resolve_runtime_config(agent_id);
 
@@ -1366,9 +1381,14 @@ impl AgentRuntime {
         };
 
         // Phase AJ-T1: 创建 session 级 ToolRegistry 快照（隔离：session A 的 MCP 安装不影响 session B）
+        // When tool_filter is provided (EAASP skill), only include those tools.
         let session_tools = {
             let guard = self.tools.lock().unwrap_or_else(|e| e.into_inner());
-            let session_reg = Arc::new(StdMutex::new(guard.snapshot()));
+            let base_snapshot = match tool_filter {
+                Some(filter) => guard.snapshot_filtered(filter),
+                None => guard.snapshot(),
+            };
+            let session_reg = Arc::new(StdMutex::new(base_snapshot));
 
             // 重建 MCP 管理工具，指向 session 级 registry（而非全局）
             let mcp_config_path = self.working_dir.join(".grid/mcp.json");
@@ -1440,14 +1460,24 @@ impl AgentRuntime {
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
     ) -> Result<AgentExecutorHandle, AgentError> {
-        self.start_session_with_autonomous(session_id, user_id, sandbox_id, initial_history, agent_id, None).await
+        self.start_session_with_tool_filter(session_id, user_id, sandbox_id, initial_history, agent_id, None).await
+    }
+
+    /// Start a session with an optional tool filter (EAASP skill allowed-tools).
+    /// When `tool_filter` is Some, only the named tools are exposed to the agent.
+    pub async fn start_session_with_tool_filter(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+        tool_filter: Option<&[String]>,
+    ) -> Result<AgentExecutorHandle, AgentError> {
+        self.start_session_full(session_id, user_id, sandbox_id, initial_history, agent_id, None, tool_filter).await
     }
 
     /// Start a new session with optional autonomous mode (AU-D1).
-    ///
-    /// When `autonomous` is `Some`, the session is registered with
-    /// `AutonomousScheduler` and the executor receives the autonomous config
-    /// for harness tick-loop integration.
     pub async fn start_session_with_autonomous(
         &self,
         session_id: SessionId,
@@ -1456,6 +1486,20 @@ impl AgentRuntime {
         initial_history: Vec<ChatMessage>,
         agent_id: Option<&AgentId>,
         autonomous: Option<super::autonomous::AutonomousConfig>,
+    ) -> Result<AgentExecutorHandle, AgentError> {
+        self.start_session_full(session_id, user_id, sandbox_id, initial_history, agent_id, autonomous, None).await
+    }
+
+    /// Full session start with all options.
+    async fn start_session_full(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+        sandbox_id: SandboxId,
+        initial_history: Vec<ChatMessage>,
+        agent_id: Option<&AgentId>,
+        autonomous: Option<super::autonomous::AutonomousConfig>,
+        tool_filter: Option<&[String]>,
     ) -> Result<AgentExecutorHandle, AgentError> {
         // Check if session already exists
         if let Some(entry) = self.sessions.get(&session_id) {
@@ -1473,12 +1517,13 @@ impl AgentRuntime {
         // AM-T5: capture sandbox_id for registry persistence before move
         let sandbox_id_for_registry = sandbox_id.clone();
 
-        let (handle, session_tools) = self.build_and_spawn_executor(
+        let (handle, session_tools) = self.build_and_spawn_executor_filtered(
             session_id.clone(),
             user_id.clone(),
             sandbox_id,
             initial_history,
             agent_id,
+            tool_filter,
         );
 
         if let Some(id) = agent_id {

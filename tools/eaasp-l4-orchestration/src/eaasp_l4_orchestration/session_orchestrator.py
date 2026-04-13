@@ -125,9 +125,13 @@ class SessionOrchestrator:
             "metadata": {},
             "dependencies": [],
         }
+        import logging as _log
+        _logger = _log.getLogger(__name__)
+        _logger.info("skill_registry=%s, skill_id=%s", self.skill_registry, skill_id)
         if self.skill_registry is not None:
             try:
                 skill_data = await self.skill_registry.read_skill(skill_id)
+                _logger.info("skill_data keys: %s, prose_len=%d", list(skill_data.keys()), len(skill_data.get("prose", "")))
                 # skill_data shape: {meta, frontmatter_yaml, prose, parsed_v2?}
                 parsed_v2 = skill_data.get("parsed_v2") or {}
                 scoped_hooks = parsed_v2.get("scoped_hooks") or {}
@@ -160,9 +164,10 @@ class SessionOrchestrator:
             except Exception as exc:
                 # Skill fetch failure is non-fatal for MVP — log and continue
                 # with empty instructions. Agent will run without skill context.
-                import logging
-                logging.getLogger(__name__).warning(
-                    "Failed to fetch skill '%s' from registry: %s", skill_id, exc
+                import logging, traceback
+                logging.getLogger(__name__).error(
+                    "Failed to fetch skill '%s' from registry: %s\n%s",
+                    skill_id, exc, traceback.format_exc(),
                 )
 
         # Step 3 — assemble payload (P1..P5 + budget flags).

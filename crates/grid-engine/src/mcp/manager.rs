@@ -496,6 +496,14 @@ impl McpManager {
         self.tool_infos.get(name).map(|t| t.len()).unwrap_or(0)
     }
 
+    /// Get all MCP tool names across all connected servers.
+    pub fn tool_names(&self) -> Vec<String> {
+        self.tool_infos
+            .values()
+            .flat_map(|tools| tools.iter().map(|t| t.name.clone()))
+            .collect()
+    }
+
     /// Call a tool on a server.
     pub async fn call_tool(
         &self,
