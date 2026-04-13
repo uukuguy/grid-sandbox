@@ -50,6 +50,13 @@ class SdkWrapper:
         if self.config.anthropic_base_url:
             env["ANTHROPIC_BASE_URL"] = self.config.anthropic_base_url
 
+        # L1 Runtime isolation: CLAUDE_CODE_SIMPLE=1 triggers --bare mode
+        # (skip hooks, LSP, plugin sync, attribution, auto-memory, CLAUDE.md).
+        # This prevents the development environment from leaking into the
+        # skill execution context. Runtime provides its own system_prompt,
+        # MCP servers, and workspace directory.
+        env["CLAUDE_CODE_SIMPLE"] = "1"
+
         opts = ClaudeAgentOptions(
             model=self.config.anthropic_model_name or None,
             max_turns=self.config.max_turns,
@@ -70,11 +77,14 @@ class SdkWrapper:
         system_prompt: str | None = None,
         allowed_tools: list[str] | None = None,
         mcp_servers: dict | None = None,
+        cwd: str | None = None,
     ) -> AsyncIterator[ChunkEvent]:
         """Send a message and yield response chunks."""
         options = self._build_options(system_prompt, allowed_tools)
         if mcp_servers:
             options.mcp_servers = mcp_servers
+        if cwd:
+            options.cwd = cwd
         # Output CLI stderr to our stderr for debugging
         import sys
         options.debug_stderr = sys.stderr

@@ -33,6 +33,7 @@ class Session:
     skills: list[dict] = field(default_factory=list)
     mcp_servers: list[str] = field(default_factory=list)
     mcp_servers_config: dict | None = None  # MCP server configs for SDK options.mcp_servers
+    workspace: str | None = None  # Isolated runtime workspace directory
     telemetry_events: list[dict] = field(default_factory=list)
     context: dict[str, str] = field(default_factory=dict)
     hook_bridge_url: str = ""

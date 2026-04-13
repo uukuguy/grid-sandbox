@@ -316,6 +316,14 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
             session.mcp_servers_config = mcp_servers
             logger.info("MCP servers for SDK: %d configured", len(mcp_servers))
 
+        # Create isolated runtime workspace for this session.
+        # L1 Runtime is designed to run in a container; when running bare-metal,
+        # we must isolate from the development environment (.claude/, hooks, etc.)
+        import tempfile, os
+        workspace = tempfile.mkdtemp(prefix=f"eaasp-workspace-{sid}-")
+        session.workspace = workspace
+        logger.info("Runtime workspace: %s", workspace)
+
         self._active_session_id = sid
         logger.info("Session initialized: %s (user=%s)", sid, user_id)
         return runtime_pb2.InitializeResponse(
@@ -378,11 +386,12 @@ class RuntimeServiceImpl(runtime_pb2_grpc.RuntimeServiceServicer):
                 len(session.memory_refs),
             )
 
-        # Pass MCP servers to SDK via options.mcp_servers (--mcp-config).
+        # Pass MCP servers + isolated workspace to SDK.
         mcp_servers = getattr(session, "mcp_servers_config", None)
+        workspace = getattr(session, "workspace", None)
         async for chunk in self.sdk.send_message(
             prompt=message.content, system_prompt=system_prompt,
-            mcp_servers=mcp_servers,
+            mcp_servers=mcp_servers, cwd=workspace,
         ):
             yield chunk_to_proto(chunk)
 
