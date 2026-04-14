@@ -90,6 +90,15 @@ pub enum AgentEvent {
         /// Human-readable reason for the retry.
         reason: String,
     },
+    /// D87 fix: LLM returned text-only mid-workflow (stop_reason=EndTurn,
+    /// no tool_use) but prior turns had tool_use — loop injects a continuation
+    /// hint instead of terminating. Mirrors hermes `run_agent.py:10049-10074`.
+    WorkflowContinuation {
+        /// 1-based continuation attempt.
+        attempt: u32,
+        /// Hard cap (`MAX_WORKFLOW_CONTINUATIONS`, default 3).
+        max_attempts: u32,
+    },
     /// Streaming event from a sub-agent (e.g. playbook skill execution).
     /// Wrapped to isolate sub-agent state from parent agent state in the TUI.
     SubAgentEvent {

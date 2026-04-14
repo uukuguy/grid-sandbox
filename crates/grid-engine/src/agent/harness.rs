@@ -54,6 +54,17 @@ const MAX_MALFORMED_TOOL_CALL_RETRIES: u32 = 2;
 /// Maximum number of retries when stream consumption fails (JSON parse error, connection drop, etc.)
 const MAX_STREAM_ERROR_RETRIES: u32 = 2;
 
+/// D87 fix: maximum number of workflow-continuation injections per loop.
+///
+/// When the LLM returns a text-only turn (`stop_reason == EndTurn` with no
+/// `tool_use` blocks) **after** at least one tool was already executed, we
+/// treat it as "LLM paused mid-workflow to ask the user" and inject a system
+/// prompt telling the model to continue. This mirrors hermes's
+/// `intermediate-ack` detection (`run_agent.py:10049-10074`). The counter
+/// prevents infinite loops when the model persistently refuses to call
+/// additional tools.
+const MAX_WORKFLOW_CONTINUATIONS: u32 = 3;
+
 /// Interval (in rounds) at which Zone B working memory is refreshed.
 /// This allows agent's memory_edit changes to take effect mid-conversation.
 const ZONE_B_REFRESH_INTERVAL: u32 = 5;
@@ -397,6 +408,10 @@ async fn run_agent_loop_inner(
     let mut malformed_retry_count: u32 = 0;
     // Stream consumption error counter — retries on JSON parse errors, connection drops, etc.
     let mut stream_error_count: u32 = 0;
+    // D87 fix: workflow continuation counter — bumped each time we inject a
+    // system prompt to nudge the LLM to keep executing tools after a
+    // text-only mid-workflow turn. See `MAX_WORKFLOW_CONTINUATIONS`.
+    let mut workflow_continuation_count: u32 = 0;
 
     // P2-H1: Pending context injections from hooks (InjectContext action)
     let mut pending_context_injections: Vec<String> = Vec::new();
@@ -1163,6 +1178,71 @@ async fn run_agent_loop_inner(
                 let _ = tx.send(AgentEvent::IterationEnd { round, input_tokens: total_input_tokens, output_tokens: total_output_tokens }).await;
                 continue; // Re-enter loop for retry
             }
+        }
+
+        // --- D87: workflow-continuation injection (hermes intermediate-ack) ---
+        //
+        // If the LLM returned a text-only turn (`stop_reason == EndTurn`, no
+        // `tool_use` blocks) *after* it has already executed at least one
+        // tool **and** the text looks like a mid-workflow clarifying question
+        // (contains a "?"), we treat it as "LLM paused to ask the user" and
+        // nudge it to keep going. Mirrors hermes's intermediate-ack detection
+        // (`run_agent.py:10049-10074`), but uses a simpler heuristic:
+        //
+        //   * `total_tool_calls > 0`: we're mid-workflow, not in a pure chat
+        //   * `full_text` contains "?": LLM is asking, not answering
+        //   * `workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS`: guard
+        //
+        // Without the "?" check, any tool-followed-by-text turn (e.g. "The
+        // answer is 42." after a lookup tool) would loop unnecessarily.
+        //
+        // Root cause: OpenAI-family models frequently emit a clarifying
+        // question after the first tool call; without this nudge the loop
+        // terminates early (only 1/N workflow steps executed). Claude Sonnet 4
+        // rarely triggers this path because it autonomously chains tool_use
+        // blocks. See `docs/design/EAASP/AGENT_LOOP_ROOT_CAUSE_ANALYSIS.md`.
+        if stop_reason == StopReason::EndTurn
+            && tool_uses.is_empty()
+            && total_tool_calls > 0
+            && full_text.contains('?')
+            && workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS
+        {
+            workflow_continuation_count += 1;
+            debug!(
+                attempt = workflow_continuation_count,
+                max = MAX_WORKFLOW_CONTINUATIONS,
+                "D87: injecting workflow continuation hint"
+            );
+            let _ = tx
+                .send(AgentEvent::WorkflowContinuation {
+                    attempt: workflow_continuation_count,
+                    max_attempts: MAX_WORKFLOW_CONTINUATIONS,
+                })
+                .await;
+            // Append what the LLM said so the next turn sees its own message,
+            // then inject a system-style user turn prodding it to continue.
+            messages.push(ChatMessage::assistant(if full_text.is_empty() {
+                "(no response)"
+            } else {
+                &full_text
+            }));
+            messages.push(ChatMessage {
+                role: MessageRole::User,
+                content: vec![ContentBlock::Text {
+                    text: "[System: Continue executing the remaining tools required \
+                           to complete the workflow. Do not ask the user for \
+                           confirmation — proceed with the next step now.]"
+                        .into(),
+                }],
+            });
+            let _ = tx
+                .send(AgentEvent::IterationEnd {
+                    round,
+                    input_tokens: total_input_tokens,
+                    output_tokens: total_output_tokens,
+                })
+                .await;
+            continue; // Re-enter loop so the LLM produces the next tool call.
         }
 
         // --- If no tool uses: check for continuation or finalize ---

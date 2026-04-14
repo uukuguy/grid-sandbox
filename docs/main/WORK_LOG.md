@@ -1,5 +1,87 @@
 # Grid Platform 开发工作日志
 
+## 2026-04-14 — Phase 2 S1.T1 D87 修复代码完成（E2E 待验证）
+
+### 会话概要
+
+D87 修复按新根因方向落地——不是改 `harness.rs:1169` 退出条件（初诊有误），而是照抄 hermes `run_agent.py:10049-10074` 的 **intermediate-ack continuation 注入**，在退出分支入口前检测"LLM 中途问询"并注入 system-style user 消息让 loop 继续。
+
+### 根因修正过程（完整记录）
+
+会话前段按旧 plan `2026-04-14-s1t1-d87-fix-implementation.md` 实施"单行退出条件修改"。实操发现 **regression test 在修改后仍 FAIL**：两个表达式 `stop_reason != ToolUse || tool_uses.is_empty()` 和 `tool_uses.is_empty()` 在 `tool_uses` 为空时逻辑等价，修改不改变任何行为。
+
+深入调研四个开源 runtime 后定位真正根因：
+
+| Runtime | LLM 模型 | Loop 实现 | MVP 单轮能完成 workflow 吗 |
+|---------|---------|----------|------------------------|
+| claude-code-runtime | Claude Sonnet 4（Anthropic） | 朴素（等同 grid-engine） | ✅ Claude 主动连续调 tool，不触发退出分支 |
+| hermes-runtime | GPT/OpenAI | **intermediate-ack 注入** | ✅ loop 主动替用户回"继续" |
+| grid-runtime | GPT/OpenAI | 朴素 | ❌ GPT 中途问"要不要继续" → loop 终止 |
+
+**grid-engine 的 loop 是为 REPL 模式设计的（和 claude-code 等价），但 EAASP 是 non-interactive skill 执行场景，缺 hermes 那套"LLM 中间响应 → 自动注入 continue"机制。同样用 OpenAI 模型，hermes 补上了，grid 没补。**
+
+### 技术变更
+
+| 文件 | 改动 |
+|------|------|
+| `crates/grid-engine/src/agent/harness.rs` | 新增 `MAX_WORKFLOW_CONTINUATIONS = 3` const；loop 内新增 `workflow_continuation_count` 状态；L1183 退出分支入口**前**插入 intermediate-ack detection + continuation 注入（60+ 行） |
+| `crates/grid-engine/src/agent/events.rs` | 新增 `AgentEvent::WorkflowContinuation { attempt, max_attempts }` 供观测 |
+| `crates/grid-engine/tests/d87_multi_step_workflow_regression.rs` | 去掉 `#[ignore]`，test 现永久锁定 D87 行为 |
+
+### 触发条件（和 hermes 对齐）
+
+```rust
+if stop_reason == StopReason::EndTurn
+    && tool_uses.is_empty()
+    && total_tool_calls > 0       // 已在 workflow 中途（不是一开始就 text-only）
+    && full_text.contains('?')    // 含问号（LLM 在问，不是在答）
+    && workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS  // 上限 3
+{
+    // 注入 [System: Continue executing the remaining tools...] user message
+    // 发 AgentEvent::WorkflowContinuation 事件
+    // continue 重入 loop
+}
+```
+
+`?` 检测是关键启发式：区分 "The answer is 42." (final answer, 无 ?) vs "Do you want me to: 1/2/3?" (mid-workflow 问询, 有 ?)。没有此过滤会误触发现有 `test_harness_full_tool_call_flow` 测试。
+
+### 测试结果
+
+- D87 regression (`test_d87_multi_step_workflow_no_early_exit`): **PASS**（修复前 FAIL: got 1; 修复后 3 个 tool 全调）
+- D87 baseline (`test_d87_single_tool_workflow_still_works`): **PASS**（无回归）
+- grid-engine 全量: **2250 passed / 0 failed / 3 ignored**（Docker pre-existing）@ `cargo test -p grid-engine -- --test-threads=1`
+
+### 待办（下一步会话）
+
+**E2E 验证**（需用户参与，跑真实 grid-runtime + threshold-calibration）：
+- 期望 PRE_TOOL_USE ≥ 4
+- 期望 event log 出现 `WorkflowContinuation` 事件（至少 1 次，因为 GPT 真的会中途问）
+- E2E 通过后 ADR-V2-016 升 Accepted
+
+### 并行可启动任务
+
+- S1.T2 (D88 hermes stdio MCP)
+- S1.T3 (D86 claude-code ToolResultBlock)
+- S1.T4 (D83 tool_name)
+- S1.T5 (D85 STOP response_text)
+- S1.T6 (ErrorClassifier) + S1.T7 (withRetry) — 批次 A 基础设施
+
+### Phase 2 进度
+
+- S0: 2/2 done (ADR-V2-015 Accepted, ADR-V2-016 Proposed)
+- S1: **1/7 done**（S1.T1 代码完成）
+- S2/S3/S4: 待进入
+- 总进度 3/22
+
+### 关联文档
+
+- 根因分析：`docs/design/EAASP/AGENT_LOOP_ROOT_CAUSE_ANALYSIS.md`
+- 可吸收 loop 优点清单（批次 A/B/C/D）：`docs/design/EAASP/AGENT_LOOP_PATTERNS_TO_ADOPT.md`
+- Phase 2 plan（22 任务）：`docs/plans/2026-04-14-v2-phase2-plan.md`
+- 旧 D87-fix plan (SUPERSEDED): `docs/plans/2026-04-14-s1t1-d87-fix-implementation.md`
+
+---
+
 ## 2026-04-14 — EAASP v2.0 Phase 1 Event-driven Foundation 🟢 Completed
 
 ### 会话概要

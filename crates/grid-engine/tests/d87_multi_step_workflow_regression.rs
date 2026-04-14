@@ -245,10 +245,9 @@ stub_tool!(WriteResultTool, "write_result", "Write result");
 /// Current broken behavior (pre-D87 fix):
 /// - Depending on exact harness logic, may exit after round 0 or fewer than 3 tools
 ///
-/// This test is `#[ignore]`'d so CI doesn't fail. Remove `#[ignore]` when
-/// starting D87 fix work to lock in the regression.
+/// D87 fix landed (2026-04-14): this test now runs in CI and locks in the
+/// multi-step behavior via hermes-style intermediate-ack continuation injection.
 #[tokio::test]
-#[ignore = "D87 pending fix — grid-engine harness.rs:1169 terminates loop on text-only response"]
 async fn test_d87_multi_step_workflow_no_early_exit() {
     let provider = Arc::new(MultiStepProvider::new());
     let mut registry = ToolRegistry::new();
