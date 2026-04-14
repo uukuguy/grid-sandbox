@@ -19,7 +19,7 @@ pub use collapse::ContextCollapser;
 pub use builder::estimate_messages_tokens;
 pub use compaction_pipeline::{
     CompactionContext, CompactionPipeline, CompactionPipelineConfig, CompactionResult,
-    SNIP_MARKER,
+    CompactionTrigger, SNIP_MARKER,
 };
 pub use flush::MemoryFlusher;
 pub use fork::ContextFork;

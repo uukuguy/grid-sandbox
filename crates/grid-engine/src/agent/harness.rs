@@ -114,6 +114,31 @@ pub(crate) fn is_prompt_too_long(err: &anyhow::Error) -> bool {
 /// Maximum number of PTL compact attempts before giving up.
 const MAX_COMPACT_ATTEMPTS: u32 = 3;
 
+/// ADR-V2-018 §D4 — conservative upper bound for `task_budget_remaining`
+/// initialization: total tokens a task is allowed to consume before the
+/// loop terminates. Computed as `context_window * MAX_TURNS_FOR_BUDGET`.
+pub const MAX_TURNS_FOR_BUDGET: u32 = 50;
+
+/// ADR-V2-018 §D4 — when `task_budget_remaining` drops below this floor,
+/// the loop terminates rather than starting another LLM round (the next turn
+/// almost certainly costs more tokens than what's left).
+pub const MIN_TURN_BUDGET: u64 = 4_096;
+
+/// ADR-V2-018 §D4 — pure helper for the harness cross-compaction budget
+/// arithmetic. Decrement `remaining` by the real token usage of a turn
+/// (input + output) and return whether the loop should continue. Exposed
+/// publicly so tests can exercise the full rule without instantiating a
+/// runtime. Compaction itself never calls this — only real LLM turns do.
+pub fn apply_budget_decrement(remaining: u64, input_tokens: u64, output_tokens: u64) -> u64 {
+    remaining.saturating_sub(input_tokens.saturating_add(output_tokens))
+}
+
+/// ADR-V2-018 §D4 — pure helper: does the current `remaining` budget allow
+/// another LLM round? Returns `false` when `remaining < MIN_TURN_BUDGET`.
+pub fn has_budget_for_next_turn(remaining: u64) -> bool {
+    remaining >= MIN_TURN_BUDGET
+}
+
 /// Extract context window from an `AgentLoopConfig`, falling back to default.
 fn context_window_from_config(config: &AgentLoopConfig) -> usize {
     config
@@ -386,6 +411,25 @@ async fn run_agent_loop_inner(
     let mut compact_attempts: u32 = 0;
     let mut loop_guard = config.loop_guard.clone().unwrap_or_default();
 
+    // --- ADR-V2-018 §D4: cross-compaction task token budget ---
+    // Initial budget = `context_window * MAX_TURNS_FOR_BUDGET`. Decremented by
+    // real `usage.input_tokens + usage.output_tokens` after each provider
+    // response. Compaction does NOT touch this number — the goal is "how many
+    // tokens can the whole task still spend", not "current message size".
+    let mut task_budget_remaining: u64 = (context_window_from_config(&config) as u64)
+        .saturating_mul(MAX_TURNS_FOR_BUDGET as u64);
+
+    // --- ADR-V2-018 effective compaction config ---
+    // Resolution order: explicit `compaction_config` > pipeline's own config >
+    // default. Lets the harness inspect proactive trigger settings without
+    // requiring callers to populate both `compaction_pipeline` and
+    // `compaction_config`.
+    let compaction_cfg: crate::context::CompactionPipelineConfig = config
+        .compaction_config
+        .clone()
+        .or_else(|| config.compaction_pipeline.as_ref().map(|p| p.config().clone()))
+        .unwrap_or_default();
+
     // --- Dynamic tool result budget (W8-T8) ---
     let ctx_window = context_window_from_config(&config);
     let (tool_soft_limit, tool_hard_limit) = tool_result_budget(ctx_window);
@@ -455,6 +499,33 @@ async fn run_agent_loop_inner(
 
     // === Main loop ===
     for round in 0..max_rounds {
+        // ADR-V2-018 §D5: per-turn reactive guard. Set `true` after the loop
+        // triggers a reactive compaction; a second 413 in the same turn falls
+        // through to retry/fallback rather than re-compacting.
+        let mut attempted_reactive_compact: bool = false;
+        // ADR-V2-018 §D5: proactive guard — at most one proactive compaction
+        // per turn so threshold oscillation can't fire repeatedly.
+        let mut proactive_compact_done_this_turn: bool = false;
+
+        // ADR-V2-018 §D4: terminate when the task token budget is exhausted.
+        if task_budget_remaining < MIN_TURN_BUDGET {
+            warn!(
+                round,
+                task_budget_remaining,
+                MIN_TURN_BUDGET,
+                "task budget exhausted, terminating loop"
+            );
+            let _ = tx
+                .send(AgentEvent::Error {
+                    message: format!(
+                        "task budget exhausted ({} remaining < {} required)",
+                        task_budget_remaining, MIN_TURN_BUDGET
+                    ),
+                })
+                .await;
+            break;
+        }
+
         // --- E-Stop check (W10) ---
         if let Some(ref estop) = config.estop {
             if estop.is_triggered() {
@@ -587,7 +658,9 @@ async fn run_agent_loop_inner(
                     session_summary_store: config.session_summary_store.clone(),
                     user_id: config.user_id.clone(),
                     sandbox_id: config.sandbox_id.clone(),
+                    session_id: config.session_id.clone(),
                     custom_instructions: None,
+                    context_window: budget.context_window() as u64,
                 });
                 match CompactionPipeline::snip_compact(
                     &mut messages,
@@ -729,7 +802,8 @@ async fn run_agent_loop_inner(
             if let Some(ref hooks) = config.hook_registry {
                 let ctx = build_rich_hook_context(&config, round, total_tool_calls, &recent_tools)
                     .with_degradation(format!("{:?}", level));
-                hooks.execute(HookPoint::ContextDegraded, &ctx).await;
+                // ADR-V2-018 §D2: PostCompact replaces ContextDegraded.
+                hooks.execute(HookPoint::PostCompact, &ctx).await;
             }
         }
 
@@ -842,6 +916,74 @@ async fn run_agent_loop_inner(
             pending_context_injections.clear();
         }
 
+        // --- ADR-V2-018 §D5: proactive threshold compaction ---
+        // Runs before the LLM call when actual token usage crossed
+        // `proactive_threshold_pct`. Skipped when `reactive_only=true`,
+        // already done this turn, or no pipeline available.
+        if !compaction_cfg.reactive_only && !proactive_compact_done_this_turn {
+            if let Some(usage_pct) = budget.usage_pct() {
+                if usage_pct >= compaction_cfg.proactive_threshold_pct {
+                    if let Some(ref pipeline) = config.compaction_pipeline {
+                        let ctx = CompactionContext {
+                            memory: config.memory.clone(),
+                            memory_store: config.memory_store.clone(),
+                            active_skill: config.active_skill.clone(),
+                            hook_registry: config.hook_registry.clone(),
+                            session_summary_store: config.session_summary_store.clone(),
+                            user_id: config.user_id.clone(),
+                            sandbox_id: config.sandbox_id.clone(),
+                            session_id: config.session_id.clone(),
+                            custom_instructions: None,
+                            context_window: budget.context_window() as u64,
+                        };
+                        info!(
+                            usage_pct,
+                            threshold = compaction_cfg.proactive_threshold_pct,
+                            "Proactive compaction trigger crossed"
+                        );
+                        match pipeline
+                            .compact_with_trigger(
+                                &messages,
+                                provider.as_ref(),
+                                &config.model,
+                                &ctx,
+                                crate::context::CompactionTrigger::Proactive,
+                            )
+                            .await
+                        {
+                            Ok(result) => {
+                                let pre = result.pre_compact_tokens;
+                                let post = result.post_compact_tokens;
+                                messages.clear();
+                                messages.push(result.boundary_marker);
+                                messages.extend(result.summary_messages);
+                                messages.extend(result.kept_messages);
+                                messages.extend(result.reinjections);
+                                if !result.system_prompt_additions.is_empty() {
+                                    system_prompt.push_str(&result.system_prompt_additions);
+                                }
+                                proactive_compact_done_this_turn = true;
+                                // Flag drains on next loop iteration when a
+                                // fresh `proactive_compact_done_this_turn` is
+                                // re-bound. Suppress the dead-store lint.
+                                let _ = proactive_compact_done_this_turn;
+                                let _ = tx
+                                    .send(AgentEvent::ContextCompacted {
+                                        strategy: "proactive_summary".into(),
+                                        pre_tokens: pre,
+                                        post_tokens: post,
+                                    })
+                                    .await;
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "Proactive compaction failed, continuing");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // --- Build CompletionRequest ---
         // P1-2: Apply observation masking when context budget exceeds 50%
         // Below 50% usage, full tool outputs are kept for better LLM reasoning.
@@ -938,13 +1080,35 @@ async fn run_agent_loop_inner(
             None => {
                 let e = last_err.unwrap_or_else(|| anyhow::anyhow!("stream failed"));
 
-                // PTL recovery — compact and retry instead of terminating
-                if is_prompt_too_long(&e) && compact_attempts < MAX_COMPACT_ATTEMPTS {
+                // ADR-V2-018 §D5 + S1.T6: classify the error to decide whether
+                // to compact. We trust the dedicated classifier when the error
+                // exposes a `ProviderError`; otherwise we fall back to the
+                // legacy `is_prompt_too_long` string scan so callers that
+                // wrap errors in plain `anyhow::Error` still recover.
+                let classifier_says_compact = e
+                    .downcast_ref::<crate::providers::ProviderError>()
+                    .map(|pe| {
+                        crate::providers::FailoverReason::classify(pe)
+                            .recovery_actions()
+                            .should_compress
+                    })
+                    .unwrap_or(false);
+                let should_compact = classifier_says_compact || is_prompt_too_long(&e);
+
+                // PTL recovery — compact and retry instead of terminating.
+                // Per-turn `attempted_reactive_compact` guard prevents back-to-back
+                // reactive compactions in the same turn (a second 413 in the same
+                // turn falls through to retry/fallback).
+                if should_compact
+                    && !attempted_reactive_compact
+                    && compact_attempts < MAX_COMPACT_ATTEMPTS
+                {
                     compact_attempts += 1;
                     warn!(
                         attempt = compact_attempts,
                         max = MAX_COMPACT_ATTEMPTS,
-                        "prompt_too_long detected, attempting compaction"
+                        classifier_says_compact,
+                        "compaction-eligible error detected, attempting compaction"
                     );
 
                     // Try LLM-based compaction first (AP-T6 reactive compact)
@@ -958,10 +1122,25 @@ async fn run_agent_loop_inner(
                                 session_summary_store: config.session_summary_store.clone(),
                                 user_id: config.user_id.clone(),
                                 sandbox_id: config.sandbox_id.clone(),
+                                session_id: config.session_id.clone(),
                                 custom_instructions: None,
+                                context_window: budget.context_window() as u64,
                             };
+                            // T1.G: mark this turn as having attempted reactive
+                            // compaction so a second 413 in the same turn falls
+                            // through to retry/fallback rather than re-compacting.
+                            attempted_reactive_compact = true;
+                            // Flag drains on next loop iteration; suppress
+                            // dead-store lint.
+                            let _ = attempted_reactive_compact;
                             match pipeline
-                                .compact(&messages, provider.as_ref(), &config.model, &ctx)
+                                .compact_with_trigger(
+                                    &messages,
+                                    provider.as_ref(),
+                                    &config.model,
+                                    &ctx,
+                                    crate::context::CompactionTrigger::Reactive,
+                                )
                                 .await
                             {
                                 Ok(result) => {
@@ -1104,6 +1283,13 @@ async fn run_agent_loop_inner(
         // Accumulate token usage across rounds
         total_input_tokens += stream_result.input_tokens as u64;
         total_output_tokens += stream_result.output_tokens as u64;
+
+        // ADR-V2-018 §D4: decrement task budget by REAL token spend.
+        // Compaction does NOT touch this number — the goal is total task
+        // accounting, not the current message size.
+        let consumed = (stream_result.input_tokens as u64)
+            .saturating_add(stream_result.output_tokens as u64);
+        task_budget_remaining = task_budget_remaining.saturating_sub(consumed);
 
         // Emit budget snapshot
         let snapshot = budget.snapshot(&system_prompt, &messages, &tool_specs);

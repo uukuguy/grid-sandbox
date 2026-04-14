@@ -32,8 +32,13 @@ pub enum HookPoint {
     SessionStart,
     /// Session ends
     SessionEnd,
-    /// Context degradation detected (replaces PreCompact)
-    ContextDegraded,
+    /// Before context compaction runs (audit-only — fires before the summarizer
+    /// LLM is called; payload travels via `HookContext::metadata` per
+    /// ADR-V2-018 §D1).
+    PreCompact,
+    /// After context compaction completes (renamed from `ContextDegraded` in
+    /// ADR-V2-018 §D2 to reflect actual fire timing — emitted post-rebuild).
+    PostCompact,
     /// Loop turn starts
     LoopTurnStart,
     /// Loop turn ends

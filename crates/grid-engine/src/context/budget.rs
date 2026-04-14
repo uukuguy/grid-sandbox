@@ -168,6 +168,23 @@ impl ContextBudgetManager {
         self.context_window
     }
 
+    /// Last actual `input_tokens` recorded by `update_actual_usage`, if any.
+    pub fn last_actual_usage(&self) -> Option<u64> {
+        self.last_actual_usage
+    }
+
+    /// Usage percentage 0..=100 derived from `last_actual_usage / context_window`.
+    /// Returns `None` when no actual usage has been recorded yet, when the
+    /// configured context window is zero, or when the recorded value is unusable.
+    pub fn usage_pct(&self) -> Option<u8> {
+        let actual = self.last_actual_usage?;
+        if self.context_window == 0 {
+            return None;
+        }
+        let pct = (actual as f64 / self.context_window as f64 * 100.0).round();
+        Some(pct.clamp(0.0, 100.0) as u8)
+    }
+
     /// Produce a snapshot of the current token budget state.
     pub fn snapshot(
         &self,

@@ -100,6 +100,15 @@ impl SessionSummaryStore {
         Ok(result)
     }
 
+    /// Get the latest stored summary for a session.
+    ///
+    /// Per ADR-V2-018 §D3 the schema is one row per `session_id` (upsert), so
+    /// "latest" is always the only row — this is an alias for `get_by_session`
+    /// added for naming clarity at the iterative-reuse call site.
+    pub async fn get_latest(&self, session_id: &str) -> Result<Option<SessionSummary>> {
+        self.get_by_session(session_id).await
+    }
+
     /// Get summary for a specific session.
     pub async fn get_by_session(&self, session_id: &str) -> Result<Option<SessionSummary>> {
         let sid = session_id.to_string();

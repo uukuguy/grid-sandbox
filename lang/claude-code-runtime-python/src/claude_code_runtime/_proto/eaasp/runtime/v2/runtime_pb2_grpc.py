@@ -270,12 +270,13 @@ class RuntimeServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def EmitEvent(self, request, context):
-        """── PLACEHOLDER — ADR-V2-001 pending ──
+        """── OPTIONAL — ADR-V2-001 Accepted (Phase 1) ──
 
-        EmitEvent exposes the session's emergent event stream to L4. The
-        wire format and backend are still open (see ADR-V2-001 / -002 / -003
-        deferred to Phase 1). Runtimes MAY implement as no-op during Phase 0
-        (return Empty); certifier reports "placeholder: present" as metadata.
+        EmitEvent exposes the session's emergent event stream to L4.
+        OPTIONAL: T1 runtimes SHOULD implement to emit enriched events
+        (THINKING, TOKEN_USAGE, PRE_COMPACT). Core events (PRE_TOOL_USE,
+        POST_TOOL_USE, STOP) are captured by L4 platform interceptor.
+        Default: no-op (return Empty).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

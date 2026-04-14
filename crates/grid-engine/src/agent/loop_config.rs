@@ -4,7 +4,9 @@ use std::sync::Arc;
 use grid_types::skill::SkillDefinition;
 use grid_types::{SandboxId, SessionId, ToolContext, UserId};
 
-use crate::context::{CompactionPipeline, ContextBudgetManager, ContextPruner};
+use crate::context::{
+    CompactionPipeline, CompactionPipelineConfig, ContextBudgetManager, ContextPruner,
+};
 use crate::event::TelemetryBus;
 use crate::hooks::HookRegistry;
 use crate::memory::round_memory::RoundMemoryConfig;
@@ -70,6 +72,14 @@ pub struct AgentLoopConfig {
     pub loop_guard: Option<LoopGuard>,
     /// LLM-based compaction pipeline for summarizing old messages on PTL (AP-T6).
     pub compaction_pipeline: Option<Arc<CompactionPipeline>>,
+    /// ADR-V2-018 (S3.T1): optional compaction config carried independently of
+    /// the pipeline arc. The harness consults this for the proactive trigger
+    /// threshold and `reactive_only` flag. When `None`, the harness falls back
+    /// to `compaction_pipeline.config()` if a pipeline is wired, otherwise to
+    /// `CompactionPipelineConfig::default()`.
+    /// TODO(ADR-V2-018): wire from YAML — currently agent runtimes call
+    /// `AgentLoopConfigBuilder::compaction_pipeline` directly.
+    pub compaction_config: Option<CompactionPipelineConfig>,
 
     // === Optional components ===
     /// Tool execution recorder for observability.
@@ -236,6 +246,7 @@ impl Default for AgentLoopConfig {
             pruner: None,
             loop_guard: None,
             compaction_pipeline: None,
+            compaction_config: None,
             recorder: None,
             event_bus: None,
             hook_registry: None,
@@ -381,6 +392,14 @@ impl AgentLoopConfigBuilder {
 
     pub fn compaction_pipeline(mut self, v: Arc<CompactionPipeline>) -> Self {
         self.config.compaction_pipeline = Some(v);
+        self
+    }
+
+    /// ADR-V2-018: set the compaction config the harness will consult for
+    /// proactive trigger thresholds. When omitted, the harness derives the
+    /// config from `compaction_pipeline.config()` if a pipeline is wired.
+    pub fn compaction_config(mut self, v: CompactionPipelineConfig) -> Self {
+        self.config.compaction_config = Some(v);
         self
     }
 

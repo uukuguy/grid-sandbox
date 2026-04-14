@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use grid_types::skill::SkillDefinition;
-use grid_types::{ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, UserId};
+use grid_types::{ChatMessage, CompletionRequest, ContentBlock, MessageRole, SandboxId, SessionId, UserId};
 use tracing::{debug, info, warn};
 
 use crate::hooks::{HookContext, HookPoint, HookRegistry};
@@ -26,16 +26,43 @@ use crate::agent::harness::is_prompt_too_long;
 // ---------------------------------------------------------------------------
 
 /// Configuration for the compaction pipeline.
+///
+/// New fields per ADR-V2-018 (S3.T1):
+/// - `proactive_threshold_pct`: usage % at which a proactive compact may run.
+/// - `tail_protect_tokens`: token budget (chars/4 estimate) preserved verbatim
+///   at the end of `messages`. Replaces hard `keep_recent_messages` as the
+///   primary tail rule; the count-based field is kept as a fallback when the
+///   token-walk cannot find a sensible boundary.
+/// - `summary_ratio`: relative aggressiveness of the summary; proactive uses
+///   the configured value (default 0.2), reactive paths pass `0.5` via the
+///   `CompactionTrigger::Reactive` override.
+/// - `summary_min_tokens`: floor for `max_tokens` of the summarizer call.
+/// - `reactive_only`: when `true`, harness skips the proactive threshold
+///   check and only runs compaction in response to errors.
 #[derive(Debug, Clone)]
 pub struct CompactionPipelineConfig {
     /// Model to use for the summary LLM call. `None` reuses the session model.
     pub compact_model: Option<String>,
     /// Maximum output tokens for the summary response.
     pub summary_max_tokens: u32,
-    /// Number of most-recent messages to keep uncompacted.
+    /// Number of most-recent messages to keep uncompacted (legacy fallback).
     pub keep_recent_messages: usize,
     /// Maximum PTL retries when the summary call itself overflows.
     pub max_ptl_retries: u32,
+    /// Usage percent (0-100) above which proactive compaction may run.
+    pub proactive_threshold_pct: u8,
+    /// Token budget (chars/4 estimate) preserved verbatim at the end.
+    pub tail_protect_tokens: u64,
+    /// Default compaction ratio for proactive triggers.
+    pub summary_ratio: f32,
+    /// Compaction ratio for reactive triggers (413/context overflow). More
+    /// conservative than `summary_ratio` so post-compaction context still holds
+    /// the recent narrative. Reviewer M2 fix — no more magic constant.
+    pub reactive_summary_ratio: f32,
+    /// Floor for the summarizer `max_tokens`.
+    pub summary_min_tokens: u32,
+    /// Skip proactive checks when `true`; only compact on PTL/overflow.
+    pub reactive_only: bool,
 }
 
 impl Default for CompactionPipelineConfig {
@@ -45,6 +72,32 @@ impl Default for CompactionPipelineConfig {
             summary_max_tokens: 2000,
             keep_recent_messages: 6,
             max_ptl_retries: 3,
+            proactive_threshold_pct: 75,
+            tail_protect_tokens: 20_000,
+            summary_ratio: 0.2,
+            reactive_summary_ratio: 0.5,
+            summary_min_tokens: 2_000,
+            reactive_only: false,
+        }
+    }
+}
+
+/// Why a `compact()` invocation was started. Influences the summary ratio,
+/// the PreCompact hook payload's `trigger` field, and downstream telemetry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompactionTrigger {
+    /// Threshold-based preemptive compaction (default ratio 0.2).
+    Proactive,
+    /// Triggered by a 413 / context-window error (default ratio 0.5).
+    Reactive,
+}
+
+impl CompactionTrigger {
+    /// Wire-format string used in the PreCompact hook payload.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CompactionTrigger::Proactive => "proactive_threshold",
+            CompactionTrigger::Reactive => "reactive_413",
         }
     }
 }
@@ -87,8 +140,16 @@ pub struct CompactionContext {
     pub session_summary_store: Option<Arc<crate::memory::SessionSummaryStore>>,
     pub user_id: UserId,
     pub sandbox_id: SandboxId,
+    /// Session ID — required by T1.E iterative summary reuse to scope
+    /// `SessionSummaryStore::get_latest()` to the current conversation.
+    pub session_id: SessionId,
     /// Custom instructions from the system prompt (used to guide summarization).
     pub custom_instructions: Option<String>,
+    /// Actual context window of the session's provider model, in tokens.
+    /// Threaded from `ContextBudgetManager::context_window()` so the PreCompact
+    /// hook payload reports correct `usage_pct` regardless of provider.
+    /// Defaults to 200_000 when unknown (claude-3.5 family default).
+    pub context_window: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -110,14 +171,15 @@ impl CompactionPipeline {
         Self { config }
     }
 
-    /// Run the full compaction pipeline.
-    ///
-    /// 1. Determine compaction boundary (keep N recent messages).
-    /// 2. Preprocess older messages (replace images, truncate long results).
-    /// 3. Call LLM to generate a 9-section summary.
-    /// 4. Format the summary (strip `<analysis>`, extract `<summary>`).
-    /// 5. Rebuild state (Zone B, Zone B+, Zone B++, active skill, hooks).
-    /// 6. Return the replacement message sequence.
+    /// Borrow the pipeline's effective config — used by the harness to read
+    /// the proactive trigger threshold and `reactive_only` flag without
+    /// duplicating storage in `AgentLoopConfig`.
+    pub fn config(&self) -> &CompactionPipelineConfig {
+        &self.config
+    }
+
+    /// Backward-compatible entry — defaults to `CompactionTrigger::Reactive`
+    /// (preserves the historic behavior of being invoked from the 413 handler).
     pub async fn compact(
         &self,
         messages: &[ChatMessage],
@@ -125,27 +187,124 @@ impl CompactionPipeline {
         model: &str,
         context: &CompactionContext,
     ) -> Result<CompactionResult> {
-        let keep_count = self.config.keep_recent_messages;
-        let boundary = messages.len().saturating_sub(keep_count);
-        if boundary < 2 {
-            return Err(anyhow!("Not enough messages to compact ({} total)", messages.len()));
+        self.compact_with_trigger(
+            messages,
+            provider,
+            model,
+            context,
+            CompactionTrigger::Reactive,
+        )
+        .await
+    }
+
+    /// Run the full compaction pipeline with an explicit trigger.
+    ///
+    /// Token-based head/tail protection (T1.B):
+    ///   * Head = system message + first user/asst pair (max 3 entries).
+    ///   * Tail = trailing window holding `tail_protect_tokens` (chars/4 estimate).
+    ///   * Middle = everything else, fed to the summarizer.
+    ///
+    /// Iterative summary reuse (T1.E):
+    ///   * If a `SessionSummaryStore` is wired, the most recent prior summary
+    ///     for `context.session_id` is fetched and prepended as a system
+    ///     message before summarization, then the resulting new summary is
+    ///     persisted (upsert by session_id).
+    ///
+    /// PreCompact hook (T1.D):
+    ///   * Fired BEFORE the summarizer LLM call. Audit-only — the returned
+    ///     `HookAction` is ignored. Payload travels through
+    ///     `HookContext::metadata` carrying the 8 fields from
+    ///     `PreCompactHook` (ADR-V2-018 §D1).
+    pub async fn compact_with_trigger(
+        &self,
+        messages: &[ChatMessage],
+        provider: &dyn Provider,
+        model: &str,
+        context: &CompactionContext,
+        trigger: CompactionTrigger,
+    ) -> Result<CompactionResult> {
+        if messages.len() < 2 {
+            return Err(anyhow!(
+                "Not enough messages to compact ({} total)",
+                messages.len()
+            ));
         }
 
-        let to_summarize = &messages[..boundary];
-        let to_keep = &messages[boundary..];
+        // T1.B: token-based head + tail protection.
+        let head_end = find_head_boundary(messages);
+        let tail_start = find_tail_boundary(messages, self.config.tail_protect_tokens);
+
+        // Decide split. Falls back to the legacy count-based split when the
+        // token walk produces an empty middle (head and tail collide) or
+        // crossed bounds.
+        let (head_slice, middle_slice, tail_slice) =
+            if head_end < tail_start && tail_start <= messages.len() {
+                (
+                    &messages[..head_end],
+                    &messages[head_end..tail_start],
+                    &messages[tail_start..],
+                )
+            } else {
+                let keep_count = self.config.keep_recent_messages.min(messages.len());
+                let boundary = messages.len().saturating_sub(keep_count);
+                if boundary < 2 {
+                    return Err(anyhow!(
+                        "Not enough messages to compact ({} total, head_end={}, tail_start={})",
+                        messages.len(),
+                        head_end,
+                        tail_start
+                    ));
+                }
+                (
+                    &messages[..0],
+                    &messages[..boundary],
+                    &messages[boundary..],
+                )
+            };
+
+        if middle_slice.is_empty() {
+            return Err(anyhow!(
+                "Nothing to summarize — middle region is empty after head/tail protection"
+            ));
+        }
 
         info!(
             total = messages.len(),
-            boundary,
-            kept = to_keep.len(),
+            head = head_slice.len(),
+            middle = middle_slice.len(),
+            tail = tail_slice.len(),
+            ?trigger,
             "Starting LLM compaction"
         );
 
-        // Pre-compact token estimate
         let pre_tokens = ContextBudgetManager::estimate_messages_tokens(messages) as usize;
 
-        // 1. Preprocess
-        let preprocessed = Self::preprocess_for_summary(to_summarize);
+        // T1.E: fetch latest prior summary (if any) for this session.
+        let prior_summary = match context.session_summary_store {
+            Some(ref store) => store.get_latest(context.session_id.as_str()).await.ok().flatten(),
+            None => None,
+        };
+        let reuses_prior_summary = prior_summary.is_some();
+
+        // 1. Preprocess the middle
+        let mut preprocessed = Self::preprocess_for_summary(middle_slice);
+
+        // T1.E: prepend the prior summary as a leading system-style hint so
+        // the summarizer can build incrementally rather than from scratch.
+        if let Some(ref prior) = prior_summary {
+            preprocessed.insert(
+                0,
+                ChatMessage {
+                    role: MessageRole::System,
+                    content: vec![ContentBlock::Text {
+                        text: format!(
+                            "[Prior summary from previous compaction]\n{}",
+                            prior.summary
+                        ),
+                    }],
+                },
+            );
+        }
 
         // 2. Build prompt
         let prompt = match context.custom_instructions.as_deref() {
@@ -153,19 +312,85 @@ impl CompactionPipeline {
             None => compact_prompt::COMPACT_PROMPT.to_string(),
         };
 
-        // 3. Generate summary via LLM (with PTL self-retry)
+        // T1.D: fire PreCompact hook BEFORE the summarizer LLM call.
+        // Audit-only per ADR-V2-018 §D1 — the action is ignored.
+        if let Some(ref hooks) = context.hook_registry {
+            // Reviewer M1 fix: use session's real context_window (threaded via
+            // CompactionContext), not a hardcoded 200K default that would misreport
+            // usage_pct for non-Claude sessions to L3/L4 audit consumers.
+            let context_window = context.context_window;
+            let usage_pct = if context_window == 0 {
+                0u32
+            } else {
+                ((pre_tokens as f64 / context_window as f64) * 100.0)
+                    .round()
+                    .clamp(0.0, 100.0) as u32
+            };
+            let prior_count: u32 = if reuses_prior_summary { 1 } else { 0 };
+            let mut ctx = HookContext::new()
+                .with_session(context.session_id.as_str().to_string());
+            ctx.set_metadata("trigger", serde_json::json!(trigger.as_str()));
+            ctx.set_metadata("estimated_tokens", serde_json::json!(pre_tokens as u64));
+            ctx.set_metadata("context_window", serde_json::json!(context_window));
+            ctx.set_metadata("usage_pct", serde_json::json!(usage_pct));
+            ctx.set_metadata(
+                "messages_to_compact",
+                serde_json::json!(middle_slice.len() as u32),
+            );
+            ctx.set_metadata("messages_total", serde_json::json!(messages.len() as u32));
+            ctx.set_metadata(
+                "reuses_prior_summary",
+                serde_json::json!(reuses_prior_summary),
+            );
+            ctx.set_metadata("prior_summary_count", serde_json::json!(prior_count));
+            let _ = hooks.execute(HookPoint::PreCompact, &ctx).await;
+            debug!(?trigger, "Fired PreCompact hook");
+        }
+
+        // 3. Determine effective summary max_tokens. Reactive triggers want a
+        // larger summary (ratio 0.5) so post-compaction context still has the
+        // recent narrative; proactive triggers want aggressive shrinkage
+        // (ratio per config). Floor by `summary_min_tokens`, ceil by
+        // `summary_max_tokens` from the config.
+        let ratio = match trigger {
+            CompactionTrigger::Proactive => self.config.summary_ratio,
+            CompactionTrigger::Reactive => self.config.reactive_summary_ratio,
+        };
+        let target_summary_tokens = ((pre_tokens as f32 * ratio) as u32)
+            .max(self.config.summary_min_tokens)
+            .min(self.config.summary_max_tokens);
+
+        // 4. Generate summary via LLM (with PTL self-retry)
         let compact_model = self.config.compact_model.as_deref().unwrap_or(model);
         let summary_text = self
-            .generate_summary(provider, compact_model, &preprocessed, &prompt)
+            .generate_summary_with_max(provider, compact_model, &preprocessed, &prompt, target_summary_tokens)
             .await?;
 
-        // 4. Format
+        // 5. Format
         let formatted = Self::format_summary(&summary_text);
 
-        // 5. Rebuild state
+        // T1.E: persist the new summary (upsert per session_id).
+        if let Some(ref store) = context.session_summary_store {
+            if let Err(e) = store
+                .save(
+                    context.session_id.as_str(),
+                    &formatted,
+                    middle_slice.len(),
+                    &[],
+                    0,
+                )
+                .await
+            {
+                warn!(error = %e, "Failed to persist new compaction summary");
+            }
+        }
+
+        // 6. Rebuild state
         let (reinjections, sys_additions) = Self::rebuild_state(context).await;
 
-        // 6. Assemble result
+        // 7. Assemble result. Head is preserved verbatim (prepended), then
+        // boundary marker, then summary, then tail kept verbatim, then state
+        // reinjections.
         let boundary_marker = ChatMessage {
             role: MessageRole::User,
             content: vec![ContentBlock::Text {
@@ -174,22 +399,29 @@ impl CompactionPipeline {
         };
 
         let summary_msg = ChatMessage::assistant(&formatted);
-        let kept = to_keep.to_vec();
+        // T1.B: keep head verbatim by inlining it ahead of the boundary
+        // marker via the existing CompactionResult shape. Callers that
+        // rebuild messages already concatenate marker + summary + kept +
+        // reinjections; placing head into kept_messages preserves that
+        // ordering without changing the result struct.
+        let mut kept = Vec::with_capacity(head_slice.len() + tail_slice.len());
+        kept.extend_from_slice(head_slice);
+        kept.extend_from_slice(tail_slice);
 
-        // Post-compact token estimate
-        let post_messages: Vec<&ChatMessage> = std::iter::once(&boundary_marker)
+        let post_messages: Vec<ChatMessage> = std::iter::once(&boundary_marker)
             .chain(std::iter::once(&summary_msg))
             .chain(kept.iter())
             .chain(reinjections.iter())
+            .cloned()
             .collect();
-        let post_tokens =
-            ContextBudgetManager::estimate_messages_tokens(&post_messages.into_iter().cloned().collect::<Vec<_>>())
-                as usize;
+        let post_tokens = ContextBudgetManager::estimate_messages_tokens(&post_messages) as usize;
 
         info!(
             pre_tokens,
             post_tokens,
             saved = pre_tokens.saturating_sub(post_tokens),
+            ?trigger,
+            reuses_prior_summary,
             "Compaction complete"
         );
 
@@ -274,6 +506,24 @@ impl CompactionPipeline {
         messages: &[ChatMessage],
         prompt: &str,
     ) -> Result<String> {
+        self.generate_summary_with_max(
+            provider,
+            model,
+            messages,
+            prompt,
+            self.config.summary_max_tokens,
+        )
+        .await
+    }
+
+    async fn generate_summary_with_max(
+        &self,
+        provider: &dyn Provider,
+        model: &str,
+        messages: &[ChatMessage],
+        prompt: &str,
+        summary_max_tokens: u32,
+    ) -> Result<String> {
         let mut to_summarize = messages.to_vec();
 
         for attempt in 0..self.config.max_ptl_retries {
@@ -281,7 +531,7 @@ impl CompactionPipeline {
                 model: model.to_string(),
                 system: Some(prompt.to_string()),
                 messages: to_summarize.clone(),
-                max_tokens: self.config.summary_max_tokens,
+                max_tokens: summary_max_tokens,
                 tools: vec![],
                 stream: false,
                 temperature: None,
@@ -453,6 +703,53 @@ impl CompactionPipeline {
 
         (reinjections, sys_additions)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Head/Tail boundary helpers (T1.B, ADR-V2-018 §D6)
+// ---------------------------------------------------------------------------
+
+/// Identify the index just past the protected "head" of the conversation.
+///
+/// Per ADR-V2-018 §D6 the head is `system messages + first user/assistant pair`.
+/// Returns the index of the first message that is fair game for summarization.
+fn find_head_boundary(messages: &[ChatMessage]) -> usize {
+    let mut idx = 0;
+    while idx < messages.len() && messages[idx].role == MessageRole::System {
+        idx += 1;
+    }
+    if idx < messages.len() && messages[idx].role == MessageRole::User {
+        idx += 1;
+        if idx < messages.len() && messages[idx].role == MessageRole::Assistant {
+            idx += 1;
+        }
+    }
+    idx
+}
+
+/// Walk backwards over `messages` accumulating estimated tokens until the
+/// running total reaches `tail_budget_tokens`. Returns the start index of
+/// the protected tail window. Returns `messages.len()` when the budget is 0.
+fn find_tail_boundary(messages: &[ChatMessage], tail_budget_tokens: u64) -> usize {
+    if tail_budget_tokens == 0 || messages.is_empty() {
+        return messages.len();
+    }
+    let mut acc: u64 = 0;
+    let mut idx = messages.len();
+    while idx > 0 {
+        let next = idx - 1;
+        let msg_tokens =
+            ContextBudgetManager::estimate_messages_tokens(std::slice::from_ref(&messages[next]));
+        if acc.saturating_add(msg_tokens) > tail_budget_tokens && next < messages.len() - 1 {
+            // Including this message would exceed the tail budget — stop here.
+            // The `next < len - 1` guard ensures we always keep at least the
+            // most recent message so the conversation has something to anchor.
+            break;
+        }
+        acc = acc.saturating_add(msg_tokens);
+        idx = next;
+    }
+    idx
 }
 
 // ---------------------------------------------------------------------------

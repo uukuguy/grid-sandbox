@@ -235,13 +235,13 @@
 | **D97** | `weights=(0.0, 0.0)` 退化情形缺少构造期告警 | 🔵 P3-defer | 所有候选 `score==0`，插入序生效无信息。运维场景罕见，但建议 `HybridIndex.__init__` 下发 `logger.warning("Both weights zero; results will be unordered")`。衍生自 S2.T2 reviewer M2 → **Phase 2.5** |
 | **D98** | `HybridIndex.search()` 每次重建 HNSWVectorIndex | 🟡 P1-defer | 每次 search 重新 `_try_load_sync()` 读磁盘 ~10ms；小索引可接受，QPS 上升后变成 perf 热点。承继 T1 同类问题。应随 D94 MemoryStore 单例化一起改为进程级缓存。衍生自 S2.T2 reviewer N3 → **Phase 2.5** |
 | **D99** | MCP dispatcher 参数类型强制转换抛原生 `ValueError`/`TypeError` 而非 `ToolError("invalid_arg")` | 🔵 P3-defer | `mcp_tools.py::_memory_list` / `_memory_search` 对 `limit`/`offset`/`top_k` 用 `int(args.get(...))` 直接转换；非法类型/字符串会抛原生异常，绕过 `_require` 的 `ToolError` 包装。预期下游 MCP SDK / REST body parsing 应先做 JSON-schema 校验，但 dispatcher 层应有兜底。不是 S2.T3 引入的回归，是承继既有模式。衍生自 S2.T3 reviewer → **Phase 2.5 dispatcher harden sweep** |
-
----
-
-## 新增 Deferred 编号规则
-
-**当前最大编号**: D99
-**下一个可用**: **D100** (跳过保留段 D67-D72 / D81-D82)
+| **D100** | S2.T4 — `write()`/`confirm()`/`archive()` 构造 `MemoryFileOut` 时未 surface `embedding_model_id`/`embedding_dim` | 🔵 P3-defer | 只有 `read_latest()` → `_row_to_memory` 返回完整字段，写路径 3 个 helper 对称性缺失。S2.T4 test 10 通过 docstring 记录，未断言。衍生自 S2.T4 reviewer → **Phase 2.5** |
+| **D101** | FastAPI `HTTPException(detail=dict)` 嵌套 `'detail'` key 的契约 erratum | 🔵 P3-defer | S2.T4 REST 409/404 断言 `resp.json()['detail']['code']` 而非 `resp.json()['code']`；blueprint 描述用了扁平 shape。非 bug，是文档纠误。衍生自 S2.T4 reviewer → **下轮 blueprint 审校同步** |
+| **D102** | S3.T1 — `AgentLoopConfig.compaction` 字段未接 YAML 配置层 | 🟡 P1-defer | 字段已加 + builder API 可用，但 `agent.yaml` → `AgentLoopConfigBuilder::compaction(...)` 的读取路径未接。下游 caller 通过 builder 传入；YAML 路径延后。衍生自 S3.T1 coder → **Phase 2.5 config harden sweep** (`crates/grid-server/src/api/agents.rs` + engine agent factory) |
+| **D103** | S3.T1 — `find_tail_boundary()` O(N²) 重估风险 | 🔵 P3-defer | 当前实现每消息调用 `estimate_messages_tokens`，总复杂度 O(sum of msg sizes) 而非真 O(N²)。仅在极长 session + 大 `tail_protect_tokens` 时才成为热点。衍生自 S3.T1 coder → **Phase 3 perf pass** |
+| **D104** | S3.T1 — 反应式 guard 在 harness 而非 pipeline | 🔵 P3-defer | `attempted_reactive_compact` 是 harness 循环本地状态，pipeline 层不 enforce。若未来其他 caller 绕过 harness 直接调 pipeline，同 turn double-compact 无锁。ADR-V2-018 §D5 明确 per-turn 语义，当前实现符合。衍生自 S3.T1 coder → **Phase 3 re-architect if needed** |
+| **D105** | S3.T1 — `HookPoint::ContextDegraded` 字符串别名保留 | 🟡 P1-defer | `runtime.rs:1899` string-key dispatcher 同时接受 `"ContextDegraded"` 和 `"PostCompact"`，保持既有 YAML/JSON hook 配置 backwards-compat。Phase 3 breaking release 时 deprecate 旧名。衍生自 S3.T1 coder → **Phase 3 breaking version** |
+| **D106** | S3.T1 — `MAX_TURNS_FOR_BUDGET=50` 硬编码 | 🔵 P3-defer | `harness.rs:120` 常量保守上限；长运行自主 agent 可能过紧，批量脚本可能过松。应成为 `AgentLoopConfig.task_budget_override` 字段。衍生自 S3.T1 coder → **Phase 3 config harden sweep** |
 
 **引入流程**:
 1. 在新 Deferred 产生的 plan 文件里以表格形式定义 `| D90 | 标题 | 去向 |`
@@ -279,6 +279,14 @@
 | 2026-04-15 | D97 | **新增** 🔵 P3-defer | `weights=(0,0)` 退化情形缺构造期告警（reviewer M2），→ Phase 2.5 |
 | 2026-04-15 | D98 | **新增** 🟡 P1-defer | HybridIndex 每次 search 重建 HNSW（reviewer N3，承继 T1）→ Phase 2.5 |
 | 2026-04-15 | D99 | **新增** 🔵 P3-defer | MCP dispatcher 参数类型转换抛原生异常（S2.T3 reviewer Major）→ Phase 2.5 |
+| 2026-04-15 | D100 | **新增** 🔵 P3-defer | write/confirm/archive embedding 字段不 surface（S2.T4 test 10）→ Phase 2.5 |
+| 2026-04-15 | D101 | **新增** 🔵 P3-defer | FastAPI detail 嵌套 erratum（S2.T4 blueprint nit）→ blueprint 审校 |
+| 2026-04-15 | D102 | **新增** 🟡 P1-defer | AgentLoopConfig.compaction YAML binding（S3.T1 coder）→ Phase 2.5 |
+| 2026-04-15 | D103 | **新增** 🔵 P3-defer | find_tail_boundary O(N²) risk（S3.T1 coder）→ Phase 3 perf |
+| 2026-04-15 | D104 | **新增** 🔵 P3-defer | 反应式 guard 在 harness 而非 pipeline（S3.T1 coder）→ Phase 3 if needed |
+| 2026-04-15 | D105 | **新增** 🟡 P1-defer | ContextDegraded 字符串别名保留（S3.T1 coder）→ Phase 3 breaking |
+| 2026-04-15 | D106 | **新增** 🔵 P3-defer | MAX_TURNS_FOR_BUDGET=50 硬编码（S3.T1 coder）→ Phase 3 config |
+| 2026-04-15 | — | **S3.T1 reviewer C1+M1-M3 inline-fixed** | context_window threaded, reactive_summary_ratio configurable, test 6+7 rewritten. 不开 D107-D110；改动随 S3.T1 commit 一并落盘 |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |

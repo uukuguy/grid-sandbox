@@ -1893,7 +1893,11 @@ fn hook_point_from_name(name: &str) -> Option<crate::hooks::HookPoint> {
         "PostTask" => Some(HookPoint::PostTask),
         "SessionStart" => Some(HookPoint::SessionStart),
         "SessionEnd" => Some(HookPoint::SessionEnd),
-        "ContextDegraded" => Some(HookPoint::ContextDegraded),
+        // ADR-V2-018: ContextDegraded was renamed to PostCompact. Both names
+        // are accepted so existing YAML/JSON hook configs keep working; new
+        // configs should prefer "PostCompact" or "PreCompact".
+        "PostCompact" | "ContextDegraded" => Some(HookPoint::PostCompact),
+        "PreCompact" => Some(HookPoint::PreCompact),
         "LoopTurnStart" => Some(HookPoint::LoopTurnStart),
         "LoopTurnEnd" => Some(HookPoint::LoopTurnEnd),
         "AgentRoute" => Some(HookPoint::AgentRoute),
