@@ -5,9 +5,9 @@
   "previous_design_doc": "docs/design/EAASP/PHASE1_EVENT_ENGINE_DESIGN.md",
   "phase": "phase-2",
   "created_at": "2026-04-14T13:00:00+08:00",
-  "updated_at": "2026-04-15T02:30:00+08:00",
-  "last_commit": "220f53e feat(eaasp/phase2): S2.T3 — MCP tool completion (memory_read embedding + offset + memory_confirm)",
-  "test_baseline": "l2-memory-engine 103/103 PASS (+8 S2.T3); ruff clean",
+  "updated_at": "2026-04-15T03:10:00+08:00",
+  "last_commit": "bd7545d feat(eaasp/phase2): S2.T4 — Memory state machine invariant tests",
+  "test_baseline": "l2-memory-engine 114/114 PASS (+11 S2.T4); ruff clean",
   "completed_tasks": [
     "S0.T1 (ADR-V2-015 Accepted)",
     "S0.T2 (ADR-V2-016 Accepted 2026-04-14 — multi-model E2E verified)",
@@ -21,15 +21,16 @@
     "S2.T1 (Vector embedding 基础设施 — Provider Protocol + Ollama/Mock + HNSWVectorIndex + schema migration + dual-write path; 26 new tests, 84/84 PASS; ADR-V2-015 三铁律 PASS; D12 partial, D78 deferred to S2.T2)",
     "S2.T2 (Hybrid retrieval — FTS + HNSW + time-decay fusion score = (w_fts*fts + w_sem*sem) * decay; env EAASP_HYBRID_WEIGHTS; 4 graceful-degrade paths; 11 new tests, 95/95 PASS @ 262d28d; ADR-V2-015 三铁律 PASS; reviewer APPROVE-WITH-COMMENTS)",
     "S2.T3 (MCP tool completion — MemoryFileOut surfaces embedding_model_id+embedding_dim (not blob); memory_list gains offset parameter; memory_confirm becomes 7th MCP tool with parity to memory_archive; 8 new tests covering embedding metadata + graceful-degrade + pagination + state machine suggested→confirmed→archived; 103/103 PASS; ruff clean; reviewer APPROVE-WITH-COMMENTS 0 Criticals 1 Major→D99)",
+    "S2.T4 (State machine invariants — 11 new tests in test_s2t4_state_machine.py covering forward via write() direct + version monotonicity + created_at/updated_at invariants + evidence_refs preservation + archived→reversal blocked (parametrized 2× after dropping archived→archived same-status no-op) + list(status=...) filter + REST 409/404 body parity + MCP dispatcher walk with read-path DB cross-check; 114/114 PASS; ruff clean; reviewer APPROVE-WITH-COMMENTS 0 Criticals 0 Majors, 2 Deferred candidates D100+D101; test-only, no src/ changes)",
     "Deferred Ledger 建立 (docs/design/EAASP/DEFERRED_LEDGER.md — single source of truth for D1-D99)"
   ],
   "deferred_ledger": "docs/design/EAASP/DEFERRED_LEDGER.md",
-  "current_task": "S2.T4 (Memory 状态机测试 — agent_suggested → confirmed → archived 流转正确性)",
+  "current_task": "S2.T5 (Tool result 三层截断 + 溢出落盘 + D60 verify-v2-mvp assertion 升级)",
   "total_tasks": 23,
   "task_delta_log": "2026-04-14: 22 → 23 after Deferred 重分类 (S3.T5 scoped-hook executor 新增，合并 D50+D51+D53)",
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 2 — Memory and Evidence",
-  "status": "S0 DONE (2/2). S1 DONE (7/7). S2 IN PROGRESS (3/5 — T1 vector infra + T2 hybrid retrieval + T3 tool completion). Plan 12/23. Next: S2.T4 state machine tests.",
+  "status": "S0 DONE (2/2). S1 DONE (7/7). S2 IN PROGRESS (4/5 — T1 vector infra + T2 hybrid retrieval + T3 tool completion + T4 state machine tests). Plan 13/23. Next: S2.T5 tool-result 三层截断.",
 
   "previous_phase": {
     "name": "Phase 1 — Event-driven Foundation",
@@ -51,7 +52,7 @@
       "remaining": [],
       "note": "Batch A landed 2026-04-14. All inherited Phase-1 Deferred (D83/D85/D86) closed + retry infrastructure complete. Follow-up candidate: ServerMessage WS tool_name extension (D90?)."
     },
-    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "in_progress", "completed": ["S2.T1 (embedding infrastructure)", "S2.T2 (hybrid retrieval)", "S2.T3 (MCP tool completion)"], "remaining": ["S2.T4 state machine tests", "S2.T5 tool-result 三层截断 + D60"], "note": "S2.T3 landed 2026-04-15: 3 code changes + 8 new tests. MemoryFileOut surfaces embedding_model_id+embedding_dim (blob withheld); memory_list gains offset parameter (clamp ≥0); memory_confirm becomes 7th MCP tool (manifest + dispatcher handler + _HANDLERS registry, delegates to existing files.confirm()). Tests: embedding visibility + graceful-degrade on embed failure + pagination + offset default + confirm happy path + archived→confirm invalid + not_found + confirmed→confirmed self-loop (inline reviewer fix) + full suggested→confirmed→archived state machine. 103/103 PASS, ruff clean. Reviewer 0 Criticals, 1 Major→D99 (MCP dispatcher type coercion abstraction deferred to Phase 2.5 sweep), 1 Minor (confirmed→confirmed self-loop) applied inline. ADR-V2-015 三铁律 PASS. Non-goals confirmed untouched: D12/D78/D91-D98. D78 (event embedding) 仍未落地，移到 S2.T5 或 Phase 2.5。" },
+    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "in_progress", "completed": ["S2.T1 (embedding infrastructure)", "S2.T2 (hybrid retrieval)", "S2.T3 (MCP tool completion)", "S2.T4 (state machine tests)"], "remaining": ["S2.T5 tool-result 三层截断 + D60"], "note": "S2.T4 landed 2026-04-15 @ bd7545d: test-only commit, 11 new tests in tests/test_s2t4_state_machine.py (406 lines). Gap-closing scope — all 11 are new coverage, zero duplication with test_files/test_review_fixes/test_s2t3. Scout blueprint at /tmp/s2t4-blueprint.md, reviewer APPROVE-WITH-COMMENTS 0 Criticals 0 Majors + 1 cosmetic nit applied inline. Key coverage: (1) forward via write() direct (not just confirm/archive helpers) for both suggested→confirmed and confirmed→archived; (2) version monotonicity + created_at stable + updated_at non-decreasing + evidence_refs preserved across full state walk; (3) archived reversal via write() blocked (parametrized over agent_suggested/confirmed — archived→archived intentionally dropped because same-status rewrites are allowed, per test_write_same_status_is_allowed); (4) list(status=...) filter returns exactly matching latest versions; (5) REST 409 invalid_transition + 404 not_found body shape parity (uses resp.json()['detail']['code'] — FastAPI nests HTTPException(detail=dict) under 'detail', blueprint erratum → D101); (6) MCP dispatcher walk with read-path DB cross-check on embedding columns. Discovered production surface asymmetry → D100: write()/confirm()/archive() construct MemoryFileOut inline and omit embedding_model_id+embedding_dim; only read_latest() → _row_to_memory surfaces them. Test #10 navigates this via docstring + limited assertion. 114/114 PASS, ruff clean. Non-goals: no src/ changes, no concurrent writes (D12), no HNSW assertions. Orchestrator found 3 test bugs during verification and fixed inline: (1) zip(strict=True) with length-mismatch after [1:] slice, (2) archived→archived blocking assertion contradicts same-status no-op rule, (3) cross-step embedding equality impossible due to write-path asymmetry." },
     "S3": { "name": "PreCompact + Skill Extraction + Stop hooks + scoped-hook executor (批次 B)", "tasks": 5, "status": "unblocked", "note": "S3.T5 新增合并 D50+D51+D53，前置 ADR-V2-006 envelope 契约. S1 DONE → unblocked." },
     "S4": { "name": "CLI + E2E 验证 + thread-scoped interrupt (批次 C)", "tasks": 4, "status": "blocked_by_S1_S2_S3" }
   },
