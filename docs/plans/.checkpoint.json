@@ -16,15 +16,16 @@
     "S1.T5 (D85 closed — event_to_chunk(Completed) extracts final_messages text + python accumulator populates done chunk content @ bdc5b8b+d0e6cb0)",
     "S1.T6 (ErrorClassifier — 14 FailoverReason variants + RecoveryActions matrix; 36 unit tests PASS; hermes pattern ported to Rust)",
     "S1.T7 (Graduated retry — RetryPolicy::graduated() + ±15% jitter + FailoverReason::recovery_actions routing; 42 lib tests + 4 integration PASS @ 8b532cb)",
-    "Deferred Ledger 建立 (docs/design/EAASP/DEFERRED_LEDGER.md — single source of truth for D1-D89)"
+    "S2.T1 (Vector embedding 基础设施 — Provider Protocol + Ollama/Mock + HNSWVectorIndex + schema migration + dual-write path; 26 new tests, 84/84 PASS; ADR-V2-015 三铁律 PASS; D12 partial, D78 deferred to S2.T2)",
+    "Deferred Ledger 建立 (docs/design/EAASP/DEFERRED_LEDGER.md — single source of truth for D1-D94)"
   ],
   "deferred_ledger": "docs/design/EAASP/DEFERRED_LEDGER.md",
-  "current_task": "S2.T1 (Vector embedding 基础设施 — hnswlib + OpenAI embeddings, merges D12+D78)",
+  "current_task": "S2.T2 (Hybrid retrieval — keyword+semantic+time-decay; 承接 S2.T1 vector index)",
   "total_tasks": 23,
   "task_delta_log": "2026-04-14: 22 → 23 after Deferred 重分类 (S3.T5 scoped-hook executor 新增，合并 D50+D51+D53)",
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 2 — Memory and Evidence",
-  "status": "S0 DONE (2/2). S1 DONE (7/7 — T1 D87 / T2 hermes frozen / T3 D86 / T4 D83 / T5 D85 / T6 ErrorClassifier / T7 graduated retry). Plan 9/23. Batch A ALL LANDED. Next: S2 L2 Memory Engine enhancement (batch B).",
+  "status": "S0 DONE (2/2). S1 DONE (7/7). S2 IN PROGRESS (1/5 — T1 vector embedding infrastructure landed). Plan 10/23. Next: S2.T2 hybrid retrieval (keyword+semantic+time-decay).",
 
   "previous_phase": {
     "name": "Phase 1 — Event-driven Foundation",
@@ -46,7 +47,7 @@
       "remaining": [],
       "note": "Batch A landed 2026-04-14. All inherited Phase-1 Deferred (D83/D85/D86) closed + retry infrastructure complete. Follow-up candidate: ServerMessage WS tool_name extension (D90?)."
     },
-    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "unblocked", "note": "可与 S3 并行。S2.T1 合并 D12+D78，S2.T5 合并 D60. S1 done → S3 解除 blocked。" },
+    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "in_progress", "completed": ["S2.T1 (embedding infrastructure)"], "remaining": ["S2.T2 hybrid retrieval", "S2.T3 memory_read/archive", "S2.T4 state machine tests", "S2.T5 tool-result 三层截断 + D60"], "note": "S2.T1 landed 2026-04-14: EmbeddingProvider Protocol + OllamaEmbedding + MockEmbedding + HNSWVectorIndex (per-model_id dir) + schema migration + dual-write path in files.py。D12 partial (migration idempotent + pack/unpack helpers; singleton refactor deferred to D94)。D78 events embedding 挪到 S2.T2。新 Deferred: D91 tombstone rebuild, D92 mock seed audit, D93 embed_batch 并发, D94 MemoryStore singleton。" },
     "S3": { "name": "PreCompact + Skill Extraction + Stop hooks + scoped-hook executor (批次 B)", "tasks": 5, "status": "unblocked", "note": "S3.T5 新增合并 D50+D51+D53，前置 ADR-V2-006 envelope 契约. S1 DONE → unblocked." },
     "S4": { "name": "CLI + E2E 验证 + thread-scoped interrupt (批次 C)", "tasks": 4, "status": "blocked_by_S1_S2_S3" }
   },

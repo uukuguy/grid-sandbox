@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 import uuid
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .db import connect
+from .db import connect, pack_embedding
+
+logger = logging.getLogger(__name__)
 
 MemoryStatus = Literal["agent_suggested", "confirmed", "archived"]
 
@@ -46,8 +50,18 @@ class InvalidStatusTransition(ValueError):
 
 
 class MemoryFileStore:
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, octo_root: str | None = None) -> None:
+        """Construct a memory file store.
+
+        Args:
+            db_path: Path to the SQLite database.
+            octo_root: Directory under which HNSW indices are persisted
+                (``{octo_root}/l2-memory/hnsw-{model_id_safe}/``). Defaults
+                to the directory containing ``db_path`` so tests that use
+                ``tmp_path`` get isolated indices automatically.
+        """
         self.db_path = db_path
+        self.octo_root = octo_root or os.path.dirname(os.path.abspath(db_path))
 
     async def write(self, memory: MemoryFileIn) -> MemoryFileOut:
         """Insert new memory or bump version of an existing memory_id.
@@ -55,9 +69,41 @@ class MemoryFileStore:
         Wrapped in BEGIN IMMEDIATE to avoid racy (SELECT MAX + INSERT) version
         collisions (C1). When memory_id is provided, status transition is
         validated against the latest version (M4).
+
+        Phase 2 S2.T1 — dual-write embedding:
+            1. Compute embedding OUTSIDE the BEGIN IMMEDIATE block so that
+               a slow/failing provider never holds a write lock. Failure here
+               is non-fatal: the base row is still inserted, just with NULL
+               embedding columns.
+            2. INSERT writes embedding_model_id / embedding_dim /
+               embedding_vec atomically with the base row (same transaction).
+            3. AFTER commit, HNSW ``add()`` + ``save()`` run best-effort.
+               Any failure is logged but never propagates — the DB row is
+               authoritative and can be re-indexed later.
         """
         now = int(time.time() * 1000)
         memory_id = memory.memory_id or f"mem_{uuid.uuid4().hex[:16]}"
+
+        # Step 1 — compute embedding pre-txn. Keep all import + compute
+        # inside a single try so any failure path (import error, provider
+        # crash, dimension surprise) falls through to NULL embedding columns
+        # rather than aborting the write.
+        embedding_model_id: str | None = None
+        embedding_dim: int | None = None
+        embedding_blob: bytes | None = None
+        embedding_vec: list[float] | None = None
+        try:
+            from .embedding import get_embedding_provider
+
+            embedder = get_embedding_provider()
+            _vec = await embedder.embed(memory.content)
+            embedding_vec = _vec
+            embedding_model_id = embedder.model_id
+            embedding_dim = embedder.dimension
+            embedding_blob = pack_embedding(_vec)
+        except Exception as e:  # noqa: BLE001 — embedding must never block writes
+            logger.warning("memory_write embedding skipped: %s", e)
+
         db = await connect(self.db_path)
         try:
             await db.execute("BEGIN IMMEDIATE")
@@ -90,8 +136,9 @@ class MemoryFileStore:
                     """
                     INSERT INTO memory_files (
                         memory_id, version, scope, category, content, evidence_refs,
-                        status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        status, created_at, updated_at,
+                        embedding_model_id, embedding_dim, embedding_vec
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         memory_id,
@@ -103,6 +150,9 @@ class MemoryFileStore:
                         memory.status,
                         created_at,
                         now,
+                        embedding_model_id,
+                        embedding_dim,
+                        embedding_blob,
                     ),
                 )
                 await db.execute(
@@ -110,7 +160,13 @@ class MemoryFileStore:
                     INSERT INTO memory_fts (memory_id, version, content_text, category, scope)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (memory_id, new_version, memory.content, memory.category, memory.scope),
+                    (
+                        memory_id,
+                        new_version,
+                        memory.content,
+                        memory.category,
+                        memory.scope,
+                    ),
                 )
                 await db.commit()
             except Exception:
@@ -118,6 +174,27 @@ class MemoryFileStore:
                 raise
         finally:
             await db.close()
+
+        # Step 3 — HNSW add/save is post-commit and fully non-fatal. The DB
+        # row is authoritative; HNSW is a rebuild-able index. Import is
+        # inside the try so missing hnswlib / vector_index stays soft.
+        if (
+            embedding_vec is not None
+            and embedding_model_id is not None
+            and embedding_dim is not None
+        ):
+            try:
+                from .vector_index import HNSWVectorIndex
+
+                idx = HNSWVectorIndex(
+                    model_id=embedding_model_id,
+                    octo_root=self.octo_root,
+                    dim=embedding_dim,
+                )
+                await idx.add(f"{memory_id}:v{new_version}", embedding_vec)
+                await idx.save()
+            except Exception as e:  # noqa: BLE001 — HNSW must never block writes
+                logger.warning("memory_write HNSW add skipped: %s", e)
 
         return MemoryFileOut(
             memory_id=memory_id,

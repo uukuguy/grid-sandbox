@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import struct
+
 import aiosqlite
 
 SCHEMA = """
@@ -62,11 +64,60 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
 """
 
 
+# Phase 2 S2.T1 — embedding columns on memory_files.
+# Stored as f32 BLOB (packed via struct). Migration is idempotent via
+# PRAGMA table_info check so apply_embedding_migration() is safe to call
+# multiple times.
+#
+# D12 status: *partially addressed* — migration is idempotent, but the full
+# MemoryStore singleton refactor (shared aiosqlite.Connection + global
+# write_lock) is intentionally deferred to Phase 2.5. All callers continue
+# to use per-call connect() for now. Do NOT open a long-lived shared
+# connection here; existing AnchorStore / MemoryFileStore / HybridIndex
+# paths all assume per-call connections.
+
+
+async def apply_embedding_migration(db: aiosqlite.Connection) -> None:
+    """Idempotent embedding-columns migration on memory_files.
+
+    Adds three nullable columns + one index:
+        - embedding_model_id TEXT    (e.g. 'bge-m3:fp16@ollama')
+        - embedding_dim     INTEGER
+        - embedding_vec     BLOB     (packed f32 array, len = dim * 4 bytes)
+        - idx_memory_files_embedding_model ON memory_files(embedding_model_id)
+
+    Safe to call multiple times. Uses PRAGMA table_info before ALTER so
+    existing columns are not re-added. Caller must pass a connection with
+    ``row_factory = aiosqlite.Row`` so that ``row["name"]`` works.
+    """
+    cur = await db.execute("PRAGMA table_info(memory_files)")
+    cols = await cur.fetchall()
+    col_names = {row["name"] for row in cols}
+
+    if "embedding_model_id" not in col_names:
+        await db.execute("ALTER TABLE memory_files ADD COLUMN embedding_model_id TEXT")
+    if "embedding_dim" not in col_names:
+        await db.execute("ALTER TABLE memory_files ADD COLUMN embedding_dim INTEGER")
+    if "embedding_vec" not in col_names:
+        await db.execute("ALTER TABLE memory_files ADD COLUMN embedding_vec BLOB")
+
+    await db.execute(
+        """CREATE INDEX IF NOT EXISTS idx_memory_files_embedding_model
+              ON memory_files(embedding_model_id)"""
+    )
+    await db.commit()
+
+
 async def init_db(path: str) -> None:
-    """Create schema if absent."""
+    """Create schema if absent and apply idempotent Phase 2 migrations."""
     async with aiosqlite.connect(path) as db:
         await db.executescript(SCHEMA)
         await db.commit()
+        # Phase 2 S2.T1 — embedding columns (idempotent).
+        # Row factory needed so apply_embedding_migration can access
+        # row["name"] on PRAGMA table_info output.
+        db.row_factory = aiosqlite.Row
+        await apply_embedding_migration(db)
 
 
 async def connect(path: str) -> aiosqlite.Connection:
@@ -74,3 +125,20 @@ async def connect(path: str) -> aiosqlite.Connection:
     db = await aiosqlite.connect(path)
     db.row_factory = aiosqlite.Row
     return db
+
+
+def pack_embedding(vec: list[float]) -> bytes:
+    """Pack list[float] → f32 BLOB for SQLite storage.
+
+    Length invariant: ``len(pack_embedding(vec)) == len(vec) * 4``.
+    """
+    return struct.pack(f"{len(vec)}f", *vec)
+
+
+def unpack_embedding(blob: bytes, dim: int) -> list[float]:
+    """Unpack f32 BLOB → list[float] of length ``dim``.
+
+    Callers that already know ``dim`` via ``embedding_dim`` column should
+    pass it explicitly; blob length must equal ``dim * 4``.
+    """
+    return list(struct.unpack(f"{dim}f", blob))
