@@ -251,10 +251,12 @@ impl GridHarness {
                 tool_id: Some(tool_id),
                 is_error: false,
             }),
-            AgentEvent::ToolResult { tool_id, output, success } => Some(ResponseChunk {
+            AgentEvent::ToolResult { tool_id, tool_name, output, success } => Some(ResponseChunk {
                 chunk_type: "tool_result".into(),
                 content: output,
-                tool_name: None,
+                // D83 (S1.T4): populate tool_name so POST_TOOL_USE hooks /
+                // CLI telemetry can tag results without a side-channel lookup.
+                tool_name: Some(tool_name),
                 tool_id: Some(tool_id),
                 is_error: !success,
             }),
@@ -265,13 +267,41 @@ impl GridHarness {
                 tool_id: None,
                 is_error: true,
             }),
-            AgentEvent::Done | AgentEvent::Completed(_) => Some(ResponseChunk {
+            // D85 (S1.T5): the `Completed(AgentLoopResult)` event carries
+            // the full final_messages history; extract the last assistant
+            // message's concatenated text and surface it in the "done" chunk
+            // so downstream L4 STOP consumers (and tests/telemetry) can read
+            // the final response without re-walking the event stream.
+            // `Done` has no payload — treat it as an empty-body done chunk.
+            AgentEvent::Done => Some(ResponseChunk {
                 chunk_type: "done".into(),
                 content: String::new(),
                 tool_name: None,
                 tool_id: None,
                 is_error: false,
             }),
+            AgentEvent::Completed(result) => {
+                // Walk final_messages in reverse to find the last assistant
+                // turn; concatenate every Text block (tool-use/tool-result
+                // blocks are skipped by `ChatMessage::text_content`). Empty
+                // string is the correct default when no assistant text is
+                // present (e.g. a tool-only turn that never terminated with
+                // plain text). Never panic.
+                let content = result
+                    .final_messages
+                    .iter()
+                    .rev()
+                    .find(|m| m.role == MessageRole::Assistant)
+                    .map(|m| m.text_content())
+                    .unwrap_or_default();
+                Some(ResponseChunk {
+                    chunk_type: "done".into(),
+                    content,
+                    tool_name: None,
+                    tool_id: None,
+                    is_error: false,
+                })
+            }
             // D87: surface workflow-continuation injections so they are
             // ingestable as `WORKFLOW_CONTINUATION` events by L3/L4. Without
             // this, the fix silently fires but downstream tooling can't
@@ -782,12 +812,18 @@ mod tests {
     fn event_to_chunk_tool_result() {
         let event = AgentEvent::ToolResult {
             tool_id: "t1".into(),
+            tool_name: "bash".into(),
             output: "file1.rs".into(),
             success: true,
         };
         let chunk = GridHarness::event_to_chunk(event).unwrap();
         assert_eq!(chunk.chunk_type, "tool_result");
         assert!(!chunk.is_error);
+        // D83 (S1.T4): tool_name MUST propagate from AgentEvent into the
+        // wire-level ResponseChunk so downstream POST_TOOL_USE hooks can
+        // correlate results to tool calls without a side-channel lookup.
+        assert_eq!(chunk.tool_name.as_deref(), Some("bash"));
+        assert_eq!(chunk.tool_id.as_deref(), Some("t1"));
     }
 
     #[test]
@@ -802,6 +838,94 @@ mod tests {
     fn event_to_chunk_done() {
         let chunk = GridHarness::event_to_chunk(AgentEvent::Done).unwrap();
         assert_eq!(chunk.chunk_type, "done");
+        // D85 — `Done` has no payload, so content stays empty.
+        assert_eq!(chunk.content, "");
+    }
+
+    #[test]
+    fn event_to_chunk_completed_populates_final_assistant_text() {
+        // D85 (S1.T5) — `AgentEvent::Completed(result)` carries the full
+        // conversation history. The "done" ResponseChunk must surface the
+        // LAST assistant message's text so downstream L4 STOP consumers
+        // (and telemetry) can read the final reply off the chunk stream.
+        use grid_engine::AgentLoopResult;
+
+        let result = AgentLoopResult {
+            final_messages: vec![
+                ChatMessage {
+                    role: MessageRole::User,
+                    content: vec![ContentBlock::Text {
+                        text: "what is 2+2?".into(),
+                    }],
+                },
+                ChatMessage {
+                    role: MessageRole::Assistant,
+                    // Two Text blocks must concatenate cleanly (no separator).
+                    content: vec![
+                        ContentBlock::Text { text: "hello".into() },
+                        ContentBlock::Text { text: " world".into() },
+                    ],
+                },
+            ],
+            ..Default::default()
+        };
+
+        let chunk = GridHarness::event_to_chunk(AgentEvent::Completed(result)).unwrap();
+        assert_eq!(chunk.chunk_type, "done");
+        assert_eq!(chunk.content, "hello world");
+        assert!(!chunk.is_error);
+        assert!(chunk.tool_name.is_none());
+        assert!(chunk.tool_id.is_none());
+    }
+
+    #[test]
+    fn event_to_chunk_completed_no_assistant_message_returns_empty_content() {
+        // Defensive path: if final_messages has no Assistant message (e.g.
+        // the loop terminated before any assistant reply was produced),
+        // the chunk must still fire but carry an empty content string —
+        // not panic, not error.
+        use grid_engine::AgentLoopResult;
+
+        let result = AgentLoopResult {
+            final_messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: vec![ContentBlock::Text { text: "hi".into() }],
+            }],
+            ..Default::default()
+        };
+
+        let chunk = GridHarness::event_to_chunk(AgentEvent::Completed(result)).unwrap();
+        assert_eq!(chunk.chunk_type, "done");
+        assert_eq!(chunk.content, "");
+        assert!(!chunk.is_error);
+    }
+
+    #[test]
+    fn event_to_chunk_completed_skips_non_text_blocks() {
+        // Tool-use blocks in the final assistant message must NOT leak into
+        // the response_text. `ChatMessage::text_content` filters for Text
+        // variants only, so a mid-message ToolUse is silently dropped.
+        use grid_engine::AgentLoopResult;
+
+        let result = AgentLoopResult {
+            final_messages: vec![ChatMessage {
+                role: MessageRole::Assistant,
+                content: vec![
+                    ContentBlock::Text { text: "final answer: ".into() },
+                    ContentBlock::ToolUse {
+                        id: "ignored-t1".into(),
+                        name: "ignored-tool".into(),
+                        input: serde_json::json!({}),
+                    },
+                    ContentBlock::Text { text: "42".into() },
+                ],
+            }],
+            ..Default::default()
+        };
+
+        let chunk = GridHarness::event_to_chunk(AgentEvent::Completed(result)).unwrap();
+        assert_eq!(chunk.chunk_type, "done");
+        assert_eq!(chunk.content, "final answer: 42");
     }
 
     #[test]

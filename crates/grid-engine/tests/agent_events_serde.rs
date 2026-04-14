@@ -19,6 +19,7 @@ fn test_all_agent_event_variants_serialize() {
         },
         AgentEvent::ToolResult {
             tool_id: "t1".into(),
+            tool_name: "bash".into(),
             output: "ok".into(),
             success: true,
         },

@@ -117,6 +117,9 @@ pub async fn send_eval_message(
                 }
                 AgentEvent::ToolResult {
                     tool_id,
+                    // D83 (S1.T4): tool_name now available on ToolResult;
+                    // ToolStart already seeded `name`, so we leave it intact.
+                    tool_name: _,
                     output,
                     success,
                 } => {

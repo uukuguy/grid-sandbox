@@ -322,6 +322,10 @@ fn handle_agent_event(state: &mut app_state::TuiState, event: grid_engine::agent
         }
         AgentEvent::ToolResult {
             tool_id,
+            // D83 (S1.T4): tool_name now available on ToolResult, but the
+            // TUI already records the active tool's name via ToolStart, so
+            // we ignore it here.
+            tool_name: _,
             output,
             success,
         } => {

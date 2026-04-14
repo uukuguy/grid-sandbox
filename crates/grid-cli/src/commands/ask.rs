@@ -196,6 +196,10 @@ async fn collect_json_output(
             }
             Ok(AgentEvent::ToolResult {
                 tool_id,
+                // D83 (S1.T4): tool_name now available on ToolResult, but
+                // the JSON collector already tracks (name, args) via
+                // `pending_tools` seeded at ToolStart, so we ignore it here.
+                tool_name: _,
                 output,
                 success,
             }) => {

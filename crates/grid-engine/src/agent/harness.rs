@@ -2138,6 +2138,10 @@ async fn run_agent_loop_inner(
             let _ = tx
                 .send(AgentEvent::ToolResult {
                     tool_id: tu.id.clone(),
+                    // D83 (S1.T4): thread tool_name through so downstream
+                    // POST_TOOL_USE hooks can correlate results to tool calls
+                    // without maintaining a separate tool_id→name side map.
+                    tool_name: tu.name.clone(),
                     output: result.content.clone(),
                     success: !result.is_error,
                 })

@@ -1392,6 +1392,11 @@ impl EvalRunner {
                 }
                 AgentEvent::ToolResult {
                     tool_id,
+                    // D83 (S1.T4): tool_name now carried on ToolResult.
+                    // The eval runner tracks name via `pending_tools` (seeded
+                    // at ToolStart) so we ignore it here; if the invariant
+                    // ever breaks we can prefer this over the cache.
+                    tool_name: _,
                     output: tool_output,
                     success,
                 } => {

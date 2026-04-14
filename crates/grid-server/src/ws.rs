@@ -348,6 +348,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>, handle: AgentExe
                                     tool_id,
                                     output,
                                     success,
+                                    // tool_name (D83): not surfaced through
+                                    // the workbench WS ServerMessage schema
+                                    // (out of D83 scope); upstream gRPC path
+                                    // already carries it.
+                                    ..
                                 } => ServerMessage::ToolResult {
                                     session_id: sid_str.clone(),
                                     tool_id,

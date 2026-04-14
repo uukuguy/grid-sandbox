@@ -211,6 +211,11 @@ async fn test_harness_full_tool_call_flow() {
     let mut saw_completed = false;
     let mut saw_done = false;
     let mut tool_result_output = String::new();
+    // D83 (S1.T4): capture ToolResult.tool_name so we can assert it matches
+    // the upstream ToolStart.tool_name. This is the primary regression guard
+    // for the fix: if the harness ever stops threading `tu.name` into the
+    // ToolResult event the assertion below fails immediately.
+    let mut tool_result_tool_name = String::new();
     let mut completed_rounds = 0u32;
     let mut completed_tool_calls = 0u32;
 
@@ -224,11 +229,15 @@ async fn test_harness_full_tool_call_flow() {
                 saw_tool_start = true;
             }
             AgentEvent::ToolResult {
-                output, success, ..
+                tool_name,
+                output,
+                success,
+                ..
             } => {
                 assert!(success);
                 assert!(output.contains("Echo:"));
                 tool_result_output = output.clone();
+                tool_result_tool_name = tool_name.clone();
                 saw_tool_result = true;
             }
             AgentEvent::TextDelta { .. } => saw_text_delta = true,
@@ -253,6 +262,13 @@ async fn test_harness_full_tool_call_flow() {
         tool_result_output.contains("Echo: hello from test"),
         "Tool result should contain echoed message, got: {}",
         tool_result_output
+    );
+    // D83 (S1.T4): ToolResult must carry the same tool_name as the paired
+    // ToolStart so downstream POST_TOOL_USE hooks can correlate results to
+    // tool calls without a side-channel tool_id→name lookup.
+    assert_eq!(
+        tool_result_tool_name, "mock_echo",
+        "ToolResult.tool_name should match ToolStart.tool_name",
     );
     assert!(saw_text_delta, "Expected TextDelta event");
     assert!(saw_text_complete, "Expected TextComplete event");

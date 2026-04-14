@@ -55,6 +55,7 @@ fn test_all_agent_event_variants_constructible() {
         },
         AgentEvent::ToolResult {
             tool_id: "t1".into(),
+            tool_name: "bash".into(),
             output: "ok".into(),
             success: true,
         },

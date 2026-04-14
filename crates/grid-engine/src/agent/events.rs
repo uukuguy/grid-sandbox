@@ -25,6 +25,11 @@ pub enum AgentEvent {
     },
     ToolResult {
         tool_id: String,
+        /// D83 (S1.T4): name of the tool this result corresponds to.
+        /// Mirrors `ToolStart.tool_name` so downstream consumers (POST_TOOL_USE
+        /// hooks, CLI telemetry, wire-level `ResponseChunk`) can correlate
+        /// results to calls without a side-channel tool_id→name lookup.
+        tool_name: String,
         output: String,
         success: bool,
     },

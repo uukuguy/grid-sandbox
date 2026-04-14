@@ -347,6 +347,11 @@ async fn handle_socket(
                                     tool_id,
                                     output,
                                     success,
+                                    // tool_name (D83): not surfaced through
+                                    // the platform WS ServerMessage schema
+                                    // (out of D83 scope); upstream gRPC path
+                                    // already carries it.
+                                    ..
                                 } => ServerMessage::ToolResult {
                                     session_id: sid_str.clone(),
                                     tool_id,
