@@ -39,6 +39,7 @@ pub mod subagent_runtime;
 pub mod task_tracker;
 pub mod team;
 pub mod tenant;
+pub mod turn_budget;
 pub mod turn_gate;
 pub mod yaml_def;
 

@@ -45,6 +45,16 @@ const TOOL_RESULT_SOFT_LIMIT: usize = 30_000;
 /// Maximum tool output size before truncation is applied.
 const MAX_TOOL_OUTPUT_SIZE: usize = 100_000;
 
+/// S2.T5 — Per-turn aggregate budget for the sum of all `ContentBlock::ToolResult`
+/// contents pushed in a single assistant turn. When the aggregate exceeds this
+/// value (measured in characters, not bytes, to match `soft_trim_tool_result`
+/// accounting), the L3 defense in `turn_budget::enforce_turn_aggregate_budget`
+/// spills the largest remaining inline entries to the blob store until the
+/// running total falls back under budget. L1 (per-call caps) and L2 (per-result
+/// spill) run first; L3 catches the fan-out case where many modest results sum
+/// over the context limit.
+const TOOL_RESULT_TURN_BUDGET: usize = 200_000;
+
 /// Default context window when no budget is configured (128K tokens).
 const DEFAULT_CONTEXT_WINDOW: usize = 128_000;
 
@@ -2272,6 +2282,19 @@ async fn run_agent_loop_inner(
             if let Some(ref_str) = blob_ref {
                 blob_replacements.push((tool_results.len() - 1, ref_str));
             }
+        }
+
+        // S2.T5 — L3 per-turn aggregate spill. Runs after L2 has populated
+        // `blob_replacements` for individual oversize results; catches the
+        // fan-out case where many modest outputs still sum over the context
+        // limit. No-op when `config.blob_store` is None, matching L2's guard.
+        if let Some(ref blob_store) = config.blob_store {
+            super::turn_budget::enforce_turn_aggregate_budget(
+                &mut tool_results,
+                &mut blob_replacements,
+                blob_store,
+                TOOL_RESULT_TURN_BUDGET,
+            );
         }
 
         messages.push(ChatMessage {

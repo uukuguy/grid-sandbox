@@ -358,18 +358,16 @@ def a11() -> None:
         f"session 2 payload.memory_refs is empty — L4 handshake did not fetch L2 refs. "
         f"payload keys={list(payload.keys())}"
     )
-    # Best-effort: check the memory_id from assertion 8 appears. L2 hybrid
-    # search may rank it lower if the FTS query doesn't strongly match, so
-    # we accept any non-empty memory_refs but log whether the specific id
-    # propagated.
+    # D60 closed @ S2.T5: once S2.T1/T2 hybrid search (FTS + HNSW semantic +
+    # time-decay) landed, the prior-anchor memory MUST surface in session 2's
+    # memory_refs. A miss here indicates cross-session memory propagation is
+    # broken — hard fail so the gap is caught at merge time.
     target = state.get("memory_id_1")
     matched_ids = [m.get("memory_id") for m in memory_refs if isinstance(m, dict)]
     if target and target not in matched_ids:
-        # Non-fatal: record the gap but do not fail (relevance ranking is
-        # non-deterministic at MVP without richer content signals).
-        print(
-            f"         note: memory_id_1={target} not in session 2 refs={matched_ids} "
-            f"(FTS ranking — acceptable at MVP)"
+        raise AssertionError(
+            f"memory_id_1={target} not in session 2 refs={matched_ids} — "
+            f"L2 hybrid search must consistently rank prior memory (D60)"
         )
 
 
