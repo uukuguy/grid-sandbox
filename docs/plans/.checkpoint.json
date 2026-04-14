@@ -103,7 +103,8 @@
     "D83": "grid-runtime AgentEvent::ToolResult chunk 缺 tool_name (harness.rs:254) → Phase 2 或更晚",
     "D84": "CLI eaasp session events --follow SSE 实时流未实现 → Phase 2 可选",
     "D85": "STOP event payload.response_text 为空（grid-runtime done chunk 不带 response_text） → Phase 2 或更晚",
-    "D86": "claude-code-runtime SDK wrapper 只处理 AssistantMessage，丢 ToolResultBlock (sdk_wrapper.py:94) → POST_TOOL_USE 完全缺失，PRE_TOOL_USE 正常 → Phase 2"
+    "D86": "claude-code-runtime SDK wrapper 只处理 AssistantMessage，丢 ToolResultBlock (sdk_wrapper.py:94) → POST_TOOL_USE 完全缺失，PRE_TOOL_USE 正常 → Phase 2",
+    "D87": "grid-engine agent loop 过早终止 — harness.rs:1169 stop_reason!=ToolUse||tool_uses.empty() 过于激进。LLM 返回非 tool_use text 时立即退出，跳过多步 skill 工作流。threshold-calibration E2E: grid-runtime 只调 1 tool vs claude-code-runtime 调 4 tools。修复: tool_result → UserMessage → re-invoke LLM (like Anthropic SDK) → Phase 2 首个任务"
   },
 
   "next_phase": "Phase 2 — Memory and Evidence"
