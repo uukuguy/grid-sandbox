@@ -5,7 +5,9 @@
   "previous_design_doc": "docs/design/EAASP/PHASE1_EVENT_ENGINE_DESIGN.md",
   "phase": "phase-2",
   "created_at": "2026-04-14T13:00:00+08:00",
-  "updated_at": "2026-04-14T23:30:00+08:00",
+  "updated_at": "2026-04-15T00:30:00+08:00",
+  "last_commit": "2f48bb7 feat(eaasp/phase2): S2.T1 — Vector embedding infrastructure (L2 memory)",
+  "test_baseline": "l2-memory-engine 84/84 PASS (26 new); ruff clean",
   "completed_tasks": [
     "S0.T1 (ADR-V2-015 Accepted)",
     "S0.T2 (ADR-V2-016 Accepted 2026-04-14 — multi-model E2E verified)",
