@@ -83,6 +83,15 @@ CREATE INDEX IF NOT EXISTS idx_session_events_event_id
     ON session_events(event_id) WHERE event_id IS NOT NULL;
 """
 
+# Backfill FTS5 index for rows inserted before migration (Phase 0.5 → Phase 1).
+# FTS5 trigger only fires on new INSERT, so pre-existing events would be
+# invisible to search() without this backfill. For external-content FTS5
+# tables, the 'rebuild' command rebuilds the index from the content table.
+# Idempotent: 'rebuild' drops and rebuilds the FTS index from scratch.
+_V2_FTS_BACKFILL = """
+INSERT INTO session_events_fts(session_events_fts) VALUES('rebuild');
+"""
+
 
 async def init_db(path: str) -> None:
     """Create schema if absent. Ensures the parent directory exists."""
@@ -104,6 +113,9 @@ async def init_db(path: str) -> None:
         await db.executescript(_V2_FTS_TRIGGER)
         await db.executescript(_V2_INDEX)
         await db.executescript(_V2_EVENT_ID_INDEX)
+        await db.commit()
+        # Backfill FTS5 for pre-migration rows (Phase 0.5 → Phase 1).
+        await db.executescript(_V2_FTS_BACKFILL)
         await db.commit()
 
 

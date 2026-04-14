@@ -381,13 +381,20 @@ class SessionOrchestrator:
 
                 # Phase 1: Interceptor extracts lifecycle events from chunks.
                 # Must also fire in send_message (not just stream_message) —
-                # both endpoints call L1.send().
+                # both endpoints call L1.send(). Failures here MUST NOT abort
+                # the response stream (events are best-effort observability).
                 if self.event_engine is not None:
-                    extracted = self.event_interceptor.extract_from_chunk(
-                        session_id, chunk, runtime_id=_runtime_id
-                    )
-                    if extracted:
-                        await self.event_engine.ingest(extracted)
+                    try:
+                        extracted = self.event_interceptor.extract_from_chunk(
+                            session_id, chunk, runtime_id=_runtime_id
+                        )
+                        if extracted:
+                            await self.event_engine.ingest(extracted)
+                    except Exception as exc:
+                        logger.warning(
+                            "Event ingest failed for session %s (non-fatal): %s",
+                            session_id, exc,
+                        )
         except L1RuntimeError as exc:
             seq_err = await self.event_stream.append(
                 session_id,
@@ -459,12 +466,19 @@ class SessionOrchestrator:
                 events.append({"seq": seq, "event_type": "RESPONSE_CHUNK", **chunk})
 
                 # Phase 1: Interceptor extracts lifecycle events from chunks.
+                # Failures MUST NOT abort the SSE stream.
                 if self.event_engine is not None:
-                    extracted = self.event_interceptor.extract_from_chunk(
-                        session_id, chunk, runtime_id=_runtime_id
-                    )
-                    if extracted:
-                        await self.event_engine.ingest(extracted)
+                    try:
+                        extracted = self.event_interceptor.extract_from_chunk(
+                            session_id, chunk, runtime_id=_runtime_id
+                        )
+                        if extracted:
+                            await self.event_engine.ingest(extracted)
+                    except Exception as exc:
+                        logger.warning(
+                            "Event ingest failed for session %s (non-fatal): %s",
+                            session_id, exc,
+                        )
 
                 yield {"event": "chunk", "data": chunk}
         except L1RuntimeError as exc:

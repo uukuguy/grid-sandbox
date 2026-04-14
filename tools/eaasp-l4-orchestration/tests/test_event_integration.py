@@ -280,6 +280,56 @@ async def test_ingest_endpoint_persists_event_to_backend(
     assert pre_compact[0]["cluster_id"] is not None
 
 
+# ── Event ingest failure must not abort streaming (resilience) ───────────────
+
+
+@respx.mock
+async def test_ingest_failure_does_not_abort_stream(
+    event_engine_app_client: httpx.AsyncClient,
+) -> None:
+    """If engine.ingest() raises, send_message must still return full response.
+
+    Previously: exception escaped the try block (only L1RuntimeError caught),
+    aborted the stream, lost partial response. Fix wraps ingest in try/except.
+    """
+    _mock_upstreams()
+
+    resp = await event_engine_app_client.post(
+        "/v1/sessions/create",
+        json={
+            "intent_text": "t",
+            "skill_id": "skill.test",
+            "runtime_pref": "grid-runtime",
+        },
+    )
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+
+    # Patch engine.ingest to raise on next call.
+    from eaasp_l4_orchestration.event_engine import EventEngine
+    from eaasp_l4_orchestration.event_models import Event
+    orig_ingest = EventEngine.ingest
+
+    async def _raising_ingest(self, event: Event):
+        raise RuntimeError("simulated backend failure")
+
+    EventEngine.ingest = _raising_ingest  # type: ignore[assignment]
+    try:
+        # Send a message — should complete despite ingest failures.
+        resp = await event_engine_app_client.post(
+            f"/v1/sessions/{session_id}/message",
+            json={"content": "hello"},
+        )
+        assert resp.status_code == 200, (
+            f"Stream aborted when ingest failed: {resp.text}"
+        )
+        # Response should still contain chunks (text_delta + done from stub).
+        body = resp.json()
+        assert "response_text" in body or "chunks" in body
+    finally:
+        EventEngine.ingest = orig_ingest  # type: ignore[assignment]
+
+
 # ── App lifespan actually starts EventEngine ─────────────────────────────────
 
 
