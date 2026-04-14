@@ -6,7 +6,7 @@
   "phase": "phase-2",
   "created_at": "2026-04-14T13:00:00+08:00",
   "updated_at": "2026-04-15T02:30:00+08:00",
-  "last_commit": "PENDING — S2.T3 memory_read/list/confirm completion",
+  "last_commit": "220f53e feat(eaasp/phase2): S2.T3 — MCP tool completion (memory_read embedding + offset + memory_confirm)",
   "test_baseline": "l2-memory-engine 103/103 PASS (+8 S2.T3); ruff clean",
   "completed_tasks": [
     "S0.T1 (ADR-V2-015 Accepted)",
