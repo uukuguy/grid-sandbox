@@ -69,6 +69,11 @@ message SkillInstructions {
   repeated ScopedHook frontmatter_hooks = 4;
   map<string, string> metadata = 5;
   repeated string dependencies = 6;   // e.g. "mcp:mock-scada", "mcp:eaasp-l2-memory"
+  // D87 L1 metadata: tools the skill author declares as required to
+  // complete the workflow. Used by L1 runtime (grid-engine harness) to
+  // drive `tool_choice=Specific(next_required)` on workflow-continuation
+  // triggers and to short-circuit continuation when the set is satisfied.
+  repeated string required_tools = 7;
 }
 
 message ScopedHook {

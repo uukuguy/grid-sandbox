@@ -211,6 +211,11 @@ pub struct AgentRuntime {
     pub(crate) plan_buffer: crate::tools::plan_mode::PlanBuffer,
     // Autonomous session scheduler (Phase AU-G2)
     pub(crate) autonomous_scheduler: super::autonomous_scheduler::AutonomousScheduler,
+    // Provider × model capability matrix (static baseline + cached probe
+    // results). Populated at runtime startup (strategy = Eager) or on
+    // first use (Lazy). harness queries it before arming features like
+    // tool_choice=Required for D87 continuation.
+    pub(crate) capability_store: Arc<crate::providers::CapabilityStore>,
 }
 
 impl AgentRuntime {
@@ -697,6 +702,7 @@ impl AgentRuntime {
             team_manager: Arc::new(TeamManager::new()),
             plan_buffer: crate::tools::plan_mode::PlanBuffer::new(),
             autonomous_scheduler: super::autonomous_scheduler::AutonomousScheduler::new(),
+            capability_store: Arc::new(crate::providers::CapabilityStore::new()),
         };
 
 
@@ -908,6 +914,13 @@ impl AgentRuntime {
 
     pub fn provider(&self) -> &Arc<dyn Provider> {
         &self.provider
+    }
+
+    /// Shared capability matrix. Harness looks up (provider, model, base_url)
+    /// to decide whether to arm provider-specific features like
+    /// `tool_choice=Required` at runtime.
+    pub fn capability_store(&self) -> &Arc<crate::providers::CapabilityStore> {
+        &self.capability_store
     }
 
     pub fn mcp_manager(&self) -> &Arc<Mutex<crate::mcp::manager::McpManager>> {
@@ -1410,7 +1423,7 @@ impl AgentRuntime {
             session_reg
         };
 
-        let executor = AgentExecutor::new(
+        let mut executor = AgentExecutor::new(
             session_id.clone(),
             user_id,
             sandbox_id,
@@ -1421,7 +1434,7 @@ impl AgentRuntime {
             session_tools.clone(),
             Arc::new(InMemoryWorkingMemory::new()),
             Some(self.memory_store.clone()),
-            Some(model),
+            Some(model.clone()),
             Some(self.session_store.clone()),
             system_prompt,
             config,
@@ -1438,6 +1451,26 @@ impl AgentRuntime {
             self.session_summary_store.clone(),
             self.interaction_gate.clone(),
             Some(self.catalog.clone()),
+        );
+
+        // D87 Fix 2 (L2b): consult the capability matrix and forward
+        // tool_choice support into the executor. This decides whether
+        // the harness will arm `force_tool_choice_next_call` on
+        // workflow-continuation triggers.
+        //
+        // base_url is unknown at this layer (the provider trait doesn't
+        // expose it); we use an empty string. Eager probes from
+        // grid-runtime startup pre-populate the cache by full key, but
+        // the static baseline accepts empty base_url for OpenAI/Anthropic
+        // direct, so this fallback covers the common case.
+        let cap_key = crate::providers::CapabilityKey::new(
+            self.provider.id(),
+            &model,
+            "",
+        );
+        let tool_choice_cap = self.capability_store.get(&cap_key).tool_choice;
+        executor.set_tool_choice_supported(
+            tool_choice_cap == crate::providers::Capability::Supported,
         );
 
         // Spawn 持久化主循环

@@ -133,6 +133,25 @@ pub struct AgentLoopConfig {
     /// Optional self-repair manager for detecting and recovering from stuck agents.
     pub self_repair: Option<SelfRepairManager>,
 
+    // === D87 Fix 2 (L2b) ===
+    /// Whether the current provider × model combination is known to honor
+    /// `tool_choice=Required`. Decided at AgentRuntime layer by querying the
+    /// `CapabilityStore`. When `false`, the harness skips the D87
+    /// continuation injection — the workflow ends normally on text-only
+    /// turns rather than triggering a doomed retry.
+    pub tool_choice_supported: bool,
+
+    // === D87 L1 metadata (skill workflow declaration) ===
+    /// Optional list of tools the active skill declares as required
+    /// (`workflow.required_tools` in the skill frontmatter). When set, the
+    /// harness uses it to decide:
+    ///   * Whether continuation is needed at all (skip if all listed tools
+    ///     have already been called)
+    ///   * Which specific tool to point the LLM at next via
+    ///     `tool_choice=Specific(...)` — much stronger signal than the
+    ///     generic `tool_choice=Required`
+    pub required_tools: Option<Vec<String>>,
+
     // === Canary Guard (W10) ===
     /// Optional canary guard layer for per-turn canary rotation.
     pub canary_guard: Option<CanaryGuardLayer>,
@@ -239,6 +258,8 @@ impl Default for AgentLoopConfig {
             collaboration_context: None,
             estop: None,
             self_repair: None,
+            tool_choice_supported: false,
+            required_tools: None,
             canary_guard: None,
             permission_engine: None,
             session_summary_store: None,
@@ -473,6 +494,24 @@ impl AgentLoopConfigBuilder {
 
     pub fn self_repair(mut self, v: SelfRepairManager) -> Self {
         self.config.self_repair = Some(v);
+        self
+    }
+
+    /// D87 Fix 2 (L2b): mark whether the current provider × model can honor
+    /// `tool_choice=Required`. Set by `AgentRuntime` after consulting its
+    /// `CapabilityStore`. When `false`, the harness skips the workflow
+    /// continuation injection.
+    pub fn tool_choice_supported(mut self, supported: bool) -> Self {
+        self.config.tool_choice_supported = supported;
+        self
+    }
+
+    /// D87 L1 metadata: declare the tools the active skill requires.
+    /// The harness uses this to point the LLM at the next missing tool
+    /// (via `tool_choice=Specific`) and to short-circuit continuation when
+    /// every required tool has already been called.
+    pub fn required_tools(mut self, names: Vec<String>) -> Self {
+        self.config.required_tools = Some(names);
         self
     }
 

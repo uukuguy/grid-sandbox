@@ -43,6 +43,11 @@ pub enum AgentMessage {
     Pause,
     /// Resume autonomous mode after pause (AQ-T4).
     Resume,
+    /// D87 L1 metadata: skill loader provides the list of tools the active
+    /// skill expects to be called. Forwarded into AgentLoopConfig so the
+    /// harness can drive `tool_choice=Specific(next_required)` on
+    /// workflow-continuation triggers. Empty vec clears the override.
+    SetRequiredTools(Vec<String>),
     /// Update user presence state for autonomous mode (AQ-T6).
     UserPresence(bool),
     /// AR-T4: Rewind conversation to a specific turn index.
@@ -84,6 +89,18 @@ impl AgentExecutorHandle {
     /// Pause autonomous mode (AQ-T5).
     pub async fn pause(&self) -> Result<(), mpsc::error::SendError<AgentMessage>> {
         self.tx.send(AgentMessage::Pause).await
+    }
+
+    /// D87 L1 metadata: tell the executor which tools the active skill
+    /// declares as required. The executor stores them and forwards into
+    /// the next `AgentLoopConfig` so the harness can drive
+    /// `tool_choice=Specific(next_required)` on workflow continuation.
+    /// Pass an empty vec to clear.
+    pub async fn set_required_tools(
+        &self,
+        tools: Vec<String>,
+    ) -> Result<(), mpsc::error::SendError<AgentMessage>> {
+        self.tx.send(AgentMessage::SetRequiredTools(tools)).await
     }
 
     /// Resume autonomous mode after pause (AQ-T5).
@@ -164,6 +181,16 @@ pub struct AgentExecutor {
     interaction_gate: Arc<crate::tools::interaction::InteractionGate>,
     // Persistent transcript writer for parent chain continuity across turns (Phase AZ)
     transcript_writer: Arc<crate::session::TranscriptWriter>,
+    // D87 Fix 2 (L2b): forwarded into AgentLoopConfig.tool_choice_supported.
+    // Set by AgentRuntime after consulting its CapabilityStore for the
+    // (provider, model, base_url) tuple. Defaults to `false` (= harness
+    // skips D87 continuation injection).
+    tool_choice_supported: bool,
+    // D87 L1 metadata: skill-declared required_tools (forwarded into
+    // AgentLoopConfig). Set via `AgentMessage::SetRequiredTools` from the
+    // runtime after parsing the skill frontmatter. None = no constraint;
+    // harness falls back to generic `tool_choice=Required` continuation.
+    required_tools: Option<Vec<String>>,
 }
 
 impl AgentExecutor {
@@ -235,7 +262,16 @@ impl AgentExecutor {
             interaction_gate,
             catalog,
             transcript_writer,
+            tool_choice_supported: false,
+            required_tools: None,
         }
+    }
+
+    /// D87 Fix 2 (L2b): mark whether the current provider × model honors
+    /// `tool_choice=Required`. AgentRuntime calls this after consulting its
+    /// `CapabilityStore`. Forwarded into `AgentLoopConfig` for each turn.
+    pub fn set_tool_choice_supported(&mut self, supported: bool) {
+        self.tool_choice_supported = supported;
     }
 
     /// Agent 主循环入口 — 持续等待消息，处理，广播结果
@@ -434,6 +470,8 @@ impl AgentExecutor {
                         transcript_writer: Some(transcript_writer.clone()),
                         working_dir: Some(self.working_dir.clone()),
                         git_context,
+                        tool_choice_supported: self.tool_choice_supported,
+                        required_tools: self.required_tools.clone(),
                         ..AgentLoopConfig::default()
                     };
 
@@ -490,6 +528,14 @@ impl AgentExecutor {
                 AgentMessage::Resume => {
                     info!(session_id = %self.session_id.as_str(), "AgentExecutor: resume requested (autonomous)");
                     let _ = self.broadcast_tx.send(AgentEvent::AutonomousResumed);
+                }
+                AgentMessage::SetRequiredTools(tools) => {
+                    info!(
+                        session_id = %self.session_id.as_str(),
+                        count = tools.len(),
+                        "AgentExecutor: skill required_tools set (D87 L1 metadata)"
+                    );
+                    self.required_tools = if tools.is_empty() { None } else { Some(tools) };
                 }
                 AgentMessage::UserPresence(online) => {
                     info!(session_id = %self.session_id.as_str(), online, "AgentExecutor: user presence updated");

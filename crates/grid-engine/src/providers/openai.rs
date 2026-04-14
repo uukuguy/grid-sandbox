@@ -77,6 +77,24 @@ struct ApiRequest {
     // Reasoning support for OpenRouter and Claude models via OpenAI-compatible APIs
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<ReasoningConfig>,
+    /// OpenAI `tool_choice` — `"auto"` | `"required"` | `"none"` |
+    /// `{"type":"function","function":{"name":"..."}}`. See `ToolChoice`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
+}
+
+/// Convert grid-types `ToolChoice` to OpenAI `tool_choice` field.
+fn convert_tool_choice(tc: Option<&grid_types::ToolChoice>) -> Option<serde_json::Value> {
+    use grid_types::ToolChoice;
+    match tc? {
+        ToolChoice::Auto => Some(serde_json::json!("auto")),
+        ToolChoice::Required => Some(serde_json::json!("required")),
+        ToolChoice::None => Some(serde_json::json!("none")),
+        ToolChoice::Specific(name) => Some(serde_json::json!({
+            "type": "function",
+            "function": { "name": name },
+        })),
+    }
 }
 
 #[derive(Serialize)]
@@ -412,6 +430,7 @@ impl Provider for OpenAIProvider {
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let reasoning = create_thinking_config(&request.model);
+        let tool_choice = convert_tool_choice(request.tool_choice.as_ref());
         let api_req = ApiRequest {
             model: request.model,
             messages: convert_messages(&request.messages, request.system.as_deref()),
@@ -421,6 +440,7 @@ impl Provider for OpenAIProvider {
             stream: false,
             stream_options: None,
             reasoning,
+            tool_choice,
         };
 
         let resp = self
@@ -440,6 +460,19 @@ impl Provider for OpenAIProvider {
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string());
             let body = resp.text().await.unwrap_or_default();
+            // Surface tool_choice-related 400s with a clear, actionable
+            // diagnostic instead of silently falling back — per design
+            // decision: fail loudly when provider configuration is wrong.
+            if status_code == 400 && api_req.tool_choice.is_some() {
+                tracing::error!(
+                    body_preview = %body.chars().take(400).collect::<String>(),
+                    "OpenAI 400 while tool_choice was set. \
+                     Provider may not support tool_choice. Either disable \
+                     tool_choice in capability matrix for this (provider, model), \
+                     or switch to a provider/model that supports it. See \
+                     docs/design/EAASP/PROVIDER_CAPABILITY_MATRIX.md"
+                );
+            }
             return Err(ProviderError::from_http_response(
                 "OpenAI",
                 status_code,
@@ -553,6 +586,7 @@ impl Provider for OpenAIProvider {
 
     async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
         let reasoning = create_thinking_config(&request.model);
+        let tool_choice = convert_tool_choice(request.tool_choice.as_ref());
         let api_req = ApiRequest {
             model: request.model,
             messages: convert_messages(&request.messages, request.system.as_deref()),
@@ -564,13 +598,12 @@ impl Provider for OpenAIProvider {
                 include_usage: true,
             }),
             reasoning,
+            tool_choice,
         };
-
-        let url = format!("{}/v1/chat/completions", self.base_url);
 
         let resp = self
             .client
-            .post(&url)
+            .post(format!("{}/v1/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("content-type", "application/json")
             .json(&api_req)
@@ -585,6 +618,17 @@ impl Provider for OpenAIProvider {
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string());
             let body = resp.text().await.unwrap_or_default();
+            // Loud diagnostic when tool_choice likely caused the 400 — callers
+            // should either disable tool_choice in the capability matrix or
+            // switch provider. No silent fallback.
+            if status_code == 400 && api_req.tool_choice.is_some() {
+                tracing::error!(
+                    body_preview = %body.chars().take(400).collect::<String>(),
+                    "OpenAI stream 400 while tool_choice was set. \
+                     Provider may not support tool_choice. See \
+                     docs/design/EAASP/PROVIDER_CAPABILITY_MATRIX.md"
+                );
+            }
             return Err(ProviderError::from_http_response(
                 "OpenAI",
                 status_code,

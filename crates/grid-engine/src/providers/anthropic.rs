@@ -58,6 +58,24 @@ struct ApiRequest {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ApiTool>,
     stream: bool,
+    /// Anthropic `tool_choice` — `{"type":"auto"}` | `{"type":"any"}`
+    /// | `{"type":"none"}` | `{"type":"tool","name":"..."}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
+}
+
+/// Convert grid-types `ToolChoice` to Anthropic `tool_choice` field.
+fn convert_tool_choice(tc: Option<&grid_types::ToolChoice>) -> Option<serde_json::Value> {
+    use grid_types::ToolChoice;
+    match tc? {
+        ToolChoice::Auto => Some(serde_json::json!({"type": "auto"})),
+        ToolChoice::Required => Some(serde_json::json!({"type": "any"})),
+        ToolChoice::None => Some(serde_json::json!({"type": "none"})),
+        ToolChoice::Specific(name) => Some(serde_json::json!({
+            "type": "tool",
+            "name": name,
+        })),
+    }
 }
 
 #[derive(Serialize)]
@@ -281,6 +299,7 @@ impl Provider for AnthropicProvider {
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let tool_choice = convert_tool_choice(request.tool_choice.as_ref());
         let api_req = ApiRequest {
             model: request.model,
             max_tokens: request.max_tokens,
@@ -289,6 +308,7 @@ impl Provider for AnthropicProvider {
             temperature: request.temperature,
             tools: convert_tools(&request.tools),
             stream: false,
+            tool_choice,
         };
 
         let resp = self
@@ -353,6 +373,7 @@ impl Provider for AnthropicProvider {
     }
 
     async fn stream(&self, request: CompletionRequest) -> Result<CompletionStream> {
+        let tool_choice = convert_tool_choice(request.tool_choice.as_ref());
         let api_req = ApiRequest {
             model: request.model,
             max_tokens: request.max_tokens,
@@ -361,6 +382,7 @@ impl Provider for AnthropicProvider {
             temperature: request.temperature,
             tools: convert_tools(&request.tools),
             stream: true,
+            tool_choice,
         };
 
         let url = format!("{}/v1/messages", self.base_url);

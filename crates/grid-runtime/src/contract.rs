@@ -220,6 +220,11 @@ pub struct SkillInstructions {
     /// Convention: `mcp:<name>` for MCP server dependencies.
     #[serde(default)]
     pub dependencies: Vec<String>,
+    /// D87 L1 metadata: tools the skill author declares as required to
+    /// complete the workflow. Used by the harness to drive
+    /// `tool_choice=Specific(next_required)`.
+    #[serde(default)]
+    pub required_tools: Vec<String>,
 }
 
 /// Skill-frontmatter scoped hook (P4).
@@ -274,7 +279,7 @@ pub struct ResponseChunk {
 }
 
 /// Skill content (SKILL.md parsed). Used by `load_skill`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SkillContent {
     pub skill_id: String,
     pub name: String,
@@ -282,6 +287,10 @@ pub struct SkillContent {
     pub frontmatter_yaml: String,
     /// Natural language instructions.
     pub prose: String,
+    /// D87 L1 metadata: tools the skill author declares as required to
+    /// complete the workflow.
+    #[serde(default)]
+    pub required_tools: Vec<String>,
 }
 
 /// Tool call event for hook interception.
@@ -584,6 +593,7 @@ impl From<crate::proto::SkillInstructions> for SkillInstructions {
             frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
             metadata: s.metadata,
             dependencies: s.dependencies,
+            required_tools: s.required_tools,
         }
     }
 }
@@ -597,6 +607,7 @@ impl From<SkillInstructions> for crate::proto::SkillInstructions {
             frontmatter_hooks: s.frontmatter_hooks.into_iter().map(Into::into).collect(),
             metadata: s.metadata,
             dependencies: s.dependencies,
+            required_tools: s.required_tools,
         }
     }
 }

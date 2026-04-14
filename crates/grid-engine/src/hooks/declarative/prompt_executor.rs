@@ -46,6 +46,7 @@ pub async fn execute_prompt(
         temperature: Some(0.0),
         tools: vec![],
         stream: false,
+        tool_choice: None,
     };
 
     // 3. Call provider with timeout

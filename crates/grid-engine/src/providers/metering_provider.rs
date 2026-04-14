@@ -187,6 +187,7 @@ mod tests {
             temperature: None,
             tools: vec![],
             stream: false,
+            tool_choice: None,
         };
 
         let _ = provider.complete(request).await;

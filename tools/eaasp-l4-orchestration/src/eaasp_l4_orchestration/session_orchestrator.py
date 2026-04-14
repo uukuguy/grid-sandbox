@@ -138,6 +138,7 @@ class SessionOrchestrator:
             "frontmatter_hooks": [],
             "metadata": {},
             "dependencies": [],
+            "required_tools": [],
         }
         import logging as _log
         _logger = _log.getLogger(__name__)
@@ -167,6 +168,14 @@ class SessionOrchestrator:
                             )
                         frontmatter_hooks.append({**resolved_hook, "scope": scope})
 
+                # D87 L1 metadata: extract workflow.required_tools from the
+                # skill frontmatter so L1 runtimes can drive
+                # `tool_choice=Specific(next_required)` on workflow
+                # continuation. Empty list = no L1 constraint, harness
+                # falls back to generic `tool_choice=Required`.
+                workflow = parsed_v2.get("workflow") or {}
+                required_tools = workflow.get("required_tools") or []
+
                 skill_instructions = {
                     "skill_id": skill_id,
                     "name": skill_data.get("meta", {}).get("name", skill_id),
@@ -174,6 +183,7 @@ class SessionOrchestrator:
                     "frontmatter_hooks": frontmatter_hooks,
                     "metadata": {},
                     "dependencies": parsed_v2.get("dependencies") or [],
+                    "required_tools": required_tools,
                 }
             except Exception as exc:
                 # Skill fetch failure is non-fatal for MVP — log and continue

@@ -256,6 +256,7 @@ async fn test_load_skill_succeeds() {
                 frontmatter_hooks: vec![],
                 metadata: Default::default(),
                 dependencies: vec![],
+                required_tools: vec![],
             }),
         })
         .await

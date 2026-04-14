@@ -70,6 +70,7 @@ impl FactExtractor {
             temperature: Some(0.1),
             tools: Vec::new(),
             stream: false,
+            tool_choice: None,
         };
 
         let response = provider.complete(request).await?;

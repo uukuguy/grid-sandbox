@@ -87,7 +87,7 @@ def _normalize_memory_ref(hit: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_skill_instructions(raw: dict[str, Any]) -> dict[str, Any]:
-    """Ensure SkillInstructions always carries the ``dependencies`` key."""
+    """Normalize SkillInstructions shape for downstream consumers."""
     if not raw:
         return raw
     return {
@@ -97,6 +97,8 @@ def _normalize_skill_instructions(raw: dict[str, Any]) -> dict[str, Any]:
         "frontmatter_hooks": list(raw.get("frontmatter_hooks") or []),
         "metadata": dict(raw.get("metadata") or {}),
         "dependencies": list(raw.get("dependencies") or []),
+        # D87 L1 metadata (proto field 7).
+        "required_tools": list(raw.get("required_tools") or []),
     }
 
 

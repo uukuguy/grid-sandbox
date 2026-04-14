@@ -65,25 +65,11 @@ const MAX_STREAM_ERROR_RETRIES: u32 = 2;
 /// additional tools.
 const MAX_WORKFLOW_CONTINUATIONS: u32 = 3;
 
-/// D87 fix: heuristic to decide whether a text-only turn looks like a
-/// clarifying question the LLM is asking the user (vs. a legitimate final
-/// answer). Needs to be multi-script aware — Chinese skill prompts drive
-/// models that speak CJK, where the question mark is `？` (U+FF1F), not the
-/// ASCII `?` (U+003F).
-///
-/// This is intentionally a weak signal: Fix 2 (see
-/// `docs/design/EAASP/AGENT_LOOP_PATTERNS_TO_ADOPT.md`) should replace it
-/// with a provider-layer `tool_choice="required"` retry that does not depend
-/// on natural-language heuristics at all.
-fn text_looks_like_clarifying_question(text: &str) -> bool {
-    const QUESTION_MARKS: &[char] = &[
-        '?',        // ASCII
-        '\u{FF1F}', // FULLWIDTH QUESTION MARK (CJK)
-        '\u{037E}', // GREEK QUESTION MARK
-        '\u{061F}', // ARABIC QUESTION MARK
-    ];
-    text.chars().any(|c| QUESTION_MARKS.contains(&c))
-}
+// Note: D87 Fix 1 originally used a `text_looks_like_clarifying_question`
+// heuristic checking for `?` / `？` / etc. That function was deleted in
+// Fix 2 (L2b) in favour of the provider-layer `tool_choice=Required` retry,
+// which is language-agnostic and skill-author-independent. See the trigger
+// block in the main loop (search for "D87 Fix 2").
 
 /// Interval (in rounds) at which Zone B working memory is refreshed.
 /// This allows agent's memory_edit changes to take effect mid-conversation.
@@ -432,6 +418,12 @@ async fn run_agent_loop_inner(
     // system prompt to nudge the LLM to keep executing tools after a
     // text-only mid-workflow turn. See `MAX_WORKFLOW_CONTINUATIONS`.
     let mut workflow_continuation_count: u32 = 0;
+    // L2b (Fix 2): when set, the next provider call will carry
+    // `tool_choice=Required`, forcing the LLM to produce a tool_use block at
+    // the API layer. `Option::take` consumes the flag in a single call so it
+    // never leaks into subsequent turns. Replaces the old weak "contains('?')"
+    // heuristic with a provider-enforced constraint.
+    let mut force_tool_choice_next_call: Option<grid_types::ToolChoice> = None;
 
     // P2-H1: Pending context injections from hooks (InjectContext action)
     let mut pending_context_injections: Vec<String> = Vec::new();
@@ -877,6 +869,10 @@ async fn run_agent_loop_inner(
                 tool_specs.clone()
             },
             stream: true,
+            // L2b will set this to Some(ToolChoice::Required) on the turn
+            // immediately following a workflow-continuation trigger. See the
+            // `force_tool_choice_next_call` state variable below.
+            tool_choice: force_tool_choice_next_call.take(),
         };
 
         // --- Call provider with retry (P0-5) ---
@@ -1200,69 +1196,107 @@ async fn run_agent_loop_inner(
             }
         }
 
-        // --- D87: workflow-continuation injection (hermes intermediate-ack) ---
+        // --- D87 Fix 2 (L2b): workflow-continuation via tool_choice=required ---
         //
         // If the LLM returned a text-only turn (`stop_reason == EndTurn`, no
-        // `tool_use` blocks) *after* it has already executed at least one
-        // tool **and** the text looks like a mid-workflow clarifying question
-        // (contains a "?"), we treat it as "LLM paused to ask the user" and
-        // nudge it to keep going. Mirrors hermes's intermediate-ack detection
-        // (`run_agent.py:10049-10074`), but uses a simpler heuristic:
+        // `tool_use` blocks) after it has already executed at least one tool,
+        // we assume it paused mid-workflow and **force the next provider call
+        // to carry `tool_choice=Required`** — the API layer will reject a
+        // text-only response, making the model emit a tool_use block.
         //
-        //   * `total_tool_calls > 0`: we're mid-workflow, not in a pure chat
-        //   * `full_text` contains "?": LLM is asking, not answering
-        //   * `workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS`: guard
+        // This replaces the earlier language-dependent heuristic
+        // (`full_text.contains('?')` + CJK variants). Upsides:
         //
-        // Without the "?" check, any tool-followed-by-text turn (e.g. "The
-        // answer is 42." after a lookup tool) would loop unnecessarily.
+        //   * No natural-language detection → works for any language / script
+        //   * No skill-prose dependence → no skill authoring change needed
+        //   * No prompt-engineering — provider-layer constraint
         //
-        // Root cause: OpenAI-family models frequently emit a clarifying
-        // question after the first tool call; without this nudge the loop
-        // terminates early (only 1/N workflow steps executed). Claude Sonnet 4
-        // rarely triggers this path because it autonomously chains tool_use
-        // blocks. See `docs/design/EAASP/AGENT_LOOP_ROOT_CAUSE_ANALYSIS.md`.
+        // Triggers:
+        //   * `stop_reason == EndTurn` — LLM thinks it's done
+        //   * `tool_uses.is_empty()` — but produced no tool_use this turn
+        //   * `total_tool_calls > 0` — mid-workflow (skip pure text-chat)
+        //   * `workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS` — bounded
+        //
+        // Fallback: if `tool_choice=Required` still yields text-only
+        // (some models emit a `required` call with no arg, some providers
+        // silently downgrade), we eventually hit the count cap and fall
+        // through to the normal exit path.
+        //
+        // See: `docs/design/EAASP/AGENT_LOOP_ROOT_CAUSE_ANALYSIS.md` for the
+        // full story. Modelled after hermes intermediate-ack but moved from
+        // prompt-layer to API-layer enforcement.
         if stop_reason == StopReason::EndTurn
             && tool_uses.is_empty()
             && total_tool_calls > 0
-            && text_looks_like_clarifying_question(&full_text)
             && workflow_continuation_count < MAX_WORKFLOW_CONTINUATIONS
+            && config.tool_choice_supported
         {
-            workflow_continuation_count += 1;
-            debug!(
-                attempt = workflow_continuation_count,
-                max = MAX_WORKFLOW_CONTINUATIONS,
-                "D87: injecting workflow continuation hint"
-            );
-            let _ = tx
-                .send(AgentEvent::WorkflowContinuation {
-                    attempt: workflow_continuation_count,
-                    max_attempts: MAX_WORKFLOW_CONTINUATIONS,
-                })
-                .await;
-            // Append what the LLM said so the next turn sees its own message,
-            // then inject a system-style user turn prodding it to continue.
-            messages.push(ChatMessage::assistant(if full_text.is_empty() {
-                "(no response)"
-            } else {
-                &full_text
-            }));
-            messages.push(ChatMessage {
-                role: MessageRole::User,
-                content: vec![ContentBlock::Text {
-                    text: "[System: Continue executing the remaining tools required \
-                           to complete the workflow. Do not ask the user for \
-                           confirmation — proceed with the next step now.]"
-                        .into(),
-                }],
+            // L1 metadata gate: if the active skill declares
+            // `workflow.required_tools`, decide what to do based on which
+            // ones have been called yet.
+            //
+            //   * All required tools called → workflow declared "done" by
+            //     the skill itself; do NOT force a continuation. The LLM's
+            //     text-only turn is treated as the legitimate final answer.
+            //   * Some required tools missing → arm
+            //     `tool_choice=Specific(next_missing)` so the API layer
+            //     drives the LLM straight to the right tool.
+            //   * No required_tools declared → fall back to generic
+            //     `tool_choice=Required` (let the LLM pick).
+            let next_required = config.required_tools.as_ref().and_then(|reqs| {
+                let called: std::collections::HashSet<&str> =
+                    recent_tools.iter().map(String::as_str).collect();
+                reqs.iter()
+                    .find(|t| !called.contains(t.as_str()))
+                    .cloned()
             });
-            let _ = tx
-                .send(AgentEvent::IterationEnd {
-                    round,
-                    input_tokens: total_input_tokens,
-                    output_tokens: total_output_tokens,
-                })
-                .await;
-            continue; // Re-enter loop so the LLM produces the next tool call.
+
+            // If skill declared required_tools AND all are satisfied, treat
+            // text-only as legitimate completion — skip continuation.
+            if config.required_tools.is_some() && next_required.is_none() {
+                debug!(
+                    "D87: skill workflow.required_tools all satisfied — \
+                     accepting text-only turn as final"
+                );
+                // Fall through to the normal exit branch below.
+            } else {
+                workflow_continuation_count += 1;
+                let chosen_tool_choice = match &next_required {
+                    Some(name) => grid_types::ToolChoice::Specific(name.clone()),
+                    None => grid_types::ToolChoice::Required,
+                };
+                debug!(
+                    attempt = workflow_continuation_count,
+                    max = MAX_WORKFLOW_CONTINUATIONS,
+                    next_tool = ?next_required,
+                    "D87: arming tool_choice for workflow continuation"
+                );
+                let _ = tx
+                    .send(AgentEvent::WorkflowContinuation {
+                        attempt: workflow_continuation_count,
+                        max_attempts: MAX_WORKFLOW_CONTINUATIONS,
+                    })
+                    .await;
+
+                // Preserve the LLM's text reply in history for context.
+                messages.push(ChatMessage::assistant(if full_text.is_empty() {
+                    "(no response)"
+                } else {
+                    &full_text
+                }));
+
+                // Arm the force-flag. Consumed by the next CompletionRequest.
+                force_tool_choice_next_call = Some(chosen_tool_choice);
+
+                let _ = tx
+                    .send(AgentEvent::IterationEnd {
+                        round,
+                        input_tokens: total_input_tokens,
+                        output_tokens: total_output_tokens,
+                    })
+                    .await;
+                continue; // Re-enter loop with tool_choice armed.
+            }
         }
 
         // --- If no tool uses: check for continuation or finalize ---

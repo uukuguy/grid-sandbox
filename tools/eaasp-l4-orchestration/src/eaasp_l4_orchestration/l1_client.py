@@ -310,6 +310,9 @@ def _dict_to_session_payload(d: dict[str, Any]) -> common_pb2.SessionPayload:
             hook.precedence = int(hook_dict.get("precedence", 0))
         for dep in si.get("dependencies") or []:
             payload.skill_instructions.dependencies.append(str(dep))
+        # D87 L1 metadata: required_tools propagate to L1 runtime.
+        for tool in si.get("required_tools") or []:
+            payload.skill_instructions.required_tools.append(str(tool))
 
     # P5 — UserPreferences
     up = d.get("user_preferences") or {}

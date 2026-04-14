@@ -447,6 +447,7 @@ impl RuntimeContract for GridHarness {
                 frontmatter_yaml: serde_json::to_string(&skill.frontmatter_hooks)
                     .unwrap_or_default(),
                 prose: skill.content,
+                required_tools: skill.required_tools,
             };
             if let Err(e) = self.load_skill(&handle, content).await {
                 warn!(error = %e, "Failed to load inline P4 skill instructions");
@@ -489,13 +490,34 @@ impl RuntimeContract for GridHarness {
         content: SkillContent,
     ) -> anyhow::Result<()> {
         // Skill prose is already injected as System message in initialize().
-        // This method handles additional skill metadata registration if needed.
+        // This method handles additional skill metadata registration.
         info!(
             session_id = %handle.session_id,
             skill = %content.name,
             prose_len = content.prose.len(),
+            required_tools_count = content.required_tools.len(),
             "GridHarness: load_skill — prose injected via initial_history"
         );
+
+        // D87 L1 metadata: forward required_tools into the running executor
+        // so the harness can drive `tool_choice=Specific(next_required)`
+        // on workflow-continuation triggers. Empty list = no L1 constraint.
+        if !content.required_tools.is_empty() {
+            let session_id = SessionId::from_string(&handle.session_id);
+            if let Some(executor_handle) = self.runtime.get_session_handle(&session_id) {
+                if let Err(e) = executor_handle
+                    .set_required_tools(content.required_tools.clone())
+                    .await
+                {
+                    warn!(
+                        error = %e,
+                        skill = %content.name,
+                        "Failed to forward required_tools to executor"
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 

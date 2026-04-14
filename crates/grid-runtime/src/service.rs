@@ -72,6 +72,7 @@ fn to_skill_content(s: proto::SkillInstructions) -> contract::SkillContent {
         name: native.name,
         frontmatter_yaml: serde_json::to_string(&native.frontmatter_hooks).unwrap_or_default(),
         prose: native.content,
+        required_tools: native.required_tools,
     }
 }
 

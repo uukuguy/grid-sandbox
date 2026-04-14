@@ -285,6 +285,7 @@ impl CompactionPipeline {
                 tools: vec![],
                 stream: false,
                 temperature: None,
+                tool_choice: None,
             };
 
             match provider.complete(request).await {

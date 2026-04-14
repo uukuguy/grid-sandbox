@@ -8,12 +8,25 @@ use std::sync::Arc;
 use tonic::transport::Server;
 use tracing::info;
 
+use grid_engine::providers::{Capability, CapabilityKey, ProbeStrategy};
 use grid_engine::{AgentCatalog, AgentRuntime, AgentRuntimeConfig, ProviderConfig, TenantContext};
 use grid_runtime::config::RuntimeConfig;
 use grid_runtime::harness::GridHarness;
 use grid_runtime::proto::runtime_service_server::RuntimeServiceServer;
 use grid_runtime::service::RuntimeGrpcService;
 use grid_types::id::{TenantId, UserId};
+
+/// Parse `GRID_PROBE_STRATEGY` env var. Defaults to `Eager` — grid-runtime
+/// insists that the configured provider is reachable and capability is known
+/// before serving any sessions.
+fn probe_strategy_from_env() -> ProbeStrategy {
+    match std::env::var("GRID_PROBE_STRATEGY").ok().as_deref() {
+        Some("lazy") => ProbeStrategy::Lazy,
+        Some("per_session") => ProbeStrategy::PerSession,
+        // Default + anything else → Eager.
+        _ => ProbeStrategy::Eager,
+    }
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,6 +76,54 @@ async fn main() -> anyhow::Result<()> {
     let engine_runtime = AgentRuntime::new(catalog, runtime_config, Some(tenant_context))
         .await
         .map_err(|e| anyhow::anyhow!("Failed to build AgentRuntime: {}", e))?;
+
+    // ── Provider capability probing (Step 4) ──────────────────────────────
+    // Default strategy is Eager: probe the configured provider/model now,
+    // refuse to serve if the provider is unreachable. See
+    // `docs/design/EAASP/PROVIDER_CAPABILITY_MATRIX.md`.
+    //
+    // Escape hatches:
+    //   GRID_PROBE_STRATEGY=lazy         → defer probe to first session
+    //   GRID_PROBE_STRATEGY=per_session  → probe per session initialize
+    let strategy = probe_strategy_from_env();
+    info!(strategy = ?strategy, "capability probe strategy");
+    if strategy == ProbeStrategy::Eager {
+        // Use empty base_url for compatibility with the runtime-side
+        // lookup in `runtime.rs::start_session_with_executor` which can't
+        // see the configured base_url (Provider trait doesn't expose it).
+        // The static_baseline() in capabilities.rs treats empty base_url
+        // as "default direct endpoint" for openai/anthropic.
+        // For OpenRouter / vLLM / etc, the probe outcome (Supported /
+        // Unsupported) overrides the static "Unknown" default.
+        let cap_key = CapabilityKey::new(
+            &config.provider,
+            &config.model,
+            "",
+        );
+        let tool_choice_cap = engine_runtime
+            .capability_store()
+            .ensure_tool_choice(cap_key, engine_runtime.provider().as_ref())
+            .await;
+        info!(
+            tool_choice = ?tool_choice_cap,
+            provider = %config.provider,
+            model = %config.model,
+            "provider capability probed"
+        );
+        // Unknown here only happens if the probe couldn't decide (e.g.
+        // transport error). For Eager strategy, that means the provider is
+        // misconfigured or unreachable → fail startup.
+        if tool_choice_cap == Capability::Unknown {
+            anyhow::bail!(
+                "Eager probe failed: cannot determine tool_choice capability \
+                 for provider={} model={}. Provider may be unreachable or \
+                 misconfigured. Set GRID_PROBE_STRATEGY=lazy to defer, or \
+                 fix the provider configuration.",
+                config.provider,
+                config.model
+            );
+        }
+    }
 
     let harness = Arc::new(
         GridHarness::new(Arc::new(engine_runtime))

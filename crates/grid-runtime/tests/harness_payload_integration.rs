@@ -237,6 +237,7 @@ async fn initialize_with_mcp_dependencies_does_not_panic() {
             "mcp:mock-scada".to_string(),
             "mcp:eaasp-l2-memory".to_string(),
         ],
+        required_tools: vec![],
     });
 
     let handle = harness
@@ -264,6 +265,7 @@ async fn initialize_with_skill_no_dependencies() {
         frontmatter_hooks: vec![],
         metadata: std::collections::HashMap::new(),
         dependencies: vec![],
+        required_tools: vec![],
     });
 
     let handle = harness
@@ -308,6 +310,7 @@ async fn initialize_with_scoped_hooks_registers_handlers() {
         ],
         metadata: std::collections::HashMap::new(),
         dependencies: vec![],
+        required_tools: vec![],
     });
 
     let handle = harness
@@ -355,6 +358,7 @@ async fn initialize_with_unknown_hook_type_skips_gracefully() {
         }],
         metadata: std::collections::HashMap::new(),
         dependencies: vec![],
+        required_tools: vec![],
     });
 
     let handle = harness

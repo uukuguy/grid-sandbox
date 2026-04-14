@@ -24,6 +24,35 @@ pub enum StopReason {
     StopSequence,
 }
 
+/// Provider-layer tool selection constraint.
+///
+/// Maps to OpenAI's `tool_choice` and Anthropic's `tool_choice` fields.
+/// Used by grid-engine to enforce "the LLM MUST call a tool this turn"
+/// after an intermediate-ack / workflow-continuation trigger (D87 / L2b).
+///
+/// Providers that don't support a given variant should fall back to `Auto`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolChoice {
+    /// Default: LLM picks whether to call a tool or reply with text.
+    Auto,
+    /// Force the LLM to produce at least one tool_use block this turn.
+    /// OpenAI: `"required"`. Anthropic: `{"type": "any"}`.
+    Required,
+    /// Force the LLM to call a specific tool by name.
+    /// OpenAI: `{"type": "function", "function": {"name": "..."}}`.
+    /// Anthropic: `{"type": "tool", "name": "..."}`.
+    Specific(String),
+    /// Forbid tool calls entirely (text-only response).
+    /// OpenAI: `"none"`. Anthropic: `{"type": "none"}`.
+    None,
+}
+
+impl Default for ToolChoice {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CompletionRequest {
     pub model: String,
@@ -33,6 +62,10 @@ pub struct CompletionRequest {
     pub temperature: Option<f32>,
     pub tools: Vec<ToolSpec>,
     pub stream: bool,
+    /// Tool selection constraint. `None` means provider default (equivalent
+    /// to `ToolChoice::Auto`). Set to `Some(ToolChoice::Required)` to force
+    /// tool use on a given turn.
+    pub tool_choice: Option<ToolChoice>,
 }
 
 impl Default for CompletionRequest {
@@ -45,6 +78,7 @@ impl Default for CompletionRequest {
             temperature: None,
             tools: Vec::new(),
             stream: false,
+            tool_choice: None,
         }
     }
 }

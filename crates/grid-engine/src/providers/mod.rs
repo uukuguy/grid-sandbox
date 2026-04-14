@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod capabilities;
 pub mod chain;
 pub mod config;
 pub mod defaults;
@@ -12,6 +13,9 @@ pub mod traits;
 pub mod usage_recorder;
 
 pub use anthropic::create_provider as create_anthropic_provider;
+pub use capabilities::{
+    Capability, CapabilityKey, CapabilitySet, CapabilityStore, ProbeOutcome, ProbeStrategy,
+};
 pub use chain::*;
 pub use config::*;
 pub use metering_provider::MeteringProvider;

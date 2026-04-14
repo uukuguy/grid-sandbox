@@ -263,6 +263,10 @@ async fn test_d87_multi_step_workflow_no_early_exit() {
         .max_tokens(1024)
         .max_iterations(10)
         .force_text_at_last(false)
+        // D87 Fix 2 (L2b): mock provider behaves as if tool_choice is honored
+        // (it ignores the field entirely and just returns the next scripted
+        // turn). Explicitly enable so the harness arms the continuation.
+        .tool_choice_supported(true)
         .agent_config(AgentConfig {
             enable_typing_signal: false,
             enable_parallel: false,

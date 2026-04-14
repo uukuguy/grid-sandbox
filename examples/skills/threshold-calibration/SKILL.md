@@ -24,6 +24,12 @@ scoped_hooks:
 dependencies:
   - mcp:mock-scada
   - mcp:eaasp-l2-memory
+workflow:
+  required_tools:
+    - scada_read_snapshot
+    - memory_search
+    - memory_write_anchor
+    - memory_write_file
 ---
 
 # Threshold Calibration Assistant

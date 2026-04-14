@@ -258,7 +258,20 @@ async fn test_harness_full_tool_call_flow() {
     assert!(saw_text_complete, "Expected TextComplete event");
     assert!(saw_completed, "Expected Completed event");
     assert!(saw_done, "Expected Done event");
-    assert_eq!(completed_rounds, 2, "Should complete in 2 rounds (tool call + final answer)");
+    // D87 Fix 2 (L2b) behavior: after the first tool call the LLM returns
+    // text-only "The answer is 42." — the loop can't tell whether this is a
+    // legitimate final answer or a mid-workflow pause, so it forces
+    // `tool_choice=Required` for up to MAX_WORKFLOW_CONTINUATIONS turns.
+    // The MockProvider keeps returning text-only, so the loop runs through
+    // the continuation cap and finalizes. Rounds = 1 (tool) + 1 (text) +
+    // MAX_WORKFLOW_CONTINUATIONS (forced retries that also return text). We
+    // assert lower/upper bounds rather than an exact number to keep the test
+    // resilient to future cap tuning.
+    assert!(completed_rounds >= 2, "Expected at least 2 rounds, got {completed_rounds}");
+    assert!(
+        completed_rounds <= 2 + 3 /* MAX_WORKFLOW_CONTINUATIONS */ + 1,
+        "Rounds {completed_rounds} exceeded continuation cap"
+    );
     assert_eq!(completed_tool_calls, 1, "Should have exactly 1 tool call");
 }
 

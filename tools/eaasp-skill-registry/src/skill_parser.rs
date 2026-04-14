@@ -24,6 +24,24 @@ pub struct V2Frontmatter {
     pub scoped_hooks: ScopedHooks,
     #[serde(default)]
     pub dependencies: Vec<String>,
+    /// Optional workflow declaration (D87 L1 metadata).
+    /// When set, the agent loop uses `required_tools` to drive
+    /// continuation: if the LLM stops mid-workflow with unsatisfied
+    /// required tools, the harness arms `tool_choice=Specific(next)`
+    /// rather than the generic `tool_choice=Required`.
+    #[serde(default)]
+    pub workflow: Option<WorkflowMetadata>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct WorkflowMetadata {
+    /// Tools the LLM is expected to call to complete this workflow,
+    /// in roughly the order the harness should request them. Order is
+    /// authoritative for "next required tool" selection. The harness
+    /// considers the workflow done when every name here has been called
+    /// at least once during the session turn.
+    #[serde(default)]
+    pub required_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
