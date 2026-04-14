@@ -3,7 +3,7 @@
 > **Single Source of Truth** — 本文件是所有 Deferred 项的唯一权威登记处。
 > 新增 / 关闭 / 迁移 D 编号都必须同步更新本文件，并在 commit message 引用 `Dxx`。
 
-**最后更新**: 2026-04-14
+**最后更新**: 2026-04-14 (S1 batch A closed: D83/D85/D86 → ✅ closed, D90 → 🟡 P1-defer 新增)
 **维护规则**: 每次 end-phase 或 Deferred 状态变更时更新 [状态变更日志](#状态变更日志) 并同步 [全局活跃清单](#全局活跃清单-eaasp-v20)。
 
 ---
@@ -36,13 +36,13 @@
 
 | ID | 标题 | 处理位置 | 影响 |
 |----|------|----------|------|
-| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | **S1.T4** | runtime 侧工具识别 |
-| **D85** | `STOP` event `response_text` 空串 | **S1.T5** | 上层 CLI 显示不出最终回答 |
-| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | **S1.T3** 🔥 | POST_TOOL_USE 完全缺失，hook 不完整 |
+| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | ✅ **S1.T4 closed 2026-04-14** @ `bdc5b8b` | runtime 侧工具识别（已修；衍生 D90 follow-up） |
+| **D85** | `STOP` event `response_text` 空串 | ✅ **S1.T5 closed 2026-04-14** @ `bdc5b8b`+`d0e6cb0` | 上层 CLI 显示不出最终回答（已修 Rust+Python 双侧） |
+| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | ✅ **S1.T3 closed 2026-04-14** @ `d0e6cb0` | POST_TOOL_USE hook 空链路（已修） |
 | **D84** | CLI `session events --follow` SSE 未实现 | **S4.T2** | CLI UX |
 | **D89** | CLI `session close` 未实现 | **S4.T1** | CLI UX |
-| (非 D) | S1.T6 ErrorClassifier | **S1.T6** | 解锁 S1.T7 + S3.T1 |
-| (非 D) | S1.T7 withRetry | **S1.T7** | Runtime 容错 |
+| (非 D) | S1.T6 ErrorClassifier | ✅ **closed 2026-04-14** @ `4001de2` | 解锁 S1.T7 + S3.T1 |
+| (非 D) | S1.T7 withRetry | ✅ **closed 2026-04-14** @ `8b532cb` | Runtime 容错（graduated retry + jitter + FailoverReason routing） |
 
 ### 🟡 P1 — 功能缺口必补（4 项，新挂到 S2/S3）
 
@@ -74,6 +74,11 @@
 |----|------|------|
 | **D87** | grid-engine agent loop 多步工作流早终止 | ✅ ADR-V2-016 · `bdc4fd5`+`c0f98f9`+`8a738b1` · Multi-model E2E |
 | **D88** | hermes-runtime stdio MCP 缺失 | ⏸️ ADR-V2-017 · 由 Phase 2.5 goose-runtime 替代 |
+| **S1.T6** | ErrorClassifier (hermes pattern in Rust) | ✅ `4001de2` · 14 FailoverReason variants + RecoveryActions + 36 tests |
+| **D86** | claude-code-runtime SDK wrapper ToolResultBlock 丢失 | ✅ S1.T3 · `d0e6cb0` · `_tool_result_chunk` helper + UserMessage branch + 6 tests |
+| **D83** | grid-runtime ToolResult chunk 缺 tool_name | ✅ S1.T4 · `bdc5b8b` · enum field + 10+ pattern-match sites (衍生 D90 WS follow-up) |
+| **D85** | STOP event response_text 空 | ✅ S1.T5 · `bdc5b8b`+`d0e6cb0` · event_to_chunk(Completed) extract text + Python accumulator |
+| **S1.T7** | Graduated retry with backoff | ✅ `8b532cb` · RetryPolicy::graduated() + ±15% jitter + FailoverReason::recovery_actions 路由 |
 
 ---
 
@@ -209,24 +214,25 @@
 
 **占位未分配**。
 
-### D83–D89: Phase 1 E2E 暴露（Phase 2 处理）
+### D83–D90: Phase 1 E2E 暴露（Phase 2 处理）+ Phase 2 衍生
 
 | ID | 标题 | 状态 | 处理位置 |
 |----|------|------|----------|
-| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | 🔥 P0-active | **S1.T4** |
+| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | ✅ closed 2026-04-14 | S1.T4 @ `bdc5b8b` (衍生 D90) |
 | **D84** | CLI `session events --follow` SSE 未实现 (合并 D35) | 🔥 P0-active | **S4.T2** |
-| **D85** | `STOP` event `response_text` 空 | 🔥 P0-active | **S1.T5** |
-| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | 🔥 P0-active | **S1.T3** |
+| **D85** | `STOP` event `response_text` 空 | ✅ closed 2026-04-14 | S1.T5 @ `bdc5b8b`+`d0e6cb0` |
+| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | ✅ closed 2026-04-14 | S1.T3 @ `d0e6cb0` |
 | **D87** 🚨 | grid-engine agent loop 多步工作流过早终止 | ✅ closed 2026-04-14 | ADR-V2-016 · `bdc4fd5`/`c0f98f9`/`8a738b1` · Multi-model E2E |
 | **D88** 🚨 | hermes-runtime stdio MCP 缺失 | ⏸️ frozen / superseded | ADR-V2-017 → Phase 2.5 goose |
 | **D89** | CLI `session close` 未实现 | 🔥 P0-active | **S4.T1** |
+| **D90** | `ServerMessage::ToolResult` WS schema 缺 `tool_name` 字段（grid-server + grid-platform） | 🟡 P1-defer | 下游 TS 类型级联改造，衍生自 D83。前置条件：frontend workbench/platform UI 决定是否需要工具名显示。目前 CLI / L4 gRPC 已有 tool_name；仅 WS 端丢失 |
 
 ---
 
 ## 新增 Deferred 编号规则
 
-**当前最大编号**: D89
-**下一个可用**: **D90** (跳过保留段 D67-D72 / D81-D82)
+**当前最大编号**: D90
+**下一个可用**: **D91** (跳过保留段 D67-D72 / D81-D82)
 
 **引入流程**:
 1. 在新 Deferred 产生的 plan 文件里以表格形式定义 `| D90 | 标题 | 去向 |`
@@ -251,6 +257,10 @@
 | 2026-04-14 | — | **重分类** | 40 active → 12 真需修 + 26 降级归档 |
 | 2026-04-14 | D87 | active → ✅ closed | ADR-V2-016, multi-model E2E PASS |
 | 2026-04-14 | D88 | active → ⏸️ frozen/superseded | ADR-V2-017 (hermes 冻结) |
+| 2026-04-14 | D83 | active → ✅ closed | S1.T4 @ `bdc5b8b` (衍生 D90) |
+| 2026-04-14 | D85 | active → ✅ closed | S1.T5 @ `bdc5b8b`+`d0e6cb0` |
+| 2026-04-14 | D86 | active → ✅ closed | S1.T3 @ `d0e6cb0` |
+| 2026-04-14 | D90 | **新增** 🟡 P1-defer | ServerMessage WS schema tool_name 衍生自 D83，前置 frontend UI 决策 |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -262,15 +272,16 @@
 
 ## 统计汇总 (2026-04-14 重分类后 — EAASP v2.0 对齐)
 
-**真正需处理的 D 项 = 13 项**（P0 + P1 + P2 + P3）
+**真正需处理的 D 项 = 11 项**（P0 + P1 + P2 + P3 剩余 + D90 新增）
 
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
-| ✅ **closed** | 9 | D1, D2, D4, D7, D47, D49, D52, D54, D87 | 已完成 |
+| ✅ **closed** | 12 | D1, D2, D4, D7, D47, D49, D52, D54, D83, D85, D86, D87 | 已完成（2026-04-14 新增 D83/D85/D86） |
 | 🔄 **superseded** | 2 | D27→D54, D40→D54 | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
-| 🔥 **P0-active** | 6 | D83, D84 (含D35), D85, D86, D89 | **Phase 2 plan 已排期必做** |
+| 🔥 **P0-active** | 2 | D84 (含D35), D89 | **Phase 2 plan S4 排期** |
 | 🟡 **P1-active** | 4 | D50, D51, D53, D78 | **挂到 S2/S3 新任务必做** |
+| 🟡 **P1-defer** | 1 | D90 | ServerMessage WS schema tool_name，前置 frontend UI 决策 |
 | 🟢 **P2-active** | 2 | D12, D60 | S2 顺带完成 |
 | 🔵 **P3-active** | 1 | D74 | Phase 2 可选加速 |
 | 🤔 **revisit-after-S2** | 4 | D3, D5, D6, D37 | 等 S2 context engineering 决策 |
