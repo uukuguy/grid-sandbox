@@ -5,12 +5,25 @@
   "phase": "phase-1",
   "created_at": "2026-04-13T22:30:00+08:00",
   "updated_at": "2026-04-14T00:00:00+08:00",
-  "completed_tasks": ["S0.T1", "S0.T2", "S0.T3", "S1.T1", "S1.T2", "S2.T1", "S2.T2", "S2.T3", "S3.T1", "S3.T2", "S3.T3", "S4.T1"],
-  "current_task": "S4.T2 (E2E验证 — 需人工执行)",
+  "completed_tasks": ["S0.T1", "S0.T2", "S0.T3", "S1.T1", "S1.T2", "S2.T1", "S2.T2", "S2.T3", "S3.T1", "S3.T2", "S3.T3", "S4.T1", "S4.T2"],
+  "current_task": null,
   "total_tasks": 13,
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 1 — Event-driven Foundation",
-  "status": "12/13 tasks complete. S4.T2 (E2E验证) needs manual execution.",
+  "status": "13/13 tasks complete. E2E verified 2026-04-14 — grid-runtime session produced SESSION_START/PRE_TOOL_USE/POST_TOOL_USE/STOP via interceptor. Ready for end-phase.",
+
+  "e2e_verification": {
+    "date": "2026-04-14",
+    "runtime": "grid-runtime",
+    "session_flow": "CREATED → INITIALIZED → SESSION_START → MCP_CONNECTED → USER_MESSAGE → RESPONSE_CHUNKs → PRE_TOOL_USE(scada_read_snapshot) → POST_TOOL_USE → STOP",
+    "interceptor_verified": true,
+    "agent_called_real_tool": true,
+    "observed_findings": [
+      "D83: POST_TOOL_USE tool= shows empty (grid-runtime ToolResult chunk missing tool_name) — harness.rs:254",
+      "runtime_id diverges: L1 handle returns 'grid-harness', L4 stores 'grid-runtime' (informational, does not affect correctness)"
+    ],
+    "claude_code_runtime_verified": false
+  },
 
   "implementation_tasks": {
     "Task 1": "event_models.py — Event + EventMetadata (7 tests) @ 1480280",
@@ -55,6 +68,13 @@
     "tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/event_engine.py",
     "tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/event_interceptor.py"
   ],
+
+  "new_deferred": {
+    "D79": "TopologyAwareClusterer (needs Ontology Service) → Phase 5 [per ADR-V2-003]",
+    "D80": "CausalGraphClusterer (parent_event_id DAG) → Phase 4 [per ADR-V2-003]",
+    "D83": "grid-runtime AgentEvent::ToolResult chunk 缺 tool_name (harness.rs:254) — E2E 2026-04-14 发现。不影响 Event Engine 正确性，仅 CLI 可读性 → Phase 2 或更晚",
+    "D84": "CLI eaasp session events --follow SSE 实时流未实现，仅支持一次性列表 → Phase 2 可选"
+  },
 
   "next_phase": "Phase 2 — Memory and Evidence"
 }

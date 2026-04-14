@@ -291,6 +291,8 @@ eaasp-cli session send "校准 Transformer-001"
 | **D76** | **EmitEvent 保持 OPTIONAL**，T1 runtime 必须实装，T2/T3 通过 L4 拦截器自动覆盖核心事件 | 不增加 certifier MUST 门槛（维持 12），同时 T1 示范全量事件 emit |
 | **D77** | **Session Event Stream Phase 1 用 SQLite WAL 增强**，通过 EventStreamBackend Protocol 抽象接口 | 零外部依赖、渐进式改进、接口保留切换能力（Phase 6 切 NATS/Kafka） |
 | **D78** | **Event 接收路径 Phase 1 用 REST**（POST /v1/events/ingest），gRPC 反向通道推迟 Phase 2 | 当前架构只有 L4→L1 gRPC，L1→L4 需要新通道。REST fallback 简单、对 fire-and-forget 可接受 |
+| **D83** | grid-runtime `AgentEvent::ToolResult` chunk 缺 `tool_name`（只带 `tool_id`），CLI 显示 `POST_TOOL_USE tool=` 空。推迟到 Phase 2 或更晚 | 人工 E2E 发现 (2026-04-14)，不影响 Event Engine 正确性，仅影响 CLI 可读性。修复方案：`crates/grid-runtime/src/harness.rs:254` 或在拦截器端通过 tool_id 回查 tool_name。属于 grid-runtime 数据完整性问题，非 Phase 1 scope |
+| **D84** | CLI `eaasp session events --follow` SSE 实时流未实现 | 设计文档列出但代码仅实现一次性列表。可选，Phase 2 补上或保持推迟 |
 
 ---
 
