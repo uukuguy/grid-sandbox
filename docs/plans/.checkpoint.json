@@ -24,8 +24,14 @@
       "cluster_id": "c-e8db24de (all same-session events in same 30s window)",
       "pipeline_worker": "ran — cluster_id written back to all events"
     },
-    "claude_code_runtime_verified": false,
-    "note": "claude-code-runtime T2 interceptor path covered by unit + integration tests; explicit E2E deferred"
+    "claude_code_runtime_verified": true,
+    "claude_code_runtime_session": "sess_f58877353378",
+    "claude_code_runtime_findings": [
+      "SESSION_START/PRE_TOOL_USE/STOP confirmed with source=interceptor:claude-code-runtime",
+      "4 PRE_TOOL_USE captured (scada_read_snapshot + memory_search + memory_write_anchor + memory_write_file)",
+      "Event fields complete: event_id/source/cluster_id all present",
+      "D86: POST_TOOL_USE missing — claude-code-runtime SDK wrapper drops ToolResultBlock (upstream bug, not Event Engine)"
+    ]
   },
 
   "implementation_tasks": {
@@ -96,7 +102,8 @@
     "D80": "CausalGraphClusterer (parent_event_id DAG) → Phase 4 [per ADR-V2-003]",
     "D83": "grid-runtime AgentEvent::ToolResult chunk 缺 tool_name (harness.rs:254) → Phase 2 或更晚",
     "D84": "CLI eaasp session events --follow SSE 实时流未实现 → Phase 2 可选",
-    "D85": "STOP event payload.response_text 为空（grid-runtime done chunk 不带 response_text） → Phase 2 或更晚"
+    "D85": "STOP event payload.response_text 为空（grid-runtime done chunk 不带 response_text） → Phase 2 或更晚",
+    "D86": "claude-code-runtime SDK wrapper 只处理 AssistantMessage，丢 ToolResultBlock (sdk_wrapper.py:94) → POST_TOOL_USE 完全缺失，PRE_TOOL_USE 正常 → Phase 2"
   },
 
   "next_phase": "Phase 2 — Memory and Evidence"

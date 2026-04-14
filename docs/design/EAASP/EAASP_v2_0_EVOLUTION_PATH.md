@@ -293,6 +293,8 @@ eaasp-cli session send "校准 Transformer-001"
 | **D78** | **Event 接收路径 Phase 1 用 REST**（POST /v1/events/ingest），gRPC 反向通道推迟 Phase 2 | 当前架构只有 L4→L1 gRPC，L1→L4 需要新通道。REST fallback 简单、对 fire-and-forget 可接受 |
 | **D83** | grid-runtime `AgentEvent::ToolResult` chunk 缺 `tool_name`（只带 `tool_id`），CLI 显示 `POST_TOOL_USE tool=` 空。推迟到 Phase 2 或更晚 | 人工 E2E 发现 (2026-04-14)，不影响 Event Engine 正确性，仅影响 CLI 可读性。修复方案：`crates/grid-runtime/src/harness.rs:254` 或在拦截器端通过 tool_id 回查 tool_name。属于 grid-runtime 数据完整性问题，非 Phase 1 scope |
 | **D84** | CLI `eaasp session events --follow` SSE 实时流未实现 | 设计文档列出但代码仅实现一次性列表。可选，Phase 2 补上或保持推迟 |
+| **D85** | `STOP` event `payload.response_text` 为空 — grid-runtime 的 `done` chunk 不携带 `response_text` 字段 | E2E 2026-04-14 发现。拦截器读 `chunk.get("response_text", "")` → 空字符串。修复方案：grid-runtime/claude-code-runtime 在 done chunk 补 response_text，或拦截器累积 text_delta。→ Phase 2 |
+| **D86** | **claude-code-runtime SDK wrapper 只处理 `AssistantMessage`，丢 `ToolResultBlock`** | E2E 2026-04-14 发现 (sdk_wrapper.py:94-118)：ToolResultBlock 通常在 UserMessage 里（Anthropic SDK 协议），wrapper 未覆盖此分支，导致 `tool_result` chunk 从未发出 → 拦截器看不到 POST_TOOL_USE。Phase 1 验证时 4 个 PRE_TOOL_USE 出现但 0 个 POST_TOOL_USE。**影响**: 不阻塞 Phase 1 观察力闭环，但 POST_TOOL_USE 在 claude-code-runtime 完全缺失。修复：`sdk_wrapper.py` 增加 `UserMessage` 分支解析 `ToolResultBlock` → emit `tool_result` chunk。→ Phase 2 |
 
 ---
 
