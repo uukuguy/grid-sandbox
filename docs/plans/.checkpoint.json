@@ -15,7 +15,8 @@
   ],
   "deferred_ledger": "docs/design/EAASP/DEFERRED_LEDGER.md",
   "current_task": "S1.T6 (ErrorClassifier) — 纯 Rust，无 Python runtime 依赖，解锁 S1.T7 retry 和 S3.T1 PreCompact",
-  "total_tasks": 22,
+  "total_tasks": 23,
+  "task_delta_log": "2026-04-14: 22 → 23 after Deferred 重分类 (S3.T5 scoped-hook executor 新增，合并 D50+D51+D53)",
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 2 — Memory and Evidence",
   "status": "S0 DONE (2/2). S1 in progress 2/7 (T1 D87 fixed, T2 hermes frozen). ADR-V2-017 accepted — L1 Runtime 生态策略确立（主力+样板+对比三轨）。Phase 2.5 规划：goose-runtime (W1) + nanobot-runtime (W2)。Plan 4/22.",
@@ -40,8 +41,8 @@
       "remaining": ["S1.T3 (D86)", "S1.T4 (D83)", "S1.T5 (D85)", "S1.T6 (ErrorClassifier)", "S1.T7 (withRetry)"],
       "note": "S1.T2 hermes 冻结完成。D88 重定义为 Phase 2.5 goose-runtime 实装。"
     },
-    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "unblocked", "note": "可与 S1 并行" },
-    "S3": { "name": "PreCompact + Skill Extraction + Stop hooks (批次 B)", "tasks": 4, "status": "blocked_by_S1" },
+    "S2": { "name": "L2 Memory Engine 增强 + tool-result 三层截断 (批次 B)", "tasks": 5, "status": "unblocked", "note": "可与 S1 并行。S2.T1 合并 D12+D78，S2.T5 合并 D60" },
+    "S3": { "name": "PreCompact + Skill Extraction + Stop hooks + scoped-hook executor (批次 B)", "tasks": 5, "status": "blocked_by_S1", "note": "S3.T5 新增合并 D50+D51+D53，前置 ADR-V2-006 envelope 契约" },
     "S4": { "name": "CLI + E2E 验证 + thread-scoped interrupt (批次 C)", "tasks": 4, "status": "blocked_by_S1_S2_S3" }
   },
 

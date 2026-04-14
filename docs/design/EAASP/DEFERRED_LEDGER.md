@@ -28,126 +28,165 @@
 
 ---
 
-## 全局活跃清单 (EAASP v2.0)
+## EAASP v2.0 真正需修清单（2026-04-14 重分类）
 
-**当前活跃（需处理）: 40 项 / 84 项总计**
+> 针对 v2.0 架构**逐项重审**结果。40 项原 active → **12 项真需修 + 26 项降级归档**。
 
-### Phase 2 当前入口待办（5 项）
+### 🔥 P0 — Phase 2 plan 已排期（5 项 D 编号 + 2 项非 D 任务）
 
-| ID | 标题 | 处理位置 | 优先级 |
-|----|------|----------|--------|
-| **D83** | grid-runtime ToolResult 缺 `tool_name` | S1.T4 | 中 |
-| **D84** | CLI `session events --follow` SSE 未实现 | S4.T2 | 低 |
-| **D85** | `STOP` event `response_text` 空串 | S1.T5 | 中 |
-| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | S1.T3 | 高 |
-| **D89** | CLI `session close` 未实现 | S4.T1 | 低 |
+| ID | 标题 | 处理位置 | 影响 |
+|----|------|----------|------|
+| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | **S1.T4** | runtime 侧工具识别 |
+| **D85** | `STOP` event `response_text` 空串 | **S1.T5** | 上层 CLI 显示不出最终回答 |
+| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | **S1.T3** 🔥 | POST_TOOL_USE 完全缺失，hook 不完整 |
+| **D84** | CLI `session events --follow` SSE 未实现 | **S4.T2** | CLI UX |
+| **D89** | CLI `session close` 未实现 | **S4.T1** | CLI UX |
+| (非 D) | S1.T6 ErrorClassifier | **S1.T6** | 解锁 S1.T7 + S3.T1 |
+| (非 D) | S1.T7 withRetry | **S1.T7** | Runtime 容错 |
+
+### 🟡 P1 — 功能缺口必补（4 项，新挂到 S2/S3）
+
+| ID | 标题 | 建议挂靠 | 必须原因 |
+|----|------|----------|----------|
+| **D50** | `ScopedHookBody::Prompt` executor loop 未实装 | **S3 新增 T5** | SKILL 里 Prompt hook 类型功能上不存在 |
+| **D53** | D49 helper 写了但 runtime 没调用 | **S3 新增 T5** | scoped-hook executor 真空 |
+| **D51** | Hook stdin envelope schema 未 ADR 化 | **S3 T5 前置，新增 ADR-V2-006** | D50/D53 实施前必须先定义契约 |
+| **D78** | Event payload embedding 向量索引 | **S2.T1 扩展** | 与 semantic 检索共 HNSW 架构 |
+
+### 🟢 P2 — S2 顺带完成（2 项）
+
+| ID | 标题 | 建议挂靠 |
+|----|------|----------|
+| **D12** | L2 connection-per-call → store 级长连接 | **S2.T1 前置** (hnswlib 接入时必然改) |
+| **D60** | verify-v2-mvp assertion 11 hybrid search 降级 | **S2.T5 收尾** (升级为硬断言) |
+
+### 🔵 P3 — 可选加速（1 项）
+
+| ID | 标题 | 建议 |
+|----|------|------|
+| **D74** | EmitEvent gRPC 反向通道 (L1→L4) | Phase 2 完成后视情况，若 event clustering 需要再上 |
+
+**P0+P1+P2+P3 合计 12 项（扣除非 D 编号的 S1.T6/T7）**
 
 ### 最近完成（2026-04-14）
 
-| ID | 标题 | 状态 | 证据 |
-|----|------|------|------|
-| **D87** | grid-engine agent loop 多步工作流早终止 | ✅ **FIXED** | ADR-V2-016 Accepted · commits `bdc4fd5` + `c0f98f9` + `8a738b1` · Multi-model E2E verified |
-| **D88** | hermes-runtime stdio MCP 缺失 | ⏸️ **FROZEN / SUPERSEDED** | ADR-V2-017 Accepted · 由 Phase 2.5 goose-runtime 完整替代解决 |
+| ID | 标题 | 证据 |
+|----|------|------|
+| **D87** | grid-engine agent loop 多步工作流早终止 | ✅ ADR-V2-016 · `bdc4fd5`+`c0f98f9`+`8a738b1` · Multi-model E2E |
+| **D88** | hermes-runtime stdio MCP 缺失 | ⏸️ ADR-V2-017 · 由 Phase 2.5 goose-runtime 替代 |
 
 ---
 
 ## D 编号详细登记（EAASP 命名空间）
 
+**状态图例**（2026-04-14 重分类后）：
+- ✅ **closed** — 已完成
+- 🔄 **superseded** — 被另一 D 编号或 ADR 取代
+- ⏸️ **frozen** — 对应模块冻结（如 hermes）
+- 🔥 **P0-active** — Phase 2 plan 已排期
+- 🟡 **P1-active** — 真功能缺口，已挂到 S2/S3
+- 🟢 **P2-active** — S2 顺带
+- 🔵 **P3-active** — 可选加速
+- 🧹 **tech-debt** — 纯代码整洁度，不影响功能，Phase 2 后批量清
+- 📦 **long-term** — Phase 4/5/6 长期路线，当前视野移除
+- 🔴 **phase3-gated** — 依赖 Phase 3 身份/租户模型
+- 🤔 **revisit-after-S2** — 需 S2 context engineering 决策后再判断
+
 ### D1–D15: Phase 0 S3 产生（L2/L3 服务基础设施）
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D1** | grid-runtime harness 接入 `payload.policy_context` (P1) | phase0 S3.T3 (2026-04-11) | ✅ closed | ADR-V2-004 S4.T2 4b-lite (2026-04-12) | — |
-| **D2** | grid-runtime harness 接入 `payload.memory_refs` (P3) | phase0 S3.T3 | ✅ closed | ADR-V2-004 S4.T2 `build_memory_preamble` | — |
-| **D3** | harness 接入 `payload.user_preferences` (P5) + `trim_for_budget()` | phase0 S3.T3 | 🟡 active | context budget 策略待定 | Phase 2 context engineering |
-| **D4** | harness 接入 `payload.event_context` (P2) | phase0 S3.T3 | ✅ closed | Phase 1 ADR-V2-002 EventStreamBackend | — |
-| **D5** | grpc_integration 测试迁移到 v2 telemetry envelope | phase0 S3.T3 | 🟡 active | EmitTelemetry Terminate 语义需先明确 | Phase 2 |
-| **D6** | certifier 补充 SessionPayload P1–P5 字段断言 | phase0 S3.T3 | 🟡 active | D1–D4 落地后可断言 | Phase 2 |
-| **D7** | EmitEvent 真实实现 (当前 `Status::unimplemented`) | phase0 S3.T3 | ✅ closed | Phase 1 ADR-V2-001 + Event Engine 上线 | — |
-| **D8** | `access_scope` 真实 RBAC 执行 | phase0 S3.T1 | 🔴 planned | Phase 3 身份与租户模型 | Phase 3 |
-| **D9** | `skill_usage` 返回真实遥测 | phase0 S3.T1 | 🔴 planned | L3 telemetry ingest + L2 聚合 | Phase 2 后续 |
-| **D10** | S3.T1 MCP REST facade 升级为真 rmcp ServerHandler | phase0 S3.T1 | 🟡 active | L2/L3/L4 统一切换契机 | Phase 2+ |
-| **D11** | skill-registry `scope` 过滤在 `LIMIT` 之后 (scope=X&limit=10 可能少于 10 条) | phase0 S3.T1 | 🟡 active | migration + 索引 | Phase 2+ |
-| **D12** | L2 memory-engine connection-per-call 延迟浪费 | phase0 S3.T2 | 🟡 active | store 级长连接 | Phase 2 S2 |
-| **D13** | L2 `archive()` 创建 "archive of archive"，FTS 仍可搜 | phase0 S3.T2 | 🟡 active | 归档检索语义明确 | Phase 2 S2 |
-| **D14** | L2 `index._row_to_memory` 跨模块访问私有符号 | phase0 S3.T2 | 🟡 active | 重构为公共符号 | 技术债 |
-| **D15** | L2 memory-engine 缺 `[tool.ruff]` / `[tool.mypy]` 配置块 | phase0 S3.T2 | 🟡 active | 统一 lint 配置 | 技术债 |
+| ID | 标题 | 引入 | 状态 | 证据 / 去向 |
+|----|------|------|------|------|
+| **D1** | grid-runtime harness 接入 `payload.policy_context` (P1) | phase0 S3.T3 | ✅ closed | ADR-V2-004 S4.T2 4b-lite |
+| **D2** | grid-runtime harness 接入 `payload.memory_refs` (P3) | phase0 S3.T3 | ✅ closed | ADR-V2-004 `build_memory_preamble` |
+| **D3** | harness 接入 `payload.user_preferences` (P5) + `trim_for_budget()` | phase0 S3.T3 | 🤔 revisit-after-S2 | 大 context 时代是否还需要？等 S2 决策 |
+| **D4** | harness 接入 `payload.event_context` (P2) | phase0 S3.T3 | ✅ closed | Phase 1 ADR-V2-002 |
+| **D5** | grpc_integration 测试迁移到 v2 telemetry envelope | phase0 S3.T3 | 🤔 revisit-after-S2 | EmitTelemetry Terminate 语义需先定 |
+| **D6** | certifier 补充 SessionPayload P1–P5 字段断言 | phase0 S3.T3 | 🤔 revisit-after-S2 | 等 D3/D5 决策后一并 |
+| **D7** | EmitEvent 真实实现 | phase0 S3.T3 | ✅ closed | Phase 1 ADR-V2-001 |
+| **D8** | `access_scope` 真实 RBAC 执行 | phase0 S3.T1 | 🔴 phase3-gated | Phase 3 身份与租户模型 |
+| **D9** | `skill_usage` 返回真实遥测 | phase0 S3.T1 | 🔴 phase3-gated | L3 telemetry ingest + L2 聚合 |
+| **D10** | S3.T1 MCP REST facade 升级为真 rmcp ServerHandler | phase0 S3.T1 | 🧹 tech-debt | L2/L3/L4 统一切换契机 |
+| **D11** | skill-registry `scope` 过滤在 `LIMIT` 之后 | phase0 S3.T1 | 🧹 tech-debt | migration + 索引 |
+| **D12** | L2 memory-engine connection-per-call 延迟浪费 | phase0 S3.T2 | 🟢 **P2-active** | **S2.T1 前置**（hnswlib 接入必改） |
+| **D13** | L2 `archive()` 创建 "archive of archive"，FTS 仍可搜 | phase0 S3.T2 | 🧹 tech-debt | 归档检索语义明确后 |
+| **D14** | L2 `index._row_to_memory` 跨模块访问私有符号 | phase0 S3.T2 | 🧹 tech-debt | 重构为公共符号 |
+| **D15** | L2 memory-engine 缺 `[tool.ruff]` / `[tool.mypy]` | phase0 S3.T2 | 🧹 tech-debt | 统一 lint 配置 |
 
-### D16–D26: Phase 0 S3.T3 (L3 governance)
+### D16–D26: Phase 0 S3.T3 (L3 governance) — 全部 tech-debt 或运维
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D16** | L3 policy_engine.deploy() 在 commit 前读 `created_at` | phase0 S3.T3 | 🟡 active | SQLite RETURNING 子句 | 技术债 |
-| **D17** | L3 api.validate_session() `hook["hook_id"]` KeyError 风险 | phase0 S3.T3 | 🟡 active | 增加守卫 | 技术债 |
-| **D18** | L3 validate_session() 对 `session_id` path param 不校验 | phase0 S3.T3 | 🟡 active | Path pattern 守卫 | 与 D29 合并 |
-| **D19** | L3 switch_mode() 接受任意 hook_id 静默创建 override | phase0 S3.T3 | 🟡 active | warn 或 404 | 技术债 |
-| **D20** | `_sanitize_errors()` 仅在 L3 定义，L2 也需要 | phase0 S3.T3 | 🟡 active | 抽到 `eaasp_common` | Phase 2+ |
-| **D21** | L3 `managed_settings_versions` / `telemetry_events` 无保留策略 | phase0 S3.T3 | 🟡 active | TTL/archive 策略 | 运维侧 |
-| **D22** | L3 无全局 FastAPI exception handler | phase0 S3.T3 | 🟡 active | 与 D28 合并 | Phase 2+ |
-| **D23** | L3 无 loguru/logging 初始化 | phase0 S3.T3 | 🟡 active | 与 D31 合并 | Phase 2+ |
-| **D24** | IDE Pyright missing-import 假阳性 (L1/L2/L3 同病) | phase0 S3.T3 | 🟡 active | pyrightconfig.json 或 workspace 配置 | DevEx |
-| **D25** | L3 无并发部署 E2E (HTTP 栈) | phase0 S3.T3 | 🟡 active | real uvicorn load test | Phase 2+ |
-| **D26** | L3 tests 用 `time.sleep(1.1)` 防撞秒 | phase0 S3.T3 | 🟡 active | 单调 tiebreaker 列 | 技术债 |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D16** | L3 policy_engine.deploy() 在 commit 前读 `created_at` | 🧹 tech-debt | SQLite RETURNING 子句 |
+| **D17** | L3 validate_session() `hook["hook_id"]` KeyError 风险 | 🧹 tech-debt | 增加守卫 |
+| **D18** | L3 validate_session() 对 `session_id` path param 不校验 | 🧹 tech-debt | 与 D29 合并 |
+| **D19** | L3 switch_mode() 接受任意 hook_id 静默创建 override | 🧹 tech-debt | warn 或 404 |
+| **D20** | `_sanitize_errors()` 仅在 L3 定义，L2 也需要 | 🧹 tech-debt | 抽到 `eaasp_common` |
+| **D21** | L3 `managed_settings_versions` / `telemetry_events` 无保留策略 | 📦 long-term | 运维侧 TTL 策略 |
+| **D22** | L3 无全局 FastAPI exception handler | 🧹 tech-debt | 与 D28 合并 |
+| **D23** | L3 无 loguru/logging 初始化 | 🧹 tech-debt | 与 D31 合并 |
+| **D24** | IDE Pyright missing-import 假阳性 | 🧹 tech-debt | DevEx, pyrightconfig.json |
+| **D25** | L3 无并发部署 E2E (HTTP 栈) | 📦 long-term | 运维侧 load test |
+| **D26** | L3 tests 用 `time.sleep(1.1)` 防撞秒 | 🧹 tech-debt | 单调 tiebreaker 列 |
 
 ### D27–D45: Phase 0 S3.T4+ (L4 + CLI v2)
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D27** | L4 session_orchestrator `Initialize`/`Send` 占位 | phase0 S3.T4 | 🔄 **superseded by D54** | ADR-V2-004 精化为 D54 | 见 D54 |
-| **D28** | L4 无全局 exception handler (D22 复现) | phase0 S3.T4 | 🟡 active | 与 D22 合并 | Phase 2+ |
-| **D29** | L4 `/v1/sessions/{id}/*` path param 未校验 (D18 复现) | phase0 S3.T4 | 🟡 active | 与 D18 合并 | Phase 2+ |
-| **D30** | L2/L3 `busy_timeout=5000` 未统一 | phase0 S3.T4 | 🟡 active | `eaasp_common.connect()` | Phase 2+ |
-| **D31** | L4 无 loguru 初始化 (D23 复现) | phase0 S3.T4 | 🟡 active | 与 D23 合并 | Phase 2+ |
-| **D32** | L4 无并发 `create_session` 压力测试 (D25 复现) | phase0 S3.T4 | 🟡 active | 与 D25 合并 | Phase 2+ |
-| **D33** | L4 SESSION_CREATED 事件 payload 与 sessions 重复存储 | phase0 S3.T4 | 🟡 active | 改为 `{session_id: id}` 引用 | 技术债 |
-| **D34** | L4 无 Intent → skill_id NLU 解析 | phase0 S3.T4 | 🔴 planned | Phase 1 NLU 或 L5 portal | Phase 3+ |
-| **D35** | L4 无 WebSocket / SSE event streaming | phase0 S3.T4 | 🟡 active | 与 D84 关联 | **D84 Phase 2 S4.T2** |
-| **D36** | L4 event window `(from_seq, to_seq, limit)` 无 cursor | phase0 S3.T4 | 🟡 active | 事件量 >10k 时补 cursor | Phase 3+ |
-| **D37** | L4 `context_assembly` 硬编码 `allow_trim_p4=False` | phase0 S3.T4 | 🟡 active | runtime budget negotiation 后 | Phase 2 context |
-| **D38** | L4 `L2Client.search_memory` 未传 `user_id` (跨租户泄漏风险) | phase0 S3.T4 | 🔴 planned | Phase 3 RBAC + L2 user_id 过滤 (D8 关联) | Phase 3 |
-| **D39** | L4 `PolicyContext.policy_version` 用 `str(int)` 而非哈希 | phase0 S3.T4 | 🟡 active | managed_settings_version SHA-256 | Phase 1 evidence chain |
-| **D40** | L4 `sessions.status` 只有 `created` 三态机未实现 | phase0 S3.T4 | 🔄 **superseded by D54** | 与 D27→D54 合并 | 见 D54 |
-| **D41** | eaasp-cli-v2 `session list` 无后端 endpoint | phase0 S3.T5 | 🟡 active | L4 `GET /v1/sessions` 列表端点 | Phase 3 多租户 |
-| **D42** | cli-v2 test_client 未覆盖 5xx exit_code=4 | phase0 S3.T5 | 🟡 active | 补测 | 技术债 |
-| **D43** | cli-v2 pyproject `respx>=0.21` 未使用 | phase0 S3.T5 | 🟡 active | 删除 dep 或补对照测试 | 技术债 |
-| **D44** | cli-v2 `cmd_session.show` 硬编码 `limit=100` | phase0 S3.T5 | 🟡 active | 暴露 flag 或分页 loop | Phase 2 S4 |
-| **D45** | cli-v2 响应 shape 假设，未预期 shape → default exit 1 | phase0 S3.T5 | 🟡 active | 共享 response-shape guard | 技术债 |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D27** | L4 session_orchestrator `Initialize`/`Send` 占位 | 🔄 superseded by D54 | ADR-V2-004 精化 |
+| **D28** | L4 无全局 exception handler (D22 复现) | 🧹 tech-debt | 与 D22 合并 |
+| **D29** | L4 `/v1/sessions/{id}/*` path param 未校验 | 🧹 tech-debt | 与 D18 合并 |
+| **D30** | L2/L3 `busy_timeout=5000` 未统一 | 🧹 tech-debt | `eaasp_common.connect()` |
+| **D31** | L4 无 loguru 初始化 | 🧹 tech-debt | 与 D23 合并 |
+| **D32** | L4 无并发 `create_session` 压力测试 | 📦 long-term | 运维侧 load test |
+| **D33** | L4 SESSION_CREATED 事件 payload 重复存储 | 🧹 tech-debt | 改引用式 |
+| **D34** | L4 无 Intent → skill_id NLU 解析 | 🔴 phase3-gated | Phase 3+ NLU 或 L5 portal |
+| **D35** | L4 无 WebSocket / SSE event streaming | 🔥 P0-active | **合并到 D84 S4.T2** |
+| **D36** | L4 event window 无 cursor (>10k 事件触发) | 📦 long-term | Phase 3+ |
+| **D37** | L4 `context_assembly` 硬编码 `allow_trim_p4=False` | 🤔 revisit-after-S2 | 与 D3 关联 |
+| **D38** | L4 `L2Client.search_memory` 未传 `user_id` | 🔴 phase3-gated | 跨租户隔离，Phase 3 RBAC |
+| **D39** | L4 `PolicyContext.policy_version` 用 `str(int)` 而非哈希 | 🧹 tech-debt | evidence chain 时顺带 |
+| **D40** | L4 `sessions.status` 三态机未实现 | 🔄 superseded by D54 | — |
+| **D41** | eaasp-cli-v2 `session list` 无后端 endpoint | 🔴 phase3-gated | 多租户同步 |
+| **D42** | cli-v2 test_client 未覆盖 5xx exit_code=4 | 🧹 tech-debt | 补测 |
+| **D43** | cli-v2 pyproject `respx>=0.21` 未使用 | 🧹 tech-debt | 删除 dep |
+| **D44** | cli-v2 `cmd_session.show` 硬编码 `limit=100` | 🧹 tech-debt | S4 时顺带暴露 flag |
+| **D45** | cli-v2 响应 shape 假设 → default exit 1 | 🧹 tech-debt | response-shape guard |
 
 ### D46–D53: Phase 0 S4.T1 (Skill + Hook 扩展)
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D46** | Skill `access_scope` 无 RBAC / 命名空间校验 | phase0 S4.T1 | 🔴 planned | Phase 3 policy backend | Phase 3 |
-| **D47** | mock-scada.py argparse stub，非真实 MCP stdio server | phase0 S4.T1 | ✅ closed | S4.T2 前置补齐 (2026-04-12) `tools/mock-scada/` | — |
-| **D48** | `ScopedHookBody` 无 `matcher` / `tool_filter` 字段 | phase0 S4.T1 | 🟡 active | hook schema v2.1 | Phase 2+ |
-| **D49** | `${SKILL_DIR}` 变量替换 runtime 未实装 | phase0 S4.T1 | ✅ closed | `substitute_hook_vars` helper (2026-04-12) | **runtime exec 侧仍见 D53** |
-| **D50** | `ScopedHookBody::Prompt` prompt-hook executor loop 未实装 | phase0 S4.T1 | 🟡 active | Phase 2 prompt-hook runtime (调 LLM 做 yes/no 决策) | Phase 2+ |
-| **D51** | Hook stdin envelope schema 未 ADR 化 | phase0 S4.T1 | 🟡 active | ADR-V2-006 (envelope 契约) | Phase 2+ |
-| **D52** | SKILL.md prose 与 L2 MCP tool schema 参数名一致性 | phase0 S4.T1 | ✅ closed | 逐字对照验证 (2026-04-12) 零不匹配 | — |
-| **D53** | D49 helper 已实现但两 runtime hook 执行路径未调用 | phase0 S4.T1 | 🟡 active | Phase 2 hook executor 设计 + runtime 接入 | **Phase 2 S3 hook executor** |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D46** | Skill `access_scope` 无 RBAC / 命名空间校验 | 🔴 phase3-gated | Phase 3 policy backend |
+| **D47** | mock-scada.py argparse stub | ✅ closed | `tools/mock-scada/` (2026-04-12) |
+| **D48** | `ScopedHookBody` 无 `matcher` / `tool_filter` 字段 | 🧹 tech-debt | hook schema v2.1 |
+| **D49** | `${SKILL_DIR}` 变量替换 helper | ✅ closed | `substitute_hook_vars` (2026-04-12) |
+| **D50** | `ScopedHookBody::Prompt` executor loop 未实装 | 🟡 **P1-active** | **S3 新 T5 hook executor** |
+| **D51** | Hook stdin envelope schema 未 ADR 化 | 🟡 **P1-active** | **S3 T5 前置 ADR-V2-006** |
+| **D52** | SKILL.md prose 与 L2 MCP tool schema 一致性 | ✅ closed | 逐字对照验证 (2026-04-12) |
+| **D53** | D49 helper 写了但 runtime 没调用 | 🟡 **P1-active** | **S3 新 T5 hook executor** |
 
 ### D54–D61: Phase 0 S4.T2 (4b-lite + E2E verify)
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D54** | **L4→L1 真 gRPC binding** (supersedes D27) | phase0 S4.T2 / ADR-V2-004 | ✅ closed | Phase 0.5 S1 实装 | — |
-| **D55** | proto3 submessage presence 应统一用 `HasField` | phase0 S4.T2 | 🟡 active | `has_field` 辅助或 lint rule | 技术债 |
-| **D56** | `verify-v2-mvp.sh` 只清 SQLite，后端变化需同步 | phase0 S4.T2 | 🟡 active | 持久化后端变化时更新 | DevOps |
-| **D57** | `harness_payload_integration.rs` 复制 `build_memory_preamble` 格式 | phase0 S4.T2 | 🟡 active | 升级为 `pub fn` | 技术债 |
-| **D58** | `test_initialize_injects_memory_refs_preamble` 未走 Send 完整路径 | phase0 S4.T2 | 🟡 active | 用 SdkWrapper 替身补真 Send-path 测试 | 技术债 |
-| **D59** | `Makefile::mcp-orch-start` 硬编码 `--port 8082` | phase0 S4.T2 | 🟡 active | 改为 18082 + EAASP_MCP_ORCHESTRATOR_PORT | 技术债 |
-| **D60** | `verify-v2-mvp.py` assertion 11 `memory_id_1 in matched_ids` 降级 | phase0 S4.T2 | 🟡 active | L2 hybrid search 确定性排名后升级为硬 failure | Phase 2 S2 |
-| **D61** | `threshold-calibration-skill.md` fixture 硬编码 `version: 0.1.0` | phase0 S4.T2 | 🟡 active | 从 submit 响应解析版本号 | 技术债 |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D54** | L4→L1 真 gRPC binding | ✅ closed | Phase 0.5 S1 |
+| **D55** | proto3 submessage presence 应统一用 `HasField` | 🧹 tech-debt | has_field 辅助 |
+| **D56** | `verify-v2-mvp.sh` 只清 SQLite | 📦 long-term | 持久化后端变化时 |
+| **D57** | `harness_payload_integration.rs` 复制 `build_memory_preamble` | 🧹 tech-debt | pub fn 升级 |
+| **D58** | `test_initialize_injects_memory_refs_preamble` 未走 Send 全路径 | 🧹 tech-debt | SdkWrapper 替身 |
+| **D59** | `Makefile::mcp-orch-start` 硬编码 `--port 8082` | 🧹 tech-debt | 改为 18082 |
+| **D60** | verify-v2-mvp assertion 11 hybrid search 降级 | 🟢 **P2-active** | **S2.T5 收尾升级为硬断言** |
+| **D61** | `threshold-calibration-skill.md` fixture 硬编码 `version` | 🧹 tech-debt | 解析 submit 响应 |
 
 ### D62–D66: Phase 1 Plan (容器化 + MCP 池)
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D62** | Per-session tool-sandbox container lifecycle | phase1 plan | 🔴 planned | Sandbox Tiers 未就绪 | Phase 3 |
-| **D63** | Tool-sandbox 通用基础镜像 + OCI artifact | phase1 plan | 🔴 planned | 与 D62 | Phase 3 |
-| **D64** | T0/T1 runtime 工具容器化 | phase1 plan | 🔴 planned | 与 D62 | Phase 3 |
-| **D65** | MCP server 多实例 / 连接池 | phase1 plan | 🟡 active | Memory Engine 增强 | Phase 2 S2 |
-| **D66** | hermes 内置工具与 MCP monkey-patch 叠加修复 | phase1 plan | ⏸️ **frozen** | hermes 冻结 (ADR-V2-017) → 由 goose 替代 | Phase 2.5 goose |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D62** | Per-session tool-sandbox container lifecycle | 🔴 phase3-gated | Sandbox Tiers 未就绪 |
+| **D63** | Tool-sandbox 通用基础镜像 + OCI artifact | 🔴 phase3-gated | 与 D62 |
+| **D64** | T0/T1 runtime 工具容器化 | 🔴 phase3-gated | 与 D62 |
+| **D65** | MCP server 多实例 / 连接池 | 🧹 tech-debt | Phase 2 S2 或 Phase 3 顺带 |
+| **D66** | hermes 内置工具与 MCP monkey-patch | ⏸️ frozen | ADR-V2-017 hermes 冻结 → goose 替代 |
 
 ### D67–D72: 保留未用
 
@@ -155,16 +194,16 @@
 
 ### D73–D80: Phase 1 Event Engine (ADR-V2-001/002/003)
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D73** | Event Room 推迟 (Phase 1 session = event 容器) | ADR-V2-001 | 🔴 planned | Phase 4 | Phase 4 |
-| **D74** | EmitEvent gRPC 反向通道 (L1→L4 gRPC server) | ADR-V2-001 | 🔴 planned | Phase 2 | Phase 2+ |
-| **D75** | EventStreamBackend 切换到 NATS JetStream (多节点) | ADR-V2-002 | 🔴 planned | Phase 6 | Phase 6 |
-| **D76** | subscribe() polling → push-based (NATS/WebSocket) | ADR-V2-002 | 🔴 planned | Phase 6 | Phase 6 |
-| **D77** | TopologyAwareClusterer (L2 Ontology Service 输入) | ADR-V2-003 | 🔴 planned | Phase 5 | Phase 5 |
-| **D78** | 向量索引 Indexer (event payload embedding) | ADR-V2-003 | 🔴 planned | Phase 2 | Phase 2 S2 |
-| **D79** | Pipeline 多 worker 并行处理 | ADR-V2-003 | 🔴 planned | Phase 6 | Phase 6 |
-| **D80** | Clusterer 因果图聚类 (parent_event_id → DAG) | ADR-V2-003 | 🔴 planned | Phase 4 | Phase 4 |
+| ID | 标题 | 状态 | 备注 |
+|----|------|------|------|
+| **D73** | Event Room 推迟 | 📦 long-term | Phase 4 |
+| **D74** | EmitEvent gRPC 反向通道 (L1→L4 gRPC server) | 🔵 **P3-active** | Phase 2 可选加速，视 event clustering 需要 |
+| **D75** | EventStreamBackend 切换到 NATS JetStream | 📦 long-term | Phase 6 多节点 |
+| **D76** | subscribe() polling → push-based | 📦 long-term | Phase 6 |
+| **D77** | TopologyAwareClusterer (L2 Ontology Service 输入) | 📦 long-term | Phase 5 |
+| **D78** | 向量索引 Indexer (event payload embedding) | 🟡 **P1-active** | **S2.T1 扩展**（与 semantic 共 HNSW 架构） |
+| **D79** | Pipeline 多 worker 并行处理 | 📦 long-term | Phase 6 |
+| **D80** | Clusterer 因果图聚类 (parent_event_id → DAG) | 📦 long-term | Phase 4 |
 
 ### D81–D82: 保留未用
 
@@ -172,15 +211,15 @@
 
 ### D83–D89: Phase 1 E2E 暴露（Phase 2 处理）
 
-| ID | 标题 | 引入 | 状态 | 证据 | 去向 |
-|----|------|------|------|------|------|
-| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | Phase 1 E2E | 🟡 **active** | checkpoint.json | **Phase 2 S1.T4** |
-| **D84** | CLI `session events --follow` SSE 未实现 | Phase 1 E2E | 🟡 **active** | checkpoint.json | **Phase 2 S4.T2** |
-| **D85** | `STOP` event `response_text` 空 | Phase 1 E2E | 🟡 **active** | checkpoint.json | **Phase 2 S1.T5** |
-| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | Phase 1 E2E | 🟡 **active** | checkpoint.json | **Phase 2 S1.T3** |
-| **D87** 🚨 | grid-engine agent loop 多步工作流过早终止 | Phase 1 E2E | ✅ **closed 2026-04-14** | ADR-V2-016 Accepted · commits `bdc4fd5` + `c0f98f9` + `8a738b1` · Multi-model E2E verified | — |
-| **D88** 🚨 | hermes-runtime stdio MCP 缺失 | Phase 1 E2E | ⏸️ **frozen / superseded** | ADR-V2-017 Accepted · hermes 冻结，由 Phase 2.5 goose-runtime 完整替代 | Phase 2.5 goose |
-| **D89** | CLI `session close` 未实现 | Phase 1 E2E | 🟡 **active** | checkpoint.json | **Phase 2 S4.T1** |
+| ID | 标题 | 状态 | 处理位置 |
+|----|------|------|----------|
+| **D83** | grid-runtime ToolResult chunk 缺 `tool_name` | 🔥 P0-active | **S1.T4** |
+| **D84** | CLI `session events --follow` SSE 未实现 (合并 D35) | 🔥 P0-active | **S4.T2** |
+| **D85** | `STOP` event `response_text` 空 | 🔥 P0-active | **S1.T5** |
+| **D86** | claude-code-runtime SDK wrapper 丢 `ToolResultBlock` | 🔥 P0-active | **S1.T3** |
+| **D87** 🚨 | grid-engine agent loop 多步工作流过早终止 | ✅ closed 2026-04-14 | ADR-V2-016 · `bdc4fd5`/`c0f98f9`/`8a738b1` · Multi-model E2E |
+| **D88** 🚨 | hermes-runtime stdio MCP 缺失 | ⏸️ frozen / superseded | ADR-V2-017 → Phase 2.5 goose |
+| **D89** | CLI `session close` 未实现 | 🔥 P0-active | **S4.T1** |
 
 ---
 
@@ -201,28 +240,54 @@
 
 | 日期 | ID | 变更 | 证据 |
 |------|-----|------|------|
-| 2026-04-14 | D87 | active → ✅ closed | ADR-V2-016 Accepted, multi-model E2E PASS |
-| 2026-04-14 | D88 | active → ⏸️ frozen/superseded | ADR-V2-017 Accepted (hermes 冻结) |
-| 2026-04-14 | — | **ledger 创建** | 初始化，收敛 D1–D89 到 single source of truth |
-| 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite (4个 commit) |
+| 2026-04-14 | D3, D5, D6, D37 | active → 🤔 revisit-after-S2 | 需 S2 context engineering 决策后判断 |
+| 2026-04-14 | D8, D9, D34, D38, D41, D46, D62, D63, D64 | active → 🔴 phase3-gated | 依赖 Phase 3 身份/租户模型 |
+| 2026-04-14 | D21, D25, D32, D36, D56, D73, D75, D76, D77, D79, D80 | active → 📦 long-term | Phase 4/5/6 路线 |
+| 2026-04-14 | D10/11/13/14/15/16/17/18/19/20/22/23/24/26/28/29/30/31/33/39/42/43/44/45/48/55/57/58/59/61/65 | active → 🧹 tech-debt | 纯技术债，Phase 2 后批量清 |
+| 2026-04-14 | D12, D60 | active → 🟢 P2-active | S2 顺带完成 |
+| 2026-04-14 | D50, D51, D53, D78 | active → 🟡 P1-active | 功能缺口必补，挂到 S2/S3 |
+| 2026-04-14 | D35 | active → 🔥 合并到 D84 | SSE event streaming 与 CLI --follow 合并 |
+| 2026-04-14 | D74 | active → 🔵 P3-active | Phase 2 可选加速 |
+| 2026-04-14 | — | **重分类** | 40 active → 12 真需修 + 26 降级归档 |
+| 2026-04-14 | D87 | active → ✅ closed | ADR-V2-016, multi-model E2E PASS |
+| 2026-04-14 | D88 | active → ⏸️ frozen/superseded | ADR-V2-017 (hermes 冻结) |
+| 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
+| 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
 | 2026-04-12 | D27, D40 | active → 🔄 superseded by D54 | ADR-V2-004 精化 |
 | 2026-04-12 | D54 | active → ✅ closed | Phase 0.5 S1 实装 |
-| 2026-04-11 | D7 | active → ✅ closed | Phase 1 Event Engine 完成 |
+| 2026-04-11 | D7 | active → ✅ closed | Phase 1 Event Engine |
 
 ---
 
-## 统计汇总 (2026-04-14)
+## 统计汇总 (2026-04-14 重分类后 — EAASP v2.0 对齐)
 
-| 状态 | 数量 | 说明 |
-|------|------|------|
-| ✅ **closed** | 10 | D1, D2, D4, D7, D47, D49, D52, D54, D87 + legacy |
-| 🔄 **superseded** | 2 | D27 → D54; D40 → D54 |
-| ⏸️ **frozen** | 2 | D66, D88 (hermes 冻结，由 Phase 2.5 goose 替代) |
-| 🟡 **active** (待处理) | 40 | 大部分技术债 + Phase 2 入口 5 项 |
-| 🔴 **planned** (推迟到后续 Phase) | 14 | Phase 2.5 / 3 / 4 / 5 / 6 |
-| **占位未用** | 16 | D67-D72, D81-D82 编号段 |
-| **总计有效** | **68** | D 编号 1–89 扣除占位 |
+**真正需处理的 D 项 = 13 项**（P0 + P1 + P2 + P3）
+
+| 状态 | 数量 | D 编号 | 含义 |
+|------|------|--------|------|
+| ✅ **closed** | 9 | D1, D2, D4, D7, D47, D49, D52, D54, D87 | 已完成 |
+| 🔄 **superseded** | 2 | D27→D54, D40→D54 | 被其他 D 或 ADR 取代 |
+| ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
+| 🔥 **P0-active** | 6 | D83, D84 (含D35), D85, D86, D89 | **Phase 2 plan 已排期必做** |
+| 🟡 **P1-active** | 4 | D50, D51, D53, D78 | **挂到 S2/S3 新任务必做** |
+| 🟢 **P2-active** | 2 | D12, D60 | S2 顺带完成 |
+| 🔵 **P3-active** | 1 | D74 | Phase 2 可选加速 |
+| 🤔 **revisit-after-S2** | 4 | D3, D5, D6, D37 | 等 S2 context engineering 决策 |
+| 🔴 **phase3-gated** | 9 | D8, D9, D34, D38, D41, D46, D62, D63, D64 | Phase 3 身份/租户模型 |
+| 📦 **long-term** | 11 | D21, D25, D32, D36, D56, D73, D75, D76, D77, D79, D80 | Phase 4/5/6 |
+| 🧹 **tech-debt** | 18 | D10, D11, D13, D14, D15, D16, D17, D18, D19, D20, D22, D23, D24, D26, D28, D29, D30, D31, D33, D39, D42, D43, D44, D45, D48, D55, D57, D58, D59, D61, D65 | Phase 2 后批量清 |
+| **占位未用** | — | D67-D72, D81-D82 | 不计入 |
+| **合计** | **68** | D1–D89 去重（81 表格行含 D66/D88 各出现 2 次） | |
+
+### 给开发者的一句话指引
+
+| 角色 | 真正要关心的 |
+|------|--------------|
+| **当前 Phase 2 推进** | 13 项（P0×6 + P1×4 + P2×2 + P3×1）— 全部已挂到具体 Stage 任务 |
+| **Phase 2 结束 end-phase** | P0/P1/P2 完成 + 启动 tech-debt batch cleanup |
+| **Phase 3 规划时** | 查 🔴 phase3-gated + 🤔 revisit 四项 |
+| **Phase 4+ 长期规划** | 查 📦 long-term |
 
 ---
 
