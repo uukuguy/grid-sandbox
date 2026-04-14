@@ -1,5 +1,15 @@
 # S1.T1 — D87 修复实施计划：grid-engine agent loop 过早退出
 
+> **⚠️ SUPERSEDED（2026-04-14）** — 本计划基于错误假设：以为 D87 的根因是 `harness.rs:1169` 的退出条件 `stop_reason != ToolUse || tool_uses.is_empty()` 有 bug，要改成 `tool_uses.is_empty()`。**实际上这两个表达式在 `tool_uses` 为空时逻辑等价**，修改不改变任何行为（2026-04-14 实操验证：regression test 在修改后仍 FAIL，同样 `got 1, seen ["read_data"]`）。
+>
+> **真正的根因**：grid-engine harness.rs 的 loop 设计与 claude-code 等价（正确的 REPL 模式 loop），但 **EAASP 是 non-interactive skill 执行场景**，缺少 hermes-style 的 `intermediate-ack detection + continuation 注入`。详见 `docs/design/EAASP/AGENT_LOOP_ROOT_CAUSE_ANALYSIS.md`。
+>
+> **新修复方向**：见 `docs/plans/2026-04-14-v2-phase2-plan.md` S1.T1 章节，照抄 hermes `run_agent.py:10049-10074` 的 intermediate-ack 注入。
+>
+> **本文档保留**：作为 2026-04-14 错误诊断过程的历史记录，以便后人理解为什么"看似 1 行修复"的 bug 实际需要更深入的根因分析。
+
+---
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 修复 grid-engine `harness.rs:1169` 错误退出条件，让 agent loop 在 LLM 持续返回 tool_use 时继续推进多步工作流，且通过 grid-runtime + threshold-calibration 真实 E2E 验收。
