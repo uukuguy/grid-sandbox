@@ -284,6 +284,66 @@ async def test_ingest_endpoint_persists_event_to_backend(
 
 
 @respx.mock
+async def test_list_events_api_returns_phase1_fields(
+    event_engine_app_client: httpx.AsyncClient,
+    tmp_db_path: str,
+) -> None:
+    """CRITICAL: GET /v1/sessions/{id}/events must return event_id/source/cluster_id.
+
+    Manual E2E 2026-04-14 discovered the API layer was dropping Phase 1 columns
+    because SessionEventStream.list_events SELECT'd only the Phase 0 columns.
+    New fields were persisted but invisible to users.
+    """
+    _mock_upstreams()
+
+    # Create session + send message — produces Phase 1 events via interceptor.
+    resp = await event_engine_app_client.post(
+        "/v1/sessions/create",
+        json={
+            "intent_text": "t",
+            "skill_id": "skill.test",
+            "runtime_pref": "grid-runtime",
+        },
+    )
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+
+    resp = await event_engine_app_client.post(
+        f"/v1/sessions/{session_id}/message",
+        json={"content": "read T-001"},
+    )
+    assert resp.status_code == 200
+
+    # Wait for pipeline to assign cluster_id
+    await asyncio.sleep(1.5)
+
+    # ★ Query via HTTP (not direct backend) — proves API surfaces Phase 1 fields
+    resp = await event_engine_app_client.get(f"/v1/sessions/{session_id}/events")
+    assert resp.status_code == 200
+    events = resp.json()["events"]
+
+    # Find interceptor-produced events
+    pre_tool_events = [e for e in events if e["event_type"] == "PRE_TOOL_USE"]
+    assert pre_tool_events, "PRE_TOOL_USE missing — interceptor not firing"
+
+    pre = pre_tool_events[0]
+    # PROOF: API returns Phase 1 fields
+    assert "event_id" in pre, f"API dropped event_id field. Got keys: {list(pre.keys())}"
+    assert pre["event_id"], f"event_id empty: {pre}"
+    assert "source" in pre, "API dropped source field"
+    assert pre["source"] == "interceptor:grid-runtime", (
+        f"source mismatch: {pre['source']!r}"
+    )
+    assert "cluster_id" in pre, "API dropped cluster_id field"
+    assert pre["cluster_id"], (
+        f"cluster_id empty — pipeline worker may not have run: {pre}"
+    )
+    assert pre["cluster_id"].startswith("c-"), (
+        f"cluster_id format wrong: {pre['cluster_id']!r}"
+    )
+
+
+@respx.mock
 async def test_ingest_failure_does_not_abort_stream(
     event_engine_app_client: httpx.AsyncClient,
 ) -> None:

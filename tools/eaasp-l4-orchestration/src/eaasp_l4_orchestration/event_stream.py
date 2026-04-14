@@ -90,9 +90,13 @@ class SessionEventStream:
 
         db = await connect(self.db_path)
         try:
+            # Phase 1: include event_id, source, metadata_json, cluster_id
+            # columns. These are NULL for pre-Phase-1 rows; COALESCE ensures
+            # consistent empty-string output for legacy rows.
             cur = await db.execute(
                 """
-                SELECT seq, session_id, event_type, payload_json, created_at
+                SELECT seq, session_id, event_type, payload_json, created_at,
+                       event_id, source, metadata_json, cluster_id
                 FROM session_events
                 WHERE session_id = ?
                   AND seq BETWEEN ? AND ?
@@ -105,6 +109,14 @@ class SessionEventStream:
         finally:
             await db.close()
 
+        def _metadata(raw: str | None) -> dict[str, Any]:
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw)
+            except (ValueError, TypeError):
+                return {}
+
         return [
             {
                 "seq": int(r["seq"]),
@@ -112,6 +124,10 @@ class SessionEventStream:
                 "event_type": r["event_type"],
                 "payload": json.loads(r["payload_json"]) if r["payload_json"] else {},
                 "created_at": int(r["created_at"]),
+                "event_id": r["event_id"] or "",
+                "source": r["source"] or "",
+                "metadata": _metadata(r["metadata_json"]),
+                "cluster_id": r["cluster_id"],
             }
             for r in rows
         ]
