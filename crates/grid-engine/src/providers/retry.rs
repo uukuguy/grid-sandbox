@@ -1,6 +1,8 @@
 use std::fmt;
 use std::time::Duration;
 
+use rand::Rng;
+
 /// Structured provider error carrying HTTP-level retry information.
 ///
 /// When a provider receives an HTTP error response, it wraps the details into
@@ -238,6 +240,11 @@ pub struct RetryPolicy {
     pub unattended: bool,
     /// Max delay between retries in unattended mode (default 5 min).
     pub unattended_max_delay: Duration,
+    /// When true, applies ±15% multiplicative jitter to each computed delay to
+    /// prevent thundering-herd retries (default false for back-compat).
+    /// The jitter is clamped to never exceed `max_delay` (or
+    /// `unattended_max_delay` in unattended mode) and never fall below zero.
+    pub jitter: bool,
 }
 
 impl Default for RetryPolicy {
@@ -249,6 +256,7 @@ impl Default for RetryPolicy {
             backoff_factor: 2.0,
             unattended: false,
             unattended_max_delay: Duration::from_secs(300),
+            jitter: false,
         }
     }
 }
@@ -264,14 +272,52 @@ impl RetryPolicy {
             backoff_factor: 2.0,
             unattended: true,
             unattended_max_delay: Duration::from_secs(300),
+            jitter: false,
         }
     }
 
-    /// 计算第 attempt 次重试的等待时间（指数退避）
+    /// Graduated retry policy per S1.T7 (claude-code `withRetry` pattern).
+    ///
+    /// Exponential backoff 1s → 2s → 4s → 8s capped at 30s + ±15% jitter,
+    /// max 3 retries. Suitable for attended interactive sessions where the
+    /// user is waiting for a response.
+    pub fn graduated() -> Self {
+        Self {
+            max_retries: 3,
+            base_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(30),
+            backoff_factor: 2.0,
+            unattended: false,
+            unattended_max_delay: Duration::from_secs(300),
+            jitter: true,
+        }
+    }
+
+    /// 计算第 attempt 次重试的等待时间（指数退避）。
+    ///
+    /// 当 `self.jitter == true` 时，应用 ±15% 乘性抖动以避免重试风暴。
+    /// 抖动后的延迟被 clamp 到 `[0, cap]`，其中 cap 为 `unattended_max_delay`
+    /// (unattended mode) 或 `max_delay` (attended mode)。
     pub fn delay_for(&self, attempt: u32) -> Duration {
         let delay_secs = self.base_delay.as_secs_f64() * self.backoff_factor.powi(attempt as i32);
-        let clamped = delay_secs.min(self.max_delay.as_secs_f64());
-        Duration::from_secs_f64(clamped)
+        let cap = if self.unattended {
+            self.unattended_max_delay.as_secs_f64()
+        } else {
+            self.max_delay.as_secs_f64()
+        };
+        if !self.jitter {
+            // Deterministic path — preserves existing behaviour (and tests).
+            let clamped = delay_secs.min(cap);
+            return Duration::from_secs_f64(clamped);
+        }
+        // Clamp first to avoid jittering astronomical pre-cap values, then
+        // apply ±15% multiplicative jitter, then clamp again to stay within
+        // [0, cap] (upper jitter on the cap itself must not exceed the cap).
+        let base_clamped = delay_secs.min(cap);
+        let jitter_factor = 1.0 + rand::thread_rng().gen_range(-0.15_f64..=0.15_f64);
+        let jittered = base_clamped * jitter_factor;
+        let bounded = jittered.max(0.0).min(cap);
+        Duration::from_secs_f64(bounded)
     }
 
     /// 使用 RetryInfo 判断是否重试，并计算延迟
@@ -634,5 +680,119 @@ mod tests {
         };
         let delay = policy.should_retry_with_info(&info, 0);
         assert_eq!(delay, Some(Duration::from_secs(60)));
+    }
+
+    // ===== S1.T7 — Graduated retry policy tests =====
+
+    #[test]
+    fn test_graduated_policy_fields() {
+        let p = RetryPolicy::graduated();
+        assert_eq!(p.max_retries, 3, "graduated max_retries should be 3");
+        assert_eq!(
+            p.max_delay,
+            Duration::from_secs(30),
+            "graduated max_delay should be 30s"
+        );
+        assert_eq!(
+            p.base_delay,
+            Duration::from_secs(1),
+            "graduated base_delay should be 1s"
+        );
+        assert!(p.jitter, "graduated policy must enable jitter");
+        assert!(!p.unattended, "graduated policy is attended mode");
+        assert_eq!(p.backoff_factor, 2.0);
+    }
+
+    #[test]
+    fn test_delay_for_deterministic_without_jitter() {
+        // Default policy has jitter=false → deterministic exponential backoff.
+        let policy = RetryPolicy::default();
+        assert_eq!(
+            policy.delay_for(2),
+            Duration::from_secs(4),
+            "default policy: delay_for(2) must be exactly 4s (no jitter)"
+        );
+        // And the full sequence from the existing exponential test.
+        assert_eq!(policy.delay_for(0), Duration::from_secs(1));
+        assert_eq!(policy.delay_for(1), Duration::from_secs(2));
+        assert_eq!(policy.delay_for(3), Duration::from_secs(8));
+    }
+
+    #[test]
+    fn test_delay_for_with_jitter_within_bounds() {
+        let policy = RetryPolicy::graduated();
+        // For attempt 0, base delay is 1s. Jitter ±15% → [0.85s, 1.15s].
+        let lower = Duration::from_millis(850);
+        let upper = Duration::from_millis(1150);
+        for _ in 0..50 {
+            let d = policy.delay_for(0);
+            assert!(
+                d >= lower && d <= upper,
+                "attempt 0 jittered delay {:?} must be within [{:?}, {:?}]",
+                d,
+                lower,
+                upper,
+            );
+        }
+        // For very large attempt the pre-jitter value is astronomical but clamp
+        // keeps it at 30s (then jitter can only bring it down). The jittered
+        // value MUST still stay ≤ 30s (our post-jitter clamp guarantees it).
+        let cap = Duration::from_secs(30);
+        for _ in 0..50 {
+            let d = policy.delay_for(10);
+            assert!(
+                d <= cap,
+                "attempt 10 jittered delay {:?} must be ≤ cap {:?}",
+                d,
+                cap,
+            );
+            // Lower bound: after clamp to 30s, -15% jitter ≈ 25.5s (but post-
+            // jitter re-clamp to [0, cap] only enforces the upper bound, so
+            // lower sanity is simply > 25s).
+            assert!(
+                d >= Duration::from_secs(25),
+                "attempt 10 jittered delay {:?} is suspiciously low",
+                d,
+            );
+        }
+    }
+
+    #[test]
+    fn test_graduated_backoff_sequence() {
+        // Attempts 0..=3 give base delays 1s, 2s, 4s, 8s; each jittered ±15%.
+        let policy = RetryPolicy::graduated();
+        let expected_bases = [1.0_f64, 2.0, 4.0, 8.0];
+        for (attempt, base) in expected_bases.iter().enumerate() {
+            let lo = base * 0.85;
+            let hi = base * 1.15;
+            // 20 samples per attempt to reduce flakiness from one unlucky draw.
+            for _ in 0..20 {
+                let d = policy.delay_for(attempt as u32).as_secs_f64();
+                assert!(
+                    d >= lo && d <= hi,
+                    "attempt {}: delay {:.4}s must be within [{:.4}s, {:.4}s]",
+                    attempt,
+                    d,
+                    lo,
+                    hi,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_jitter_does_not_exceed_max_delay() {
+        // attempt 10 → pre-clamp 1024s → must be ≤ max_delay (30s) AFTER jitter.
+        let policy = RetryPolicy::graduated();
+        let cap = Duration::from_secs(30);
+        for _ in 0..100 {
+            let d = policy.delay_for(10);
+            assert!(
+                d <= cap,
+                "attempt 10 delay {:?} exceeds graduated max_delay {:?}",
+                d,
+                cap,
+            );
+        }
     }
 }

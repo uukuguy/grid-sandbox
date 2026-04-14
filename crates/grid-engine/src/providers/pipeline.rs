@@ -23,8 +23,9 @@ use tracing::{debug, warn};
 
 use grid_types::{CompletionRequest, CompletionResponse};
 
+use super::error_classifier::FailoverReason;
 use super::response_cache::ResponseCacheProvider;
-use super::retry::{ErrorStrategy, ProviderError, RetryInfo, RetryPolicy};
+use super::retry::{LlmErrorKind, ProviderError, RetryPolicy};
 use super::smart_router::{QueryAnalyzer, QueryComplexity, SmartRouterProvider};
 use super::traits::{CompletionStream, Provider};
 use super::usage_recorder::{UsageRecorderProvider, UsageStats};
@@ -334,70 +335,107 @@ impl Provider for RetryProvider {
         self.inner.id()
     }
 
+    /// Retry with graduated backoff + FailoverReason routing.
+    ///
+    /// Per S1.T7 we use `FailoverReason::classify()` + `recovery_actions()`
+    /// instead of the coarser `LlmErrorKind::routing_strategy()`. This gives
+    /// 14 error variants with independent `retryable / should_compress /
+    /// should_rotate_credential / should_fallback` bits, letting the retry
+    /// decorator make precise decisions:
+    ///
+    /// * `retryable == false` → propagate immediately (AuthPermanent, Billing,
+    ///   FormatError, ModelNotFound, LongContextTier).
+    /// * `should_compress == true` → propagate so the harness can compact
+    ///   context (ContextOverflow, PayloadTooLarge).
+    /// * `should_rotate_credential == true` → emit warning; rotation itself
+    ///   happens at the harness / credential-manager layer.
+    /// * Otherwise retry with the policy's (possibly jittered) backoff, up to
+    ///   `max_retries`.
     async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
         let mut last_err = None;
         for attempt in 0..=self.policy.max_retries {
             match self.inner.complete(request.clone()).await {
                 Ok(resp) => return Ok(resp),
                 Err(e) => {
-                    // Extract structured RetryInfo if the provider emitted a ProviderError,
-                    // otherwise fall back to string-based classification from the error message.
-                    let retry_info = if let Some(pe) = e.downcast_ref::<ProviderError>() {
-                        pe.retry_info.clone()
-                    } else {
-                        // Legacy path: classify from error message text.
-                        let msg = e.to_string().to_lowercase();
-                        let kind = super::retry::LlmErrorKind::classify_from_str(&msg);
-                        RetryInfo {
-                            kind,
-                            retry_after: None,
-                            error_code: None,
-                        }
-                    };
+                    // Classify the error. Prefer the structured ProviderError
+                    // (HTTP status + body + error_code) when available; fall
+                    // back to string scan for legacy/bare `anyhow` errors.
+                    //
+                    // For the bare-string fallback path we cannot distinguish
+                    // transient vs permanent auth — there is no `error_code`
+                    // or body to inspect — so we conservatively route
+                    // `AuthError` to `AuthPermanent` (non-retryable). Callers
+                    // that want credential rotation must emit a structured
+                    // `ProviderError` so `FailoverReason::classify()` has a
+                    // body + code to split `Auth` from `AuthPermanent`.
+                    let (reason, retry_after) =
+                        if let Some(pe) = e.downcast_ref::<ProviderError>() {
+                            (FailoverReason::classify(pe), pe.retry_info.retry_after)
+                        } else {
+                            let msg = e.to_string().to_lowercase();
+                            let kind = LlmErrorKind::classify_from_str(&msg);
+                            // Map coarse LlmErrorKind → FailoverReason fallback.
+                            let reason = match kind {
+                                LlmErrorKind::RateLimit => FailoverReason::RateLimit,
+                                LlmErrorKind::Overloaded => FailoverReason::Overloaded,
+                                LlmErrorKind::Timeout => FailoverReason::Timeout,
+                                LlmErrorKind::ServiceError => FailoverReason::ServerError,
+                                LlmErrorKind::BillingError => FailoverReason::Billing,
+                                // Conservative for the fallback path: bare
+                                // anyhow auth errors have no metadata, so we
+                                // treat them as permanent to preserve the
+                                // invariant "legacy auth errors never retry".
+                                LlmErrorKind::AuthError => FailoverReason::AuthPermanent,
+                                LlmErrorKind::ContextOverflow => FailoverReason::ContextOverflow,
+                                LlmErrorKind::Unknown => FailoverReason::Unknown,
+                            };
+                            (reason, None)
+                        };
 
-                    // Use routing_strategy() to decide the recovery action.
-                    let strategy = retry_info.kind.routing_strategy();
-                    match strategy {
-                        ErrorStrategy::Fail => {
-                            // Non-recoverable — return immediately (auth, billing).
-                            return Err(e);
-                        }
-                        ErrorStrategy::Failover => {
-                            // Failover errors (ServiceError, Timeout) should propagate
-                            // so the outer ProviderChain/CircuitBreaker can pick a
-                            // different backend. Retry only within max_retries.
-                            if attempt == self.policy.max_retries {
-                                return Err(e);
-                            }
-                        }
-                        ErrorStrategy::CompactAndRetry => {
-                            // Context overflow — cannot be solved by simple retry.
-                            // Propagate so higher layers can compact context.
-                            return Err(e);
-                        }
-                        ErrorStrategy::Retry => {
-                            // Retryable (RateLimit, Overloaded, Unknown).
-                            if attempt == self.policy.max_retries {
-                                return Err(e);
-                            }
-                        }
+                    let actions = reason.recovery_actions();
+
+                    // Non-retryable: propagate immediately (AuthPermanent,
+                    // Billing, FormatError, ModelNotFound, LongContextTier).
+                    if !actions.retryable {
+                        return Err(e);
+                    }
+                    // Compression signal: propagate to harness — simple retry
+                    // cannot solve the size problem (ContextOverflow /
+                    // PayloadTooLarge).
+                    if actions.should_compress {
+                        return Err(e);
+                    }
+                    // Retries exhausted.
+                    if attempt == self.policy.max_retries {
+                        return Err(e);
+                    }
+                    // Credential rotation signal — surface for observability;
+                    // actual rotation happens at the harness layer.
+                    if actions.should_rotate_credential {
+                        warn!(
+                            "credential rotation recommended for FailoverReason::{:?}",
+                            reason
+                        );
                     }
 
-                    // Compute delay: prefer RetryInfo (honours Retry-After header),
-                    // fall back to exponential backoff.
-                    let delay = self
-                        .policy
-                        .should_retry_with_info(&retry_info, attempt)
-                        .unwrap_or_else(|| self.policy.delay_for(attempt));
+                    // Delay: honour Retry-After header when present, else
+                    // exponential backoff (with jitter if policy.jitter).
+                    let delay = retry_after.unwrap_or_else(|| self.policy.delay_for(attempt));
+                    let cap = if self.policy.unattended {
+                        self.policy.unattended_max_delay
+                    } else {
+                        self.policy.max_delay
+                    };
+                    let delay = delay.min(cap);
 
                     warn!(
-                        "Retry attempt {}/{} after {:?} (kind={:?}, strategy={:?}): {}",
+                        "retry {}/{} after {:?} (reason={:?}, actions={:?}): {}",
                         attempt + 1,
                         self.policy.max_retries,
                         delay,
-                        retry_info.kind,
-                        strategy,
-                        e,
+                        reason,
+                        actions,
+                        e
                     );
                     tokio::time::sleep(delay).await;
                     last_err = Some(e);
