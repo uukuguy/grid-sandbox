@@ -1,5 +1,103 @@
 # Grid Platform 开发工作日志
 
+## 2026-04-14 — EAASP v2.0 Phase 1 Event-driven Foundation 🟢 Completed
+
+### 会话概要
+
+Phase 1 Event-driven Foundation 13/13 tasks 全部完成，E2E 人工验证通过。Event Engine 不仅兑现了可观测性承诺，更暴露了 Phase 0.5 MVP 简单 skill 掩盖的 3 个 runtime 深层 bug（D86/D87/D88），为 Phase 2 提供明确起点。
+
+### 完成内容
+
+**核心模块（7 新文件）**
+- `event_models.py` — Event + EventMetadata 数据模型（UUID + timestamp 自动分配）
+- `event_backend.py` + `event_backend_sqlite.py` — SqliteWalBackend 可插拔接口（FTS5 + subscribe polling）
+- `event_handlers.py` — 4 handler pipeline（Ingestor + TimeWindowDedup + TimeWindowCluster + FTS5Indexer）
+- `event_engine.py` — async worker + handler chain + cluster_id 回写
+- `event_interceptor.py` — L4 拦截器从 L1 chunks 提取 PRE_TOOL_USE/POST_TOOL_USE/STOP
+- `test_event_integration.py` + `test_fts_migration.py` — 集成测试（防止"测试谎言"）
+
+**wiring 改造**
+- `session_orchestrator.py` — EventEngine + Interceptor 注入，send_message + stream_message 均触发
+- `api.py` — POST /v1/events/ingest + EventEngine 在 lifespan 启动/停止
+- `cmd_session.py` — `eaasp session events` 命令带颜色编码 + cluster 显示
+- `contract.rs` + `service.rs` (Rust) — EmitEvent 从 PLACEHOLDER 升级为 OPTIONAL no-op
+
+**ADR 落地（3 个 Accepted）**
+- ADR-V2-001: EmitEvent 混合拦截器 + OPTIONAL RPC
+- ADR-V2-002: SQLite WAL + EventStreamBackend 接口抽象
+- ADR-V2-003: 4 Handler Pipeline
+
+### 技术变更
+
+| 文件 | 改动 |
+|------|------|
+| `tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/` | 6 新模块 + session_orchestrator 集成 + api.py ingest endpoint |
+| `tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/db.py` | Phase 1 migration: event_id/source/metadata_json/cluster_id 列 + FTS5 + rebuild 回填 |
+| `tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/event_stream.py` | list_events SELECT 扩展为新列（E2E 暴露修复） |
+| `tools/eaasp-cli-v2/src/eaasp_cli_v2/cmd_session.py` | events 子命令 |
+| `crates/grid-runtime/` | EmitEvent 契约升级 |
+| `crates/grid-engine/tests/d87_multi_step_workflow_regression.rs` | D87 regression test 锁定 |
+
+### 测试结果
+
+- **L4 Python**: 124 PASS, 0 FAIL（原 70 + 新 54）
+- **CLI Session**: 13 PASS
+- **grid-runtime Rust**: 1 PASS (test_emit_event_returns_ok)
+- **D87 baseline**: 1 PASS (test_d87_single_tool_workflow_still_works)
+- **Zero regression**
+
+### 两轮集成审计
+
+**第一轮审计**（081c21b）修 4 个 CRITICAL:
+1. chunk_type "tool_call_start" vs grid-runtime 真实 "tool_start" 不匹配
+2. 拦截器只在 stream_message 注入，漏 send_message
+3. /v1/events/ingest 缺 session 存在性检查
+4. 测试只检 HTTP 200，不验证数据落盘
+
+**第二轮审计**（8c174c2）修 2 个 HIGH:
+1. stream_message 在 ingest 失败时中断（无韧性）
+2. FTS5 迁移不回填 Phase 0.5 旧事件
+
+**E2E 暴露的第三批 bug**（6f8548b）:
+- SessionEventStream.list_events SELECT 漏读 Phase 1 新列 → API 返回缺字段
+
+### E2E 验证
+
+**grid-runtime** (sess_7a5654e7c6d4):
+- 事件链: SESSION_CREATED → RUNTIME_INITIALIZED → SESSION_START → SESSION_MCP_CONNECTED → USER_MESSAGE → RESPONSE_CHUNKs → PRE_TOOL_USE(scada_read_snapshot) → POST_TOOL_USE → STOP
+- 字段齐全: event_id UUID / source=interceptor:grid-runtime / cluster_id=c-e8db24de
+- **发现 D87**: 只调 1 个 tool 就停，跳过 skill 后续 5 步
+
+**claude-code-runtime** (sess_f58877353378):
+- 4 个 PRE_TOOL_USE: scada_read_snapshot / memory_search / memory_write_anchor / memory_write_file
+- **发现 D86**: POST_TOOL_USE 全缺失（SDK wrapper 丢 UserMessage.ToolResultBlock）
+
+**hermes-runtime** (运行中断):
+- 0 个 PRE_TOOL_USE，LLM 输出"让我模拟 SCADA 数据"→编造虚假证据
+- **发现 D88**: stdio MCP 不支持，service.py:374-382 谎报 connected=True
+
+### Phase 1 产出的 7 个 Deferred（Phase 2 处理）
+
+| ID | 严重度 | 描述 |
+|---|--------|------|
+| D83 | LOW | grid-runtime ToolResult 缺 tool_name |
+| D84 | LOW | CLI --follow SSE 未实现 |
+| D85 | LOW | STOP response_text 空 |
+| D86 | HIGH | claude-code-runtime SDK 丢 ToolResultBlock |
+| **D87** | **CRITICAL** | **grid-engine agent loop 过早终止（多步工作流）** |
+| **D88** | **CRITICAL** | **hermes-runtime stdio MCP 支持缺失 → 幻觉** |
+| D89 | LOW | CLI session close 未实装 |
+
+### 设计评分
+
+Phase 1 Event Engine **超越可观测性目标**：
+- ✅ 事件流实时可查（CLI events 命令可用）
+- ✅ Pipeline 正确运行（cluster_id 正确分配）
+- ✅ 不只看到预期行为，更**让不对的行为无处可藏**（暴露 3 个 runtime 深层 bug）
+- ✅ "测试谎言"模式识别并建立检查机制（/integration-audit 全局命令）
+
+---
+
 ## 2026-04-04 — Welcome Panel 视觉大修 + 品牌重设计
 
 ### 会话概要
