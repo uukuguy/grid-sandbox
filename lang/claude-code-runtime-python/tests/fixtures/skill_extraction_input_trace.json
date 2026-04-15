@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "fixture_name": "skill_extraction_input_trace",
+  "comment": "S3.T3 deterministic replay input. Minimal TOOL_RESULT-only variant — represents a 6-step threshold-calibration session clustered in L2 memory. The skill-extraction meta-skill reads this trace and emits a SKILL.md draft. Event shape follows tools/eaasp-l4-orchestration/tests/test_event_models.py (top-level event_id/event_type/payload/session_id/created_at, plus optional cluster_id). created_at is unix epoch seconds per SKILL.md §2. Full PRE_TOOL_USE/TOOL_RESULT/POST_TOOL_USE event triplets belong to future S3.T5 hook-executor E2E (this fixture targets workflow-replay correctness, not hook-fire assertions).",
+  "cluster_id": "cluster_threshold_xfmr042_v1",
+  "session_id": "sess_20260415_001",
+  "access_scope": "org:eaasp-mvp",
+  "events": [
+    {
+      "event_id": "evt_0001",
+      "event_type": "TOOL_RESULT",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168000,
+      "seq": 1,
+      "payload": {
+        "tool_name": "memory_search",
+        "tool_args": {
+          "query": "threshold_calibration xfmr-042",
+          "category": "threshold_calibration",
+          "top_k": 5
+        },
+        "tool_result": {
+          "hits": [
+            {"memory_id": "mem_threshold_xfmr-042_v2", "relevance": 0.92, "scope": "org:eaasp-mvp"}
+          ]
+        }
+      }
+    },
+    {
+      "event_id": "evt_0002",
+      "event_type": "TOOL_RESULT",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168003,
+      "seq": 2,
+      "payload": {
+        "tool_name": "scada_read_snapshot",
+        "tool_args": {
+          "device_id": "xfmr-042",
+          "time_window": "7d"
+        },
+        "tool_result": {
+          "device_id": "xfmr-042",
+          "snapshot_id": "snap_xfmr-042_20260415",
+          "samples": [
+            {"ts": 1713167900, "temp_c": 65.2, "load_pct": 0.78, "doa_h2_ppm": 22.1},
+            {"ts": 1713167960, "temp_c": 66.0, "load_pct": 0.80, "doa_h2_ppm": 22.5}
+          ]
+        }
+      }
+    },
+    {
+      "event_id": "evt_0003",
+      "event_type": "TOOL_RESULT",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168006,
+      "seq": 3,
+      "payload": {
+        "tool_name": "memory_read",
+        "tool_args": {
+          "memory_id": "mem_threshold_xfmr-042_v2"
+        },
+        "tool_result": {
+          "memory_id": "mem_threshold_xfmr-042_v2",
+          "version": 2,
+          "scope": "org:eaasp-mvp",
+          "category": "threshold_calibration",
+          "status": "agent_suggested",
+          "content": "{\"temperature_c_max\": 68.0, \"load_pct_max\": 0.82, \"doa_h2_ppm_max\": 28.0}"
+        }
+      }
+    },
+    {
+      "event_id": "evt_0004",
+      "event_type": "TOOL_RESULT",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168010,
+      "seq": 4,
+      "payload": {
+        "tool_name": "memory_write_anchor",
+        "tool_args": {
+          "event_id": "evt_0004",
+          "session_id": "sess_20260415_001",
+          "type": "scada_snapshot",
+          "data_ref": "snap_xfmr-042_20260415",
+          "snapshot_hash": "sha256:9f2a7b1c",
+          "source_system": "threshold-calibration"
+        },
+        "tool_result": {
+          "anchor_id": "anc_threshold_src_001",
+          "event_id": "evt_0004",
+          "session_id": "sess_20260415_001",
+          "type": "scada_snapshot",
+          "created_at": 1713168010000
+        }
+      }
+    },
+    {
+      "event_id": "evt_0005",
+      "event_type": "TOOL_RESULT",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168014,
+      "seq": 5,
+      "payload": {
+        "tool_name": "memory_write_file",
+        "tool_args": {
+          "scope": "org:eaasp-mvp",
+          "category": "threshold_calibration",
+          "content": "{\"temperature_c_max\": 68.5, \"load_pct_max\": 0.82, \"doa_h2_ppm_max\": 28.0, \"decision\": \"revise\"}",
+          "evidence_refs": ["anc_threshold_src_001"],
+          "status": "agent_suggested"
+        },
+        "tool_result": {
+          "memory_id": "mem_threshold_xfmr-042_v3",
+          "version": 3,
+          "scope": "org:eaasp-mvp",
+          "category": "threshold_calibration",
+          "status": "agent_suggested"
+        }
+      }
+    },
+    {
+      "event_id": "evt_0006",
+      "event_type": "STOP",
+      "session_id": "sess_20260415_001",
+      "cluster_id": "cluster_threshold_xfmr042_v1",
+      "created_at": 1713168017,
+      "seq": 6,
+      "payload": {
+        "final_output": {
+          "device_id": "xfmr-042",
+          "proposal": {
+            "temperature_c_max": 68.5,
+            "load_pct_max": 0.82,
+            "doa_h2_ppm_max": 28.0
+          },
+          "decision": "revise",
+          "evidence_anchor_id": "anc_threshold_src_001",
+          "memory_id": "mem_threshold_xfmr-042_v3"
+        }
+      }
+    }
+  ]
+}
