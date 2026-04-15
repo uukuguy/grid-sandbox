@@ -15,6 +15,7 @@ Endpoints (MVP + Phase 1 Event Engine):
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -268,6 +269,90 @@ def create_app(
                 detail={"code": "session_not_found", "session_id": exc.session_id},
             ) from exc
         return {"session_id": session_id, "events": events}
+
+    # ─── S4.T2 (D84): list events as SSE stream (follow mode) ────────────
+    @app.get("/v1/sessions/{session_id}/events/stream")
+    async def stream_events(
+        session_id: str,
+        from_: int = Query(default=1, ge=1, alias="from"),
+        poll_interval_ms: int = Query(default=500, ge=50, le=5000),
+        heartbeat_secs: int = Query(default=15, ge=1, le=120),
+        max_idle_polls: int = Query(default=0, ge=0, le=10000),
+        orchestrator: SessionOrchestrator = Depends(get_orchestrator),
+    ) -> StreamingResponse:
+        """SSE tail-follow for session events.
+
+        Emits each event as ``event: event\\ndata: <json>\\n\\n``. Replays all
+        events with ``seq >= from`` then polls at ``poll_interval_ms``.
+        Heartbeat comments (``: hb``) are emitted every ``heartbeat_secs`` to
+        keep the connection alive and surface client disconnects quickly.
+
+        ``max_idle_polls=0`` (default) polls forever. Set a positive value to
+        terminate the stream after that many consecutive empty polls — useful
+        for "catch up then exit" workflows and for tests running under an
+        ASGI transport that buffers the full response body.
+        """
+        # Validate session up front (fail fast with 404 instead of in-stream).
+        try:
+            await orchestrator._require_session(session_id)
+        except SessionNotFound as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "session_not_found", "session_id": exc.session_id},
+            ) from exc
+
+        async def _sse_generator() -> AsyncIterator[str]:
+            last_seen = from_ - 1
+            last_heartbeat = asyncio.get_event_loop().time()
+            poll_s = poll_interval_ms / 1000.0
+            idle_polls = 0
+            while True:
+                try:
+                    events = await orchestrator.list_events(
+                        session_id,
+                        from_seq=last_seen + 1,
+                        limit=500,
+                    )
+                except SessionNotFound:
+                    # Session deleted mid-stream — emit a terminal error frame
+                    # and break rather than raising (can't raise inside a
+                    # started StreamingResponse body).
+                    yield (
+                        "event: error\n"
+                        "data: "
+                        + json.dumps(
+                            {
+                                "code": "session_not_found",
+                                "session_id": session_id,
+                            }
+                        )
+                        + "\n\n"
+                    )
+                    return
+                if events:
+                    idle_polls = 0
+                    for ev in events:
+                        payload = json.dumps(ev, ensure_ascii=False, default=str)
+                        yield f"event: event\ndata: {payload}\n\n"
+                        last_seen = int(ev["seq"])
+                else:
+                    idle_polls += 1
+                    if max_idle_polls and idle_polls >= max_idle_polls:
+                        return
+                now = asyncio.get_event_loop().time()
+                if now - last_heartbeat >= heartbeat_secs:
+                    yield ": hb\n\n"
+                    last_heartbeat = now
+                await asyncio.sleep(poll_s)
+
+        return StreamingResponse(
+            _sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # ─── Contract 5: get session ─────────────────────────────────────────
     @app.get("/v1/sessions/{session_id}")

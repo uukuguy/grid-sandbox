@@ -183,6 +183,96 @@ async def test_get_session_unknown_404(app_client: httpx.AsyncClient) -> None:
     assert resp.status_code == 404
 
 
+# ── S4.T2 (D84) — events SSE follow endpoint ─────────────────────────────
+
+
+async def test_stream_events_unknown_session_404(app_client: httpx.AsyncClient) -> None:
+    """Unknown session on SSE endpoint should 404 before stream starts."""
+    resp = await app_client.get("/v1/sessions/sess_ghost/events/stream")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "session_not_found"
+
+
+async def _collect_sse_data(
+    client: httpx.AsyncClient, url: str, expected_data_count: int
+) -> str:
+    """Open an SSE stream, collect ``expected_data_count`` data lines, return them.
+
+    ASGITransport doesn't honor httpx read-timeouts (in-memory transport with
+    no socket), so we rely on ``asyncio.wait_for`` as a hard termination fence
+    and ``break`` as the happy-path exit.
+    """
+    import asyncio
+
+    async def _inner() -> list[str]:
+        collected: list[str] = []
+        async with client.stream("GET", url) as resp:
+            assert resp.status_code == 200
+            assert resp.headers["content-type"].startswith("text/event-stream")
+            async for line in resp.aiter_lines():
+                collected.append(line)
+                data_count = sum(
+                    1 for line_ in collected if line_.startswith("data: ")
+                )
+                if data_count >= expected_data_count:
+                    break
+        return collected
+
+    collected = await asyncio.wait_for(_inner(), timeout=5.0)
+    return "\n".join(collected)
+
+
+async def test_stream_events_replays_existing(
+    app_client: httpx.AsyncClient,
+    tmp_db_path: str,
+    seed_session,
+) -> None:
+    """SSE stream replays pre-existing events in ascending seq order."""
+    from eaasp_l4_orchestration.event_stream import SessionEventStream
+
+    sid = await seed_session("sess_sse_replay")
+    stream = SessionEventStream(tmp_db_path)
+    await stream.append(sid, "SESSION_START", {"runtime_id": "grid-runtime"})
+    await stream.append(sid, "PRE_TOOL_USE", {"tool_name": "scada_read"})
+    await stream.append(sid, "STOP", {"reason": "complete"})
+
+    blob = await _collect_sse_data(
+        app_client,
+        f"/v1/sessions/{sid}/events/stream?from=1&poll_interval_ms=50&max_idle_polls=1",
+        expected_data_count=3,
+    )
+    assert "SESSION_START" in blob
+    assert "PRE_TOOL_USE" in blob
+    assert "STOP" in blob
+    # Ordering: SESSION_START appears before PRE_TOOL_USE appears before STOP.
+    assert blob.index("SESSION_START") < blob.index("PRE_TOOL_USE") < blob.index("STOP")
+
+
+async def test_stream_events_from_seq_filters(
+    app_client: httpx.AsyncClient,
+    tmp_db_path: str,
+    seed_session,
+) -> None:
+    """?from=N must skip events with seq < N."""
+    from eaasp_l4_orchestration.event_stream import SessionEventStream
+
+    sid = await seed_session("sess_sse_from")
+    stream = SessionEventStream(tmp_db_path)
+    await stream.append(sid, "SESSION_START", {})
+    await stream.append(sid, "PRE_TOOL_USE", {"tool_name": "a"})
+    await stream.append(sid, "POST_TOOL_USE", {"tool_name": "a"})
+
+    blob = await _collect_sse_data(
+        app_client,
+        f"/v1/sessions/{sid}/events/stream?from=2&poll_interval_ms=50&max_idle_polls=1",
+        expected_data_count=2,
+    )
+    # seq=1 (SESSION_START) must be skipped; 2+3 must appear.
+    assert "SESSION_START" not in blob
+    assert "PRE_TOOL_USE" in blob
+    assert "POST_TOOL_USE" in blob
+
+
 @respx.mock
 async def test_list_sessions(app_client: httpx.AsyncClient) -> None:
     """GET /v1/sessions returns all sessions, newest first."""

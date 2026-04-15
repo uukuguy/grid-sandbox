@@ -106,15 +106,22 @@ class ServiceClient:
         self,
         url: str,
         *,
+        method: str = "POST",
         json_body: Any = None,
+        params: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """POST to an SSE endpoint and yield parsed ``{event, data}`` dicts.
+        """Open an SSE stream and yield parsed ``{event, data}`` dicts.
+
+        ``method`` defaults to ``POST`` for the existing ``/message/stream``
+        endpoint but can be overridden (e.g. ``GET`` for follow-mode tails).
+        ``params`` are forwarded to httpx for proper query-string encoding
+        instead of manual f-string concatenation.
 
         Each SSE message is expected as ``event: <type>\\ndata: <json>\\n\\n``.
         """
         try:
             async with self._client.stream(
-                "POST", url, json=json_body,
+                method, url, json=json_body, params=params,
                 timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0),
             ) as response:
                 if response.status_code >= 400:

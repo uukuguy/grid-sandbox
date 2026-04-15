@@ -387,9 +387,51 @@ def events_cmd(
     session_id: str = typer.Argument(...),
     format_: str = typer.Option("table", "--format", "-f", help="Output: table|json"),
     limit: int = typer.Option(500, "--limit", "-n"),
+    follow: bool = typer.Option(
+        False, "--follow", "-F", help="Tail-follow events via SSE (Ctrl+C to stop)"
+    ),
+    from_seq: int = typer.Option(
+        1, "--from", help="Start from this seq (default 1; useful with --follow)"
+    ),
 ) -> None:
-    """List events for a session."""
+    """List events for a session (optionally tail-follow via SSE)."""
     cfg = CliConfig.from_env()
+
+    # ── Follow mode: SSE tail ────────────────────────────────────────────
+    if follow:
+        console = Console()
+        err_console = Console(stderr=True)
+
+        async def _do_follow() -> None:
+            client = _main.make_client(cfg)
+            try:
+                url = f"{cfg.l4_url}/v1/sessions/{session_id}/events/stream"
+                async for msg in client.stream_sse(
+                    url, method="GET", params={"from": from_seq}
+                ):
+                    event = msg.get("event", "event")
+                    data = msg.get("data", {})
+                    if event == "event" and isinstance(data, dict):
+                        if format_ == "json":
+                            import json as _json
+                            typer.echo(
+                                _json.dumps(data, ensure_ascii=False, default=str)
+                            )
+                        else:
+                            console.print(_format_event_line(data, format_))
+                    elif event == "error":
+                        err_console.print(
+                            f"[bold red]stream error:[/bold red] "
+                            f"{data.get('code', '?')} — {data.get('session_id', '?')}"
+                        )
+                        return
+            finally:
+                await client.aclose()
+
+        _main.run_async(_do_follow())
+        return
+
+    # ── One-shot mode (original behavior) ────────────────────────────────
     result = _main.run_async(_fetch_events(cfg, session_id, limit=limit))
 
     if format_ == "json":
