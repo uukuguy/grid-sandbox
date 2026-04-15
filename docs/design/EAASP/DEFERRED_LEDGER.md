@@ -248,6 +248,9 @@
 | **D110** | S3.T2 — `dependencies` 字段 soft-intent vs runtime-required 语义不分 | 🔵 P3-defer | `dependencies: - mcp:eaasp-skill-registry` 对 skill-extraction 是 soft intent（skill 自己从不调），但 schema 不区分此与 `mcp:eaasp-l2-memory`（runtime-required）。L4 resolution 时可能误把 soft-intent 服务拉起来浪费资源。应有 `dependencies_intent:` vs `dependencies_runtime:` 或每条加 `kind: runtime|intent` 标签。衍生自 S3.T2 设计决策 → **Phase 3 schema refactor（breaking）** |
 | **D124** | S4.T2 — L4 `/events/stream` 无 client-disconnect 结构化日志 | ✅ closed 2026-04-15 | 4 结构化日志点：`sse_follow_start`（INFO, 入口）/ `sse_follow_session_gone`（INFO, mid-stream SessionNotFound）/ `sse_follow_idle_exit`（DEBUG, max_idle_polls 触发）/ `sse_follow_disconnect`（INFO, client 断开 → `asyncio.CancelledError` 捕获后 re-raise）。zero regressions (127/127 L4 tests PASS). ruff clean. |
 | **D125** | S4.T2 — L4 events 流单次 poll 上限 500 events，burst 超限静默丢失 | 🟡 P1-defer | `list_events(limit=500)` + 默认 poll_interval_ms=500 → 1000 events/sec 上限。若 L1 在一轮 500ms 内 emit >500 events，第 501 起会进入下一轮，但如果持续过载会无限滞后。应加 overflow 检测 (`len(events) == 500 → log.warning + 缩短下次 poll 间隔`) 或把 limit 提升到 2000。衍生自 S4.T2 reviewer 注记 → **Phase 2.5 if L1 bursts > 1k/sec** |
+| **D126** | S4.T3 — `lang/claude-code-runtime-python/.venv` 缺失时 A8 fails late | 🔵 P3-defer | `scripts/verify-v2-phase2.sh` 的 pre-flight `check_venv` 循环只覆盖 L2/L3/L4/cli-v2。若 fresh clone 未跑 `make claude-runtime-setup`，A8 要跑到一半才抛 AssertionError（message 指向 setup target 是清楚的，但前面 A1-A7 空跑了 ~30s）。应在 pre-flight 添加 WARNING（non-fatal，因为 skill extraction 是 fixture-replay-可选）。衍生自 S4.T3 reviewer M2 → **Phase 2.5 ergonomics** |
+| **D127** | S4.T3 — `data/verify-v2-phase2-skill-registry/` 目录不被清理 | 🔵 P3-defer | `verify-v2-phase2.sh` 的 wipe 块只清 `*.db`/`*.db-shm`/`*.db-wal` glob。但 skill-registry 用 `--data-dir` 挂到目录，里面有 `registry.db` + `skills/*` 子目录。重跑积累残留 manifest。目前无 Phase 2 assertion 查 registry（已核验），是 latent。MVP 的 `verify-v2-skill-registry/` 有同样 gap，继承行为不是新 regression。修法：在 wipe 块加 `rm -rf "$PROJECT_ROOT/data/verify-v2-phase2-skill-registry"`。衍生自 S4.T3 reviewer M3 → **Phase 2.5 when a Phase 2+ assertion starts reading registry state** |
+| **D128** | S4.T3 — `@assertion` 装饰器 NOTE 在 PASS 之前打印（UX polish） | 🔵 P3-defer | `@assertion` 装饰器先调用 wrapped function 再 print `PASS N. title`；function body 里的 `print()` NOTE（A5 graceful-degrade、A13 CLI 缺 .venv）会落在 PASS 行之前。阅读顺序是 `NOTE: ...\nPASS 5. ...`，略混乱但内容正确。可切到 post-hoc "notes" channel 或把 NOTE prefix 改为 `└─` 表示是 PASS 的细节。衍生自 S4.T3 reviewer N2 → **Phase 2.5 polish** |
 
 **引入流程**:
 1. 在新 Deferred 产生的 plan 文件里以表格形式定义 `| D90 | 标题 | 去向 |`
@@ -314,6 +317,10 @@
 | 2026-04-15 | D121 | **新增** 🔵 P3-defer | `register_session_stop_hooks` 额外调用累加而非替换（S3.T5 reviewer M2）→ 加 dedupe 或 warn-on-duplicate semantics |
 | 2026-04-15 | D122 | **新增** 🔵 P3-defer | Python envelope 包含 top-level `hook_id` 字段，Rust 未含（S3.T5 reviewer M3）→ D120 统一修 |
 | 2026-04-15 | D123 | **新增** 🔵 P3-defer | `scoped_hook_wiring_integration.rs` 测试用 `std::env::set_var` + Mutex，poison 恢复静默（reviewer N5）→ 改为 RAII env guard |
+| 2026-04-15 | — | **S4.T3 reviewer C1+M1+M4+N1 inline-fixed** | A10 SKIP_RUNTIMES 守护避免默认路径 502, eaasp-skill-registry binary pre-flight 从 --with-runtimes 分支提出, A13 comment cli-v2-setup, chmod 755 on verify-v2-phase2.py. 改动随 S4.T3 commit a5101d5 一并落盘 |
+| 2026-04-15 | D126 | **新增** 🔵 P3-defer | S4.T3 fresh-clone 时 `lang/claude-code-runtime-python/.venv` 缺失导致 A8 late-fail，pre-flight 应加 WARNING（non-fatal）→ Phase 2.5 ergonomics |
+| 2026-04-15 | D127 | **新增** 🔵 P3-defer | S4.T3 `data/verify-v2-phase2-skill-registry/` 目录不被清理（MVP 也有同样 gap，继承非新 regression）→ Phase 2.5 when a Phase 2+ assertion reads registry state |
+| 2026-04-15 | D128 | **新增** 🔵 P3-defer | S4.T3 `@assertion` 装饰器 NOTE 在 PASS 之前打印，阅读顺序略混乱（UX polish）→ Phase 2.5 polish |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -336,7 +343,7 @@
 | 🟡 **P1-active** | 1 | D78 | event payload embedding 未完成，延到 Phase 2.5 |
 | 🟡 **P1-defer** | 8 | D90, D93, D94, D98, D102, D105, D108, D109, D120, D125 | 前置 frontend UI / Phase 2.5 refactor / Phase 3 breaking |
 | 🔵 **P2-defer** | 1 | D95 | FTS semantic_score 回填，Phase 2.5 |
-| 🔵 **P3-defer** | 15 | D92, D96, D97, D99, D100, D101, D103, D104, D106, D107, D110, D118, D119, D121, D122, D123 | 边角场景 / 告警优化 |
+| 🔵 **P3-defer** | 18 | D92, D96, D97, D99, D100, D101, D103, D104, D106, D107, D110, D118, D119, D121, D122, D123, D126, D127, D128 | 边角场景 / 告警优化 |
 | 🟢 **P2-active** | 0 | — | D12→D94 renamed, D60 closed |
 | 🔵 **P3-active** | 1 | D74 | Phase 2 可选加速 |
 | 🟡 **P1-active（renamed）** | 1 | D117 (原 D50) | Prompt-body 执行器，用户同意推迟 |
