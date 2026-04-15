@@ -242,6 +242,10 @@
 | **D104** | S3.T1 — 反应式 guard 在 harness 而非 pipeline | 🔵 P3-defer | `attempted_reactive_compact` 是 harness 循环本地状态，pipeline 层不 enforce。若未来其他 caller 绕过 harness 直接调 pipeline，同 turn double-compact 无锁。ADR-V2-018 §D5 明确 per-turn 语义，当前实现符合。衍生自 S3.T1 coder → **Phase 3 re-architect if needed** |
 | **D105** | S3.T1 — `HookPoint::ContextDegraded` 字符串别名保留 | 🟡 P1-defer | `runtime.rs:1899` string-key dispatcher 同时接受 `"ContextDegraded"` 和 `"PostCompact"`，保持既有 YAML/JSON hook 配置 backwards-compat。Phase 3 breaking release 时 deprecate 旧名。衍生自 S3.T1 coder → **Phase 3 breaking version** |
 | **D106** | S3.T1 — `MAX_TURNS_FOR_BUDGET=50` 硬编码 | 🔵 P3-defer | `harness.rs:120` 常量保守上限；长运行自主 agent 可能过紧，批量脚本可能过松。应成为 `AgentLoopConfig.task_budget_override` 字段。衍生自 S3.T1 coder → **Phase 3 config harden sweep** |
+| **D107** | S3.T2 — Stop hook 三-way empty-string 检查的共享 jq fragment | 🔵 P3-defer | `threshold-calibration/hooks/check_output_anchor.sh` 和 `skill-extraction/hooks/check_final_output.sh` 都用 `has(x) and (x != null) and (x != "")` 三-way check，S3.T2 reviewer C1 就是 `evidence_anchor_id` 漏掉 `!= ""` 分支导致空字符串被放行。Copy-paste 易漏，应抽成 skill-hook stdlib helper（例如 `${SKILL_DIR}/../../_lib/json_guards.sh` 或内嵌于 runtime hook executor）。衍生自 S3.T2 reviewer → **S3.T5 scoped-hook executor 带共享 lib 一起实现** |
+| **D108** | S3.T2 — Hook script 自动化回归测试（bats/shellcheck） | 🟡 P1-defer | S3.T2 C1 靠 orchestrator 手动 4-case 回归才发现，没有持续 CI 保障。应加 `examples/skills/*/hooks/*.bats` 或 unified `scripts/test_hook_scripts.sh` 覆盖 allow/deny/edge-case envelope，集成到 `make verify`。衍生自 S3.T2 reviewer → **S3.T3 E2E 验证 或 Phase 2.5** |
+| **D109** | S3.T2 — `workflow.required_tools` 只能列 agent 真正 invoke 的 tool 的不变量未文档化 | 🟡 P1-defer | 列入 unreachable tool（如 S3.T2 故意排除的 `skill_submit_draft`）会让 D87 fix 的 `tool_choice=Specific(next)` 卡死不能推进。S3.T2 测试注释捕获了意图，但 ADR-V2-016 + `skill_parser.rs::WorkflowMetadata` docstring 都没显式写这条。应补 ADR 脚注 + parser 校验（例如：若 tool 不在 MCP dependencies 解析结果中，parse-time warn）。衍生自 S3.T2 设计决策 → **Phase 2.5 ADR-V2-016 修订 + schema v2.1** |
+| **D110** | S3.T2 — `dependencies` 字段 soft-intent vs runtime-required 语义不分 | 🔵 P3-defer | `dependencies: - mcp:eaasp-skill-registry` 对 skill-extraction 是 soft intent（skill 自己从不调），但 schema 不区分此与 `mcp:eaasp-l2-memory`（runtime-required）。L4 resolution 时可能误把 soft-intent 服务拉起来浪费资源。应有 `dependencies_intent:` vs `dependencies_runtime:` 或每条加 `kind: runtime|intent` 标签。衍生自 S3.T2 设计决策 → **Phase 3 schema refactor（breaking）** |
 
 **引入流程**:
 1. 在新 Deferred 产生的 plan 文件里以表格形式定义 `| D90 | 标题 | 去向 |`
@@ -286,7 +290,12 @@
 | 2026-04-15 | D104 | **新增** 🔵 P3-defer | 反应式 guard 在 harness 而非 pipeline（S3.T1 coder）→ Phase 3 if needed |
 | 2026-04-15 | D105 | **新增** 🟡 P1-defer | ContextDegraded 字符串别名保留（S3.T1 coder）→ Phase 3 breaking |
 | 2026-04-15 | D106 | **新增** 🔵 P3-defer | MAX_TURNS_FOR_BUDGET=50 硬编码（S3.T1 coder）→ Phase 3 config |
-| 2026-04-15 | — | **S3.T1 reviewer C1+M1-M3 inline-fixed** | context_window threaded, reactive_summary_ratio configurable, test 6+7 rewritten. 不开 D107-D110；改动随 S3.T1 commit 一并落盘 |
+| 2026-04-15 | — | **S3.T1 reviewer C1+M1-M3 inline-fixed** | context_window threaded, reactive_summary_ratio configurable, test 6+7 rewritten. 改动随 S3.T1 commit 一并落盘 |
+| 2026-04-15 | — | **S3.T2 reviewer C1+M1-M3 inline-fixed** | check_final_output.sh evidence_anchor_id 三-way, SKILL.md event shape + anchor optional fields + memory_write_file memory_id. 改动随 S3.T2 commit 27de415 一并落盘 |
+| 2026-04-15 | D107 | **新增** 🔵 P3-defer | Stop hook 三-way empty-string 检查共享 jq helper（S3.T2 reviewer，承继 S4.T1 threshold-calibration）→ S3.T5 带 shared lib 一起实现 |
+| 2026-04-15 | D108 | **新增** 🟡 P1-defer | Hook script 自动化回归测试（bats/shellcheck）避免 C1-class 退化（S3.T2 reviewer 候选 2）→ S3.T3 E2E 或 Phase 2.5 |
+| 2026-04-15 | D109 | **新增** 🟡 P1-defer | `workflow.required_tools` 不变量（只列 agent 真正 invoke 的 tool）未文档化，避免 D87 tool_choice=Specific(next) 卡死（S3.T2 设计决策）→ Phase 2.5 ADR-V2-016 修订 + parse-time warn |
+| 2026-04-15 | D110 | **新增** 🔵 P3-defer | `dependencies` 字段 soft-intent vs runtime-required 语义不分（S3.T2 设计决策）→ Phase 3 schema refactor breaking |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
