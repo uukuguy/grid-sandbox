@@ -40,7 +40,8 @@
         "S4.T3 (automated acceptance gate + runtime runbook — 4 deliverables / +1404 LOC: verify-v2-phase2.sh 363 LOC + verify-v2-phase2.py 621 LOC / 14 @assertions + s4t3-runtime-verification.sh 398 LOC + Makefile +22 LOC / 4 new targets. Pattern-faithful to MVP harness with 2 deliberate inversions: SKIP_RUNTIMES=true default + WITH_BUILD=false default. A10 SKIP_RUNTIMES-guarded because /v1/sessions/create needs grid-runtime gRPC. Reviewer REQUEST-CHANGES → C1 (A10 502)+M1 (skill-registry binary check)+M4 (A13 comment)+N1 (chmod 755) inline-fixed. Runtime 6-step × 2 runtimes deferred to human runbook per ADR-V2-017. @ a5101d5)"
       ],
       "next_task": "S4.T4 (thread-scoped interrupt — hermes 模式，per-session CancelToken)",
-      "last_updated": "2026-04-15T22:30:00+08:00",
+      "last_updated": "2026-04-15T22:50:00+08:00",
+      "s4t3_live_validation": "2026-04-15 @ 9a756be — make v2-phase2-e2e default 14/14 PASS from port-free state. 4 services (L2/L3/L4/skill-registry) up in ~1s each, A10 SKIP_RUNTIMES guard correctly skip-with-note, ports clean post-teardown. C1+M1+M4+N1 fixes proven in real execution. D129 filed (trap cleanup sweeps external ports on pre-flight fail, local-dev ergonomics only).",
       "commits_so_far": [
         "bdc4fd5",
         "c0f98f9",
@@ -68,7 +69,10 @@
         "f22e0e3",
         "6bc6158",
         "a4bd459",
-        "a5101d5"
+        "a5101d5",
+        "c484f64",
+        "d5be5f9",
+        "9a756be"
       ]
     }
   ],

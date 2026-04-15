@@ -5,8 +5,8 @@
   "previous_design_doc": "docs/design/EAASP/PHASE1_EVENT_ENGINE_DESIGN.md",
   "phase": "phase-2",
   "created_at": "2026-04-14T13:00:00+08:00",
-  "updated_at": "2026-04-15T22:30:00+08:00",
-  "last_commit": "a5101d5 feat(eaasp/phase2): S4.T3 — automated acceptance gate + runtime runbook",
+  "updated_at": "2026-04-15T22:50:00+08:00",
+  "last_commit": "9a756be chore(eaasp/phase2): log D129 + S4.T3 live-run 14/14 PASS",
   "test_baseline": "S4.T3 verification: bash -n scripts/verify-v2-phase2.sh PASS; bash -n scripts/s4t3-runtime-verification.sh PASS; python3 -m py_compile scripts/verify-v2-phase2.py PASS; ruff check scripts/verify-v2-phase2.py CLEAN; make -n v2-phase2-e2e + v2-phase2-e2e-full + v2-phase2-e2e-build + test-phase2-batch-ab ALL RESOLVE; stat -f '%Sp' confirms 755 on all 3 scripts. Static-only verification per scope (automated harness not run end-to-end — reviewer independently confirmed MVP pattern parity via 32/32 helper match + cross-referenced L4 API endpoint contracts in session_orchestrator.py/l1_client.py/api.py). Actual E2E runs land when operator executes make v2-phase2-e2e on a fresh clone after S4.T4 closes Phase 2. Assertion count 14 grep-verified. Runtime runbook execute-bit check A14 self-validates. Test execution of the assertions themselves (cargo test wrappers in A1/A2/A7/A9/A11/A12 + pytest in A8) deferred to first harness run — static invocation shape verified via grep against actual test file existence (d87_multi_step_workflow_regression.rs / tool_result_aggregate_spill.rs / stop_hooks_integration.rs + error_classifier module in src/providers/).",
   "completed_tasks": [
     "S0.T1 (ADR-V2-015 Accepted)",
@@ -39,7 +39,7 @@
   "task_delta_log": "2026-04-14: 22 → 23 after Deferred 重分类 (S3.T5 scoped-hook executor 新增，合并 D50+D51+D53)",
   "execution_mode": "ruflo-orchestrated",
   "phase_name": "EAASP v2.0 Phase 2 — Memory and Evidence",
-  "status": "S0 DONE (2/2). S1 DONE (7/7). S2 DONE (5/5). S3 DONE (5/5). S4 3/4 (T1 ✅ T2 ✅ T3 ✅). Plan 22/23. S4.T3 automated gate shipped @ a5101d5 (14 assertions + runtime runbook deferred to human). Next: S4.T4 thread-scoped interrupt to close Phase 2 23/23.",
+  "status": "S0 DONE (2/2). S1 DONE (7/7). S2 DONE (5/5). S3 DONE (5/5). S4 3/4 (T1 ✅ T2 ✅ T3 ✅ live-validated 14/14 PASS). Plan 22/23. S4.T3 automated gate shipped @ a5101d5 + live-run 14/14 validated @ 9a756be (4 services up <5s, A10 SKIP_RUNTIMES guard fires as designed, ports clean post-teardown, C1+M1+M4+N1 fixes all proven in real execution path). D126-D129 filed (all P3-defer, non-blocking). Next: S4.T4 thread-scoped interrupt to close Phase 2 23/23.",
   "previous_phase": {
     "name": "Phase 1 — Event-driven Foundation",
     "status": "ARCHIVED",
