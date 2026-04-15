@@ -39,7 +39,7 @@
         "S4.T2 (D84 closed — CLI events --follow + L4 SSE endpoint + 6 tests)"
       ],
       "next_task": "S4.T3 (端到端验收 — threshold-calibration 6-step × 3 runtimes)",
-      "last_updated": "2026-04-15T19:30:00+08:00",
+      "last_updated": "2026-04-15T20:00:00+08:00",
       "commits_so_far": [
         "bdc4fd5",
         "c0f98f9",
@@ -63,7 +63,9 @@
         "a209716",
         "7cb48eb",
         "28e6b21",
-        "bd55bc4"
+        "bd55bc4",
+        "f22e0e3",
+        "6bc6158"
       ]
     }
   ],
