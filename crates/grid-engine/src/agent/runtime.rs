@@ -11,7 +11,8 @@ use grid_types::{ChatMessage, SandboxId, SessionId, TenantId, UserId};
 
 use crate::agent::{
     AgentCatalog, AgentConfig, AgentError, AgentEvent, AgentExecutor, AgentExecutorHandle, AgentId,
-    AgentManifest, AgentMessage, AgentStatus, CancellationToken, TenantContext,
+    AgentManifest, AgentMessage, AgentStatus, CancellationToken, SessionInterruptRegistry,
+    TenantContext,
 };
 use crate::agent::task_tracker::TaskTracker;
 use crate::agent::team::TeamManager;
@@ -111,6 +112,17 @@ pub struct SessionEntry {
     pub tools: Arc<StdMutex<ToolRegistry>>,
     /// Last activity timestamp for idle timeout detection (AJ-D4)
     pub last_activity: Arc<StdMutex<Instant>>,
+    /// S4.T4: Session-lifetime cancellation token — thread-scoped interrupt.
+    ///
+    /// This token is ALSO stored in `AgentRuntime.session_interrupts` keyed
+    /// by `SessionId`. It is a separate instance from the executor's
+    /// per-turn `cancel_token` (which the executor resets on every
+    /// `UserMessage`; see `executor.rs::run`). External state inspectors
+    /// (tests, observability) can observe this flag to learn "session X
+    /// was externally cancelled". For authoritative mid-turn interrupt
+    /// dispatch, `AgentRuntime::cancel_session` also sends
+    /// `AgentMessage::Cancel` through the handle — see D130.
+    pub cancel_token: CancellationToken,
 }
 
 /// Idle-time distribution buckets for session monitoring (AM-T3).
@@ -225,6 +237,14 @@ pub struct AgentRuntime {
     // without an `.await`.
     pub(crate) session_stop_hooks:
         DashMap<SessionId, Vec<Arc<dyn super::stop_hooks::StopHook>>>,
+    /// S4.T4: Per-session cancellation registry — thread-scoped interrupt.
+    ///
+    /// Populated at session spawn in `start_session_full`, fired by
+    /// `cancel_session(sid)`, cleared at `stop_session`. Multi-session
+    /// isolation is guaranteed by `CancellationToken`'s per-instance
+    /// `Arc<AtomicBool>`: cancelling session A does not affect session B.
+    /// See `docs/design/EAASP/AGENT_LOOP_PATTERNS_TO_ADOPT.md` #10.
+    pub(crate) session_interrupts: SessionInterruptRegistry,
 }
 
 impl AgentRuntime {
@@ -571,6 +591,7 @@ impl AgentRuntime {
             max_concurrent_sessions: config.max_concurrent_sessions.unwrap_or(DEFAULT_MAX_CONCURRENT_SESSIONS),
             agent_handles: DashMap::new(),
             session_stop_hooks: DashMap::new(),
+            session_interrupts: SessionInterruptRegistry::new(),
             catalog,
             provider,
             tools: Arc::new(StdMutex::new(tools)),
@@ -1097,6 +1118,22 @@ impl AgentRuntime {
     /// Get session handle by session ID
     pub fn get_session_handle(&self, session_id: &SessionId) -> Option<AgentExecutorHandle> {
         self.sessions.get(session_id).map(|e| e.handle.clone())
+    }
+
+    /// Returns a clone of the cancel token for a given session.
+    ///
+    /// **Intended consumers**: future REST/gRPC interrupt endpoints that need to
+    /// observe cancellation state (e.g. return 409 if already cancelled). For
+    /// dispatching a cancel, use [`Self::cancel_session`] instead — this accessor
+    /// is read-only.
+    ///
+    /// Hidden from public docs pending stabilization of the interrupt API
+    /// surface (see D130 for the planned consolidation).
+    #[doc(hidden)]
+    pub fn get_session_cancel_token(&self, session_id: &SessionId) -> Option<CancellationToken> {
+        self.sessions
+            .get(session_id)
+            .map(|e| e.cancel_token.clone())
     }
 
     /// List all active session IDs
@@ -1627,6 +1664,15 @@ impl AgentRuntime {
 
         // Register in session registry
         let now = Instant::now();
+        // S4.T4: allocate a session-lifetime cancel token and register it in
+        // the thread-scoped interrupt registry. A clone is stashed in
+        // SessionEntry so external state inspectors (tests, observability)
+        // can observe "session X was externally cancelled" without reaching
+        // into the handle. Separate instance from the executor's per-turn
+        // token (which the executor resets on each UserMessage).
+        let session_cancel_token = CancellationToken::new();
+        self.session_interrupts
+            .register(session_id.clone(), session_cancel_token.clone());
         self.sessions.insert(
             session_id.clone(),
             SessionEntry {
@@ -1635,6 +1681,7 @@ impl AgentRuntime {
                 created_at: now,
                 tools: session_tools,
                 last_activity: Arc::new(StdMutex::new(now)),
+                cancel_token: session_cancel_token,
             },
         );
 
@@ -1675,11 +1722,92 @@ impl AgentRuntime {
                 mcp_guard.cleanup_session(session_id.as_str());
             }
 
+            // S4.T4: drop the thread-scoped interrupt entry so the registry
+            // never grows unbounded across session churn.
+            self.session_interrupts.remove(session_id);
+
             // AM-T5: persist stop status to session_registry
             self.persist_session_stop(session_id, "stopped").await;
 
             info!(session_id = %session_id.as_str(), "Session stopped and cleaned up");
         }
+    }
+
+    /// S4.T4: Fire thread-scoped interrupt for a specific session.
+    ///
+    /// Returns `true` if the session was registered and its
+    /// cancellation path was dispatched. Returns `false` if the session
+    /// is unknown (may have already exited naturally — not an error).
+    ///
+    /// # Isolation
+    /// Only the target session's cancel path fires. Other sessions'
+    /// executors are unaffected. This is the authoritative external
+    /// mid-call interrupt entry point; `stop_session` is the graceful
+    /// channel-close path that drops the handle.
+    ///
+    /// # Dispatch
+    /// Fires two paths belt-and-suspenders style:
+    /// 1. The session-lifetime token registered in
+    ///    `session_interrupts` — observable to tests and external
+    ///    inspectors.
+    /// 2. `AgentMessage::Cancel` via the handle — the executor's
+    ///    internal path that flips the per-turn `cancel_token` currently
+    ///    watched by the harness `run_agent_loop`. Only this path
+    ///    interrupts an in-flight turn because the executor resets its
+    ///    `cancel_token` on each `UserMessage` (see `executor.rs::run`).
+    ///
+    /// A structural consolidation (unified session-lifetime token that
+    /// the executor also watches directly) is tracked as D130.
+    pub async fn cancel_session(&self, session_id: &SessionId) -> bool {
+        // Path 1: flip the session-lifetime token so external observers
+        // see the cancellation even if the executor has exited already.
+        let fired = self.session_interrupts.cancel(session_id);
+
+        // Path 2: if the session is live, dispatch AgentMessage::Cancel
+        // through the executor handle so the currently running turn is
+        // interrupted. A closed channel means the executor already exited,
+        // which we treat as a successful no-op on top of path 1.
+        //
+        // S4.T4/D131: clone the handle out of the DashMap guard BEFORE
+        // awaiting, mirroring the idiom at runtime_lifecycle.rs:55-63 —
+        // holding a DashMap Ref across .await is a deadlock risk per
+        // dashmap docs. S4.T4/N2: log send errors at debug! level so
+        // diagnostic signal is preserved without elevating "executor
+        // already exited" to a real error.
+        let handle = self
+            .sessions
+            .get(session_id)
+            .map(|entry| entry.value().handle.clone());
+        if let Some(h) = handle {
+            if let Err(e) = h.send(AgentMessage::Cancel).await {
+                tracing::debug!(
+                    session_id = %session_id.as_str(),
+                    error = %e,
+                    "cancel_session: AgentMessage::Cancel send failed (executor likely already exited)"
+                );
+            }
+        }
+
+        if fired {
+            tracing::info!(
+                session_id = %session_id.as_str(),
+                "Session cancelled via thread-scoped interrupt"
+            );
+        } else {
+            tracing::debug!(
+                session_id = %session_id.as_str(),
+                "cancel_session called for unknown session (already exited?)"
+            );
+        }
+        fired
+    }
+
+    /// S4.T4: Accessor for the session interrupt registry.
+    ///
+    /// Exposed for tests and runtime wrappers that need to inspect or
+    /// share the registry. Clone is cheap (inner Arc<DashMap>).
+    pub fn session_interrupts(&self) -> &SessionInterruptRegistry {
+        &self.session_interrupts
     }
 
     /// 启动主 Runtime 并返回其 Handle。

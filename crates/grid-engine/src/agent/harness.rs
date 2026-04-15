@@ -639,6 +639,13 @@ async fn run_agent_loop_inner(
         let turn_start = std::time::Instant::now();
 
         // --- Check cancellation ---
+        // S4.T4: `config.cancel_token` is per-session — it was cloned from
+        // the executor's per-turn token (which the executor resets on each
+        // UserMessage; see `executor.rs::run`). Cancelling this token only
+        // interrupts this session's loop; peer sessions have independent
+        // tokens (separate Arc<AtomicBool>). External callers dispatch via
+        // `AgentRuntime::cancel_session` → `AgentMessage::Cancel` → the
+        // executor's `cancel_token.cancel()`, which this read observes.
         if config.cancel_token.is_cancelled() {
             info!(session = %config.session_id, "Harness: cancelled");
             break;
@@ -1684,6 +1691,8 @@ async fn run_agent_loop_inner(
                         } => AutonomousAction::Pause,
                     };
                     // Check cancellation after select (covers cancel during sleep)
+                    // S4.T4: session-scoped — see note at the primary
+                    // cancellation read above for isolation semantics.
                     if config.cancel_token.is_cancelled() {
                         info!(session = %config.session_id, "Autonomous: cancelled during sleep");
                     } else {

@@ -533,6 +533,7 @@ mod tests {
                 created_at: Instant::now(),
                 tools,
                 last_activity: Arc::new(std::sync::Mutex::new(Instant::now())),
+                cancel_token: crate::agent::CancellationToken::new(),
             },
         );
         (map, rx)

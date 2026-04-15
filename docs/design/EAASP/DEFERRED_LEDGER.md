@@ -252,6 +252,7 @@
 | **D127** | S4.T3 — `data/verify-v2-phase2-skill-registry/` 目录不被清理 | 🔵 P3-defer | `verify-v2-phase2.sh` 的 wipe 块只清 `*.db`/`*.db-shm`/`*.db-wal` glob。但 skill-registry 用 `--data-dir` 挂到目录，里面有 `registry.db` + `skills/*` 子目录。重跑积累残留 manifest。目前无 Phase 2 assertion 查 registry（已核验），是 latent。MVP 的 `verify-v2-skill-registry/` 有同样 gap，继承行为不是新 regression。修法：在 wipe 块加 `rm -rf "$PROJECT_ROOT/data/verify-v2-phase2-skill-registry"`。衍生自 S4.T3 reviewer M3 → **Phase 2.5 when a Phase 2+ assertion starts reading registry state** |
 | **D128** | S4.T3 — `@assertion` 装饰器 NOTE 在 PASS 之前打印（UX polish） | 🔵 P3-defer | `@assertion` 装饰器先调用 wrapped function 再 print `PASS N. title`；function body 里的 `print()` NOTE（A5 graceful-degrade、A13 CLI 缺 .venv）会落在 PASS 行之前。阅读顺序是 `NOTE: ...\nPASS 5. ...`，略混乱但内容正确。可切到 post-hoc "notes" channel 或把 NOTE prefix 改为 `└─` 表示是 PASS 的细节。衍生自 S4.T3 reviewer N2 → **Phase 2.5 polish** |
 | **D129** | S4.T3 — `verify-v2-phase2.sh` cleanup trap 在 pre-flight 失败时仍 sweep 外部端口 | 🔵 P3-defer | `trap cleanup EXIT INT TERM` 无条件运行；`_kill_tree` 用 `$L2_PID` 等变量守护（pre-flight 失败时未设置 → no-op，正确），但 `_kill_port` 是按 PORT 号用 `lsof` sweep，不论这些端口上的进程是否由本脚本启动。实证：2026-04-15 运行 `make v2-phase2-e2e` 时 `make dev-eaasp` 正在另一终端跑，pre-flight 正确检测到 port 18085 被 PID 3398 占用并 exit 1，但随后 trap cleanup 无差别 sweep 了 6 个端口上的所有 listeners，杀掉了用户的 dev-eaasp session。修法：(a) 在 `_kill_port` 前检查对应的 `$*_PID` 是否非空（只 sweep "我们启动过的"），或 (b) pre-flight 失败时 `trap - EXIT` 提前 clear cleanup trap。生产 CI 无 pre-existing 服务不触发，是 local-dev 边角。衍生自 S4.T3 实跑观察 → **Phase 2.5 harness ergonomics** |
+| **D130** | S4.T4 — Session-lifetime vs per-turn cancel token 双 token 不一致 | 🟡 P1-defer | `SessionEntry.cancel_token`（spawn-time，由 `SessionInterruptRegistry` 托管）与 `AgentExecutor.cancel_token`（每次收 UserMessage 时 reset 到 fresh `::new()`，clone 到 `AgentLoopConfig.cancel_token` 供 harness `:642/:1687` 读）是两个独立 Arc<AtomicBool>。`cancel_session()` 目前双路径触发（registry 标志 + `AgentMessage::Cancel` channel 消息）才能在跑 loop 中间实际打断——path 1 flag 没人读，只是 post-mortem observability；path 2 打到 `executor.cancel_token.cancel()` 是真正触达 harness 的路径。设计更干净的方案：`AgentExecutor` 持有由 `session_interrupts` 注入的 **session-lifetime parent token**，每轮 UserMessage 创建 `parent.child()` 作 per-turn token；fire registry token 通过 parent→child 传播自动到达 in-flight turn，不需要 channel round-trip。前置：`ChildCancellationToken` 当前只读，需加 `cancel()` propagation 语义 + 通过 `AgentLoopConfig.cancel_token` plumbing。衍生自 S4.T4 实装 → **Phase 2.5 consolidation** |
 
 **引入流程**:
 1. 在新 Deferred 产生的 plan 文件里以表格形式定义 `| D90 | 标题 | 去向 |`
@@ -324,6 +325,9 @@
 | 2026-04-15 | D128 | **新增** 🔵 P3-defer | S4.T3 `@assertion` 装饰器 NOTE 在 PASS 之前打印，阅读顺序略混乱（UX polish）→ Phase 2.5 polish |
 | 2026-04-15 | — | **S4.T3 live run 14/14 PASS** | `make v2-phase2-e2e` default (--skip-runtimes) 从 port-free 状态跑完：4 服务启动各 1s + 14 assertions 全 PASS（A10 正确 skip），ports 清理干净；证明 C1+M1+M4+N1 fixes 成立，gate 在 production 路径工作 |
 | 2026-04-15 | D129 | **新增** 🔵 P3-defer | S4.T3 `verify-v2-phase2.sh` cleanup trap 在 pre-flight 失败时仍 sweep 外部端口（实证：运行时误杀用户 dev-eaasp session）→ Phase 2.5 harness ergonomics |
+| 2026-04-16 | — | **S4.T4 reviewer M1+M2+N2 inline-fixed** | DashMap-Ref-across-await 修正（改为 clone-handle-out-of-guard 匹配 runtime_lifecycle.rs 惯用法）+ `tracing::debug!` 日志送失败 + `THREAD_SCOPED` 改为 module-level `const _: () = assert!(...)` 编译时断言。3 候选 D131/D132/D133 全部 inline-fixed 无新 Deferred 需登 |
+| 2026-04-16 | D130 | **新增** 🟡 P1-defer | S4.T4 session-lifetime vs per-turn cancel token 双 token 不一致，`cancel_session()` 需双路径触发（registry flag + `AgentMessage::Cancel` channel）才能真正打断 in-flight turn → **Phase 2.5 consolidation**（前置：`ChildCancellationToken::cancel` propagation + `AgentLoopConfig.cancel_token` plumbing） |
+| 2026-04-16 | — | **Phase 2 23/23 COMPLETE** | S4.T4 closes Phase 2. Stage breakdown: S0 2/2 + S1 7/7 + S2 5/5 + S3 5/5 + S4 4/4. Next: Phase 2.5 (goose-runtime + Rust HookContext envelope parity + D94/D98/D108/D120/D130 consolidation batch) |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -344,7 +348,7 @@
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
 | 🟡 **P1-active** | 1 | D78 | event payload embedding 未完成，延到 Phase 2.5 |
-| 🟡 **P1-defer** | 8 | D90, D93, D94, D98, D102, D105, D108, D109, D120, D125 | 前置 frontend UI / Phase 2.5 refactor / Phase 3 breaking |
+| 🟡 **P1-defer** | 11 | D90, D93, D94, D98, D102, D105, D108, D109, D120, D125, D130 | 前置 frontend UI / Phase 2.5 refactor / Phase 3 breaking |
 | 🔵 **P2-defer** | 1 | D95 | FTS semantic_score 回填，Phase 2.5 |
 | 🔵 **P3-defer** | 19 | D92, D96, D97, D99, D100, D101, D103, D104, D106, D107, D110, D118, D119, D121, D122, D123, D126, D127, D128, D129 | 边角场景 / 告警优化 |
 | 🟢 **P2-active** | 0 | — | D12→D94 renamed, D60 closed |
