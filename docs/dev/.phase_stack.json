@@ -6,8 +6,8 @@
       "checkpoint": "docs/plans/.checkpoint.json",
       "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
       "plan": "docs/plans/2026-04-14-v2-phase2-plan.md",
-      "progress": "15/23",
-      "stages": ["S0 ADR ✅", "S1 Runtime Fixes ✅ 7/7", "S2 L2 Memory + tool-result truncation ✅ 5/5", "S3 PreCompact + Skill Extraction + Stop hooks (批次 B, 1/5)", "S4 CLI+E2E + thread-scoped interrupt (批次 C)"],
+      "progress": "16/23",
+      "stages": ["S0 ADR ✅", "S1 Runtime Fixes ✅ 7/7", "S2 L2 Memory + tool-result truncation ✅ 5/5", "S3 PreCompact + Skill Extraction + Stop hooks (批次 B, 2/5)", "S4 CLI+E2E + thread-scoped interrupt (批次 C)"],
       "first_task": "S0.T1 ADR-V2-015 semantic 检索选型",
       "completed_tasks": [
         "S0.T1 (ADR-V2-015 Accepted)",
@@ -24,11 +24,12 @@
         "S2.T3 (MCP tool completion — 7th tool memory_confirm + embedding surface + offset; 103/103 @ 220f53e)",
         "S2.T4 (State machine invariant tests — 11 new tests; 114/114 @ bd7545d)",
         "S2.T5 (Tool-result aggregate spill — turn_budget.rs + D60 closure; 3/3 @ bad4269)",
-        "S3.T1 (PreCompact hook + proactive/reactive compaction + iterative summary — ADR-V2-018 + 7 surgical deltas + 7 new tests + reviewer C1+M1-M3 inline-fixed; 15+108+14 PASS @ 794fb98)"
+        "S3.T1 (PreCompact hook + proactive/reactive compaction + iterative summary — ADR-V2-018 + 7 surgical deltas + 7 new tests + reviewer C1+M1-M3 inline-fixed; 15+108+14 PASS @ 794fb98)",
+        "S3.T2 (Skill Extraction meta-skill — examples/skills/skill-extraction/{SKILL.md,hooks/} + Rust parser test; 4 required_tools 排除 skill_submit_draft 避开 D87 trap; reviewer C1+M1+M2+M3 inline-fixed; 10/10 PASS @ 27de415)"
       ],
-      "next_task": "S3.T2 (Skill Extraction meta-skill — examples/skills/skill-extraction/SKILL.md 新建，纯内容，零 Rust 风险)",
-      "last_updated": "2026-04-15T06:45:00+08:00",
-      "commits_so_far": ["bdc4fd5", "c0f98f9", "8a738b1", "9870342", "4001de2", "8b532cb", "bdc5b8b", "d0e6cb0", "c6d7b89", "15da7ae", "2f48bb7", "1cb6446", "262d28d", "220f53e", "bd7545d", "bad4269", "794fb98"]
+      "next_task": "S3.T3 (Skill Extraction E2E 验证 — 跑 skill-extraction skill 在真实 threshold-calibration session trace 上)",
+      "last_updated": "2026-04-15T08:35:00+08:00",
+      "commits_so_far": ["bdc4fd5", "c0f98f9", "8a738b1", "9870342", "4001de2", "8b532cb", "bdc5b8b", "d0e6cb0", "c6d7b89", "15da7ae", "2f48bb7", "1cb6446", "262d28d", "220f53e", "bd7545d", "bad4269", "794fb98", "27de415"]
     }
   ],
   "suspended_phases": [],
