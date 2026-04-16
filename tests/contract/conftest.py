@@ -398,8 +398,48 @@ def runtime_config(
             startup_timeout_s=startup_timeout_s,
         )
 
+    if runtime_name == "nanobot":
+        nanobot_python = _REPO_ROOT / "lang" / "nanobot-runtime-python" / ".venv" / "bin" / "python"
+        if not nanobot_python.exists():
+            pytest.skip(
+                "nanobot-runtime-python venv not installed; "
+                "run `cd lang/nanobot-runtime-python && uv sync` to enable nanobot contract run"
+            )
+
+        grpc_port = _free_port()
+        fixtures_root = _REPO_ROOT / "tests" / "contract" / "fixtures"
+        probe_out_dir = fixtures_root / "_probe_out"
+        probe_out_dir.mkdir(parents=True, exist_ok=True)
+
+        return RuntimeConfig(
+            name="nanobot",
+            launch_cmd=[
+                str(nanobot_python),
+                "-m", "nanobot_runtime",
+                "--port", str(grpc_port),
+                "--log-level", "WARNING",
+            ],
+            grpc_port=grpc_port,
+            env={
+                "NANOBOT_RUNTIME_PORT": str(grpc_port),
+                "OPENAI_BASE_URL": f"http://127.0.0.1:{mock_openai_server_port}/v1",
+                "OPENAI_API_KEY": "sk-test-mock",
+                "OPENAI_MODEL_NAME": "gpt-4o-mini",
+                "EAASP_DEPLOYMENT_MODE": "shared",
+                "EAASP_SKILL_CACHE_DIR": str(fixtures_root),
+                "GRID_CONTRACT_PROBE_OUT": str(probe_out_dir),
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+            },
+            startup_timeout_s=15.0,
+        )
+
     raise NotImplementedError(
-        f"RuntimeConfig for {runtime_name!r} not yet wired; see plan §S0.T5."
+        f"RuntimeConfig for {runtime_name!r} not yet wired."
     )
 
 
