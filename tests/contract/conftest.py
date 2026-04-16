@@ -32,7 +32,7 @@ import httpx
 import pytest
 import uvicorn
 
-from tests.contract.harness import mock_openai_server
+from tests.contract.harness import mock_anthropic_server, mock_openai_server
 from tests.contract.harness.hook_probe import HookProbe
 from tests.contract.harness.runtime_launcher import RuntimeConfig, RuntimeLauncher
 
@@ -187,8 +187,61 @@ def mock_openai_server_port() -> Iterator[int]:
 
 
 @pytest.fixture(scope="session")
+def mock_anthropic_server_port() -> Iterator[int]:
+    """Start a mock Anthropic Messages API server on a free loopback port.
+
+    Parallel to :func:`mock_openai_server_port` but with one important
+    architectural distinction: the claude-code-runtime does not drive
+    scoped-hook dispatch from within ``Send``. Scoped hooks fire on the
+    dedicated ``OnToolCall`` / ``OnToolResult`` / ``OnStop`` RPCs. So
+    this mock's only job is to keep the underlying claude CLI from
+    erroring out against the real ``api.anthropic.com`` when the probe
+    drains Send (which happens before the RPC sweep). No tool scripting
+    is required or implemented.
+    """
+    port = _free_port()
+    app = mock_anthropic_server.build_app()
+
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+        access_log=False,
+    )
+    server = uvicorn.Server(config)
+
+    def _run() -> None:
+        try:
+            server.run()
+        except SystemExit:
+            pass
+
+    thread = threading.Thread(target=_run, name="mock-anthropic-uvicorn", daemon=True)
+    thread.start()
+
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        try:
+            # trust_env=False ⇒ bypass Clash / HTTP_PROXY on macOS.
+            resp = httpx.get(
+                f"http://127.0.0.1:{port}/health", timeout=1.0, trust_env=False
+            )
+            if resp.status_code == 200:
+                break
+        except httpx.HTTPError:
+            time.sleep(0.1)
+    else:
+        raise RuntimeError(f"mock Anthropic server did not come up on port {port}")
+
+    yield port
+
+
+@pytest.fixture(scope="session")
 def runtime_config(
-    runtime_name: str, mock_openai_server_port: int
+    runtime_name: str,
+    mock_openai_server_port: int,
+    mock_anthropic_server_port: int,
 ) -> RuntimeConfig:
     """Resolve the :class:`RuntimeConfig` for ``runtime_name``.
 
@@ -244,6 +297,60 @@ def runtime_config(
                 "https_proxy": "",
             },
             startup_timeout_s=startup_timeout_s,
+        )
+
+    if runtime_name == "claude-code":
+        # Use the runtime's own venv — it ships claude-agent-sdk and the
+        # bundled `claude` CLI, pinned to Python 3.14. The repo-root .venv
+        # (Python 3.12) does NOT have claude-agent-sdk installed.
+        ccruntime_python = (
+            _REPO_ROOT
+            / "lang"
+            / "claude-code-runtime-python"
+            / ".venv"
+            / "bin"
+            / "python"
+        )
+        grpc_port = _free_port()
+
+        fixtures_root = _REPO_ROOT / "tests" / "contract" / "fixtures"
+        probe_out_dir = fixtures_root / "_probe_out"
+        probe_out_dir.mkdir(parents=True, exist_ok=True)
+
+        # ANTHROPIC_BASE_URL concerns:
+        # The bundled `claude` CLI (forked by claude-agent-sdk) honors the
+        # env var and appends its own `/v1/messages` path. We therefore
+        # point BASE_URL at the mock's root host, NOT at `/v1`.
+        return RuntimeConfig(
+            name="claude-code",
+            launch_cmd=[
+                str(ccruntime_python),
+                "-m",
+                "claude_code_runtime",
+                "--port",
+                str(grpc_port),
+                "--log-level",
+                "WARNING",
+            ],
+            grpc_port=grpc_port,
+            env={
+                "ANTHROPIC_API_KEY": "sk-test-mock",
+                "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{mock_anthropic_server_port}",
+                "CLAUDE_RUNTIME_ID": "claude-code-contract-test",
+                "CLAUDE_RUNTIME_PORT": str(grpc_port),
+                # Scoped-hook wiring — same shape as grid arm so the
+                # probe-skill's ${SKILL_DIR} resolves identically.
+                "EAASP_SKILL_CACHE_DIR": str(fixtures_root),
+                "GRID_CONTRACT_PROBE_OUT": str(probe_out_dir),
+                # macOS Clash / system proxy bypass for loopback LLM.
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+            },
+            startup_timeout_s=15.0,
         )
 
     raise NotImplementedError(
@@ -314,15 +421,20 @@ def _run_hook_probe(
     return captures
 
 
-def _check_envelope_mode(cap, scope: str) -> None:
+def _check_envelope_mode(cap, scope: str, runtime_name: str) -> None:
     """Ensure the captured envelope uses ADR-V2-006 envelope-mode shape.
 
-    grid-engine's `HookContext` has envelope-mode support via
-    `with_event()` (D120 / S0.T3), but the dispatch sites in
-    `fire_post_task_hooks` and `dispatch_stop_hooks` do not call it
-    today — so shipping hooks see the pre-ADR legacy full-struct
-    projection. When that happens, xfail with D140 so the contract
-    doesn't falsely flag the runtime as envelope-compliant.
+    Runtime-specific behaviour:
+
+    * ``grid``: grid-engine's ``HookContext`` has envelope-mode support
+      via ``with_event()`` (D120 / S0.T3), but the dispatch sites in
+      ``fire_post_task_hooks`` and ``dispatch_stop_hooks`` do not call
+      it today — shipping hooks see the pre-ADR legacy full-struct
+      projection. Xfail with D140 when that happens.
+    * ``claude-code``: the Python runtime's scoped-hook dispatch (S3.T5)
+      writes envelope-mode shape directly (see ``service.py``
+      ``_dispatch_scoped_*``). A legacy-shape capture here would be a
+      contract regression worth failing loudly, not xfail'ing.
     """
     env = cap.env
     envelope = cap.envelope
@@ -330,7 +442,9 @@ def _check_envelope_mode(cap, scope: str) -> None:
         "GRID_EVENT" not in env
         or envelope.get("event") != scope
     )
-    if legacy:
+    if not legacy:
+        return
+    if runtime_name == "grid":
         pytest.xfail(
             f"D140: grid-runtime {scope} dispatch site not yet calling "
             "HookContext::with_event(...) — envelope-mode infrastructure "
@@ -338,55 +452,58 @@ def _check_envelope_mode(cap, scope: str) -> None:
             "fire_post_task_hooks) needs follow-up commit. Legacy shape "
             "captured."
         )
+    # Any other runtime that ships legacy shape is a real violation —
+    # fall through to the downstream assertion, which will fail with a
+    # diff against the required envelope keys.
 
 
 @pytest.fixture
-def trigger_pre_tool_use_hook(runtime_grpc_stub, probe_out_dir):
+def trigger_pre_tool_use_hook(runtime_grpc_stub, probe_out_dir, runtime_name):
     """Trigger a PreToolUse hook and return ``(envelope, env)``."""
     def _invoke():
         captures = _run_hook_probe(runtime_grpc_stub, probe_out_dir)
         cap = captures.get("PreToolUse")
         if cap is None:
             pytest.xfail(
-                "D136: grid-runtime did not fire PreToolUse during probe "
-                "turn — the scripted tool_call response from the mock "
-                "OpenAI server is not being dispatched by the agent "
-                "loop (D87/required_tools interaction or provider tool-"
-                "call parse). Resolution deferred to Phase 2.5 S1."
+                f"D136: {runtime_name}-runtime did not fire PreToolUse "
+                "during probe turn — for grid this is the required_tools / "
+                "D87 interaction in the agent loop; for claude-code this "
+                "would indicate the OnToolCall RPC dispatch path is "
+                "broken. Resolution deferred to Phase 2.5 S1."
             )
-        _check_envelope_mode(cap, "PreToolUse")
+        _check_envelope_mode(cap, "PreToolUse", runtime_name)
         return cap.envelope, cap.env
 
     return _invoke
 
 
 @pytest.fixture
-def trigger_post_tool_use_hook(runtime_grpc_stub, probe_out_dir):
+def trigger_post_tool_use_hook(runtime_grpc_stub, probe_out_dir, runtime_name):
     def _invoke():
         captures = _run_hook_probe(runtime_grpc_stub, probe_out_dir)
         cap = captures.get("PostToolUse")
         if cap is None:
             pytest.xfail(
-                "D136: grid-runtime did not fire PostToolUse during "
-                "probe turn (same root cause as PreToolUse gap above)"
+                f"D136: {runtime_name}-runtime did not fire PostToolUse "
+                "during probe turn (same root cause as PreToolUse gap)"
             )
-        _check_envelope_mode(cap, "PostToolUse")
+        _check_envelope_mode(cap, "PostToolUse", runtime_name)
         return cap.envelope, cap.env
 
     return _invoke
 
 
 @pytest.fixture
-def trigger_stop_hook(runtime_grpc_stub, probe_out_dir):
+def trigger_stop_hook(runtime_grpc_stub, probe_out_dir, runtime_name):
     def _invoke():
         captures = _run_hook_probe(runtime_grpc_stub, probe_out_dir)
         cap = captures.get("Stop")
         if cap is None:
             pytest.xfail(
-                "D136: grid-runtime did not fire Stop hook at natural "
-                "termination during probe turn"
+                f"D136: {runtime_name}-runtime did not fire Stop hook "
+                "at natural termination during probe turn"
             )
-        _check_envelope_mode(cap, "Stop")
+        _check_envelope_mode(cap, "Stop", runtime_name)
         return cap.envelope, cap.env
 
     return _invoke

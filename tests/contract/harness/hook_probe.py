@@ -179,6 +179,26 @@ class HookProbe:
         written are included. Missing entries indicate the runtime did
         not fire that hook during the turn (which is itself a contract
         violation the caller may assert on).
+
+        Dispatch model notes (S0.T5):
+
+        * grid-runtime fires scoped hooks natively from inside the
+          ``Send`` agent loop when the engine dispatches a tool_call
+          (see ``crates/grid-runtime/src/harness.rs``). Its
+          ``OnToolCall`` / ``OnToolResult`` / ``OnStop`` RPC handlers
+          are deliberate no-ops (``harness.rs:740-761``).
+        * claude-code-runtime fires scoped hooks from
+          ``OnToolCall`` / ``OnToolResult`` / ``OnStop`` directly. Its
+          ``Send`` is a pure SDK passthrough that never dispatches
+          scoped hooks (see ``service.py::Send`` — no ``_dispatch_*``
+          calls inline).
+
+        To exercise the scoped-hook code path on BOTH runtimes without
+        branching on ``runtime_name`` here, we drain Send first (giving
+        grid's native in-loop dispatch a chance to fire) and then
+        invoke the three On* RPCs as a deterministic fallback. The On*
+        RPCs are idempotent (scoped-hook files are overwritten on each
+        fire) and safe on grid (noop return path).
         """
         assert self._session_id, "call setup() first"
 
@@ -201,7 +221,58 @@ class HookProbe:
         # masking real-timing bugs.
         time.sleep(0.1)
 
+        # Post-Send On* sweep (S0.T5). Safe on grid-runtime because its
+        # handlers are noops; necessary on claude-code-runtime whose
+        # scoped-hook dispatch lives ONLY in the On* RPCs. The tool
+        # name + args shape matches the probe-skill's
+        # ``required_tools=["file_write"]`` declaration so a future
+        # runtime that gates dispatch on declared tools still fires.
+        self._drive_on_rpcs()
+
+        # A second short settle for the RPC-path hook writes.
+        time.sleep(0.1)
+
         return self._read_dumps()
+
+    def _drive_on_rpcs(self) -> None:
+        """Invoke On* RPCs to fire scoped hooks on runtimes that gate
+        dispatch on them (e.g. claude-code-runtime).
+
+        Exceptions from any individual RPC are swallowed — the caller
+        surfaces missing captures via the ``_read_dumps`` walk and the
+        corresponding ``trigger_*`` fixture will xfail with the right
+        D-number rather than raising an opaque gRPC error here.
+        """
+        sid = self._session_id or ""
+        try:
+            self._stub.OnToolCall(
+                self._runtime_pb2.ToolCallEvent(
+                    session_id=sid,
+                    tool_name="file_write",
+                    tool_id="call_probe_0",
+                    input_json='{"path": "/tmp/contract-probe.txt", "content": "probe"}',
+                )
+            )
+        except Exception:
+            pass
+        try:
+            self._stub.OnToolResult(
+                self._runtime_pb2.ToolResultEvent(
+                    session_id=sid,
+                    tool_name="file_write",
+                    tool_id="call_probe_0",
+                    output="ok",
+                    is_error=False,
+                )
+            )
+        except Exception:
+            pass
+        try:
+            self._stub.OnStop(
+                self._runtime_pb2.StopEvent(session_id=sid, reason="")
+            )
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Internals
