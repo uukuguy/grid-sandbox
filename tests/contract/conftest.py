@@ -20,6 +20,7 @@ lesson (see MEMORY.md).
 
 from __future__ import annotations
 
+import os
 import socket
 import sys
 import threading
@@ -351,6 +352,50 @@ def runtime_config(
                 "https_proxy": "",
             },
             startup_timeout_s=15.0,
+        )
+
+    if runtime_name == "goose":
+        import shutil
+        goose_bin = os.environ.get("GOOSE_BIN", "") or shutil.which("goose") or ""
+        if not goose_bin:
+            pytest.skip("goose binary not installed; set GOOSE_BIN env to enable goose contract run")
+
+        prebuilt = _REPO_ROOT / "target" / "debug" / "eaasp-goose-runtime"
+        if prebuilt.exists():
+            launch_cmd = [str(prebuilt)]
+            startup_timeout_s = 30.0
+        else:
+            launch_cmd = ["cargo", "run", "-p", "eaasp-goose-runtime", "--"]
+            startup_timeout_s = 120.0
+
+        grpc_port = _free_port()
+        fixtures_root = _REPO_ROOT / "tests" / "contract" / "fixtures"
+        probe_out_dir = fixtures_root / "_probe_out"
+        probe_out_dir.mkdir(parents=True, exist_ok=True)
+
+        return RuntimeConfig(
+            name="goose",
+            launch_cmd=launch_cmd,
+            grpc_port=grpc_port,
+            env={
+                "GOOSE_RUNTIME_GRPC_ADDR": f"0.0.0.0:{grpc_port}",
+                "GOOSE_BIN": goose_bin,
+                "OPENAI_BASE_URL": f"http://127.0.0.1:{mock_openai_server_port}/v1",
+                "OPENAI_API_KEY": "sk-test-mock",
+                "OPENAI_MODEL_NAME": "gpt-4o-mini",
+                "EAASP_HOOK_MCP_MODE": "stdio",
+                "EAASP_SKILL_CACHE_DIR": str(fixtures_root),
+                "GRID_CONTRACT_PROBE_OUT": str(probe_out_dir),
+                "EAASP_DEPLOYMENT_MODE": "shared",
+                "RUST_LOG": "eaasp_goose_runtime=warn",
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+            },
+            startup_timeout_s=startup_timeout_s,
         )
 
     raise NotImplementedError(
