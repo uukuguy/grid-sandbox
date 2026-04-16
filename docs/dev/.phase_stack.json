@@ -6,12 +6,12 @@
       "checkpoint": "docs/plans/.checkpoint.json",
       "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
       "plan": "docs/plans/2026-04-16-v2-phase2_5-plan.md",
-      "progress": "12/25",
+      "progress": "18/25",
       "theme": "Consolidation + goose-runtime (+ ADR-V2-019 L1 deployment model)",
       "stages": [
         "S0 Contract Suite v1 + D120 envelope parity ✅ 6/6 (T1 ✅ T2 ✅ T3 ✅ T4 ✅ T5 ✅ T6 ✅)",
-        "S1.W1 goose-runtime ⏳ 4/7 (T0 ✅ T1 ✅ T2 ✅ T2.5 ✅ — D141 ✅ CLOSED via Dockerfile)",
-        "S1.W2 nanobot-runtime ⏳ 2/6 (T1 ✅ T2 ✅)",
+        "S1.W1 goose-runtime ✅ 7/7 (T0 ✅ T1 ✅ T2 ✅ T2.5 ✅ T3 ✅ T4 ✅ T5 ✅ — COMPLETE)",
+        "S1.W2 nanobot-runtime ⏳ 5/6 (T1 ✅ T2 ✅ T3 ✅ T4 ✅ T5 ✅ — T6 remaining)",
         "S2 Reference Docs ⏳ 0/2",
         "S3 Automated CI Gate ⏳ 0/2",
         "S4 Manual E2E Runbook ⏳ 0/2"

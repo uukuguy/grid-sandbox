@@ -3,7 +3,7 @@
   "design_file": "docs/plans/2026-04-16-v2-phase2_5-design.md",
   "phase": "execution",
   "created_at": "2026-04-16T04:05:00+08:00",
-  "updated_at": "2026-04-16T23:30:00+08:00",
+  "updated_at": "2026-04-17T00:15:00+08:00",
   "completed_tasks": [
     "S0.T1 (Contract harness scaffolding — 10 files @ d5ee72b, 6/6 smoke PASS)",
     "S0.T2 (Contract v1 RED ~35 cases @ 7b19ed8, 1 PASS + 29 SKIP + 5 xfail awaiting T4/T5 fixtures)",
@@ -20,10 +20,12 @@
     "S1.W1.T3 (16 gRPC methods + eaasp-scoped-hook-mcp stdio proxy @ 0719ce5 — service.rs 200+ LOC GooseRuntimeService wrapping GooseAdapter; all 16 RuntimeService methods implemented (Initialize/Terminate/Send/GetCapabilities/On*/List*/Health/Ping/Metrics); build.rs real tonic_build proto codegen; main.rs tonic server on GOOSE_RUNTIME_GRPC_ADDR default 0.0.0.0:50053; eaasp-scoped-hook-mcp: HookEnvelope/HookResult/dispatch_hook/DownstreamMcp/ProxyServer intercepts tools/call for Pre+PostToolUse hooks, proxies all other JSON-RPC; find_hook_script(); 4 unit tests allow/deny/fail-open/missing; Cargo.toml +tokio-stream+chrono+serde_json+[[bin]]; main.rs reads EAASP_DOWNSTREAM_CMD/ARGS/HOOK_DIR/SESSION_ID/SKILL_ID/HOOK_TIMEOUT_SECS; Method A stdio MCP server chosen per user agreement.)",
     "S1.W2.T3 (multi-turn agent loop + event mapping @ ff311c0 — session.py 178 LOC: EventType/AgentEvent/ToolCall/ToolExecutor protocol/StubToolExecutor/AgentSession.run() AsyncGenerator + _dispatch_post_tool_use_hooks + _run_hook_subprocess; ADR-V2-006 PostToolUse envelope on stdin; exit-2=deny/timeout=fail-open/other=allow; test_session.py 124 LOC 5 tests: pure-text CHUNK+STOP/single-tool-call/multi-turn-2-rounds/post-tool-use-hook-fires real shell/provider-error-emits-error; pytest 5/5 PASS on Python 3.14.2)",
     "S1.W1.T4 (goose-runtime contract v1 config wired @ 310e0ff — conftest.py goose branch: GOOSE_BIN check + shutil.which + pytest.skip-if-absent + prebuilt/cargo-run detection + grpc_port _free_port() + full env dict; dry-run --runtime=goose produces 10 skips in 0.15s — designed behaviour when goose not installed)",
-    "S1.W2.T4 (16 gRPC methods for nanobot-runtime-python @ a8408c9+14ed549 — proto stubs copied+patched from claude-code-runtime _proto/eaasp/runtime/v2/; service.py NanobotRuntimeService all 16 methods wrapping AgentSession; __main__.py real grpc.aio server port 50054/NANOBOT_RUNTIME_PORT; tests/test_service.py 8 new tests; 18/18 pytest PASS; .pyi stubs added)"
+    "S1.W2.T4 (16 gRPC methods for nanobot-runtime-python @ a8408c9+14ed549 — proto stubs copied+patched from claude-code-runtime _proto/eaasp/runtime/v2/; service.py NanobotRuntimeService all 16 methods wrapping AgentSession; __main__.py real grpc.aio server port 50054/NANOBOT_RUNTIME_PORT; tests/test_service.py 8 new tests; 18/18 pytest PASS; .pyi stubs added)",
+    "S1.W1.T5 (skill-extraction E2E smoke through goose gRPC stack @ 2189800 — tests/skill_extraction_e2e_test.rs: in-process tonic server Initialize→Send→Terminate; asserts session_id non-empty + ≥1 SendResponse chunk + last chunk_type=='done'; graceful skip if goose absent (GOOSE_BIN/which gate); build.rs +build_client(true); Cargo.toml +tokio-stream net feature; 11/11 cargo test PASS)",
+    "S1.W2.T5 (nanobot-runtime contract v1 config wired @ 602c1dc — conftest.py nanobot branch: nanobot-runtime-python venv python + free port + OPENAI_BASE_URL/API_KEY/MODEL_NAME + EAASP_DEPLOYMENT_MODE + proxy bypass; skip-if-venv-absent guard; syntax OK; venv exists Python 3.14)"
   ],
   "current_task": null,
-  "next_task": "parallel: W1.T5 (skill-extraction E2E smoke through goose subprocess+middleware) ∥ W2.T5 (nanobot-runtime contract v1 GREEN — add nanobot config to conftest)",
+  "next_task": "parallel: W2.T6 (skill-extraction E2E smoke through nanobot → mock_openai_server) ∥ S2.T1 (L1_RUNTIME_ADAPTATION_GUIDE.md) — W1.T5+W2.T5 both DONE, S1 W1 7/7 COMPLETE, W2 5/6",
   "execution_mode": "subagent-driven-development",
   "phase_name": "Phase 2.5 — Consolidation + goose-runtime (EAASP v2.0)",
   "total_tasks": 25,
