@@ -7,7 +7,7 @@ description = "EAASP L1 runtime adapter for block/goose (Outcome B: subprocess v
 [dependencies]
 tonic = "0.12"
 tokio = { version = "1", features = ["full", "process"] }   # "process" for Child
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["net"] }
 prost = "0.13"
 anyhow = "1"
 tracing = "0.1"
