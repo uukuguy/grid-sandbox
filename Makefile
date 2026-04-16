@@ -28,7 +28,8 @@
         eaasp-mcp-health eaasp-mcp-list eaasp-mcp-resolve \
         e2e-setup e2e-run e2e-test e2e-teardown e2e-full \
         hermes-runtime-setup hermes-runtime-test hermes-runtime-start hermes-runtime-build hermes-runtime-run \
-        runtime-verify claude-runtime-verify hermes-runtime-verify
+        runtime-verify claude-runtime-verify hermes-runtime-verify \
+        goose-runtime-container-build goose-runtime-container-run goose-runtime-container-verify-f1
 
 # Default test project for CLI commands
 TEST_PROJECT ?= $(PWD)/examples/demo-project
@@ -748,6 +749,26 @@ claude-runtime-verify:
 # 双 runtime 集成验证 (先 build 再启动，需要 ANTHROPIC_API_KEY)
 verify-dual-runtime:
 	./scripts/verify-dual-runtime.sh
+
+# ============================================================
+# eaasp-goose-runtime (ADR-V2-019 L1 container template)
+# Container-first baseline replacing frozen hermes as L1 reference.
+# ============================================================
+
+goose-runtime-container-build:
+	docker build -f crates/eaasp-goose-runtime/Dockerfile -t eaasp-goose-runtime:dev .
+
+goose-runtime-container-run:
+	docker run --rm -p 50063:50063 \
+	  -e EAASP_DEPLOYMENT_MODE=shared \
+	  -e OPENAI_BASE_URL=$${OPENAI_BASE_URL:-http://host.docker.internal:18099} \
+	  -e OPENAI_API_KEY=$${OPENAI_API_KEY:-sk-test} \
+	  -e OPENAI_MODEL_NAME=$${OPENAI_MODEL_NAME:-gpt-4o-mini} \
+	  eaasp-goose-runtime:dev
+
+# F1 gate: prove goose CLI is functional inside the image (closes D141)
+goose-runtime-container-verify-f1:
+	docker run --rm --entrypoint goose eaasp-goose-runtime:dev info
 
 # ============================================================
 # hermes-runtime (Python EAASP L1 Runtime — ⏸️ DEPRECATED)
