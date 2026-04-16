@@ -1,5 +1,36 @@
 {
-  "active_phases": [],
+  "active_phases": [
+    {
+      "name": "Phase 2.5 — Consolidation + goose-runtime (EAASP v2.0)",
+      "started_at": "2026-04-16T03:45:00+08:00",
+      "checkpoint": "docs/plans/.checkpoint.json",
+      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
+      "plan": null,
+      "progress": "0/0 (plan TBD)",
+      "theme": "Consolidation + goose-runtime",
+      "priorities_p1_defer": [
+        "goose-runtime 引入 (ADR-V2-017 W1)",
+        "D130 session-lifetime parent token consolidation",
+        "D120 cross-runtime hook envelope parity",
+        "D117 原 D50 Prompt executor",
+        "D78 event payload embedding",
+        "D94 MemoryStore 单例 refactor",
+        "D98 HybridIndex HNSW 持久化"
+      ],
+      "prereq_commits": [
+        "f4bf9ad (S4.T4 thread-scoped interrupt)",
+        "35c20af (Phase 2 close 23/23)",
+        "f4d0edf (end-phase docs)"
+      ],
+      "upstream_adrs": [
+        "ADR-V2-006 (scoped-hook envelope)",
+        "ADR-V2-015 (semantic HNSW)",
+        "ADR-V2-016 (agent loop)",
+        "ADR-V2-017 (L1 runtime ecosystem — hermes frozen, goose primary)",
+        "ADR-V2-018 (PreCompact hook)"
+      ]
+    }
+  ],
   "suspended_phases": [],
   "archived_phases": [
     {
