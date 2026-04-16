@@ -3,7 +3,7 @@
 > **Single Source of Truth** — 本文件是所有 Deferred 项的唯一权威登记处。
 > 新增 / 关闭 / 迁移 D 编号都必须同步更新本文件，并在 commit message 引用 `Dxx`。
 
-**最后更新**: 2026-04-14 (S1 batch A closed: D83/D85/D86 → ✅ closed, D90 → 🟡 P1-defer 新增)
+**最后更新**: 2026-04-16 (Phase 2.5 S0.T1-T3 batch closed: D120 → ✅ closed @ `7e083c7`, D134/D135 新增)
 **维护规则**: 每次 end-phase 或 Deferred 状态变更时更新 [状态变更日志](#状态变更日志) 并同步 [全局活跃清单](#全局活跃清单-eaasp-v20)。
 
 ---
@@ -328,6 +328,9 @@
 | 2026-04-16 | — | **S4.T4 reviewer M1+M2+N2 inline-fixed** | DashMap-Ref-across-await 修正（改为 clone-handle-out-of-guard 匹配 runtime_lifecycle.rs 惯用法）+ `tracing::debug!` 日志送失败 + `THREAD_SCOPED` 改为 module-level `const _: () = assert!(...)` 编译时断言。3 候选 D131/D132/D133 全部 inline-fixed 无新 Deferred 需登 |
 | 2026-04-16 | D130 | **新增** 🟡 P1-defer | S4.T4 session-lifetime vs per-turn cancel token 双 token 不一致，`cancel_session()` 需双路径触发（registry flag + `AgentMessage::Cancel` channel）才能真正打断 in-flight turn → **Phase 2.5 consolidation**（前置：`ChildCancellationToken::cancel` propagation + `AgentLoopConfig.cancel_token` plumbing） |
 | 2026-04-16 | — | **Phase 2 23/23 COMPLETE** | S4.T4 closes Phase 2. Stage breakdown: S0 2/2 + S1 7/7 + S2 5/5 + S3 5/5 + S4 4/4. Next: Phase 2.5 (goose-runtime + Rust HookContext envelope parity + D94/D98/D108/D120/D130 consolidation batch) |
+| 2026-04-16 | D120 | 🟡 P1-defer → ✅ closed | Phase 2.5 S0.T3 @ `7e083c7` — Rust `HookContext` 扩展 ADR-V2-006 §2/§3 字段（`event`/`skill_id`/`draft_memory_id`/`evidence_anchor_id`/`created_at` + `GRID_EVENT`/`GRID_SKILL_ID` env vars）+ empty-string serde helper + 10 parity tests。Python 侧先前已合规（S3.T5）。byte-parity 已对 ADR §2.1/2.2/2.3 canonical JSON 锁定 |
+| 2026-04-16 | D134 | **新增** 🟡 P1-defer | 已落盘 skill hooks（`threshold-calibration/check_output_anchor.sh` + `skill-extraction/check_final_output.sh`）通过 `.output.evidence_anchor_id` / `.output.draft_memory_id` 嵌套路径读 envelope，与 ADR-V2-006 §2.3 定义的 top-level 字段不匹配。T3 envelope 代码本身正确，但 grid-runtime 生产路径尚未调用 `with_event()`，旧调用站走 legacy full-struct 投影所以当前运行正常。**阻断项**：Phase 2.5 W1 goose-runtime 或任何激活 `with_event("Stop")` 的 batch 必须先迁移这些 shipped hook 或文档化 top-level 字段 — 否则 production 路径静默失配。建议 W1.T1 前置 |
+| 2026-04-16 | D135 | **新增** 🔵 P3-defer | Phase 2.5 S0.T2 contract_v1 `test_hook_envelope.py` 5 cases 用 `pytest.xfail` 标注 fixture 占位；T4 引入真实 fixtures 时需显式**转为正断言**（而非仅删 xfail 标记）。否则 xfail→XPASS 可能掩盖 D120 回归。S0.T2 reviewer Major-2 — T4 blueprint 前置 |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -343,14 +346,14 @@
 
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
-| ✅ **closed** | 19 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D83, D84, D85, D86, D87, D89, D124 + S3.T5 legacy D50→D117 renamed | 已完成（2026-04-15 新增 D51/D53/D60/D84/D89/D124） |
+| ✅ **closed** | 20 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D83, D84, D85, D86, D87, D89, D120, D124 + S3.T5 legacy D50→D117 renamed | 已完成（2026-04-16 新增 D120 via S0.T3） |
 | 🔄 **superseded** | 3 | D27→D54, D40→D54, D50→D117 (renamed) | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
 | 🟡 **P1-active** | 1 | D78 | event payload embedding 未完成，延到 Phase 2.5 |
-| 🟡 **P1-defer** | 11 | D90, D93, D94, D98, D102, D105, D108, D109, D120, D125, D130 | 前置 frontend UI / Phase 2.5 refactor / Phase 3 breaking |
+| 🟡 **P1-defer** | 11 | D90, D93, D94, D98, D102, D105, D108, D109, D125, D130, D134 | 前置 frontend UI / Phase 2.5 refactor / Phase 3 breaking（D120 closed via S0.T3，D134 新增 Phase 2.5 W1 前置） |
 | 🔵 **P2-defer** | 1 | D95 | FTS semantic_score 回填，Phase 2.5 |
-| 🔵 **P3-defer** | 19 | D92, D96, D97, D99, D100, D101, D103, D104, D106, D107, D110, D118, D119, D121, D122, D123, D126, D127, D128, D129 | 边角场景 / 告警优化 |
+| 🔵 **P3-defer** | 20 | D92, D96, D97, D99, D100, D101, D103, D104, D106, D107, D110, D118, D119, D121, D122, D123, D126, D127, D128, D129, D135 | 边角场景 / 告警优化（D135 新增 S0.T2 xfail graduation） |
 | 🟢 **P2-active** | 0 | — | D12→D94 renamed, D60 closed |
 | 🔵 **P3-active** | 1 | D74 | Phase 2 可选加速 |
 | 🟡 **P1-active（renamed）** | 1 | D117 (原 D50) | Prompt-body 执行器，用户同意推迟 |

@@ -5,17 +5,32 @@
       "started_at": "2026-04-16T03:45:00+08:00",
       "checkpoint": "docs/plans/.checkpoint.json",
       "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
-      "plan": null,
-      "progress": "0/0 (plan TBD)",
+      "plan": "docs/plans/2026-04-16-v2-phase2_5-plan.md",
+      "progress": "3/24",
       "theme": "Consolidation + goose-runtime",
+      "stages": [
+        "S0 Contract Suite v1 + D120 envelope parity 🟡 3/6 (T1 ✅ T2 ✅ T3 ✅)",
+        "S1.W1 goose-runtime ⏳ 0/6",
+        "S1.W2 nanobot-runtime ⏳ 0/6",
+        "S2 Reference Docs ⏳ 0/2",
+        "S3 Automated CI Gate ⏳ 0/2",
+        "S4 Manual E2E Runbook ⏳ 0/2"
+      ],
+      "next_task": "S0.T4 grid-runtime contract tests GREEN",
+      "last_updated": "2026-04-16T15:10:00+08:00",
+      "commits_so_far": [
+        "d5ee72b (S0.T1 contract harness scaffolding)",
+        "7b19ed8 (S0.T2 contract v1 RED ~35 cases)",
+        "7e083c7 (S0.T3 D120 HookContext envelope parity — D120 CLOSED)"
+      ],
       "priorities_p1_defer": [
         "goose-runtime 引入 (ADR-V2-017 W1)",
         "D130 session-lifetime parent token consolidation",
-        "D120 cross-runtime hook envelope parity",
         "D117 原 D50 Prompt executor",
         "D78 event payload embedding",
         "D94 MemoryStore 单例 refactor",
-        "D98 HybridIndex HNSW 持久化"
+        "D98 HybridIndex HNSW 持久化",
+        "D134 shipped Stop hooks nesting mismatch (W1 前置)"
       ],
       "prereq_commits": [
         "f4bf9ad (S4.T4 thread-scoped interrupt)",
@@ -28,7 +43,8 @@
         "ADR-V2-016 (agent loop)",
         "ADR-V2-017 (L1 runtime ecosystem — hermes frozen, goose primary)",
         "ADR-V2-018 (PreCompact hook)"
-      ]
+      ],
+      "s0_t1_t3_completion": "2026-04-16 @ d5ee72b+7b19ed8+7e083c7 — Contract harness (tests/contract/ 7 files + 6 smoke tests PASS) + 35 RED contract_v1 cases (1 PASS + 29 SKIP pending T4/T5 + 5 xfail fixtures) + Rust HookContext envelope parity extends ADR-V2-006 §2/§3 (event/skill_id/draft_memory_id/evidence_anchor_id/created_at + GRID_EVENT/GRID_SKILL_ID) + 10 integration tests byte-parity locked to ADR canonical JSON literals. Reviewer APPROVE-WITH-COMMENTS 0 Criticals, 5 coder deviations all acceptable (created_at in new() > execute_command; xfail RED discipline vs plan FAIL; .gitignore exemption; --runtime optional for smoke coexistence; surgical rustfmt). Major-1 → D134 filed (shipped skill hooks read nested .output.evidence_anchor_id vs ADR top-level — blocks W1 when grid-runtime wires .with_event() to production). Major-2 → D135 filed (T4 must graduate xfail fixtures to positive assertions, not just remove xfail markers). D120 → ✅ closed. Python side already compliant from Phase 2 S3.T5 (verified byte-for-byte against service.py:898-1042 — same 6/7/6 keys, same empty-string policy, same Zulu strftime). RuFlo swarm-1776322960829 hierarchical: scout (Explore /tmp/s0-t1-t3-blueprint.md 638 lines) → coder (3 commits first-pass) → reviewer APPROVE-WITH-COMMENTS."
     }
   ],
   "suspended_phases": [],

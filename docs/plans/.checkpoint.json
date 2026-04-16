@@ -1,21 +1,26 @@
 {
   "plan_file": "docs/plans/2026-04-16-v2-phase2_5-plan.md",
   "design_file": "docs/plans/2026-04-16-v2-phase2_5-design.md",
-  "phase": "design",
+  "phase": "execution",
   "created_at": "2026-04-16T04:05:00+08:00",
-  "updated_at": "2026-04-16T04:05:00+08:00",
-  "completed_tasks": [],
+  "updated_at": "2026-04-16T15:10:00+08:00",
+  "completed_tasks": [
+    "S0.T1 (Contract harness scaffolding — 10 files @ d5ee72b, 6/6 smoke PASS)",
+    "S0.T2 (Contract v1 RED ~35 cases @ 7b19ed8, 1 PASS + 29 SKIP + 5 xfail awaiting T4/T5 fixtures)",
+    "S0.T3 (D120 HookContext envelope parity @ 7e083c7, 10 integration tests PASS, byte-parity locked to ADR §2.1/2.2/2.3 canonical JSON, Python already compliant — D120 ✅ closed)"
+  ],
   "current_task": null,
-  "next_task": "S0.T1 — Contract harness scaffolding",
-  "execution_mode": null,
+  "next_task": "S0.T4 — grid-runtime contract tests GREEN",
+  "execution_mode": "subagent-driven-development",
   "phase_name": "Phase 2.5 — Consolidation + goose-runtime (EAASP v2.0)",
   "total_tasks": 24,
   "stages": {
     "S0": {
       "name": "Shared Contract Suite v1 + D120 Envelope Parity",
       "tasks": 6,
-      "completed": 0,
-      "type": "serial-prerequisite"
+      "completed": 3,
+      "type": "serial-prerequisite",
+      "batch_1_completion": "2026-04-16 T1-T3 via RuFlo swarm-1776322960829 hierarchical (scout Explore /tmp/s0-t1-t3-blueprint.md 638 lines → coder 3 commits first-pass → reviewer APPROVE-WITH-COMMENTS 0 Criticals 2 Majors deferred D134/D135). Next batch: T4-T6 (grid+claude-code runtime GREEN + v1.0.0 freeze tag)."
     },
     "S1.W1": {
       "name": "goose-runtime (Rust, Thin Wrap)",
@@ -81,6 +86,18 @@
     "f4d0edf — end-phase Phase 2 docs sync",
     "8b293b1 — Phase 2.5 design doc",
     "5182ab3 — Phase 2.5 implementation plan"
+  ],
+  "phase2_5_commits": [
+    "d5ee72b (S0.T1 contract harness scaffolding)",
+    "7b19ed8 (S0.T2 contract v1 ~35 cases RED)",
+    "7e083c7 (S0.T3 D120 HookContext envelope parity — D120 ✅ closed)"
+  ],
+  "new_deferred_this_batch": [
+    "D134 🟡 P1-defer — shipped skill hooks read nested .output.* vs ADR top-level envelope (Phase 2.5 W1 前置)",
+    "D135 🔵 P3-defer — T4 must graduate xfail fixtures to positive assertions"
+  ],
+  "closed_deferred_this_batch": [
+    "D120 ✅ closed via S0.T3 @ 7e083c7"
   ],
   "notes": "Design + plan phase complete via /superpowers:brainstorming (8 Q/A) then /superpowers:writing-plans (24 bite-sized tasks). Recommended next step: Parallel Session via /superpowers:executing-plans in fresh context pointing at plan_file, starting with S0.T1 contract harness scaffolding. Subagent-Driven (this session) also viable for rapid momentum. W1.T0 goose spike MUST run before W1.T1 — it determines thin wrap vs subprocess-via-MCP branching. Open Q#1+Q#4 close during W1.T0."
 }
