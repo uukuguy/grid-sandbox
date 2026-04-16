@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import json
 import stat
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from nanobot_runtime.provider import OpenAICompatProvider
-from nanobot_runtime.session import AgentEvent, AgentSession, EventType
+from nanobot_runtime.session import AgentSession, EventType
 
 
 # ---------------------------------------------------------------------------

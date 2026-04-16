@@ -135,7 +135,7 @@ class AgentSession:
         """
         self._messages.append({"role": "user", "content": user_message})
 
-        for _turn in range(self.max_turns):
+        for _ in range(self.max_turns):
             try:
                 response = await self.provider.chat(
                     messages=self._messages,
@@ -226,6 +226,7 @@ class AgentSession:
             "session_id": self.session_id,
             "skill_id": "",
             "tool_name": tool_name,
+            "tool_input": tool_input,
             "tool_result": tool_result,
             "is_error": is_error,
             "draft_memory_id": "",
