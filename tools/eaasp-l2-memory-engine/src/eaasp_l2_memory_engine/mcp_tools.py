@@ -171,7 +171,13 @@ class McpToolDispatcher:
         memory_id = _require(args, "memory_id", str)
         memory = await self.files.read_latest(memory_id)
         if memory is None:
-            raise ToolError("not_found", f"memory_id not found: {memory_id}")
+            raise ToolError(
+                "not_found",
+                f"memory_id '{memory_id}' not found. memory_id must come from "
+                f"memory_search.hits[*].memory_id or memory_write_file return. "
+                f"Do not invent IDs. If you intend to create a new entry, "
+                f"call memory_write_file (not memory_read/update).",
+            )
         return memory.model_dump()
 
     async def _memory_write_anchor(self, args: dict[str, Any]) -> dict[str, Any]:

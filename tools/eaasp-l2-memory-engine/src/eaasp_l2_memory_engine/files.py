@@ -293,7 +293,11 @@ class MemoryFileStore:
         """Transition status → archived (creates new version)."""
         latest = await self.read_latest(memory_id)
         if latest is None:
-            raise KeyError(f"memory_id not found: {memory_id}")
+            raise KeyError(
+                f"memory_id '{memory_id}' not found. memory_id must come from "
+                f"memory_search.hits[*].memory_id or memory_write_file return. "
+                f"Do not invent IDs."
+            )
         if "archived" not in _ALLOWED_TRANSITIONS[latest.status]:
             raise InvalidStatusTransition(
                 f"Cannot transition {latest.status} → archived for {memory_id}"
@@ -312,7 +316,11 @@ class MemoryFileStore:
     async def confirm(self, memory_id: str) -> MemoryFileOut:
         latest = await self.read_latest(memory_id)
         if latest is None:
-            raise KeyError(f"memory_id not found: {memory_id}")
+            raise KeyError(
+                f"memory_id '{memory_id}' not found. memory_id must come from "
+                f"memory_search.hits[*].memory_id or memory_write_file return. "
+                f"Do not invent IDs."
+            )
         if "confirmed" not in _ALLOWED_TRANSITIONS[latest.status]:
             raise InvalidStatusTransition(
                 f"Cannot transition {latest.status} → confirmed for {memory_id}"
