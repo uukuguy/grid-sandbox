@@ -1,5 +1,11 @@
 # Phase 1 Event Engine — 人工 E2E 验证指南
 
+> **⚠️ ARCHIVED (2026-04-17)** — 本文已归档为 Phase 1 收尾的一次性 artifact。
+> **后续所有人工 E2E 验证请使用长期指南**: `docs/design/EAASP/E2E_VERIFICATION_GUIDE.md`
+> Phase 1 收尾历史见该指南第 7 节。
+
+---
+
 > **执行时机**: Phase 1 所有自动化测试通过后（123/123 L4 + 13 CLI），准备进入 end-phase 前。
 > **目标**: 证明 Event Engine 在真实 agent loop 中端到端工作，不是纸面承诺。
 > **参考提交**: `8c174c2`（第二轮审计修复）/ `081c21b`（第一轮审计修复）
