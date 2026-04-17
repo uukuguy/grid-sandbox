@@ -427,14 +427,23 @@ bash scripts/eaasp-e2e.sh --only B --skip B9,B10,B11
 - **B 组**: 全跑（当时脚本手动驱动，见 `scripts/s4t3-runtime-verification.sh`）
 - **结果**: 🟢 Completed 23/23
 
-### Phase 2.5 — L1 Runtime Ecosystem（2026-04-17 进行中）
+### Phase 2.5 — L1 Runtime Ecosystem（2026-04-18 🟢 Completed）
 
 - **本次引入能力**: A12 (D120 HookContext parity) + A13 (L1 生态扩展) + B10 (goose F1) + B11 (合约 v1) + nanobot/goose runtime
-- **全矩阵回归**: 本次 sign-off 要求 A1-A13 + B1-B11 全跑（由 `scripts/eaasp-e2e.sh` 驱动）
-- **新 runtime 能力**: nanobot（真实 LLM 可回复，无 MCP 工具注入）+ goose（Initialize/Terminate/Health，Send stub → Phase 3）
+- **全矩阵回归**: Sign-off E2E PASS (34 checks, 0 FAIL, 8 TODO, 4 SKIP, exit 0)
+- **本次 sign-off 挖出并治本的 grid-engine/grid-runtime 核心 bug**:
+  1. BROADCAST_CAPACITY 256 过小 → Done chunk 丢失 → gRPC stream 不关 (fix: 4096 + Lag-fallback)
+  2. `EAASP_TOOL_FILTER=on` env 读取逻辑在 055badf 被 squash 丢失 (fix: 恢复)
+  3. KG/MCP-manage tools 绕过 tool_filter (fix: 尊重 filter)
+  4. executor.rs AgentTool/QueryAgentTool 无条件注册 (fix: 检查 session registry)
+  5. Stop hook envelope 缺 evidence_anchor_id/draft_memory_id → 永远 InjectAndContinue → cap reached (fix: memory_write_anchor/file 后捕获 id 注入)
+  6. 只 materialize SKILL.md 不 copy hooks/ → `${SKILL_DIR}/hooks/*.sh` 不存在 (fix: copy hooks/ + exec bit)
+  7. L4 token-level chunk 不聚合 → 612 events/session 撑爆 API (fix: send/stream 都聚合 text_delta/thinking → 35 events/session)
+- **10 个新回归测试固定**: L4 coalescing (5) + Rust phase2_5_regression (3) + hooks materialization (2)，全 PASS
+- **新 runtime 能力**: nanobot（真实 LLM + agent loop 骨架，无 MCP 工具注入）+ goose（Initialize/Terminate/Health + 容器 F1 gate，Send stub → Phase 3）
 - **新 Deferred**: D144（nanobot/goose ConnectMCP 工具注入 → Phase 3）
-- **结果**: 待 sign-off
-- **本次 artifact**: `docs/main/PHASE2_5_E2E_VERIFICATION_GUIDE.md`（降级为历史归档）
+- **结果**: 🟢 25/25 Completed @ 2026-04-18
+- **本次 artifact**: `docs/main/PHASE2_5_E2E_VERIFICATION_GUIDE.md`（历史归档）
 
 ### Phase 3 — [待定]
 

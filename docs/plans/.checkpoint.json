@@ -3,7 +3,7 @@
   "design_file": "docs/plans/2026-04-16-v2-phase2_5-design.md",
   "phase": "execution",
   "created_at": "2026-04-16T04:05:00+08:00",
-  "updated_at": "2026-04-17T02:30:00+08:00",
+  "updated_at": "2026-04-18T06:00:00+08:00",
   "completed_tasks": [
     "S0.T1 (Contract harness scaffolding — 10 files @ d5ee72b, 6/6 smoke PASS)",
     "S0.T2 (Contract v1 RED ~35 cases @ 7b19ed8, 1 PASS + 29 SKIP + 5 xfail awaiting T4/T5 fixtures)",
@@ -28,10 +28,11 @@
     "S2.T2 (L1_RUNTIME_COMPARISON_MATRIX.md @ 844664d — docs/design/EAASP/L1_RUNTIME_COMPARISON_MATRIX.md 105 LOC Chinese; 4-runtime capability matrix: native_hooks/mcp/skills, tool_choice, PreCompact, deployment_mode, tier, contract v1 pass counts; per-runtime summaries + D142/D143 deferred references)",
     "S3.T1 (Makefile v2-phase2_5-e2e targets @ 844664d — +29 LOC: v2-phase2_5-ci-setup + contract-{grid,cc,goose,nanobot} + e2e aggregate target)",
     "S3.T2 (GitHub Actions contract matrix @ 844664d — .github/workflows/phase2_5-contract.yml 76 LOC; matrix [grid,claude-code,goose,nanobot] fail-fast:false; Rust toolchain only for grid/goose; API keys via secrets)",
-    "S4.T1 (Manual E2E runbook @ 844664d — scripts/phase2_5-runtime-verification.sh 172 LOC chmod+x + scripts/phase2_5-runtime-verification-checklist.md 128 LOC Chinese; --runtime override; exits 0 on ≥2 PASS; mirrors s4t3 pattern)"
+    "S4.T1 (Manual E2E runbook @ 844664d — scripts/phase2_5-runtime-verification.sh 172 LOC chmod+x + scripts/phase2_5-runtime-verification-checklist.md 128 LOC Chinese; --runtime override; exits 0 on ≥2 PASS; mirrors s4t3 pattern)",
+    "S4.T2 (Human sign-off E2E @ 83533ba+047ce7a+eaed8c0+ddda098 — `bash scripts/eaasp-e2e.sh` exit 0 with 34 PASS / 0 FAIL / 8 TODO / 4 SKIP. Root-caused and fixed 6 grid-engine/grid-runtime issues: BROADCAST_CAPACITY 256→4096, EAASP_TOOL_FILTER env logic restored (lost in 055badf), KG/MCP-manage tools now respect tool_filter, executor.rs AgentTool/QueryAgentTool gated on filter, last_evidence_anchor_id + last_draft_memory_id captured from memory_write_anchor/file and threaded into Stop ctx, hooks/ subdirectory materialized alongside SKILL.md. L4 coalesces token-level text_delta/thinking chunks (612→35 events/session). L2 friendly error messages. Stop hook scripts read top-level envelope fields. 10 new regression tests (5 L4 coalescing + 3 Rust phase2.5 + 2 hooks materialization), all PASS. scripts/eaasp-e2e.sh adds log_todo status with explicit cross-layer test coverage references. docs/design/EAASP/E2E_VERIFICATION_GUIDE.md §5.5 human step-by-step + §5.6 maintenance commitment.)"
   ],
   "current_task": null,
-  "next_task": "S4.T2 (Human sign-off run ≥2 real OpenAI-compat endpoints) — HUMAN-DRIVEN, run: bash scripts/phase2_5-runtime-verification.sh — Plan 24/25",
+  "next_task": null,
   "execution_mode": "subagent-driven-development",
   "phase_name": "Phase 2.5 — Consolidation + goose-runtime (EAASP v2.0)",
   "total_tasks": 25,
@@ -82,20 +83,21 @@
     "S2": {
       "name": "Reference Documentation",
       "tasks": 2,
-      "completed": 1,
+      "completed": 2,
       "type": "after-W1-W2"
     },
     "S3": {
       "name": "Automated CI Gate",
       "tasks": 2,
-      "completed": 0,
+      "completed": 2,
       "type": "after-S2"
     },
     "S4": {
-      "name": "Manual E2E Runbook",
+      "name": "Manual E2E Runbook + Sign-off",
       "tasks": 2,
-      "completed": 0,
-      "type": "after-S3"
+      "completed": 2,
+      "type": "after-S3",
+      "t2_completion": "2026-04-18 @ 83533ba+047ce7a+eaed8c0+ddda098 — Human sign-off E2E PASS (34 checks, 0 FAIL, 8 TODO, 4 SKIP, exit 0). Root-caused 6 grid-engine/grid-runtime structural bugs during debug; all fixed with治本 approach + 10 regression tests. See completed_tasks S4.T2 entry for full detail."
     }
   },
   "design_decisions": {
