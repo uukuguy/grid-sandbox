@@ -58,3 +58,6 @@ eval_output/
 tests/e2e/__pycache__/
 tests/contract/**/__pycache__/
 tests/contract/.pytest_cache/
+
+# dev-eaasp runtime logs
+.logs/

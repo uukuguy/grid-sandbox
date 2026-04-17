@@ -208,6 +208,173 @@ bash scripts/eaasp-e2e.sh --runtime grid  # 只测单 runtime
 
 ---
 
+### 5.5 人工分步观察方案
+
+**目的**: 每个新功能特性有独立小步，人眼能看到实际运行过程。不追求一键，追求**可观察**。
+
+**前置**: `make dev-eaasp` 已在 Terminal A 运行。
+
+```bash
+cd /Users/sujiangwen/sandbox/LLM/speechless.ai/SGAI/grid-sandbox
+alias eaasp='tools/eaasp-cli-v2/.venv/bin/eaasp'
+```
+
+#### Part A — 回归基线（主干能力，每次必跑）
+
+##### Step 1 — 注册 skills（首次）
+
+```bash
+eaasp skill submit examples/skills/threshold-calibration
+eaasp skill submit examples/skills/skill-extraction
+```
+
+##### Step 2 — grid-runtime 流式跑
+
+```bash
+eaasp session create --skill threshold-calibration --runtime grid-runtime
+export SID=<session_id>
+eaasp session send $SID "请校准 Transformer-001 的温度阈值，完整执行工作流"
+```
+
+**观察**: 终端实时滚动 `[tool_call: scada_read_snapshot] → [tool_result] → memory_search → memory_write_anchor → memory_write_file`，最终 JSON 含 `evidence_anchor_id`。
+
+##### Step 3 — grid 计数验收
+
+```bash
+eaasp session events $SID --format json | jq '{
+  PRE:([.events[]|select(.event_type=="PRE_TOOL_USE")]|length),
+  POST:([.events[]|select(.event_type=="POST_TOOL_USE")]|length),
+  STOP:([.events[]|select(.event_type=="STOP")]|length),
+  tools:[.events[]|select(.event_type=="PRE_TOOL_USE")|.payload.tool_name]
+}'
+```
+
+**标准**: PRE ≥ 4 / POST ≈ PRE / STOP == 1。
+
+##### Step 4 — claude-code-runtime 同 Step 2+3
+
+```bash
+eaasp session create --skill threshold-calibration --runtime claude-code-runtime
+export SID2=<id>
+eaasp session send $SID2 "请校准 Transformer-001 的温度阈值，完整执行工作流"
+eaasp session events $SID2 --format json | jq '{PRE:([.events[]|select(.event_type=="PRE_TOOL_USE")]|length),STOP:([.events[]|select(.event_type=="STOP")]|length)}'
+```
+
+---
+
+#### Part B — 新功能特性分步（每特性独立，可观察）
+
+> **演进规则**: 每个 Phase 新增能力必须在此追加一小节（5.5.N）。**不改已有小节**。
+
+##### 5.5.1 混合检索 + HNSW 向量（Phase 2.S2.T1-T2）
+
+```bash
+eaasp memory search --query "Transformer-001 温度阈值" --limit 5
+EAASP_HYBRID_WEIGHTS=1.0,0.0 eaasp memory search --query "Transformer-001 温度阈值" --limit 5
+```
+
+**观察**: 两次返回的 memory 顺序不同（纯 FTS vs FTS+语义融合）。
+
+##### 5.5.2 状态机 + memory_confirm（Phase 2.S2.T3-T4）
+
+```bash
+eaasp session send $SID "确认刚才的阈值建议，调用 memory_confirm 把 status 设为 confirmed"
+eaasp memory list --status confirmed --limit 3
+```
+
+**观察**: 返回 memory 含 `status: confirmed`。
+
+##### 5.5.3 skill-extraction meta-skill（Phase 2.S3.T2-T3）
+
+```bash
+eaasp session create --skill skill-extraction --runtime grid-runtime
+export SID_SX=<id>
+eaasp session send $SID_SX "从刚才 Transformer-001 的校准会话抽取可复用 skill 草稿"
+```
+
+**观察**: 流式看 LLM 调 `memory_search → memory_read → memory_write_file`，最终输出结构化 YAML skill draft。
+
+##### 5.5.4 ADR-V2-006 hook envelope（Phase 2.S3.T5 + 2.5.S0.T3 D120）
+
+```bash
+eaasp session events $SID --format json | \
+  jq '.events[] | select(.event_type=="PRE_TOOL_USE") | .payload' | head -30
+```
+
+**观察**: payload 含 `tool_name` + `arguments`，证明 envelope parity。
+
+##### 5.5.5 goose 容器（Phase 2.5.W1，ADR-V2-019）
+
+```bash
+make goose-runtime-container-verify-f1
+```
+
+**观察**: 输出 `goose info` 面板，exit 0。
+
+##### 5.5.6 nanobot gRPC 基线（Phase 2.5.W2）
+
+```bash
+lang/claude-code-runtime-python/.venv/bin/python -c "
+import sys, grpc, uuid
+sys.path.insert(0, 'lang/claude-code-runtime-python/src')
+from claude_code_runtime._proto.eaasp.runtime.v2 import common_pb2, runtime_pb2, runtime_pb2_grpc
+ch = grpc.insecure_channel('127.0.0.1:50054')
+stub = runtime_pb2_grpc.RuntimeServiceStub(ch)
+print('Health:', stub.Health(common_pb2.Empty(), timeout=5).healthy)
+init = stub.Initialize(runtime_pb2.InitializeRequest(payload=common_pb2.SessionPayload(
+    session_id='manual-'+str(uuid.uuid4())[:8], user_id='verifier', runtime_id='nanobot-runtime')), timeout=10)
+print('session:', init.session_id)
+stub.Terminate(common_pb2.Empty(), timeout=5)
+print('Terminate OK')
+"
+```
+
+**观察**: `Health: True` + `session: <id>` + `Terminate OK`。
+
+##### 5.5.7 合约套件 v1 四 runtime（Phase 2.5.S0）
+
+```bash
+make v2-phase2_5-e2e
+```
+
+**观察**: pytest 滚动 grid/cc/nanobot PASS，goose XFAIL。
+
+---
+
+#### Part C — 难观察项（自动化批跑）
+
+```bash
+bash scripts/eaasp-e2e.sh --only B --skip B9,B10,B11
+```
+
+覆盖 ErrorClassifier (B1) / graduated retry (B2) / PreCompactHook (B8) 等需造错/超长才能触发的特性。
+
+---
+
+**Sign-off 判定**:
+- Part A Step 2+4: PRE ≥ 4 / STOP = 1
+- Part B 所有 5.5.N 小节可观察到预期输出
+- Part C + 全矩阵: `bash scripts/eaasp-e2e.sh` exit 0
+
+三者满足 → `/end-phase`。
+
+---
+
+### 5.6 持续维护承诺（两条路径同步演进）
+
+每次大阶段新增能力，**必须同步更新两处**：
+
+| 路径 | 更新位置 | 内容 |
+|------|---------|------|
+| 自动化全矩阵 | `scripts/eaasp-e2e.sh` | A/B 组函数追加断言 |
+| 人工分步观察 | 本节 5.5 Part B | 追加 5.5.N 小节（不改已有） |
+
+目标：任何时刻任何人：
+- 一条命令看全量回归结果（自动化）
+- 按步骤亲眼看新功能跑起来（分步观察）
+
+---
+
 ## 六、Sign-off 门控
 
 ### 6.1 必要条件（全矩阵必验）

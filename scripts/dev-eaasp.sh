@@ -40,6 +40,12 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+# ── Log directory: per-run timestamped, one file per service ─────────────
+LOG_DIR="${PROJECT_ROOT}/.logs/dev-eaasp-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$LOG_DIR"
+# Also maintain a stable "latest" symlink for `tail -f` convenience.
+ln -sfn "$LOG_DIR" "${PROJECT_ROOT}/.logs/latest" 2>/dev/null || true
+
 # ── Port assignments (env-overridable, must match verify-v2-mvp.sh) ───────
 SKILL_REG_PORT="${EAASP_SKILL_REGISTRY_PORT:-18081}"
 L2_MEM_PORT="${EAASP_L2_PORT:-18085}"
@@ -204,6 +210,10 @@ echo -e "${BOLD}${CYAN}═══════════════════
 echo -e "${BOLD}${CYAN}  EAASP v2.0 — Development Server${RESET}"
 echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════${RESET}"
 echo ""
+echo -e "  ${CYAN}Log dir${RESET}: ${LOG_DIR}"
+echo -e "           (symlink: ${PROJECT_ROOT}/.logs/latest)"
+echo -e "  ${CYAN}Tail${RESET}   : tail -f ${PROJECT_ROOT}/.logs/latest/grid-runtime.log"
+echo ""
 
 # ── Pre-flight checks ────────────────────────────────────────────────────
 echo -e "${BOLD}=== Pre-flight: port availability ===${RESET}"
@@ -334,7 +344,7 @@ mkdir -p "$PROJECT_ROOT/data/dev-skill-registry"
 EAASP_SKILL_REGISTRY_PORT=$SKILL_REG_PORT \
 EAASP_SKILL_REGISTRY_HOST=127.0.0.1 \
     "$PROJECT_ROOT/target/debug/eaasp-skill-registry" \
-        --data-dir "$PROJECT_ROOT/data/dev-skill-registry" 2>&1 | sed 's/^/  [skill-reg] /' &
+        --data-dir "$PROJECT_ROOT/data/dev-skill-registry" 2>&1 | tee "$LOG_DIR/skill-registry.log" | sed 's/^/  [skill-reg] /' &
 SKILL_REG_PID=$!
 echo "  PID: $SKILL_REG_PID"
 wait_for_port $SKILL_REG_PORT "skill-registry"
@@ -347,7 +357,7 @@ EAASP_L2_PORT=$L2_MEM_PORT \
 EAASP_L2_HOST=127.0.0.1 \
 EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
     "$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin/python" \
-        -m eaasp_l2_memory_engine.main 2>&1 | sed 's/^/  [l2-mem]    /' &
+        -m eaasp_l2_memory_engine.main 2>&1 | tee "$LOG_DIR/l2-memory.log" | sed 's/^/  [l2-mem]    /' &
 L2_PID=$!
 echo "  PID: $L2_PID"
 wait_for_port $L2_MEM_PORT "L2 memory-engine"
@@ -359,7 +369,7 @@ EAASP_L3_PORT=$L3_GOV_PORT \
 EAASP_L3_HOST=127.0.0.1 \
 EAASP_L3_DB_PATH="$PROJECT_ROOT/data/dev-l3.db" \
     "$PROJECT_ROOT/tools/eaasp-l3-governance/.venv/bin/python" \
-        -m eaasp_l3_governance.main 2>&1 | sed 's/^/  [l3-gov]    /' &
+        -m eaasp_l3_governance.main 2>&1 | tee "$LOG_DIR/l3-governance.log" | sed 's/^/  [l3-gov]    /' &
 L3_PID=$!
 echo "  PID: $L3_PID"
 wait_for_port $L3_GOV_PORT "L3 governance"
@@ -369,7 +379,7 @@ echo ""
 echo -e "${BOLD}=== Starting mock-scada SSE on :${MOCK_SCADA_SSE_PORT} ===${RESET}"
 NO_PROXY=127.0.0.1,localhost \
     "$PROJECT_ROOT/tools/mock-scada/.venv/bin/mock-scada" \
-        --transport sse --host 0.0.0.0 --port "$MOCK_SCADA_SSE_PORT" 2>&1 | sed 's/^/  [scada-sse] /' &
+        --transport sse --host 0.0.0.0 --port "$MOCK_SCADA_SSE_PORT" 2>&1 | tee "$LOG_DIR/mock-scada.log" | sed 's/^/  [scada-sse] /' &
 MOCK_SCADA_SSE_PID=$!
 echo "  PID: $MOCK_SCADA_SSE_PID"
 wait_for_port $MOCK_SCADA_SSE_PORT "mock-scada-sse"
@@ -381,19 +391,27 @@ EAASP_MCP_ORCHESTRATOR_PORT=$MCP_ORCH_PORT \
 EAASP_MCP_ORCHESTRATOR_HOST=127.0.0.1 \
     "$PROJECT_ROOT/target/debug/eaasp-mcp-orchestrator" \
         --config "$PROJECT_ROOT/tools/eaasp-mcp-orchestrator/config/mcp-servers.yaml" \
-        --port "$MCP_ORCH_PORT" --host 127.0.0.1 2>&1 | sed 's/^/  [mcp-orch]  /' &
+        --port "$MCP_ORCH_PORT" --host 127.0.0.1 2>&1 | tee "$LOG_DIR/mcp-orchestrator.log" | sed 's/^/  [mcp-orch]  /' &
 MCP_ORCH_PID=$!
 echo "  PID: $MCP_ORCH_PID"
 wait_for_port $MCP_ORCH_PORT "L2 MCP Orchestrator"
 
 # ── Step 5: Start grid-runtime ───────────────────────────────────────────
+# EAASP_TOOL_FILTER=on restricts each skill session's ToolRegistry to the
+# MCP tools declared in skill dependencies — prevents the LLM from choosing
+# grid-engine built-ins (memory_recall/timeline/bash/file_read/...) over
+# skill-required MCP tools. Default OFF was introduced in commit 055badf
+# and turned out to break threshold-calibration-style skill workflows:
+# LLM thinks in loops with grid-engine built-ins instead of following the
+# MCP-based workflow. Phase 3 will re-architect tool namespace separation.
 echo ""
 echo -e "${BOLD}=== Starting grid-runtime on :${GRID_RT_PORT} ===${RESET}"
 GRID_RUNTIME_PORT=$GRID_RT_PORT \
 RUST_LOG=grid_runtime=info,grid_engine=info \
+EAASP_TOOL_FILTER=on \
 EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
 PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
-    "$PROJECT_ROOT/target/debug/grid-runtime" 2>&1 | sed 's/^/  [grid-rt]   /' &
+    "$PROJECT_ROOT/target/debug/grid-runtime" 2>&1 | tee "$LOG_DIR/grid-runtime.log" | sed 's/^/  [grid-rt]   /' &
 GRID_PID=$!
 echo "  PID: $GRID_PID"
 wait_for_port $GRID_RT_PORT "grid-runtime"
@@ -405,7 +423,7 @@ CLAUDE_RUNTIME_PORT=$CLAUDE_RT_PORT \
 EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
 PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
     "$PROJECT_ROOT/lang/claude-code-runtime-python/.venv/bin/python" \
-        -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | sed 's/^/  [claude-rt] /' &
+        -m claude_code_runtime --port "$CLAUDE_RT_PORT" 2>&1 | tee "$LOG_DIR/claude-code-runtime.log" | sed 's/^/  [claude-rt] /' &
 CLAUDE_PID=$!
 echo "  PID: $CLAUDE_PID"
 wait_for_port $CLAUDE_RT_PORT "claude-code-runtime"
@@ -421,7 +439,7 @@ if [ "$SKIP_NANOBOT" = false ]; then
     EAASP_L2_DB_PATH="$PROJECT_ROOT/data/dev-l2.db" \
     PATH="$PROJECT_ROOT/tools/mock-scada/.venv/bin:$PROJECT_ROOT/tools/eaasp-l2-memory-engine/.venv/bin:$PATH" \
         "$PROJECT_ROOT/lang/nanobot-runtime-python/.venv/bin/python" \
-            -m nanobot_runtime 2>&1 | sed 's/^/  [nanobot-rt]/' &
+            -m nanobot_runtime 2>&1 | tee "$LOG_DIR/nanobot-runtime.log" | sed 's/^/  [nanobot-rt]/' &
     NANOBOT_PID=$!
     echo "  PID: $NANOBOT_PID"
     wait_for_port $NANOBOT_RT_PORT "nanobot-runtime"
@@ -452,7 +470,7 @@ if [ "$SKIP_GOOSE" = false ]; then
         -e NO_PROXY=host.docker.internal,127.0.0.1,localhost \
         eaasp-goose-runtime:dev >/dev/null 2>&1
     # Stream container logs in background
-    docker logs -f "$GOOSE_CONTAINER" 2>&1 | sed 's/^/  [goose-rt]  /' &
+    docker logs -f "$GOOSE_CONTAINER" 2>&1 | tee "$LOG_DIR/goose-runtime.log" | sed 's/^/  [goose-rt]  /' &
     GOOSE_PID=$!
     echo "  Container: $GOOSE_CONTAINER"
     wait_for_port $GOOSE_RT_PORT "goose-runtime"
@@ -471,7 +489,7 @@ EAASP_L2_URL="http://127.0.0.1:${L2_MEM_PORT}" \
 EAASP_L3_URL="http://127.0.0.1:${L3_GOV_PORT}" \
 EAASP_MCP_ORCH_URL="http://127.0.0.1:${MCP_ORCH_PORT}" \
     "$PROJECT_ROOT/tools/eaasp-l4-orchestration/.venv/bin/python" \
-        -m eaasp_l4_orchestration.main 2>&1 | sed 's/^/  [l4-orch]   /' &
+        -m eaasp_l4_orchestration.main 2>&1 | tee "$LOG_DIR/l4-orchestration.log" | sed 's/^/  [l4-orch]   /' &
 L4_PID=$!
 echo "  PID: $L4_PID"
 wait_for_port $L4_ORCH_PORT "L4 orchestration"
