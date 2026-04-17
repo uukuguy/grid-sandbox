@@ -149,9 +149,9 @@ eaasp session events $SID2
 
 ---
 
-### 4.2 Group B — 分项补验（一轮触发不到）
+### 4.2 Group B — 分项回归（一轮触发不到）
 
-单轮 threshold-calibration 不触发、需要另造会话/环境的能力。**新 Phase 引入的 B 组行在本阶段附录列为"必跑"。**
+单轮 threshold-calibration 不触发、需要另造会话/环境的能力。**每次完整人工 E2E 必须 B 组全跑**（回归测试原则：Phase N 验过不代表 Phase M 没破坏）。由 `scripts/eaasp-e2e.sh` 自动驱动。
 
 | # | Phase | 能力 | 触发方法 | 验收断言 |
 |---|---|---|---|---|
@@ -171,67 +171,66 @@ eaasp session events $SID2
 
 ## 五、核心验证流程
 
-### 5.1 大阶段收尾标准流程
-
-```
-1. make dev-eaasp-stop            # 清洁
-2. make dev-eaasp                  # 起全栈，确认状态表 UP
-3. A 组: grid runtime 跑 threshold-calibration → events 过 A1-A12
-4. A 组: claude-code runtime 跑同上
-5. B 组: 按本阶段附录（七节）列的"必跑"行逐项跑
-6. nanobot/goose: 跑基线（Initialize/Send/Terminate 通即可，容器 F1 gate）
-7. 汇总结果填七节 Phase 收尾历史附录
-8. Sign-off 或延期
-```
-
-### 5.2 验证动作模板（可复制粘贴）
+### 5.1 唯一入口：一条命令跑完整 E2E
 
 ```bash
-# ── A 组主验证（copy-paste friendly）──
-alias eaasp='/Users/sujiangwen/sandbox/LLM/speechless.ai/SGAI/grid-sandbox/tools/eaasp-cli-v2/.venv/bin/eaasp'
+# 1. 起全栈 (Terminal A, 常驻)
+make dev-eaasp-stop && make dev-eaasp
 
-run_a_suite() {
-    local rt=$1
-    eaasp session create --skill threshold-calibration --runtime "$rt"
-    read -rp "  SID: " SID
-    eaasp session send "$SID" "校准 Transformer-001 的温度阈值"
-    echo "=== Events for $rt ($SID) ==="
-    eaasp session events "$SID"
-    echo ""
-    echo "=== Counts ==="
-    eaasp session events "$SID" --format json | jq '{
-        total: (.events | length),
-        PRE: ([.events[] | select(.event_type=="PRE_TOOL_USE")] | length),
-        POST: ([.events[] | select(.event_type=="POST_TOOL_USE")] | length),
-        STOP: ([.events[] | select(.event_type=="STOP")] | length)
-    }'
-}
-
-run_a_suite grid-runtime
-run_a_suite claude-code-runtime
+# 2. 一条命令跑 A + B 全矩阵 (Terminal B)
+bash scripts/eaasp-e2e.sh
 ```
+
+### 5.2 脚本行为契约
+
+`scripts/eaasp-e2e.sh` 的职责（由下一节验证矩阵驱动）：
+
+1. **Pre-flight** — 验 L4 健康 / CLI 可用 / skill 已注册（未注册自动 submit）
+2. **A 组** — 对 grid-runtime + claude-code-runtime 各跑一轮 threshold-calibration，逐项断言 A1-A13
+3. **B 组** — 顺序执行 B1-B11 各自的触发 + 断言（能自动化的直接跑，需真实数据的复用 A 组 session）
+4. **Runtime 基线** — nanobot / goose 跑 Initialize/Terminate/Health 最小合约
+5. **汇总** — 写 `.e2e/verify-$(date +%Y%m%d-%H%M).log` + 打印表格：行号 / PASS/FAIL/SKIP/XFAIL / 说明
+6. **退出码** — 0 (全 PASS/XFAIL/SKIP) / 1 (任何 FAIL) / 2 (pre-flight 失败)
+
+### 5.3 脚本 flag
+
+```bash
+bash scripts/eaasp-e2e.sh                 # 全量
+bash scripts/eaasp-e2e.sh --only A        # 只 A 组
+bash scripts/eaasp-e2e.sh --only B        # 只 B 组
+bash scripts/eaasp-e2e.sh --skip B7,B8    # 跳过耗费大的
+bash scripts/eaasp-e2e.sh --runtime grid  # 只测单 runtime
+```
+
+### 5.4 手动逐项（紧急排错）
+
+所有行都有独立触发命令，见第四节矩阵的"触发方法"列。脚本失败时复制对应命令手动跑。
 
 ---
 
 ## 六、Sign-off 门控
 
-### 6.1 必要条件（三者都要）
+### 6.1 必要条件（全矩阵必验）
 
 | # | 条件 | 证据 |
 |---|---|---|
-| 1 | A 组 grid + claude-code 全通过（A1-A12 各 ≥ 1） | events 输出 |
-| 2 | 本阶段新 B 组行全通过（由附录七节标注） | events / log |
-| 3 | 新 runtime 至少 "基线" 通过（Initialize/Terminate/Health） | 合约套件 + 独立 gRPC probe |
+| 1 | A 组 grid + claude-code 全通过（A1-A13 全绿） | `.e2e/verify-*.log` |
+| 2 | B 组 B1-B11 全部 PASS 或明确 XFAIL（无 FAIL） | `.e2e/verify-*.log` |
+| 3 | 所有已接入 runtime 至少基线通过 | 同上 |
+| 4 | 脚本退出码 = 0 | `echo $?` |
+
+**原则**：每次完整人工 E2E = 全矩阵回归。不允许"Phase N 验过不用再验" — 这违背回归测试原则。
 
 ### 6.2 Sign-off 判定表
 
-| 条件满足 | 动作 |
+| 条件 | 动作 |
 |---|---|
-| 三个必要条件全通过 | → `/end-phase` |
-| A 组失败 | ⛔ 阻塞 — 核心能力回归，根因分析 |
-| B 组失败 | 视情况：修复或记 Deferred，视严重度决定是否 sign-off |
-| 新 runtime 基线失败 | ⛔ 阻塞 — 该 runtime 合约退出 |
-| 暴露新 gap | 记 Deferred（DEFERRED_LEDGER.md），不阻塞 sign-off |
+| 脚本 exit 0 + A+B 全绿 | → `/end-phase` |
+| A 组任一 FAIL | ⛔ 阻塞 — 核心能力回归，根因分析 |
+| B 组 FAIL（非 XFAIL） | ⛔ 阻塞 — 回归测试失败，必须查清 |
+| 新 runtime 基线 FAIL | ⛔ 阻塞 — 该 runtime 合约退出 |
+| XFAIL（已知预期失败） | ✅ 允许 — 要有 Deferred 记录引用 |
+| 新暴露 gap | 记 Deferred，该行改 XFAIL + 给出归属 Phase |
 
 ### 6.3 Deferred 记录规范
 
@@ -258,15 +257,14 @@ run_a_suite claude-code-runtime
 ### Phase 2 — Memory & Evidence（2026-04-15）
 
 - **A 组**: A1-A11 全通过（S3.T5 ScopedHookExecutor 加入 A 组）
-- **B 组必跑**: B1 / B3 / B5 / B6 / B9
+- **B 组**: 全跑（当时脚本手动驱动，见 `scripts/s4t3-runtime-verification.sh`）
 - **结果**: 🟢 Completed 23/23
-- **参考**: `scripts/s4t3-runtime-verification.sh` + `scripts/verify-v2-phase2.sh`
 
 ### Phase 2.5 — L1 Runtime Ecosystem（2026-04-17 进行中）
 
-- **A 组必跑**: A1-A13（A12 D120 HookContext parity 首次加入）
-- **B 组必跑**: B10（goose 容器 F1 gate）+ B11（合约套件 v1）+ B9（skill-extraction 单跑）
-- **新 runtime 基线**: nanobot（真实 LLM 可回复，无工具链注入）+ goose（Initialize/Terminate/Health，Send stub）
+- **本次引入能力**: A12 (D120 HookContext parity) + A13 (L1 生态扩展) + B10 (goose F1) + B11 (合约 v1) + nanobot/goose runtime
+- **全矩阵回归**: 本次 sign-off 要求 A1-A13 + B1-B11 全跑（由 `scripts/eaasp-e2e.sh` 驱动）
+- **新 runtime 能力**: nanobot（真实 LLM 可回复，无 MCP 工具注入）+ goose（Initialize/Terminate/Health，Send stub → Phase 3）
 - **新 Deferred**: D144（nanobot/goose ConnectMCP 工具注入 → Phase 3）
 - **结果**: 待 sign-off
 - **本次 artifact**: `docs/main/PHASE2_5_E2E_VERIFICATION_GUIDE.md`（降级为历史归档）
