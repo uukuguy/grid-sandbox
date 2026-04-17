@@ -397,3 +397,151 @@ async fn unresolved_skill_dir_skips_hook_with_log() {
 
     std::env::remove_var("EAASP_RUNTIME_WORKSPACE");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2.5 S4.T2 — hooks/ directory materialization
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Symptom before fix: `build_hook_vars` wrote only `SKILL.md` to the
+// materialized `${SKILL_DIR}`, not the companion `hooks/*.sh` scripts.
+// Skills like `threshold-calibration` whose Stop hook action resolves to
+// `${SKILL_DIR}/hooks/check_output_anchor.sh` then hit "file not found"
+// at exec time, the ScopedCommandExecutor returned error → fail-open →
+// Stop hook cap reached → agent loop never committed a clean Done.
+//
+// Fix: copy `{EAASP_SKILL_SOURCE_DIR}/{skill_id}/hooks/*` into the
+// materialized session skill dir, preserving exec bits on Unix.
+//
+// This test creates a synthetic source skill with hooks/ children and
+// asserts they land under `{workspace}/grid-session-{sid}/skill/hooks/`.
+#[tokio::test]
+async fn skill_hooks_dir_is_materialized_alongside_skill_md() {
+    let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+    // Synthetic on-disk skill source — mimics `examples/skills/<id>/` layout.
+    let skill_src_root = TempDir::new().expect("tempdir for source root");
+    let skill_id = "hook-materialize-test-skill";
+    let skill_src_dir = skill_src_root.path().join(skill_id);
+    let hooks_src_dir = skill_src_dir.join("hooks");
+    std::fs::create_dir_all(&hooks_src_dir).unwrap();
+    std::fs::write(
+        hooks_src_dir.join("check.sh"),
+        "#!/usr/bin/env bash\necho ok\n",
+    )
+    .unwrap();
+    std::fs::write(
+        hooks_src_dir.join("block.sh"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    .unwrap();
+
+    let workspace = TempDir::new().expect("workspace tempdir");
+    std::env::set_var("EAASP_RUNTIME_WORKSPACE", workspace.path());
+    std::env::set_var("EAASP_SKILL_SOURCE_DIR", skill_src_root.path());
+    std::env::remove_var("EAASP_SKILL_CACHE_DIR");
+
+    let payload = payload_with_hook(
+        skill_id,
+        "# Synthetic skill\n",
+        vec![ScopedHook {
+            hook_id: "h_check".into(),
+            hook_type: "PreToolUse".into(),
+            condition: "".into(),
+            action: "/bin/true".into(),
+            precedence: 0,
+        }],
+    );
+
+    let harness = build_harness().await;
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must succeed");
+
+    let session_skill_dir = workspace
+        .path()
+        .join(format!("grid-session-{}", handle.session_id))
+        .join("skill");
+    let materialized_hooks_dir = session_skill_dir.join("hooks");
+
+    assert!(
+        materialized_hooks_dir.is_dir(),
+        "hooks/ directory must be materialized at {}",
+        materialized_hooks_dir.display()
+    );
+    assert!(
+        materialized_hooks_dir.join("check.sh").is_file(),
+        "check.sh must be copied"
+    );
+    assert!(
+        materialized_hooks_dir.join("block.sh").is_file(),
+        "block.sh must be copied"
+    );
+
+    // Exec bit must be preserved on Unix so bash can run these scripts.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(materialized_hooks_dir.join("check.sh"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert!(
+            mode & 0o100 != 0,
+            "materialized hook must have owner exec bit; got mode {:o}",
+            mode
+        );
+    }
+
+    harness.terminate(&handle).await.ok();
+    std::env::remove_var("EAASP_RUNTIME_WORKSPACE");
+    std::env::remove_var("EAASP_SKILL_SOURCE_DIR");
+}
+
+// When EAASP_SKILL_SOURCE_DIR is unset, materialization falls back to
+// `CWD/examples/skills` — but the test CWD is usually the crate dir, not
+// the repo root, so hooks/ won't exist. The code must gracefully log a
+// warning and NOT abort the session.  This pins the "skill hook dir
+// missing is not fatal" contract.
+#[tokio::test]
+async fn missing_skill_source_dir_does_not_abort_initialize() {
+    let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+
+    let workspace = TempDir::new().expect("workspace tempdir");
+    std::env::set_var("EAASP_RUNTIME_WORKSPACE", workspace.path());
+    // Set a source dir that definitely doesn't contain our skill_id.
+    let empty_root = TempDir::new().expect("empty source root");
+    std::env::set_var("EAASP_SKILL_SOURCE_DIR", empty_root.path());
+    std::env::remove_var("EAASP_SKILL_CACHE_DIR");
+
+    let payload = payload_with_hook(
+        "skill-not-in-source-dir",
+        "# prose\n",
+        vec![ScopedHook {
+            hook_id: "h1".into(),
+            hook_type: "PreToolUse".into(),
+            condition: "".into(),
+            action: "/bin/true".into(),
+            precedence: 0,
+        }],
+    );
+
+    let harness = build_harness().await;
+    let handle = harness
+        .initialize(payload)
+        .await
+        .expect("initialize must NOT fail just because hooks/ source is absent");
+
+    // SKILL.md should still be written.
+    let skill_md = workspace
+        .path()
+        .join(format!("grid-session-{}", handle.session_id))
+        .join("skill")
+        .join("SKILL.md");
+    assert!(skill_md.exists(), "SKILL.md still materializes");
+
+    harness.terminate(&handle).await.ok();
+    std::env::remove_var("EAASP_RUNTIME_WORKSPACE");
+    std::env::remove_var("EAASP_SKILL_SOURCE_DIR");
+}
