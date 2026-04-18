@@ -26,9 +26,10 @@
     "S3.T1 goose ACP parser + next_event() — 408213b",
     "S3.T2 goose send() ACP streaming wiring — a89b2a6",
     "S3.T3 nanobot stdio MCP client + ConnectMcp — 87262b1",
-    "S3.T4 nanobot Stop hook dispatch in session loop — 84c7d6f"
+    "S3.T4 nanobot Stop hook dispatch in session loop — 84c7d6f",
+    "S3.T5 nanobot contract v1.1 — 42 PASS 22 XFAIL, skill-extraction E2E 8/8 PASS, D144-B ✅"
   ],
-  "current_task": "S3.T5 nanobot contract v1.1 PASS",
+  "current_task": "S3.T6 pydantic-ai-runtime scaffold + 16 gRPC",
   "execution_mode": "subagent-driven",
   "phase_name": "Phase 3 — L1 Runtime Functional Completeness",
   "total_tasks": 35,

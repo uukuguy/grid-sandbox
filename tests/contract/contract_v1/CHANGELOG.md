@@ -7,6 +7,26 @@ The authoritative policy for this suite lives in ADR-V2-017 §2 ("共享契约�
 Every entry below must be traceable to a specific ledger item in
 `docs/design/EAASP/DEFERRED_LEDGER.md` or an accepted ADR.
 
+## v1.1.1 — 2026-04-18 (Phase 3 S3.T5 — nanobot-runtime certified)
+
+### Status
+Patch: nanobot-runtime certified against contract v1.1. No test changes.
+
+### Certified runtimes (v1.0 + v1.1 combined, 58 cases)
+
+| Runtime | Language | v1 PASS / XFAIL | v1.1 PASS |
+|---------|----------|-----------------|-----------|
+| grid-runtime | Rust | 13 / 22 | 29 (all 29 pure-parser cases) |
+| claude-code-runtime | Python | 18 / 17 | 29 |
+| goose-runtime | Rust | 13 / 22 | 29 |
+| **nanobot-runtime** | **Python** | **13 / 22** | **29** |
+
+nanobot: 42 PASS, 22 XFAIL @ Phase 3 S3.T5. All 22 XFAILs are
+deferred-by-design (D136/D137/D138/D139 — live LLM probe required).
+skill-extraction E2E 8/8 PASS (fixture-replay).
+
+---
+
 ## v1.1.0 — 2026-04-18 (Phase 3 S1.T6 — tool namespace governance)
 
 ### Status

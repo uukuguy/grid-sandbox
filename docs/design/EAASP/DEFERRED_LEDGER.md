@@ -349,6 +349,7 @@
 | 2026-04-16 | ADR-V2-019 | **新增 ADR** | L1 Runtime Deployment Model Proposed — multi-session 内在 + `EAASP_DEPLOYMENT_MODE={shared,per_session}` env + 容错分级。goose-runtime (W1.T2.5) 为 reference 实现；grid/claude-code 合规通过 D142/D143 回填 |
 | 2026-04-16 | D142, D143 | **新增** 🟡 P2-defer | ADR-V2-019 D2 合规审计 — grid-runtime + claude-code-runtime 均未读 `EAASP_DEPLOYMENT_MODE` env；各 ~20 LOC 小改动，Phase 2.5 S3 CI gate 批处理 |
 | 2026-04-16 | D141 | 🟡 P1-defer → ✅ CLOSED | W1.T2.5 `e78d858` Dockerfile 烘入 goose v1.30.0；F1 gate 通过 `make goose-runtime-container-verify-f1` exit 0 验证；ldd 确认 libgomp1 补上后 9 libs 全解析；image 361MB < 500MB 目标。ACP 语义留 T3 首跑 smoke |
+| 2026-04-18 | D144-B | **✅ CLOSED** | Phase 3 S3.T5 — nanobot-runtime contract v1.1 certified: 42 PASS / 22 XFAIL (all XFAILs are D136-D139 deferred-by-design). skill-extraction E2E 8/8 PASS. mcp_client + session Stop hooks + ConnectMCP wired in S3.T3-T4. |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
