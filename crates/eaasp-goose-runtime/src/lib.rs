@@ -1,3 +1,4 @@
+pub mod acp_parser;
 pub mod goose_adapter;
 pub mod service;
 

@@ -1,11 +1,13 @@
 // Outcome B: adapter owns a subprocess Child per session + ACP client handle.
-// T2 wires the subprocess spawn + ACP placeholder; T3 will add the real ACP
-// client type + middleware hook wiring.
+// T2 wired subprocess spawn; S3.T1 adds ACP event stream reading via stdout.
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::process::{Child, Command};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, ChildStdout, Command};
 use tokio::sync::Mutex;
+
+use crate::acp_parser::AcpEvent;
 
 pub struct SessionConfig {
     // TODO(T3): real wiring for `model`, `provider`, `extensions` (middleware insertion).
@@ -21,7 +23,7 @@ impl Default for SessionConfig {
 
 struct SessionHandle {
     child: Child,
-    // acp_client: AcpClient,   // placeholder; T3 resolves real ACP client type
+    stdout: Option<BufReader<ChildStdout>>,
 }
 
 pub struct GooseAdapter {
@@ -81,19 +83,49 @@ impl GooseAdapter {
             .context("goose binary not found; set GOOSE_BIN or install goose")?;
 
         // ACP mode — exact CLI invocation validated per F1 gate.
-        let child = Command::new(&goose_bin)
+        let mut child = Command::new(&goose_bin)
             // F1-pending: exact CLI flags to be validated via `goose acp --help` once binary installed (see D141)
             .args(["acp", "--stdio"])
+            .stdout(std::process::Stdio::piped())
             .kill_on_drop(true)
             .spawn()
             .context("failed to spawn goose subprocess")?;
 
+        let stdout = child.stdout.take().map(BufReader::new);
         let sid = uuid::Uuid::new_v4().to_string();
         self.sessions
             .lock()
             .await
-            .insert(sid.clone(), SessionHandle { child });
+            .insert(sid.clone(), SessionHandle { child, stdout });
         Ok(sid)
+    }
+
+    /// Read the next ACP event from goose stdout for the given session.
+    ///
+    /// Returns `None` when the subprocess closes stdout (EOF = session ended).
+    /// Each call reads exactly one newline-delimited JSON-RPC line and parses it
+    /// into an `AcpEvent`. Malformed lines are returned as `AcpEvent::Unknown`.
+    pub async fn next_event(&self, sid: &str) -> Result<Option<AcpEvent>> {
+        let mut sessions = self.sessions.lock().await;
+        let handle = sessions
+            .get_mut(sid)
+            .ok_or_else(|| anyhow::anyhow!("session {sid} not found"))?;
+
+        let stdout = match handle.stdout.as_mut() {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let mut line = String::new();
+        let n = stdout.read_line(&mut line).await?;
+        if n == 0 {
+            return Ok(None); // EOF
+        }
+
+        let trimmed = line.trim_end();
+        let event = AcpEvent::try_from(trimmed)
+            .unwrap_or_else(|_| AcpEvent::Unknown { raw: trimmed.to_string() });
+        Ok(Some(event))
     }
 
     /// F3 (no ACP cancellation API) — see design §9 Q#4.
