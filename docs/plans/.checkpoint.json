@@ -22,16 +22,17 @@
     "S2.T6 D108 bats hook regression infra — 00e64e7",
     "S2.T7 D125 EventBus backpressure counter — 0ce0294",
     "S2.T8 DEFERRED_LEDGER archival — 373b3be",
-    "S2.T9 S2 sign-off — cargo check clean, 121 pytest PASS, 22 bats PASS"
+    "S2.T9 S2 sign-off — cargo check clean, 121 pytest PASS, 22 bats PASS",
+    "S3.T1 goose ACP parser + next_event() — 408213b"
   ],
-  "current_task": "S3.T1 D144 接线",
+  "current_task": "S3.T2 goose Send ACP 接线 + contract v1.1 PASS",
   "execution_mode": "subagent-driven",
   "phase_name": "Phase 3 — L1 Runtime Functional Completeness",
   "total_tasks": 35,
   "stages": {
     "S1": { "name": "工具命名空间治理", "tasks": 8, "completed": 8 },
     "S2": { "name": "Phase 2 P1-defer 清债", "tasks": 9, "completed": 9 },
-    "S3": { "name": "D144 + 对比 runtime + E2E", "tasks": 18, "completed": 0 }
+    "S3": { "name": "D144 + 对比 runtime + E2E", "tasks": 18, "completed": 1 }
   },
   "first_task": "S1.T1 ADR-V2-020 tool namespace contract — Proposed",
   "sign_off_criteria": [
