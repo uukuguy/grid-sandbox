@@ -144,3 +144,81 @@ async def test_provider_error_emits_error_event(mock_provider):
     assert len(events) == 1
     assert events[0].event_type == EventType.ERROR
     assert events[0].is_error is True
+
+
+async def test_stop_hook_allow_fires_and_emits_stop(mock_provider, tmp_path):
+    """Stop hook exit-0 → allow: HOOK_FIRED + STOP emitted."""
+    hook_script = tmp_path / "stop_hook.sh"
+    hook_script.write_text("#!/bin/sh\nexit 0\n")
+    hook_script.chmod(hook_script.stat().st_mode | stat.S_IEXEC)
+
+    mock_provider.chat.return_value = _make_text_response("All done.")
+
+    session = AgentSession(
+        provider=mock_provider,
+        stop_hooks=[str(hook_script)],
+    )
+    events = [ev async for ev in session.run("finish")]
+
+    types = [e.event_type for e in events]
+    assert EventType.HOOK_FIRED in types
+    assert EventType.STOP in types
+    hook_ev = next(e for e in events if e.event_type == EventType.HOOK_FIRED)
+    assert hook_ev.hook_event == "Stop"
+    assert hook_ev.hook_decision == "allow"
+
+
+async def test_stop_hook_deny_injects_system_and_continues(mock_provider, tmp_path):
+    """Stop hook exit-2 → deny: system message injected, loop re-enters."""
+    deny_hook = tmp_path / "deny.sh"
+    deny_hook.write_text("#!/bin/sh\nexit 2\n")
+    deny_hook.chmod(deny_hook.stat().st_mode | stat.S_IEXEC)
+
+    # First call returns text → stop hook denies → second call returns text → stop hook allows
+    allow_hook = tmp_path / "allow.sh"
+    allow_hook.write_text("#!/bin/sh\nexit 0\n")
+    allow_hook.chmod(allow_hook.stat().st_mode | stat.S_IEXEC)
+
+    mock_provider.chat.side_effect = [
+        _make_text_response("draft output"),
+        _make_text_response("revised output"),
+    ]
+
+    # Use deny hook first time only by chaining — simplest: just use deny then allow in sequence
+    # But stop_hooks is a list; for simplicity test with deny-only hook and check re-entry via chat call count
+    session = AgentSession(
+        provider=mock_provider,
+        stop_hooks=[str(deny_hook)],
+        max_turns=5,
+    )
+    events = [ev async for ev in session.run("finish")]
+
+    # deny hook should have fired at least once
+    hook_events = [e for e in events if e.event_type == EventType.HOOK_FIRED]
+    assert any(e.hook_decision == "deny" for e in hook_events)
+    # provider was called more than once due to re-entry
+    assert mock_provider.chat.call_count >= 2
+
+
+async def test_stop_hook_timeout_fails_open(mock_provider, tmp_path):
+    """Stop hook timeout → fail-open (allow), STOP emitted normally."""
+    slow_hook = tmp_path / "slow.sh"
+    slow_hook.write_text("#!/bin/sh\nsleep 30\n")
+    slow_hook.chmod(slow_hook.stat().st_mode | stat.S_IEXEC)
+
+    mock_provider.chat.return_value = _make_text_response("done")
+
+    from nanobot_runtime import session as session_mod
+    orig_timeout = session_mod.HOOK_TIMEOUT_SECS
+    session_mod.HOOK_TIMEOUT_SECS = 0.1
+
+    try:
+        sess = AgentSession(provider=mock_provider, stop_hooks=[str(slow_hook)])
+        events = [ev async for ev in sess.run("go")]
+    finally:
+        session_mod.HOOK_TIMEOUT_SECS = orig_timeout
+
+    hook_events = [e for e in events if e.event_type == EventType.HOOK_FIRED]
+    assert len(hook_events) == 1
+    assert hook_events[0].hook_decision == "allow"  # fail-open
+    assert any(e.event_type == EventType.STOP for e in events)

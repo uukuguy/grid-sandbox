@@ -106,6 +106,8 @@ class AgentSession:
         provider: Async OAI-compatible provider.
         tools: Optional OAI tool schema list passed on every chat() call.
         post_tool_use_hooks: Shell commands dispatched after each tool result.
+        stop_hooks: Shell commands dispatched at natural session termination
+            (ADR-V2-006 Stop envelope). Exit-2 → inject system message + continue.
         session_id: Opaque session identifier (auto-generated if omitted).
         tool_executor: Handles actual tool execution. Defaults to StubToolExecutor.
         max_turns: Upper bound on agentic turns before emitting an ERROR event.
@@ -116,6 +118,7 @@ class AgentSession:
         provider: OpenAICompatProvider,
         tools: list[dict[str, Any]] | None = None,
         post_tool_use_hooks: list[str] | None = None,
+        stop_hooks: list[str] | None = None,
         session_id: str | None = None,
         tool_executor: ToolExecutor | None = None,
         max_turns: int = 10,
@@ -123,6 +126,7 @@ class AgentSession:
         self.provider = provider
         self.tools = tools or []
         self.post_tool_use_hooks = post_tool_use_hooks or []
+        self.stop_hooks = stop_hooks or []
         self.session_id = session_id or _new_session_id()
         self.tool_executor: ToolExecutor = tool_executor or StubToolExecutor()
         self.max_turns = max_turns
@@ -157,8 +161,27 @@ class AgentSession:
                 if content:
                     yield AgentEvent(event_type=EventType.CHUNK, content=content)
                 self._messages.append({"role": "assistant", "content": content})
-                yield AgentEvent(event_type=EventType.STOP, content=content)
-                return
+
+                # Dispatch Stop hooks (ADR-V2-006); exit-2 → inject + continue loop.
+                denied = False
+                async for hook_ev in self._dispatch_stop_hooks(content):
+                    yield hook_ev
+                    if (
+                        hook_ev.event_type == EventType.HOOK_FIRED
+                        and hook_ev.hook_decision == "deny"
+                    ):
+                        # Inject a system message and re-enter the loop
+                        self._messages.append({
+                            "role": "system",
+                            "content": "Stop hook denied completion. Please revise your response.",
+                        })
+                        denied = True
+                        break
+
+                if not denied:
+                    yield AgentEvent(event_type=EventType.STOP, content=content)
+                    return
+                continue  # stop hook denied — re-enter loop for another turn
 
             # Tool call path
             self._messages.append(message)
@@ -249,6 +272,43 @@ class AgentSession:
                 hook_decision=decision,
                 tool_name=tool_name,
             )
+
+
+    async def _dispatch_stop_hooks(
+        self,
+        final_content: str,
+    ) -> AsyncGenerator[AgentEvent, None]:
+        """Dispatch Stop hooks per ADR-V2-006.
+
+        Exit-2 → deny (caller re-enters loop with system injection).
+        All other exits → allow (no re-entry needed).
+        """
+        if not self.stop_hooks:
+            return
+
+        envelope = {
+            "event": "Stop",
+            "session_id": self.session_id,
+            "skill_id": "",
+            "content": final_content,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        stdin_bytes = json.dumps(envelope).encode()
+        env = {
+            "GRID_SESSION_ID": self.session_id,
+            "GRID_SKILL_ID": "",
+            "GRID_EVENT": "Stop",
+        }
+
+        for command in self.stop_hooks:
+            decision = await _run_hook_subprocess(command, stdin_bytes, env, HOOK_TIMEOUT_SECS)
+            yield AgentEvent(
+                event_type=EventType.HOOK_FIRED,
+                hook_event="Stop",
+                hook_decision=decision,
+            )
+            if decision == "deny":
+                return  # caller sees deny and injects system message
 
 
 def _new_session_id() -> str:
