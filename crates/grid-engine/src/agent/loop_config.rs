@@ -25,6 +25,7 @@ use super::events::AgentLoopResult;
 use super::estop::EmergencyStop;
 use super::self_repair::SelfRepairManager;
 use super::loop_guard::LoopGuard;
+use super::prompt_executor::{build_prompt_executor_from_env, PromptExecutor};
 use super::stop_hooks::StopHook;
 use super::subagent::SubAgentManager;
 use super::CancellationToken;
@@ -228,6 +229,12 @@ pub struct AgentLoopConfig {
     /// [`super::stop_hooks::MAX_STOP_HOOK_INJECTIONS`] per loop invocation.
     /// Empty by default — the harness skips dispatch entirely if empty.
     pub stop_hooks: Vec<Arc<dyn StopHook>>,
+
+    // === Prompt Executor (D117) ===
+    /// Optional LLM-driven yes/no classifier for prompt bodies (e.g. skill
+    /// stop-hook payloads). Activated by `EAASP_PROMPT_EXECUTOR=1`.
+    /// Defaults to `NoOpPromptExecutor` (always Allow, zero LLM overhead).
+    pub prompt_executor: Arc<dyn PromptExecutor>,
 }
 
 /// Pre-collected git information for system prompt injection.
@@ -295,6 +302,7 @@ impl Default for AgentLoopConfig {
             git_context: None,
             on_completion: None,
             stop_hooks: Vec::new(),
+            prompt_executor: build_prompt_executor_from_env(),
         }
     }
 }
@@ -597,6 +605,12 @@ impl AgentLoopConfigBuilder {
 
     pub fn git_context(mut self, v: GitContext) -> Self {
         self.config.git_context = Some(v);
+        self
+    }
+
+    /// D117: override the prompt executor (default: env-driven noop or llm).
+    pub fn prompt_executor(mut self, v: Arc<dyn PromptExecutor>) -> Self {
+        self.config.prompt_executor = v;
         self
     }
 

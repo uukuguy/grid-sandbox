@@ -27,6 +27,7 @@ pub mod loop_guard;
 pub mod loop_steps;
 pub mod manifest_loader;
 pub mod parallel;
+pub mod prompt_executor;
 pub mod queue;
 pub mod router;
 pub mod runtime;
