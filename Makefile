@@ -1085,3 +1085,11 @@ v2-phase2_5-contract-nanobot:
 ## Run all 4 runtime contracts (Phase 2.5 full gate)
 v2-phase2_5-e2e: v2-phase2_5-contract-grid v2-phase2_5-contract-cc v2-phase2_5-contract-goose v2-phase2_5-contract-nanobot
 	@echo "✅ Phase 2.5 automated gate PASS (4 runtimes × contract v1)"
+
+# ── D108 Hook Script Regression (bats) ──────────────────────────────────────
+.PHONY: hook-scripts-test
+
+## Run bats regression tests for all skill hook scripts (D108).
+## Requires: brew install bats-core
+hook-scripts-test:
+	bash scripts/test_hook_scripts.sh
