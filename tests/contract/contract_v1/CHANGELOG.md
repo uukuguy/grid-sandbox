@@ -7,6 +7,30 @@ The authoritative policy for this suite lives in ADR-V2-017 §2 ("共享契约�
 Every entry below must be traceable to a specific ledger item in
 `docs/design/EAASP/DEFERRED_LEDGER.md` or an accepted ADR.
 
+## v1.1.4 — 2026-04-18 (Phase 3 S3.T11 — ccb-runtime certified)
+
+### Status
+Patch: ccb-runtime (Bun/TypeScript) certified against contract v1.1. conftest.py
+gains `--runtime ccb` choice + RuntimeConfig block. Server loads runtime.proto
+via @grpc/proto-loader at startup. Fixed REPO_ROOT path resolution (3 levels up
+from src/, not 4).
+
+### Certified runtimes (v1.0 + v1.1 combined, 58 cases)
+
+| Runtime | Language | v1 PASS / XFAIL | v1.1 PASS |
+|---------|----------|-----------------|-----------|
+| grid-runtime | Rust | 13 / 22 | 29 |
+| claude-code-runtime | Python | 18 / 17 | 29 |
+| goose-runtime | Rust | 13 / 22 | 29 |
+| nanobot-runtime | Python | 13 / 22 | 29 |
+| pydantic-ai-runtime | Python | 13 / 22 | 29 |
+| claw-code-runtime | Rust | 13 / 22 | 29 |
+| **ccb-runtime** | **TypeScript/Bun** | **13 / 22** | **29** |
+
+ccb: 42 PASS, 22 XFAIL @ Phase 3 S3.T11. All XFAILs deferred-by-design (D136-D139).
+
+---
+
 ## v1.1.3 — 2026-04-18 (Phase 3 S3.T9 — claw-code-runtime certified)
 
 ### Status

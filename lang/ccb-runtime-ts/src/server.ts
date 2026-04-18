@@ -13,8 +13,8 @@ import type { CcbRuntimeService } from "./service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Resolve proto root: lang/ccb-runtime-ts/src/ -> repo root -> proto/
-const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
+// Resolve proto root: lang/ccb-runtime-ts/src/ -> lang/ccb-runtime-ts/ -> lang/ -> repo root
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 const PROTO_PATH = resolve(REPO_ROOT, "proto", "eaasp", "runtime", "v2", "runtime.proto");
 
 function loadProto() {

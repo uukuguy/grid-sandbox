@@ -85,7 +85,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--runtime",
         action="store",
         default=None,
-        choices=["grid", "claude-code", "goose", "nanobot", "pydantic-ai", "claw-code"],
+        choices=["grid", "claude-code", "goose", "nanobot", "pydantic-ai", "claw-code", "ccb"],
         help=(
             "Runtime under test. Required by contract_v1/ tests; smoke tests "
             "under tests/contract/test_harness_smoke.py do not consult it."
@@ -476,6 +476,44 @@ def runtime_config(
                 "https_proxy": "",
             },
             startup_timeout_s=15.0,
+        )
+
+    if runtime_name == "ccb":
+        ccb_dir = _REPO_ROOT / "lang" / "ccb-runtime-ts"
+        if not (ccb_dir / "node_modules").exists():
+            pytest.skip(
+                "ccb-runtime-ts node_modules not installed; "
+                "run `cd lang/ccb-runtime-ts && bun install` to enable ccb contract run"
+            )
+
+        grpc_port = _free_port()
+        fixtures_root = _REPO_ROOT / "tests" / "contract" / "fixtures"
+        probe_out_dir = fixtures_root / "_probe_out"
+        probe_out_dir.mkdir(parents=True, exist_ok=True)
+
+        bun_bin = os.environ.get("BUN_BIN", "bun")
+
+        return RuntimeConfig(
+            name="ccb",
+            launch_cmd=[
+                bun_bin,
+                "run",
+                str(ccb_dir / "src" / "index.ts"),
+            ],
+            grpc_port=grpc_port,
+            env={
+                "CCB_RUNTIME_GRPC_ADDR": f"0.0.0.0:{grpc_port}",
+                "EAASP_DEPLOYMENT_MODE": "shared",
+                "EAASP_SKILL_CACHE_DIR": str(fixtures_root),
+                "GRID_CONTRACT_PROBE_OUT": str(probe_out_dir),
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+            },
+            startup_timeout_s=30.0,
         )
 
     if runtime_name == "claw-code":
