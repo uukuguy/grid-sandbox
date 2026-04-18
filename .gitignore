@@ -65,3 +65,11 @@ tests/contract/.pytest_cache/
 .grid/
 .e2e/
 .omc/
+
+# runtime artifacts
+grid-runtime.db
+*.log
+docs/design/AgentOS/
+docs/design/AgentOS/
+grid-runtime.db
+*.log
