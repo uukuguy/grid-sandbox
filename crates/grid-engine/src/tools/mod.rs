@@ -181,8 +181,13 @@ impl ToolRegistry {
     pub fn snapshot_filtered(&self, filter: &[String]) -> ToolRegistry {
         let mut registry = ToolRegistry::new();
         for name in filter {
-            if let Some(tool) = self.tools.get(name) {
-                registry.tools.insert(name.clone(), tool.clone());
+            // Use resolve() so that namespace-prefixed names like "l2:scada_read_snapshot"
+            // (ADR-V2-020) match tools registered under their bare name "scada_read_snapshot".
+            // resolve() strips the prefix and falls back to bare-name lookup.
+            if let Some(tool) = self.resolve(name) {
+                // Store under the bare name the LLM will see (strip prefix if present).
+                let bare = name.find(':').map_or(name.as_str(), |i| &name[i + 1..]);
+                registry.tools.insert(bare.to_string(), tool);
             }
         }
         registry
@@ -289,4 +294,57 @@ pub fn register_scheduler_tools(
     storage: Arc<dyn SchedulerStorage>,
 ) {
     registry.register(scheduler::ScheduleTaskTool::new(storage));
+}
+
+#[cfg(test)]
+mod tests_snapshot_filtered {
+    use super::*;
+    use crate::tools::bash::BashTool;
+
+    struct FakeTool(String);
+    #[async_trait::async_trait]
+    impl crate::tools::Tool for FakeTool {
+        fn name(&self) -> &str { &self.0 }
+        fn description(&self) -> &str { "" }
+        fn parameters(&self) -> serde_json::Value { serde_json::json!({}) }
+        fn source(&self) -> grid_types::ToolSource { grid_types::ToolSource::BuiltIn }
+        async fn execute(&self, _params: serde_json::Value, _ctx: &grid_types::ToolContext) -> anyhow::Result<grid_types::ToolOutput> {
+            Ok(grid_types::ToolOutput::success(""))
+        }
+    }
+
+    #[test]
+    fn bare_name_filter_works() {
+        let mut reg = ToolRegistry::new();
+        reg.register(FakeTool("scada_read_snapshot".into()));
+        reg.register(FakeTool("bash".into()));
+        let filtered = reg.snapshot_filtered(&["scada_read_snapshot".to_string()]);
+        assert!(filtered.get("scada_read_snapshot").is_some(), "bare name must match");
+        assert!(filtered.get("bash").is_none(), "non-filter tool must be excluded");
+    }
+
+    #[test]
+    fn l2_prefix_filter_resolves_bare_name() {
+        // Regression: ADR-V2-020 qualified names like "l2:scada_read_snapshot"
+        // must resolve MCP tools registered under bare name "scada_read_snapshot".
+        let mut reg = ToolRegistry::new();
+        reg.register(FakeTool("scada_read_snapshot".into()));
+        reg.register(FakeTool("bash".into()));
+        let filter = vec!["l2:scada_read_snapshot".to_string()];
+        let filtered = reg.snapshot_filtered(&filter);
+        assert!(filtered.get("scada_read_snapshot").is_some(),
+            "l2: prefix must resolve to bare tool name — if this fails, grid-runtime tool_filter silently becomes empty");
+        assert!(filtered.get("bash").is_none(), "bash must be excluded by filter");
+    }
+
+    #[test]
+    fn filter_with_layered_registration() {
+        // Tools registered via register_layered store both bare and qualified keys.
+        let mut reg = ToolRegistry::new();
+        reg.register_layered(ToolLayer::L2, Arc::new(FakeTool("memory_search".into())));
+        let filter = vec!["l2:memory_search".to_string()];
+        let filtered = reg.snapshot_filtered(&filter);
+        assert!(filtered.get("memory_search").is_some(),
+            "register_layered + l2: filter must resolve");
+    }
 }

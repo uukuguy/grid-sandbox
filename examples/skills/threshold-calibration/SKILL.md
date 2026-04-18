@@ -27,9 +27,9 @@ dependencies:
 workflow:
   required_tools:
     - l2:scada_read_snapshot
-    - l2:memory.search
-    - l2:memory.write_anchor
-    - l2:memory.write_file
+    - l2:memory_search
+    - l2:memory_write_anchor
+    - l2:memory_write_file
 ---
 
 # Threshold Calibration Assistant

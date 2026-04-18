@@ -843,11 +843,23 @@ impl RuntimeContract for GridHarness {
         // D87 L1 metadata: forward required_tools into the running executor
         // so the harness can drive `tool_choice=Specific(next_required)`
         // on workflow-continuation triggers. Empty list = no L1 constraint.
+        //
+        // Strip ADR-V2-020 namespace prefix (e.g. "l2:") so that bare tool
+        // names reach the LLM tool_choice field — providers reject prefixed names
+        // because the tool is registered under its bare name.
         if !content.required_tools.is_empty() {
+            let bare_required: Vec<String> = content
+                .required_tools
+                .iter()
+                .map(|t| {
+                    t.find(':')
+                        .map_or(t.clone(), |i| t[i + 1..].to_string())
+                })
+                .collect();
             let session_id = SessionId::from_string(&handle.session_id);
             if let Some(executor_handle) = self.runtime.get_session_handle(&session_id) {
                 if let Err(e) = executor_handle
-                    .set_required_tools(content.required_tools.clone())
+                    .set_required_tools(bare_required)
                     .await
                 {
                     warn!(
