@@ -1,8 +1,13 @@
 # Grid Platform 下一会话指南
 
-**最后更新**: 2026-04-18 06:00 GMT+8
+**最后更新**: 2026-04-18 07:00 GMT+8
 **当前分支**: `main`
-**当前状态**: EAASP v2.0 **Phase 2.5 (L1 Runtime Ecosystem + goose + nanobot) 🟢 COMPLETED 25/25** — 下一阶段 **Phase 3** 待规划
+**当前状态**: EAASP v2.0 **Phase 3 (L1 Runtime Functional Completeness) 🟡 ACTIVE — Planning Complete 0/35** — 等待执行模式选择开启 S1.T1
+
+- **Context**: `docs/plans/2026-04-18-v2-phase3-CONTEXT.md`
+- **Design**: `docs/design/EAASP/PHASE_3_DESIGN.md`
+- **Plan**: `docs/plans/2026-04-18-v2-phase3-plan.md`
+- **S1 / S2 / S3**: 8 / 9 / 18 tasks，预计 3-5 周
 
 ---
 
@@ -99,51 +104,45 @@
 
 ---
 
-## Phase 3 规划（下一步优先级）
+## Phase 3 规划（设计 & 计划已锁）
 
-**Phase 3 主题**：L1 生态功能完整性 + 工具命名空间治理 + 对比 runtime 评估
+**Phase 3 主题**：工具命名空间治理（root cause）+ Phase 2 P1-defer 7 项全清 + D144 L1 runtime 功能补全 + pydantic-ai / claw-code / ccb 对比 runtime 全矩阵
 
-### 优先级
+### 已产出（2026-04-18）
 
-1. **D144: goose-runtime Send 完整 ACP 接线**
-   - 当前 Send 是 stub（返回单个 done chunk）
-   - 通过 GooseAdapter.stream 驱动真实 goose ACP subprocess
-   - 事件映射 ACP → AgentEvent (CHUNK / TOOL_CALL / TOOL_RESULT / STOP)
+- ✅ **CONTEXT.md**: `docs/plans/2026-04-18-v2-phase3-CONTEXT.md`（10 决策 locked）
+- ✅ **PHASE_3_DESIGN.md**: `docs/design/EAASP/PHASE_3_DESIGN.md`（8 章含架构/风险/sign-off）
+- ✅ **Plan**: `docs/plans/2026-04-18-v2-phase3-plan.md`（35 tasks × TDD 粒度）
 
-2. **D144: nanobot-runtime ConnectMCP + 工具注入**
-   - 当前 ConnectMcp 是空实现，AgentSession 永远用空 tools 列表
-   - 真实实现 stdio MCP client + 工具注册到 AgentSession
-   - Stop Hook dispatch（当前只有 PostToolUse）
+### Stage 编排（三轮）
 
-3. **grid-engine 工具命名空间架构治理**
-   - 内置 L0/L1 工具（memory_recall/timeline/graph_*/bash/file_read/agent/...）与 L2 MCP 工具（memory_search/read/write_*/confirm/...）命名空间混乱
-   - skill 作者无法系统性控制 LLM 选择
-   - 本次 Phase 2.5 靠 EAASP_TOOL_FILTER=on 和 executor.rs gate 打了补丁，Phase 3 需系统重构
+| Stage | Tasks | 主题 | 周期 |
+|-------|-------|------|------|
+| **S1** | 8 | 工具命名空间治理（L0/L1/L2 + skill 显式声明 + contract v1.1） | 1-1.5 周 |
+| **S2** | 9 | Phase 2 P1-defer 清债（D130/D78/D94/D98/D117/D108/D125） | 1.5-2 周 |
+| **S3** | 18 | D144 goose/nanobot 接线 + pydantic-ai/claw-code/ccb 进契约 + E2E B1-B8 | 1.5-2 周 |
 
-4. **对比 runtime 评估**（ADR-V2-017 计划）
-   - pydantic-ai / claw-code / ccb 对比评估
-   - 拓展 L1 生态样本
+### Sign-off 标准（9 条）
 
-5. **补 E2E harness 覆盖 TODO 项**（8 项）
-   - B1 ErrorClassifier E2E harness（错误注入）
-   - B2 graduated retry 日志解析
-   - B5/B6 memory_confirm + 状态机定制 skill
-   - B7 聚合溢出 blob_ref 造大 tool output
-   - B8 PreCompact 长对话模拟
-   - B3/B4 HNSW + 混合检索样本集
+1. ADR-V2-020 Accepted
+2. `contract-v1.1.0` tag local-only（35+ cases）
+3. 7 项 P1-defer 全 closed
+4. 5 runtimes × contract v1.1 全 PASS 无 XFAIL
+5. skill-extraction E2E 在所有 5 runtime 跑通
+6. `make v2-phase3-e2e` 一键跑 B1-B8
+7. `make verify` 全绿
+8. `L1_RUNTIME_COMPARISON_MATRIX.md` 扩至 5-runtime 全行
+9. 人工 runbook 签字
 
-6. **Phase 2.5 历史遗留 P1-defer**（未处理）：
-   - **D130 token consolidation** — AgentExecutor 持 session-lifetime parent token
-   - **D78 event payload embedding** — 与 memory semantic 共 HNSW
-   - **D94 MemoryStore 单例 refactor**（收尾 D12）
-   - **D98 HybridIndex HNSW 持久化**（当前每次 search 重建）
-   - **D108 hook script bats/shellcheck 自动回归**
-   - **D125 events/stream burst cap**（if L1 >1k/sec）
+### Phase 3 执行启动
 
-### Phase 3 启动命令
+选执行模式：
+- **Mode 1 Subagent-Driven**：RuFlo swarm + Task tool 分派 coder/reviewer（推荐，符合 CLAUDE.md 铁律）
+- **Mode 2 Parallel Session**：单开 session 跑 `/superpowers:executing-plans`
 
+启动第一个任务：
 ```
-/dev-phase-manager:start-phase "Phase 3 — L1 Runtime Functional Completeness"
+S1.T1 ADR-V2-020 tool namespace contract — Proposed
 ```
 
 ---
