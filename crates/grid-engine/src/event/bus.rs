@@ -57,6 +57,8 @@ pub struct TelemetryBus {
     sender: broadcast::Sender<TelemetryEvent>,
     history: Arc<RwLock<VecDeque<TelemetryEvent>>>,
     history_capacity: usize,
+    /// Capacity of the broadcast channel (set at construction time).
+    channel_capacity: usize,
     metrics: Arc<MetricsRegistry>,
     /// Optional persistent event store. When set, every published event
     /// is also appended to the store for replay and projection support.
@@ -74,6 +76,7 @@ impl TelemetryBus {
             sender,
             history: Arc::new(RwLock::new(VecDeque::with_capacity(history_capacity))),
             history_capacity,
+            channel_capacity,
             metrics,
             event_store: None,
         }
@@ -96,6 +99,21 @@ impl TelemetryBus {
 
     /// 发布事件（fire-and-forget，不阻塞发送方）
     pub async fn publish(&self, event: TelemetryEvent) {
+        // D125: detect channel backpressure — when queued messages reach or
+        // exceed channel capacity all slow receivers will start lagging on
+        // the next send. Increment the counter before the send so operators
+        // can alert on `events_stream_backpressure_total > 0`.
+        if self.sender.len() >= self.channel_capacity {
+            self.metrics
+                .counter("events_stream_backpressure_total")
+                .inc();
+            warn!(
+                queued = self.sender.len(),
+                capacity = self.channel_capacity,
+                "TelemetryBus channel at capacity — slow receivers will lag"
+            );
+        }
+
         // 记录指标
         self.record_metrics(&event);
 
