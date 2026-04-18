@@ -376,6 +376,177 @@ Rust 参考实现：`crates/grid-engine/src/tools/mod.rs`（`register_layered` /
 
 ---
 
+## 12. TypeScript/Bun Runtime 接入教程（ccb-runtime 参考）
+
+本章基于 Phase 3 S3.T10-T11 的 `lang/ccb-runtime-ts/` 实践，面向希望用 TypeScript（Bun 运行时）接入 EAASP 的开发者。
+
+### 12.1 目录结构
+
+```
+lang/ccb-runtime-ts/
+├── package.json             # @grpc/grpc-js + @grpc/proto-loader 依赖
+├── tsconfig.json            # 严格模式 TypeScript
+├── src/
+│   ├── index.ts             # 入口：读 CCB_RUNTIME_GRPC_ADDR env，启动 gRPC 服务器
+│   ├── server.ts            # proto-loader 加载 proto + addService + 16 方法 handler
+│   ├── service.ts           # CcbRuntimeService — 16 个方法的纯逻辑实现
+│   └── proto/
+│       └── types.ts         # 手写 TypeScript 接口（Request/Response 类型）
+└── tests/
+    └── service.test.ts      # Bun 原生测试（bun test）
+```
+
+### 12.2 依赖安装
+
+```bash
+cd lang/ccb-runtime-ts
+bun install   # 安装 @grpc/grpc-js + @grpc/proto-loader
+```
+
+`package.json` 关键依赖：
+
+```json
+{
+  "dependencies": {
+    "@grpc/grpc-js": "^1.10.0",
+    "@grpc/proto-loader": "^0.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/bun": "latest"
+  }
+}
+```
+
+### 12.3 proto 文件加载（关键路径）
+
+与 Python（protoc codegen）或 Rust（tonic build.rs）不同，ccb-runtime 使用 `proto-loader` 在**运行时**动态加载 `.proto` 文件：
+
+```typescript
+import { loadSync } from "@grpc/proto-loader";
+import { loadPackageDefinition } from "@grpc/grpc-js";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+// __dirname 在 ESM 中需要手动计算
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// 从 src/ 目录出发，向上 3 级到达 repo 根（不是 4 级）
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
+const PROTO_PATH = resolve(REPO_ROOT, "proto", "eaasp", "runtime", "v2", "runtime.proto");
+
+const packageDef = loadSync(PROTO_PATH, {
+  keepCase: true,
+  longs: String,
+  enums: String,
+  defaults: true,
+  oneofs: true,
+  includeDirs: [resolve(REPO_ROOT, "proto")],
+});
+const grpcObj = loadPackageDefinition(packageDef) as any;
+const RuntimeService = grpcObj.eaasp.runtime.v2.RuntimeService;
+```
+
+> **常见陷阱**：`resolve(__dirname, "..", "..", "..", "..")` 会跳出 repo 根目录，导致 ENOENT proto 文件。从 `src/` 出发只需 3 级 `..`。
+
+### 12.4 Send 方法（流式响应）
+
+TypeScript gRPC 服务端的流式方法使用 `ServerWritableStream`：
+
+```typescript
+async send(call: grpc.ServerWritableStream<SendRequest, SendResponse>): Promise<void> {
+  const { session_id, message } = call.request;
+  // 流式 yield 每个 chunk
+  for await (const chunk of this.svc.send(session_id, message)) {
+    call.write(chunk);
+  }
+  call.end();
+}
+```
+
+`service.ts` 中 `CcbRuntimeService.send()` 实现为 async generator：
+
+```typescript
+async *send(sessionId: string, message: string): AsyncGenerator<SendResponse> {
+  // 可选：先 yield 一个 text chunk
+  yield { chunk_type: "text", content: "Processing...", session_id: sessionId, ... };
+  // 必须以 done 结尾
+  yield { chunk_type: "done", content: "end_turn", session_id: sessionId, is_error: false };
+}
+```
+
+### 12.5 手写类型接口（无 protoc codegen）
+
+ccb-runtime 不使用 protoc 代码生成，改用 `src/proto/types.ts` 手写接口：
+
+```typescript
+// src/proto/types.ts
+export interface SendRequest {
+  session_id: string;
+  message: string;
+  skill_instructions?: SkillInstructions;
+}
+
+export interface SendResponse {
+  session_id: string;
+  chunk_type: string;   // "text" | "tool_call" | "tool_result" | "done" | "error"
+  content: string;
+  tool_name?: string;
+  tool_id?: string;
+  is_error: boolean;
+}
+```
+
+这比 codegen 更轻量，但需要手动与 `.proto` 文件保持同步。
+
+### 12.6 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `CCB_RUNTIME_GRPC_ADDR` | `0.0.0.0:50057` | gRPC 监听地址 |
+| `EAASP_DEPLOYMENT_MODE` | `shared` | 部署模式（ADR-V2-019） |
+
+### 12.7 本地测试
+
+```bash
+# 单元测试（Bun 原生，无需 Jest/Vitest）
+cd lang/ccb-runtime-ts
+bun test
+
+# 合约测试（需先安装 Python 依赖）
+cd tests/contract
+python -m pytest contract_v1/ --runtime=ccb -v
+```
+
+### 12.8 GetCapabilities 声明
+
+```typescript
+getCapabilities(_call: grpc.ServerUnaryCall<Empty, Capabilities>, callback: grpc.sendUnaryData<Capabilities>): void {
+  callback(null, {
+    tier: "aligned",
+    runtime_id: "eaasp-ccb-runtime",
+    runtime_version: "0.1.0",
+    deployment_mode: process.env.EAASP_DEPLOYMENT_MODE ?? "shared",
+    supports_native_mcp: false,
+    supports_native_hooks: false,
+    supports_precompact_hook: false,
+  });
+}
+```
+
+### 12.9 与其他 runtime 的对比
+
+| 维度 | Python runtime | Rust runtime | TypeScript/Bun runtime |
+|------|---------------|-------------|------------------------|
+| proto 加载 | protoc codegen | tonic build.rs | proto-loader 运行时加载 |
+| gRPC 库 | grpcio-aio | tonic | @grpc/grpc-js |
+| 测试框架 | pytest | cargo test | bun test |
+| 包管理 | uv / pip | cargo | bun |
+| 流式方法 | async generator | Stream trait | async generator |
+| 类型安全 | pb2 + .pyi | prost 生成 | 手写接口 |
+
+---
+
 ## 11. 参考资料
 
 | 文档 | 位置 |

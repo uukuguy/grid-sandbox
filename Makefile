@@ -21,6 +21,7 @@
         l3-setup l3-start l3-test l4-setup l4-proto-gen l4-start l4-test \
         cli-v2-setup cli-v2-test v2-mvp-e2e \
         v2-phase2-e2e v2-phase2-e2e-full v2-phase2-e2e-build test-phase2-batch-ab \
+        v2-phase3-e2e v2-phase3-e2e-rust \
         mock-scada-setup mock-scada-test mock-scada-start \
         dev-eaasp dev-eaasp-stop \
         eaasp-skill-list eaasp-skill-submit eaasp-policy-list eaasp-policy-deploy \
@@ -984,6 +985,22 @@ test-phase2-batch-ab:
 	cargo test -p grid-engine --test stop_hooks_integration -- --test-threads=1
 	cargo test -p grid-engine error_classifier -- --test-threads=1
 	@echo "=== Batch A/B: all passed ==="
+
+# ============================================================
+# EAASP v2.0 Phase 3 E2E (S3.T16) — B1-B8 automated acceptance gate
+# ============================================================
+
+v2-phase3-e2e:
+	@echo "=== Phase 3 E2E: B1-B8 (pytest, no live LLM required) ==="
+	pytest tests/e2e/phase3/ -v --tb=short
+	@echo "=== Phase 3 E2E: all passed ==="
+
+v2-phase3-e2e-rust:
+	@echo "=== Phase 3 E2E: Rust integration tests (slow) ==="
+	cargo test -p grid-engine --test tool_result_aggregate_spill -- --test-threads=1
+	cargo test -p grid-engine --test compaction_pipeline -- --test-threads=1
+	cargo test -p grid-engine --test retry_graduated_integration -- --test-threads=1
+	@echo "=== Phase 3 Rust E2E: all passed ==="
 
 # ============================================================
 # EAASP v2.0 Dev Server — start/stop all services interactively
