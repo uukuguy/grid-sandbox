@@ -152,6 +152,11 @@ class HybridIndex:
         self.w_fts = max(0.0, min(1.0, weights[0]))
         self.w_sem = max(0.0, min(1.0, weights[1]))
 
+        # D98: cache HNSWVectorIndex per (model_id, dim) to avoid rebuilding
+        # on every search() call. Invalidated implicitly when model_id changes
+        # (a new key is used). None until the first successful embedding round.
+        self._hnsw_cache: dict[tuple[str, int], Any] = {}
+
     async def search(
         self,
         query: str,
@@ -231,20 +236,25 @@ class HybridIndex:
                     ModelIdMismatchError,
                 )
 
-                try:
-                    hnsw_index = HNSWVectorIndex(
-                        model_id=embedder_model_id,
-                        octo_root=self.octo_root,
-                        dim=embedder_dim,
-                    )
-                except (ModelIdMismatchError, DimensionMismatchError) as e:
-                    logger.warning(
-                        "hybrid_search HNSW model_id/dim mismatch, "
-                        "degrading to keyword-only: %s",
-                        e,
-                    )
-                    keyword_only = True
-                    hnsw_index = None
+                cache_key = (embedder_model_id, embedder_dim)
+                if cache_key in self._hnsw_cache:
+                    hnsw_index = self._hnsw_cache[cache_key]
+                else:
+                    try:
+                        hnsw_index = HNSWVectorIndex(
+                            model_id=embedder_model_id,
+                            octo_root=self.octo_root,
+                            dim=embedder_dim,
+                        )
+                        self._hnsw_cache[cache_key] = hnsw_index
+                    except (ModelIdMismatchError, DimensionMismatchError) as e:
+                        logger.warning(
+                            "hybrid_search HNSW model_id/dim mismatch, "
+                            "degrading to keyword-only: %s",
+                            e,
+                        )
+                        keyword_only = True
+                        hnsw_index = None
             except Exception as e:  # noqa: BLE001 — degrade on any load error
                 logger.warning(
                     "hybrid_search HNSW load failed, degrading to keyword-only: %s",
