@@ -241,24 +241,35 @@ class AgentSession:
 
             self._messages.extend(tool_results)
 
-            # D87-parity: once all required_tools have been called, inject a
-            # system message to drive the LLM toward a final text answer.
-            # Only inject once to avoid repeated nudges polluting history.
-            if (
-                self.required_tools
-                and not self._workflow_completion_injected
-                and self._check_workflow_complete()
-            ):
-                self._workflow_completion_injected = True
-                self._messages.append({
-                    "role": "system",
-                    "content": (
-                        "You have completed all required workflow steps "
-                        f"({', '.join(self.required_tools)}). "
-                        "Now provide your final answer to the user in clear, "
-                        "concise text. Do not call any more tools."
-                    ),
-                })
+            # D87-parity: after each tool-call round, check required_tools
+            # progress and inject a system message to steer the LLM.
+            # - If some required_tools are still missing: name the next one
+            #   explicitly so the LLM calls it on the next turn.
+            # - If all are satisfied: drive toward final text answer (once).
+            if self.required_tools:
+                next_missing = next(
+                    (t for t in self.required_tools if t not in self._called_tools),
+                    None,
+                )
+                if next_missing is not None:
+                    self._messages.append({
+                        "role": "system",
+                        "content": (
+                            f"Next required step: call the `{next_missing}` tool "
+                            "before proceeding further."
+                        ),
+                    })
+                elif not self._workflow_completion_injected:
+                    self._workflow_completion_injected = True
+                    self._messages.append({
+                        "role": "system",
+                        "content": (
+                            "You have completed all required workflow steps "
+                            f"({', '.join(self.required_tools)}). "
+                            "Now provide your final answer to the user in clear, "
+                            "concise text. Do not call any more tools."
+                        ),
+                    })
             # continue loop
 
         yield AgentEvent(
