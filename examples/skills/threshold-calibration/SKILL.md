@@ -26,10 +26,10 @@ dependencies:
   - mcp:eaasp-l2-memory
 workflow:
   required_tools:
-    - scada_read_snapshot
-    - memory_search
-    - memory_write_anchor
-    - memory_write_file
+    - l2:scada_read_snapshot
+    - l2:memory.search
+    - l2:memory.write_anchor
+    - l2:memory.write_file
 ---
 
 # Threshold Calibration Assistant

@@ -4,6 +4,38 @@ use anyhow::Result;
 use async_trait::async_trait;
 use grid_types::{ApprovalRequirement, RiskLevel, ToolContext, ToolOutput, ToolSource, ToolSpec};
 
+/// Three-layer tool namespace defined in ADR-V2-020.
+///
+/// - `L0`: runtime-core (gRPC contract layer, invisible to LLM)
+/// - `L1`: engine-builtin (runtime-native, LLM visible, zero external deps)
+/// - `L2`: MCP-provided (external MCP server, LLM visible, routed via MCP protocol)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ToolLayer {
+    L0,
+    L1,
+    L2,
+}
+
+impl ToolLayer {
+    pub fn prefix(&self) -> &'static str {
+        match self {
+            Self::L0 => "l0",
+            Self::L1 => "l1",
+            Self::L2 => "l2",
+        }
+    }
+
+    /// Parse layer from string prefix ("l0" / "l1" / "l2").
+    pub fn from_prefix(s: &str) -> Option<Self> {
+        match s {
+            "l0" => Some(Self::L0),
+            "l1" => Some(Self::L1),
+            "l2" => Some(Self::L2),
+            _ => None,
+        }
+    }
+}
+
 /// Callback for streaming tool progress during execution.
 pub type ProgressCallback = std::sync::Arc<dyn Fn(grid_types::ToolProgress) + Send + Sync>;
 
@@ -54,6 +86,12 @@ pub trait Tool: Send + Sync {
     /// Category tag for grouping and permission control.
     fn category(&self) -> &str {
         "general"
+    }
+
+    /// Namespace layer for this tool (ADR-V2-020).
+    /// Default is L1 (engine-builtin); MCP-bridged tools should return L2.
+    fn layer(&self) -> ToolLayer {
+        ToolLayer::L1
     }
 
     /// Whether this tool only reads data (never modifies state).

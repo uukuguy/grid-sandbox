@@ -697,36 +697,46 @@ impl RuntimeContract for GridHarness {
             self.register_scoped_hooks(&session_id, &scoped_hooks, hook_vars).await;
         }
 
-        // Tool filter (restored from commit 055badf design):
-        // When EAASP_TOOL_FILTER=on, restrict the agent's ToolRegistry to
-        // only the MCP tools provided by the current skill's MCP
-        // dependencies. This prevents the LLM from choosing grid-engine
-        // built-ins (memory_recall/timeline/store/edit, bash, graph_*, ...)
-        // that are not part of the skill's declared workflow.
+        // Tool filter (Phase 3 / ADR-V2-020): derive allowed tool set from
+        // skill's `workflow.required_tools` namespace declarations (authoritative),
+        // falling back to the legacy EAASP_TOOL_FILTER env (deprecated).
         //
-        // Deferred D145/D146: grid-engine vs L2 MCP tool coexistence is an
-        // EAASP architecture issue — to be re-designed in Phase 3.
+        // Priority: skill declaration > EAASP_TOOL_FILTER env > no filter.
+        // The env path emits a deprecation warning so operators migrate to
+        // skill YAML (ADR-V2-020 §6 retirement timeline: Phase 4 removal).
         let tool_filter: Option<Vec<String>> = {
-            let filter_enabled = std::env::var("EAASP_TOOL_FILTER")
-                .map(|v| v == "on" || v == "true" || v == "1")
-                .unwrap_or(false);
-            if filter_enabled {
-                let mcp_guard = self.runtime.mcp_manager().lock().await;
-                let mcp_tools = mcp_guard.tool_names();
-                if mcp_tools.is_empty() {
-                    None
-                } else {
-                    Some(mcp_tools)
-                }
+            // Primary: skill-declared required_tools (Phase 3 / ADR-V2-020)
+            let skill_filter: Option<Vec<String>> = payload
+                .skill_instructions
+                .as_ref()
+                .map(|s| s.required_tools.clone())
+                .filter(|rt| !rt.is_empty());
+
+            if skill_filter.is_some() {
+                skill_filter
             } else {
-                None
+                // Fallback: legacy EAASP_TOOL_FILTER env (deprecated)
+                let filter_enabled = std::env::var("EAASP_TOOL_FILTER")
+                    .map(|v| v == "on" || v == "true" || v == "1")
+                    .unwrap_or(false);
+                if filter_enabled {
+                    warn!(
+                        "EAASP_TOOL_FILTER env is deprecated (ADR-V2-020); \
+                         use skill YAML workflow.required_tools with namespace prefix instead"
+                    );
+                    let mcp_guard = self.runtime.mcp_manager().lock().await;
+                    let mcp_tools = mcp_guard.tool_names();
+                    if mcp_tools.is_empty() { None } else { Some(mcp_tools) }
+                } else {
+                    None
+                }
             }
         };
 
         info!(
             session_id = %session_id,
             tool_filter = ?tool_filter,
-            "GridHarness: tool_filter derived from EAASP_TOOL_FILTER + MCP deps"
+            "GridHarness: tool_filter from skill required_tools (ADR-V2-020)"
         );
 
         // NOW start session — ToolRegistry snapshot will include MCP tools.

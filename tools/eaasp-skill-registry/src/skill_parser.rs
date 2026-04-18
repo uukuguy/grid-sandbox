@@ -4,9 +4,88 @@
 //! schema with `runtime_affinity`, `access_scope`, `scoped_hooks`, and
 //! `dependencies`. All fields are optional so legacy frontmatter parses
 //! cleanly with default values.
+//!
+//! v1.1 (Phase 3 / ADR-V2-020): `workflow.required_tools` entries now support
+//! optional namespace prefixes `"{layer}:{name}"` (e.g. `l2:memory.search`).
+//! Entries without a prefix are treated as pre-Phase-3 legacy declarations and
+//! resolved via the fallback chain (L2 → L1 → L0) at runtime.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+/// A single entry in `workflow.required_tools` (skill schema v1.1).
+///
+/// Supports both namespaced form (`l2:memory.search`) and legacy bare form
+/// (`memory_search`). Use [`RequiredTool::parse`] to construct from a YAML
+/// string value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RequiredTool {
+    /// Namespace layer (`"l0"` / `"l1"` / `"l2"`), or `None` for pre-Phase 3 legacy.
+    pub layer: Option<String>,
+    /// Tool name without layer prefix (e.g. `"memory.search"` or `"memory_search"`).
+    pub name: String,
+}
+
+impl RequiredTool {
+    /// Parse a required_tools YAML string value.
+    ///
+    /// - `"l2:memory.search"` → `RequiredTool { layer: Some("l2"), name: "memory.search" }`
+    /// - `"memory_search"` → `RequiredTool { layer: None, name: "memory_search" }`
+    /// - `"l3:anything"` → `Err(InvalidLayer)`
+    pub fn parse(s: &str) -> Result<Self, RequiredToolParseError> {
+        if let Some(colon) = s.find(':') {
+            let layer_str = &s[..colon];
+            let name = s[colon + 1..].to_string();
+            // Validate layer: only l0/l1/l2 are legal (ADR-V2-020 §2)
+            match layer_str {
+                "l0" | "l1" | "l2" => Ok(Self { layer: Some(layer_str.to_string()), name }),
+                other => Err(RequiredToolParseError::InvalidLayer(other.to_string())),
+            }
+        } else {
+            // No colon → pre-Phase 3 legacy bare name
+            Ok(Self { layer: None, name: s.to_string() })
+        }
+    }
+
+    /// Returns the fully-qualified name `"{layer}:{name}"` if layer is set,
+    /// otherwise returns the bare name.
+    pub fn qualified(&self) -> String {
+        match &self.layer {
+            Some(l) => format!("{}:{}", l, self.name),
+            None => self.name.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum RequiredToolParseError {
+    #[error("invalid namespace layer `{0}`; expected l0, l1, or l2")]
+    InvalidLayer(String),
+}
+
+/// Serde helper: deserialize a `Vec<RequiredTool>` from a YAML sequence of strings.
+mod required_tools_serde {
+    use super::RequiredTool;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<RequiredTool>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw: Vec<String> = Vec::deserialize(deserializer)?;
+        raw.iter()
+            .map(|s| RequiredTool::parse(s).map_err(serde::de::Error::custom))
+            .collect()
+    }
+
+    pub fn serialize<S>(tools: &Vec<RequiredTool>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let strs: Vec<String> = tools.iter().map(|t| t.qualified()).collect();
+        strs.serialize(serializer)
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct V2Frontmatter {
@@ -35,13 +114,25 @@ pub struct V2Frontmatter {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowMetadata {
-    /// Tools the LLM is expected to call to complete this workflow,
-    /// in roughly the order the harness should request them. Order is
-    /// authoritative for "next required tool" selection. The harness
-    /// considers the workflow done when every name here has been called
-    /// at least once during the session turn.
-    #[serde(default)]
-    pub required_tools: Vec<String>,
+    /// Tools the LLM is expected to call to complete this workflow (skill schema v1.1).
+    ///
+    /// Each entry is a [`RequiredTool`] that may carry an optional namespace prefix
+    /// (`l2:memory.search`) or be a legacy bare name (`memory_search`).
+    /// Order is authoritative for "next required tool" selection.
+    #[serde(default, with = "required_tools_serde")]
+    pub required_tools: Vec<RequiredTool>,
+}
+
+impl WorkflowMetadata {
+    /// Return bare tool names for backward-compatible callers that still use `Vec<String>`.
+    pub fn required_tool_names(&self) -> Vec<String> {
+        self.required_tools.iter().map(|t| t.name.clone()).collect()
+    }
+
+    /// Return fully-qualified tool names (`"{layer}:{name}"` or bare).
+    pub fn required_tool_qualifieds(&self) -> Vec<String> {
+        self.required_tools.iter().map(|t| t.qualified()).collect()
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

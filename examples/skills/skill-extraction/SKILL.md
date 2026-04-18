@@ -23,10 +23,10 @@ dependencies:
   - mcp:eaasp-skill-registry
 workflow:
   required_tools:
-    - memory_search
-    - memory_read
-    - memory_write_anchor
-    - memory_write_file
+    - l2:memory.search
+    - l2:memory.read
+    - l2:memory.write_anchor
+    - l2:memory.write_file
 ---
 
 # Skill Extraction

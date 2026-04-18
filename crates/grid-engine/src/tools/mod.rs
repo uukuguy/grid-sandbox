@@ -57,7 +57,7 @@ use std::sync::Arc;
 
 pub use input_risk::{classify_path_risk, classify_url_risk};
 pub use interceptor::ToolCallInterceptor;
-pub use traits::Tool;
+pub use traits::{Tool, ToolLayer};
 
 use self::bash::BashTool;
 use self::dev_commands::{GitCommitTool, GitDiffTool, SecurityReviewTool};
@@ -109,6 +109,45 @@ impl ToolRegistry {
     /// Register a tool that is already wrapped in an Arc.
     pub fn register_arc(&mut self, name: String, tool: Arc<dyn Tool>) {
         self.tools.insert(name, tool);
+    }
+
+    /// Register a tool with an explicit namespace layer (ADR-V2-020).
+    /// The tool is stored under both its bare name (for legacy lookup) and
+    /// its fully-qualified name `"{layer}:{name}"` (for namespace-aware lookup).
+    pub fn register_layered(&mut self, layer: ToolLayer, tool: Arc<dyn Tool>) {
+        let bare = tool.name().to_string();
+        let qualified = format!("{}:{}", layer.prefix(), bare);
+        self.tools.insert(bare.clone(), tool.clone());
+        self.tools.insert(qualified, tool);
+    }
+
+    /// Resolve a tool by fully-qualified name `"{layer}:{name}"` (ADR-V2-020).
+    /// Falls back to bare name lookup for tools registered without a layer prefix.
+    pub fn resolve(&self, full_name: &str) -> Option<Arc<dyn Tool>> {
+        // Try exact match first (handles "l1:bash.execute" and bare "bash")
+        if let Some(tool) = self.tools.get(full_name) {
+            return Some(tool.clone());
+        }
+        // If caller passed a qualified name but it's not stored qualified, strip prefix
+        if let Some(colon_pos) = full_name.find(':') {
+            let bare = &full_name[colon_pos + 1..];
+            return self.tools.get(bare).cloned();
+        }
+        None
+    }
+
+    /// Resolve an unqualified tool name using the fallback chain: L2 → L1 → L0.
+    /// This implements backward compatibility for pre-Phase 3 skill declarations
+    /// that lack a namespace prefix (ADR-V2-020 §4).
+    pub fn resolve_with_fallback(&self, name: &str) -> Option<Arc<dyn Tool>> {
+        for layer in &[ToolLayer::L2, ToolLayer::L1, ToolLayer::L0] {
+            let qualified = format!("{}:{}", layer.prefix(), name);
+            if let Some(tool) = self.tools.get(&qualified) {
+                return Some(tool.clone());
+            }
+        }
+        // Final fallback: bare name (covers tools registered without register_layered)
+        self.tools.get(name).cloned()
     }
 
     pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {

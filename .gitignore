@@ -61,3 +61,7 @@ tests/contract/.pytest_cache/
 
 # dev-eaasp runtime logs
 .logs/
+
+.grid/
+.e2e/
+.omc/

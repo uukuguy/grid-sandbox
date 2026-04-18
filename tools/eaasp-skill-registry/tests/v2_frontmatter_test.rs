@@ -224,14 +224,14 @@ fn parse_skill_extraction_example_skill() {
     assert!(fm.workflow.is_some());
     let workflow = fm.workflow.unwrap();
     assert_eq!(workflow.required_tools.len(), 4);
-    assert!(workflow.required_tools.contains(&"memory_search".to_string()));
-    assert!(workflow.required_tools.contains(&"memory_read".to_string()));
-    assert!(workflow
-        .required_tools
-        .contains(&"memory_write_anchor".to_string()));
-    assert!(workflow
-        .required_tools
-        .contains(&"memory_write_file".to_string()));
+    // Phase 3: SKILL.md uses namespaced form (l2:memory.search); verify via qualified() and name
+    let qualifieds = workflow.required_tool_qualifieds();
+    assert!(qualifieds.contains(&"l2:memory.search".to_string()));
+    assert!(qualifieds.contains(&"l2:memory.read".to_string()));
+    assert!(qualifieds.contains(&"l2:memory.write_anchor".to_string()));
+    assert!(qualifieds.contains(&"l2:memory.write_file".to_string()));
+    // All entries must have layer l2
+    assert!(workflow.required_tools.iter().all(|t| t.layer.as_deref() == Some("l2")));
 
     // Verify dependencies: both eaasp-l2-memory (tool MCP) and eaasp-skill-registry
     // (soft intent declaration — draft output is destined for the registry even
