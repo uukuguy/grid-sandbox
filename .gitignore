@@ -66,10 +66,10 @@ tests/contract/.pytest_cache/
 .e2e/
 .omc/
 
+# claude code session artifacts
+.claude/scheduled_tasks.lock
+
 # runtime artifacts
 grid-runtime.db
 *.log
 docs/design/AgentOS/
-docs/design/AgentOS/
-grid-runtime.db
-*.log
