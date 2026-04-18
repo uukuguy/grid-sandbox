@@ -139,6 +139,7 @@ class AgentSession:
         self._messages: list[dict[str, Any]] = []
         self._called_tools: set[str] = set()
         self._workflow_completion_injected: bool = False
+        self._last_evidence_anchor_id: str = ""
 
     def _check_workflow_complete(self) -> bool:
         """Return True if all required_tools have been called at least once."""
@@ -221,6 +222,16 @@ class AgentSession:
                     is_error = True
 
                 self._called_tools.add(tc_name)
+
+                # Track anchor_id from memory_write_anchor for Stop hook envelope.
+                if tc_name == "memory_write_anchor" and not is_error:
+                    try:
+                        anchor_data = json.loads(result_str)
+                        aid = anchor_data.get("anchor_id", "")
+                        if aid:
+                            self._last_evidence_anchor_id = aid
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
 
                 yield AgentEvent(
                     event_type=EventType.TOOL_RESULT,
@@ -336,6 +347,7 @@ class AgentSession:
             "session_id": self.session_id,
             "skill_id": "",
             "content": final_content,
+            "evidence_anchor_id": self._last_evidence_anchor_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         stdin_bytes = json.dumps(envelope).encode()

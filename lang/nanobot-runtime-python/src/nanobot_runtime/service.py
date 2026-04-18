@@ -65,9 +65,9 @@ class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
         sid = payload.session_id if payload.session_id else str(uuid.uuid4())
         provider = self._make_provider()
 
-        # Extract required_tools from skill_instructions (ADR-V2-020).
-        # Strip namespace prefix (e.g. "l2:") so bare tool names reach the loop.
+        # Extract required_tools and scoped Stop hooks from skill_instructions (ADR-V2-020).
         required_tools: list[str] = []
+        stop_hooks: list[str] = []
         if payload.HasField("skill_instructions"):
             si = payload.skill_instructions
             for t in si.required_tools:
@@ -79,11 +79,20 @@ class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
                 logger.info(
                     "Initialize: session=%s required_tools=%s", sid, required_tools
                 )
+            # Extract Stop-scoped command hooks (ScopedHook.condition == "Stop").
+            for h in si.frontmatter_hooks:
+                if h.condition == "Stop" and h.hook_type == "command" and h.action:
+                    stop_hooks.append(h.action)
+            if stop_hooks:
+                logger.info(
+                    "Initialize: session=%s stop_hooks=%s", sid, stop_hooks
+                )
 
         self._sessions[sid] = AgentSession(
             provider=provider,
             session_id=sid,
             required_tools=required_tools or None,
+            stop_hooks=stop_hooks or None,
         )
         self._active_session_id = sid
         return runtime_pb2.InitializeResponse(
@@ -108,7 +117,7 @@ class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
                     )
                 elif event.event_type == EventType.TOOL_CALL:
                     yield runtime_pb2.SendResponse(
-                        chunk_type="tool_call",
+                        chunk_type="tool_call_start",
                         tool_name=event.tool_name,
                         tool_id=event.tool_call_id,
                         content=event.content,
