@@ -46,9 +46,15 @@ class McpToolSpec:
 class StdioMcpClient:
     """JSON-RPC 2.0 MCP client over subprocess stdio."""
 
-    def __init__(self, cmd: list[str], server_name: str = "") -> None:
+    def __init__(
+        self,
+        cmd: list[str],
+        server_name: str = "",
+        env: dict[str, str] | None = None,
+    ) -> None:
         self.cmd = cmd
         self.server_name = server_name or (cmd[0] if cmd else "mcp")
+        self._env = env  # passed to create_subprocess_exec; None means inherit
         self._proc: asyncio.subprocess.Process | None = None
 
     async def start(self) -> None:
@@ -57,6 +63,7 @@ class StdioMcpClient:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=self._env,
         )
         await self._send_rpc("initialize", {
             "protocolVersion": "2024-11-05",
@@ -84,6 +91,25 @@ class StdioMcpClient:
             )
             for t in tools_raw
         ]
+
+    async def call_tool(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Call a tool on the MCP server via JSON-RPC tools/call."""
+        await self._send_rpc("tools/call", {"name": tool_name, "arguments": tool_input})
+        resp = await self._read_response(timeout=30.0)
+        if "error" in resp:
+            raise RuntimeError(f"tools/call error from {self.server_name}: {resp['error']}")
+        result = resp.get("result", {})
+        # Extract text from content array (MCP spec)
+        content = result.get("content", [])
+        if content and isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+                elif isinstance(item, str):
+                    parts.append(item)
+            return "\n".join(parts) if parts else str(result)
+        return str(result)
 
     async def close(self) -> None:
         if self._proc is not None:

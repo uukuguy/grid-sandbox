@@ -9,6 +9,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,20 @@ from nanobot_runtime.session import AgentSession, EventType
 
 _RUNTIME_ID = "eaasp-nanobot-runtime"
 _DEPLOYMENT_MODE = os.environ.get("EAASP_DEPLOYMENT_MODE", "shared")
+
+
+class _McpToolExecutor:
+    """Routes tool calls to the correct StdioMcpClient using an exact tool→server map."""
+
+    def __init__(self, tool_map: dict[str, Any]) -> None:
+        # tool_map: {tool_name: StdioMcpClient}
+        self._tool_map = tool_map
+
+    async def execute(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        client = self._tool_map.get(tool_name)
+        if client is None:
+            raise RuntimeError(f"Tool {tool_name!r} not found in any connected MCP server")
+        return await client.call_tool(tool_name, tool_input)
 
 
 class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
@@ -144,27 +159,69 @@ class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
         )
 
     async def ConnectMCP(self, request, context):
+        import shutil
         from nanobot_runtime.mcp_client import StdioMcpClient
 
         connected: list[str] = []
         failed: list[str] = []
 
+        # Build augmented PATH: __file__ is .../lang/nanobot-runtime-python/src/nanobot_runtime/service.py
+        # 5 levels up → grid-sandbox project root.
+        _nanobot_pkg = os.path.dirname(os.path.abspath(__file__))        # nanobot_runtime/
+        _project_root = os.path.dirname(  # grid-sandbox/
+            os.path.dirname(              # lang/
+                os.path.dirname(          # nanobot-runtime-python/
+                    os.path.dirname(      # src/
+                        _nanobot_pkg
+                    )
+                )
+            )
+        )
+        # Allow override via env (e.g. in containers or tests).
+        _project_root = os.environ.get("EAASP_PROJECT_ROOT", _project_root)
+        _extra_paths = [
+            os.path.join(_project_root, "tools", "mock-scada", ".venv", "bin"),
+            os.path.join(_project_root, "tools", "eaasp-l2-memory-engine", ".venv", "bin"),
+        ]
+        _augmented_path = os.pathsep.join(
+            _extra_paths + [os.environ.get("PATH", "")]
+        )
+        logger.info("ConnectMCP: project_root=%s extra_paths=%s", _project_root, _extra_paths)
+
+        # tool_name → StdioMcpClient (built during connect loop for exact routing)
+        tool_map: dict[str, StdioMcpClient] = {}
+
         for server_spec in request.servers:
             name = server_spec.name
-            cmd_str = server_spec.command  # e.g. "npx -y @some/mcp-server"
-            cmd = cmd_str.split() if cmd_str else []
-            if not cmd:
+            cmd_str = server_spec.command
+            raw_cmd = cmd_str.split() if cmd_str else []
+            if not raw_cmd:
                 failed.append(name)
                 continue
+            binary = shutil.which(raw_cmd[0], path=_augmented_path) or raw_cmd[0]
+            args_from_spec = list(server_spec.args) if server_spec.args else raw_cmd[1:]
+            cmd = [binary] + args_from_spec
+            logger.info("ConnectMCP: launching %s → cmd=%s", name, cmd)
             try:
-                client = StdioMcpClient(cmd=cmd, server_name=name)
+                env = {**os.environ, "PATH": _augmented_path}
+                # Ensure L2 memory stdio server finds the project-level DB.
+                _l2_db = os.path.join(_project_root, "data", "memory.db")
+                if "memory" in name and not env.get("EAASP_L2_DB_PATH"):
+                    env["EAASP_L2_DB_PATH"] = _l2_db
+                client = StdioMcpClient(cmd=cmd, server_name=name, env=env)
                 await client.start()
                 tools = await client.list_tools()
-                # Store client for lifecycle management (terminate on session close)
+                logger.info(
+                    "ConnectMCP: connected %s, discovered %d tools: %s",
+                    name, len(tools), [t.name for t in tools],
+                )
                 if not hasattr(self, "_mcp_clients"):
                     self._mcp_clients: dict[str, StdioMcpClient] = {}
                 self._mcp_clients[name] = client
-                # Inject discovered tools into active session
+                # Build exact tool_name → client routing map
+                for t in tools:
+                    tool_map[t.name] = client
+                # Inject OAI tool schemas into active session (for LLM awareness)
                 if self._active_session_id and self._active_session_id in self._sessions:
                     sess = self._sessions[self._active_session_id]
                     oai_tools = [t.to_oai_schema() for t in tools]
@@ -173,6 +230,12 @@ class NanobotRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
             except Exception as exc:
                 logger.warning("ConnectMCP: failed to connect %s: %s", name, exc)
                 failed.append(name)
+
+        # Wire up exact-routing MCP ToolExecutor replacing StubToolExecutor.
+        if tool_map and self._active_session_id and self._active_session_id in self._sessions:
+            sess = self._sessions[self._active_session_id]
+            sess.tool_executor = _McpToolExecutor(tool_map)
+            logger.info("ConnectMCP: tool_executor wired with %d tools", len(tool_map))
 
         success = len(failed) == 0
         return runtime_pb2.ConnectMCPResponse(
