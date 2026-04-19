@@ -134,7 +134,8 @@ async fn execute_single(
     // Collect response text
     let mut text = String::new();
     while let Some(chunk) = stream.message().await? {
-        if chunk.chunk_type == "text_delta" {
+        // ADR-V2-021: chunk_type is the proto ChunkType enum (i32 on wire).
+        if chunk.chunk_type == proto::ChunkType::TextDelta as i32 {
             text.push_str(&chunk.content);
         }
     }

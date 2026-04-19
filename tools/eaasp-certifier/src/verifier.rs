@@ -350,7 +350,8 @@ async fn verify_send(
             match chunk {
                 Ok(c) => {
                     chunk_count += 1;
-                    if c.chunk_type == "done" {
+                    // ADR-V2-021: chunk_type is the proto ChunkType enum (i32 on wire).
+                    if c.chunk_type == proto::ChunkType::Done as i32 {
                         break;
                     }
                 }
