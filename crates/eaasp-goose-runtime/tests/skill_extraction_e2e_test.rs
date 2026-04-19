@@ -88,10 +88,11 @@ async fn skill_extraction_e2e_smoke() {
         chunks.push(chunk);
     }
     assert!(!chunks.is_empty(), "Send must return at least one chunk");
+    // ADR-V2-021: chunk_type is the proto ChunkType enum (i32 on wire).
     assert_eq!(
         chunks.last().unwrap().chunk_type,
-        "done",
-        "last chunk_type must be 'done'"
+        proto::ChunkType::Done as i32,
+        "last chunk_type must be ChunkType::Done"
     );
 
     // Terminate — close the session gracefully.

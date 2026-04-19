@@ -99,7 +99,8 @@ impl RuntimeService for GooseRuntimeService {
                     Ok(Some(event)) => {
                         let response = match event {
                             AcpEvent::Chunk { text, .. } => proto::SendResponse {
-                                chunk_type: "chunk".to_string(),
+                                // ADR-V2-021: text stream → TEXT_DELTA.
+                                chunk_type: proto::ChunkType::TextDelta as i32,
                                 content: text,
                                 tool_name: String::new(),
                                 tool_id: String::new(),
@@ -108,7 +109,8 @@ impl RuntimeService for GooseRuntimeService {
                             },
                             AcpEvent::ToolCall { tool_name, tool_id, input_json, .. } => {
                                 proto::SendResponse {
-                                    chunk_type: "tool_call".to_string(),
+                                    // ADR-V2-021: tool invocation → TOOL_START.
+                                    chunk_type: proto::ChunkType::ToolStart as i32,
                                     content: input_json,
                                     tool_name,
                                     tool_id,
@@ -119,7 +121,7 @@ impl RuntimeService for GooseRuntimeService {
                             AcpEvent::Stop { reason, .. } => {
                                 let _ = tx
                                     .send(Ok(proto::SendResponse {
-                                        chunk_type: "done".to_string(),
+                                        chunk_type: proto::ChunkType::Done as i32,
                                         content: reason,
                                         tool_name: String::new(),
                                         tool_id: String::new(),
@@ -130,6 +132,15 @@ impl RuntimeService for GooseRuntimeService {
                                 break;
                             }
                             AcpEvent::Error { message, .. } => {
+                                // ADR-V2-021 §S1.T3 "补 tool_result 与 error 分支":
+                                // the upstream AcpEvent enum has no ToolResult variant
+                                // (acp_parser.rs models Chunk/ToolCall/Stop/Error/Unknown),
+                                // and Error is surfaced as a transport-level
+                                // Status::internal rather than a SendResponse chunk.
+                                // Synthetic tool_result/error chunks require upstream
+                                // parser extension and are out of scope for the contract
+                                // freeze. When added, map to
+                                // ChunkType::ToolResult / ChunkType::Error respectively.
                                 let _ = tx
                                     .send(Err(Status::internal(format!(
                                         "goose agent error: {message}"
@@ -150,7 +161,7 @@ impl RuntimeService for GooseRuntimeService {
                         // EOF — goose closed stdout; emit done
                         let _ = tx
                             .send(Ok(proto::SendResponse {
-                                chunk_type: "done".to_string(),
+                                chunk_type: proto::ChunkType::Done as i32,
                                 content: String::new(),
                                 tool_name: String::new(),
                                 tool_id: String::new(),
