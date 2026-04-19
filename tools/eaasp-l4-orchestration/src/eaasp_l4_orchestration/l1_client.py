@@ -334,10 +334,55 @@ def _dict_to_session_payload(d: dict[str, Any]) -> common_pb2.SessionPayload:
     return payload
 
 
+def _chunk_type_to_wire(enum_int: int) -> str:
+    """Convert a ChunkType enum int → lowercase snake_case wire string.
+
+    ADR-V2-021: after the proto freeze, ``SendResponse.chunk_type`` is an
+    enum (int on the wire). Downstream L4 consumers (SessionOrchestrator
+    coalescer, EventInterceptor, SSE serialiser, DB payloads) all compare
+    against string literals like ``"text_delta"``. This helper is the
+    single canonical site that maps enum int → wire string. Per
+    ADR-V2-021 §2: "单点映射，不在 runtime 端重复".
+
+    Mapping rule: strip the ``CHUNK_TYPE_`` prefix from the descriptor
+    name and lowercase. Example: ``CHUNK_TYPE_TEXT_DELTA`` (1) →
+    ``"text_delta"``.
+
+    The lookup is descriptor-driven (``common_pb2.ChunkType.Name``) so
+    adding a new variant in the proto automatically surfaces here
+    without code changes.
+
+    Unknown / unregistered ints (includes the ``0`` UNSPECIFIED default
+    and any future variant L4 is compiled against an older proto for)
+    return ``""``. Downstream string whitelists will reject that, and
+    ADR-V2-021's contract tests (Phase 3.5 S3.T1) also assert chunk_type
+    is non-empty — so unknown values surface as test failures rather
+    than silent drift.
+    """
+    try:
+        name = common_pb2.ChunkType.Name(enum_int)
+    except ValueError:
+        return ""
+    # UNSPECIFIED maps to "unspecified" — but per ADR-V2-021 §2 that's a
+    # forbidden wire value. Return "" so the whitelist rejects it.
+    if name == "CHUNK_TYPE_UNSPECIFIED":
+        return ""
+    prefix = "CHUNK_TYPE_"
+    if name.startswith(prefix):
+        name = name[len(prefix):]
+    return name.lower()
+
+
 def _send_response_to_dict(chunk: runtime_pb2.SendResponse) -> dict[str, Any]:
-    """Convert a proto SendResponse to a plain dict."""
+    """Convert a proto SendResponse to a plain dict.
+
+    ``chunk_type`` is converted at THIS boundary from ChunkType enum int
+    → lowercase snake_case wire string via :func:`_chunk_type_to_wire`.
+    All downstream L4 code (coalescer, interceptor, SSE serialiser,
+    event store payloads) works on the wire string form.
+    """
     result: dict[str, Any] = {
-        "chunk_type": chunk.chunk_type,
+        "chunk_type": _chunk_type_to_wire(chunk.chunk_type),
         "content": chunk.content,
     }
     if chunk.tool_name:

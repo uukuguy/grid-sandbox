@@ -30,9 +30,11 @@ class EventInterceptor:
         chunk_type = chunk.get("chunk_type", "")
         source = f"interceptor:{runtime_id}" if runtime_id else "interceptor"
 
-        # Tool call start — grid-runtime uses "tool_start"; other runtimes may
-        # use "tool_call_start". Accept both.
-        if chunk_type in ("tool_start", "tool_call_start"):
+        # Tool call start. Per ADR-V2-021, all 7 runtimes emit
+        # CHUNK_TYPE_TOOL_START (enum 3 → wire "tool_start"). The legacy
+        # "tool_call_start" nanobot-drift tolerance was removed once the
+        # proto freeze made the contract canonical.
+        if chunk_type == "tool_start":
             return Event(
                 session_id=session_id,
                 event_type="PRE_TOOL_USE",

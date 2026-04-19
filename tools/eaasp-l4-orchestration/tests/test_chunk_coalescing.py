@@ -340,3 +340,119 @@ async def test_stream_message_yields_every_delta_but_coalesces_db(
     # DB has only 1 aggregate text_delta chunk.
     counts = await _count_events(tmp_db_path, sid)
     assert counts.get("RESPONSE_CHUNK:text_delta", 0) == 1, counts
+
+
+# ─── ADR-V2-021 chunk_type wire-string contract (Phase 3.5 S2.T1) ──────────
+
+
+class _ProtoStreamL1:
+    """Stub L1 whose ``send`` returns real ``SendResponse`` proto messages
+    funneled through ``_send_response_to_dict`` — the exact boundary the
+    real ``L1RuntimeClient.send`` uses. This exercises the ChunkType
+    enum int → wire string conversion end-to-end, which a raw-dict stub
+    cannot.
+
+    Pre-fix bug (before ADR-V2-021 S2.T1): ``_send_response_to_dict`` put
+    the raw enum ``int`` into the dict, so ``ctype == "text_delta"``
+    string compares in the orchestrator NEVER matched, leaving
+    ``response_text=""``. This test pins the fix.
+    """
+
+    def __init__(self, runtime_id: str = "grid-runtime", text_tokens: int = 5) -> None:
+        self.runtime_id = runtime_id
+        self.text_tokens = text_tokens
+
+    async def initialize(self, payload_dict: dict[str, Any]) -> dict[str, str]:
+        return {
+            "session_id": payload_dict.get("session_id", "mock"),
+            "runtime_id": self.runtime_id,
+        }
+
+    async def send(
+        self, session_id: str, content: str, message_type: str = "text"
+    ) -> AsyncIterator[dict[str, Any]]:
+        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import (
+            common_pb2,
+            runtime_pb2,
+        )
+        from eaasp_l4_orchestration.l1_client import _send_response_to_dict
+
+        for i in range(self.text_tokens):
+            proto_chunk = runtime_pb2.SendResponse(
+                chunk_type=common_pb2.CHUNK_TYPE_TEXT_DELTA,
+                content=f"tok{i}",
+            )
+            yield _send_response_to_dict(proto_chunk)
+
+        yield _send_response_to_dict(
+            runtime_pb2.SendResponse(chunk_type=common_pb2.CHUNK_TYPE_DONE)
+        )
+
+    async def terminate(self) -> None:
+        pass
+
+    async def close(self) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_response_text_accumulates_through_proto_boundary(
+    tmp_db_path: str,
+) -> None:
+    """End-to-end regression for ADR-V2-021 S2.T1.
+
+    Before the fix, ``_send_response_to_dict`` exposed the raw enum int
+    (``chunk.chunk_type`` == ``1`` for TEXT_DELTA). Downstream
+    ``ctype == "text_delta"`` comparisons in ``send_message`` never
+    matched, so ``response_text`` was always "". With the enum→wire
+    conversion at the proto boundary, text_delta content now accumulates
+    correctly.
+    """
+    async with httpx.AsyncClient() as http:
+        orch = await _make_orchestrator(
+            tmp_db_path,
+            http,
+            lambda rid: _ProtoStreamL1(runtime_id=rid, text_tokens=5),
+        )
+        sid = "sess_proto_wire"
+        await _seed_session_row(tmp_db_path, sid)
+        orch._l1_clients[sid] = orch._l1_factory("grid-runtime")
+        orch._l1_session_ids[sid] = sid
+
+        result = await orch.send_message(sid, "hello")
+
+    # Proto boundary produced wire strings, so the string compare matched
+    # and full_text_parts accumulated.
+    assert result["response_text"] != "", (
+        "response_text empty — enum→wire conversion likely broken at boundary"
+    )
+    assert result["response_text"] == "tok0tok1tok2tok3tok4"
+
+    # Persisted chunk_type must also be the wire string (not an int) so
+    # the DB is readable by the SSE serialiser and CLI consumer.
+    counts = await _count_events(tmp_db_path, sid)
+    assert counts.get("RESPONSE_CHUNK:text_delta", 0) == 1, counts
+    assert counts.get("RESPONSE_CHUNK:done", 0) == 1, counts
+
+
+def test_chunk_type_to_wire_known_variants() -> None:
+    """Unit-level lock on :func:`_chunk_type_to_wire` (ADR-V2-021 §2)."""
+    from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import common_pb2
+    from eaasp_l4_orchestration.l1_client import _chunk_type_to_wire
+
+    # All 7 contract-defined variants map to lowercase snake_case names.
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_TEXT_DELTA) == "text_delta"
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_THINKING) == "thinking"
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_TOOL_START) == "tool_start"
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_TOOL_RESULT) == "tool_result"
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_DONE) == "done"
+    assert _chunk_type_to_wire(common_pb2.CHUNK_TYPE_ERROR) == "error"
+    assert (
+        _chunk_type_to_wire(common_pb2.CHUNK_TYPE_WORKFLOW_CONTINUATION)
+        == "workflow_continuation"
+    )
+    # UNSPECIFIED (0) and unknown future ints collapse to "" — whitelist
+    # rejects that and contract tests catch it.
+    assert _chunk_type_to_wire(0) == ""
+    assert _chunk_type_to_wire(9999) == ""

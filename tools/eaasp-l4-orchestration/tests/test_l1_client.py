@@ -217,23 +217,30 @@ class TestSkillScopedHooksProtoMapping:
 
 class TestSendResponseToDict:
     def test_text_delta(self):
-        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import runtime_pb2
+        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import (
+            common_pb2,
+            runtime_pb2,
+        )
 
         chunk = runtime_pb2.SendResponse(
-            chunk_type="text_delta",
+            chunk_type=common_pb2.CHUNK_TYPE_TEXT_DELTA,
             content="Hello",
         )
         d = _send_response_to_dict(chunk)
+        # ADR-V2-021: enum int → wire string at this boundary.
         assert d["chunk_type"] == "text_delta"
         assert d["content"] == "Hello"
         assert "tool_name" not in d
         assert "is_error" not in d
 
     def test_tool_start(self):
-        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import runtime_pb2
+        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import (
+            common_pb2,
+            runtime_pb2,
+        )
 
         chunk = runtime_pb2.SendResponse(
-            chunk_type="tool_start",
+            chunk_type=common_pb2.CHUNK_TYPE_TOOL_START,
             tool_name="scada_read_snapshot",
             tool_id="t1",
         )
@@ -468,15 +475,23 @@ class TestL1RuntimeClientConnectMcp:
 class TestL1RuntimeClientSend:
     @pytest.mark.asyncio
     async def test_send_streaming(self):
-        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import runtime_pb2
+        from eaasp_l4_orchestration._proto.eaasp.runtime.v2 import (
+            common_pb2,
+            runtime_pb2,
+        )
 
         client = L1RuntimeClient("localhost:50051", "grid-runtime")
 
         # Create an async iterator mock for the stream.
+        # ADR-V2-021: chunk_type is an enum (int on the wire).
         chunks = [
-            runtime_pb2.SendResponse(chunk_type="text_delta", content="Hello "),
-            runtime_pb2.SendResponse(chunk_type="text_delta", content="world"),
-            runtime_pb2.SendResponse(chunk_type="done"),
+            runtime_pb2.SendResponse(
+                chunk_type=common_pb2.CHUNK_TYPE_TEXT_DELTA, content="Hello "
+            ),
+            runtime_pb2.SendResponse(
+                chunk_type=common_pb2.CHUNK_TYPE_TEXT_DELTA, content="world"
+            ),
+            runtime_pb2.SendResponse(chunk_type=common_pb2.CHUNK_TYPE_DONE),
         ]
 
         async def mock_stream(*args, **kwargs):

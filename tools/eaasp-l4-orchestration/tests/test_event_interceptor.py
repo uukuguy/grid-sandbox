@@ -5,8 +5,14 @@ from __future__ import annotations
 from eaasp_l4_orchestration.event_interceptor import EventInterceptor
 
 
-def test_extract_tool_call_start_legacy_name():
-    """Some runtimes use "tool_call_start" — must still map to PRE_TOOL_USE."""
+def test_extract_tool_call_start_legacy_name_now_rejected():
+    """ADR-V2-021: the legacy "tool_call_start" nanobot-drift tolerance was
+    removed once the proto freeze made ``CHUNK_TYPE_TOOL_START`` (enum 3,
+    wire "tool_start") canonical across all 7 runtimes. Any chunk_type
+    other than "tool_start" (including the old "tool_call_start") must
+    NOT be mapped to PRE_TOOL_USE anymore — it falls through to None so
+    drift surfaces as a contract-test failure rather than silent tolerance.
+    """
     interceptor = EventInterceptor()
     chunk = {
         "chunk_type": "tool_call_start",
@@ -14,11 +20,9 @@ def test_extract_tool_call_start_legacy_name():
         "arguments": {"id": "T-001"},
     }
     event = interceptor.extract_from_chunk("s1", chunk, runtime_id="grid-runtime")
-    assert event is not None
-    assert event.event_type == "PRE_TOOL_USE"
-    assert event.payload["tool_name"] == "scada_read"
-    assert event.payload["arguments"] == {"id": "T-001"}
-    assert "interceptor:grid-runtime" in event.metadata.source
+    assert event is None, (
+        "legacy 'tool_call_start' must no longer be tolerated post ADR-V2-021"
+    )
 
 
 def test_extract_tool_start_grid_runtime_actual_name():
