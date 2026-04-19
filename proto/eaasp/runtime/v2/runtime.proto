@@ -99,7 +99,7 @@ message UserMessage {
 }
 
 message SendResponse {
-  string chunk_type = 1;                // "text_delta" | "thinking" | "tool_start" | "tool_result" | "done" | "error"
+  ChunkType chunk_type = 1;             // 关闭枚举，见 common.proto; ADR-V2-021 Phase 3.5.
   string content = 2;
   string tool_name = 3;
   string tool_id = 4;

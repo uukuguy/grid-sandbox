@@ -122,6 +122,21 @@ message SessionPayload {
 
 // ── Lightweight shared types ────────────────────────────────
 
+// ChunkType 定义 SendResponse 流中每个 chunk 的语义。
+// 关闭枚举 — 新增取值必须先改 proto + 同步扩展契约测试白名单，
+// 不允许在 runtime 层自行发送未定义值。
+// ADR-V2-021 (Phase 3.5 chunk_type 契约冻结).
+enum ChunkType {
+  CHUNK_TYPE_UNSPECIFIED           = 0;   // 禁止发送；proto 默认值占位
+  CHUNK_TYPE_TEXT_DELTA            = 1;   // 流式 assistant 文本增量
+  CHUNK_TYPE_THINKING              = 2;   // 扩展思考流（可选，runtime 不支持时不发）
+  CHUNK_TYPE_TOOL_START            = 3;   // tool call 开始，content 为 JSON 序列化的参数
+  CHUNK_TYPE_TOOL_RESULT           = 4;   // tool 返回，content 为 JSON 序列化的结果
+  CHUNK_TYPE_DONE                  = 5;   // 本轮结束，content 可为最终汇总文本
+  CHUNK_TYPE_ERROR                 = 6;   // 运行期错误，error 字段必填
+  CHUNK_TYPE_WORKFLOW_CONTINUATION = 7;   // D87 observability：workflow 继续执行事件，content = "attempt N/M"
+}
+
 message Empty {}
 
 message EvidenceAnchor {

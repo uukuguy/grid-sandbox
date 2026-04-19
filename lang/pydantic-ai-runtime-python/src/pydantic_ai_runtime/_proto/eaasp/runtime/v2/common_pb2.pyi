@@ -1,10 +1,30 @@
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class ChunkType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    CHUNK_TYPE_UNSPECIFIED: _ClassVar[ChunkType]
+    CHUNK_TYPE_TEXT_DELTA: _ClassVar[ChunkType]
+    CHUNK_TYPE_THINKING: _ClassVar[ChunkType]
+    CHUNK_TYPE_TOOL_START: _ClassVar[ChunkType]
+    CHUNK_TYPE_TOOL_RESULT: _ClassVar[ChunkType]
+    CHUNK_TYPE_DONE: _ClassVar[ChunkType]
+    CHUNK_TYPE_ERROR: _ClassVar[ChunkType]
+    CHUNK_TYPE_WORKFLOW_CONTINUATION: _ClassVar[ChunkType]
+CHUNK_TYPE_UNSPECIFIED: ChunkType
+CHUNK_TYPE_TEXT_DELTA: ChunkType
+CHUNK_TYPE_THINKING: ChunkType
+CHUNK_TYPE_TOOL_START: ChunkType
+CHUNK_TYPE_TOOL_RESULT: ChunkType
+CHUNK_TYPE_DONE: ChunkType
+CHUNK_TYPE_ERROR: ChunkType
+CHUNK_TYPE_WORKFLOW_CONTINUATION: ChunkType
 
 class PolicyContext(_message.Message):
     __slots__ = ("hooks", "org_unit", "policy_version", "quotas", "deploy_timestamp")

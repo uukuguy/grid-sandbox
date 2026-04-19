@@ -86,13 +86,13 @@ class SendResponse(_message.Message):
     TOOL_ID_FIELD_NUMBER: _ClassVar[int]
     IS_ERROR_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
-    chunk_type: str
+    chunk_type: _common_pb2.ChunkType
     content: str
     tool_name: str
     tool_id: str
     is_error: bool
     error: _common_pb2.RuntimeError
-    def __init__(self, chunk_type: _Optional[str] = ..., content: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_id: _Optional[str] = ..., is_error: bool = ..., error: _Optional[_Union[_common_pb2.RuntimeError, _Mapping]] = ...) -> None: ...
+    def __init__(self, chunk_type: _Optional[_Union[_common_pb2.ChunkType, str]] = ..., content: _Optional[str] = ..., tool_name: _Optional[str] = ..., tool_id: _Optional[str] = ..., is_error: bool = ..., error: _Optional[_Union[_common_pb2.RuntimeError, _Mapping]] = ...) -> None: ...
 
 class LoadSkillRequest(_message.Message):
     __slots__ = ("session_id", "skill")
