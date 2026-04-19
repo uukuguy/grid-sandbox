@@ -52,28 +52,37 @@ class PydanticAiRuntimeService(runtime_pb2_grpc.RuntimeServiceServicer):
         content = request.message.content if request.message else ""
         try:
             async for event in session.run(content):
+                # ADR-V2-021: chunk_type is the proto ChunkType enum (int on wire).
                 if event.event_type == EventType.CHUNK:
-                    yield runtime_pb2.SendResponse(chunk_type="text", content=event.content)
+                    yield runtime_pb2.SendResponse(
+                        chunk_type=common_pb2.CHUNK_TYPE_TEXT_DELTA,
+                        content=event.content,
+                    )
                 elif event.event_type == EventType.TOOL_CALL:
                     yield runtime_pb2.SendResponse(
-                        chunk_type="tool_call",
+                        chunk_type=common_pb2.CHUNK_TYPE_TOOL_START,
                         tool_name=event.tool_name,
                         tool_id=event.tool_call_id,
                         content=event.content,
                     )
                 elif event.event_type == EventType.TOOL_RESULT:
                     yield runtime_pb2.SendResponse(
-                        chunk_type="tool_result",
+                        chunk_type=common_pb2.CHUNK_TYPE_TOOL_RESULT,
                         tool_name=event.tool_name,
                         tool_id=event.tool_call_id,
                         content=event.content,
                         is_error=event.is_error,
                     )
                 elif event.event_type == EventType.STOP:
-                    yield runtime_pb2.SendResponse(chunk_type="done", content=event.content)
+                    yield runtime_pb2.SendResponse(
+                        chunk_type=common_pb2.CHUNK_TYPE_DONE,
+                        content=event.content,
+                    )
                 elif event.event_type == EventType.ERROR:
                     yield runtime_pb2.SendResponse(
-                        chunk_type="error", content=event.content, is_error=True
+                        chunk_type=common_pb2.CHUNK_TYPE_ERROR,
+                        content=event.content,
+                        is_error=True,
                     )
         except Exception as exc:
             context.set_code(grpc.StatusCode.INTERNAL)
