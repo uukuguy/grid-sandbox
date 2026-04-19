@@ -11,10 +11,13 @@ v2 notes:
 from __future__ import annotations
 
 import json
+import logging
 
 from ._proto.eaasp.runtime.v2 import common_pb2, runtime_pb2
 from .sdk_wrapper import ChunkEvent
 from .telemetry import TelemetryEntry
+
+_log = logging.getLogger(__name__)
 
 # ADR-V2-021: map domain `ChunkEvent.chunk_type` strings (canonical
 # lowercase as emitted by SdkWrapper) → proto `ChunkType` enum ints.
@@ -39,9 +42,13 @@ def chunk_to_proto(chunk: ChunkEvent) -> runtime_pb2.SendResponse:
     enum (int on the wire). Map the domain string to an int; unknown
     values log-and-emit UNSPECIFIED so the violation is loud.
     """
-    proto_chunk_type = _CHUNK_TYPE_MAP.get(
-        chunk.chunk_type, common_pb2.CHUNK_TYPE_UNSPECIFIED
-    )
+    proto_chunk_type = _CHUNK_TYPE_MAP.get(chunk.chunk_type)
+    if proto_chunk_type is None:
+        _log.error(
+            "ADR-V2-021 violation: unknown chunk_type %r from SDK; emitting UNSPECIFIED",
+            chunk.chunk_type,
+        )
+        proto_chunk_type = common_pb2.CHUNK_TYPE_UNSPECIFIED
     resp = runtime_pb2.SendResponse(
         chunk_type=proto_chunk_type,
         content=chunk.content,
