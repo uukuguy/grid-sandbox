@@ -89,7 +89,8 @@ impl RuntimeService for ClawCodeRuntimeService {
                         let (resp, should_break) = match event {
                             UltraWorkerEvent::Chunk { text, .. } => (
                                 proto::SendResponse {
-                                    chunk_type: "chunk".to_string(),
+                                    // ADR-V2-021: text stream → TEXT_DELTA.
+                                    chunk_type: proto::ChunkType::TextDelta as i32,
                                     content: text,
                                     tool_name: String::new(),
                                     tool_id: String::new(),
@@ -100,7 +101,8 @@ impl RuntimeService for ClawCodeRuntimeService {
                             ),
                             UltraWorkerEvent::ToolCall { tool_name, tool_id, input_json, .. } => (
                                 proto::SendResponse {
-                                    chunk_type: "tool_call".to_string(),
+                                    // ADR-V2-021: tool invocation → TOOL_START.
+                                    chunk_type: proto::ChunkType::ToolStart as i32,
                                     content: input_json,
                                     tool_name,
                                     tool_id,
@@ -112,7 +114,7 @@ impl RuntimeService for ClawCodeRuntimeService {
                             UltraWorkerEvent::Stop { reason, .. } => {
                                 let _ = tx
                                     .send(Ok(proto::SendResponse {
-                                        chunk_type: "done".to_string(),
+                                        chunk_type: proto::ChunkType::Done as i32,
                                         content: reason,
                                         tool_name: String::new(),
                                         tool_id: String::new(),
@@ -123,6 +125,17 @@ impl RuntimeService for ClawCodeRuntimeService {
                                 break;
                             }
                             UltraWorkerEvent::Error { message, .. } => {
+                                // ADR-V2-021 §S1.T2 "补 tool_result 与 error 分支":
+                                // the upstream UltraWorkerEvent enum does NOT carry a
+                                // ToolResult variant (ultra_worker.rs lines 11-71:
+                                // only Chunk/ToolCall/Stop/Error/Unknown), and the
+                                // Error variant is surfaced as a transport-level
+                                // Status::internal rather than a SendResponse chunk.
+                                // Adding a synthetic tool_result or error-chunk
+                                // emission path is out of scope for the contract
+                                // freeze — would require upstream parser work. Leave
+                                // as-is; if/when claw-code gets a tool_result event,
+                                // mapping is trivially `ChunkType::ToolResult as i32`.
                                 let _ = tx.send(Err(Status::internal(message))).await;
                                 break;
                             }
@@ -135,7 +148,7 @@ impl RuntimeService for ClawCodeRuntimeService {
                     Ok(None) => {
                         let _ = tx
                             .send(Ok(proto::SendResponse {
-                                chunk_type: "done".to_string(),
+                                chunk_type: proto::ChunkType::Done as i32,
                                 content: String::new(),
                                 tool_name: String::new(),
                                 tool_id: String::new(),
