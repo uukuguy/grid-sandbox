@@ -16,11 +16,34 @@ from ._proto.eaasp.runtime.v2 import common_pb2, runtime_pb2
 from .sdk_wrapper import ChunkEvent
 from .telemetry import TelemetryEntry
 
+# ADR-V2-021: map domain `ChunkEvent.chunk_type` strings (canonical
+# lowercase as emitted by SdkWrapper) → proto `ChunkType` enum ints.
+# Unknown strings fall back to UNSPECIFIED (forbidden by contract) so
+# the violation is visible at the gRPC boundary rather than silently
+# coerced into something plausible.
+_CHUNK_TYPE_MAP: dict[str, int] = {
+    "text_delta": common_pb2.CHUNK_TYPE_TEXT_DELTA,
+    "thinking": common_pb2.CHUNK_TYPE_THINKING,
+    "tool_start": common_pb2.CHUNK_TYPE_TOOL_START,
+    "tool_result": common_pb2.CHUNK_TYPE_TOOL_RESULT,
+    "done": common_pb2.CHUNK_TYPE_DONE,
+    "error": common_pb2.CHUNK_TYPE_ERROR,
+    "workflow_continuation": common_pb2.CHUNK_TYPE_WORKFLOW_CONTINUATION,
+}
+
 
 def chunk_to_proto(chunk: ChunkEvent) -> runtime_pb2.SendResponse:
-    """Convert SDK ChunkEvent to v2 SendResponse."""
+    """Convert SDK ChunkEvent to v2 SendResponse.
+
+    ADR-V2-021: `SendResponse.chunk_type` is now the `ChunkType` proto
+    enum (int on the wire). Map the domain string to an int; unknown
+    values log-and-emit UNSPECIFIED so the violation is loud.
+    """
+    proto_chunk_type = _CHUNK_TYPE_MAP.get(
+        chunk.chunk_type, common_pb2.CHUNK_TYPE_UNSPECIFIED
+    )
     resp = runtime_pb2.SendResponse(
-        chunk_type=chunk.chunk_type,
+        chunk_type=proto_chunk_type,
         content=chunk.content,
         tool_name=chunk.tool_name,
         tool_id=chunk.tool_id,
