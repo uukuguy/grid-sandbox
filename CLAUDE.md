@@ -1,639 +1,433 @@
-# Octo Sandbox
+# Grid — An Agent Runtime Stack with Two Product Legs
 
-An autonomous AI agent workbench built with Rust (backend) + TypeScript/React (frontend). Supports MCP (Model Context Protocol) server management, tool execution, multi-layer memory, session management, sandboxed code execution, and real-time debugging.
-
-**IMPORTANT**: This file is the primary memory for the project. If any information below becomes outdated due to code changes, UPDATE IT IMMEDIATELY. Outdated information is harmful.
-
----
-
-## Mono-Repo Product Structure
-
-**IMPORTANT**: octo-sandbox is a mono-repo hosting two independent products sharing `octo-engine`.
-
-### Product Boundaries
-
-| Product | Branch | Crates | Frontend | Purpose |
-|---------|--------|--------|----------|---------|
-| **octo-workbench** | `octo-workbench` | `octo-types`, `octo-sandbox`, `octo-engine`, `octo-server` | `web/` | Single-user single-agent workbench |
-| **octo-platform** | `octo-platform` | `octo-types`, `octo-sandbox`, `octo-engine`, `octo-platform-server` | `web-platform/` | Multi-tenant multi-agent platform |
-
-### Rules
-- `octo-engine`, `octo-types`, and `octo-sandbox` are **shared libraries** — changes must be backward compatible
-- `octo-server` is **workbench-only** — do NOT add platform logic here
-- `octo-platform-server` is **platform-only** — separate crate, separate branch
-- `web/` is **workbench frontend only** — do NOT add platform pages here
-- `web-platform/` is **platform frontend only** — separate app, separate branch
+> **Brand name:** Grid.
+> **Working repo name:** `grid-sandbox` — rename deferred per ADR-V2-023 P6 until product leg B activates.
+> **Primary strategic reference:** [`docs/design/EAASP/adrs/ADR-V2-023-grid-two-leg-product-strategy.md`](docs/design/EAASP/adrs/ADR-V2-023-grid-two-leg-product-strategy.md) (Accepted 2026-04-19).
+>
+> **What Grid is:** A Rust-centric agent-runtime stack built around `grid-engine` and the full Grid toolchain (`grid-cli` / `grid-server` / `grid-platform` / `grid-desktop` / `grid-eval` / `grid-hook-bridge` / `grid-sandbox` / `grid-runtime` / `grid-types`). Grid has two product legs:
+>
+> **Leg A — EAASP integration (CURRENT MAIN FOCUS).** `grid-engine` / `grid-runtime` are being developed as the flagship L1 runtime for EAASP (Enterprise-Agent-as-a-Service Platform — a **separate upstream project**). The `tools/eaasp-*/` directories and the 6 comparison runtimes in `lang/*` in this repo are **high-fidelity local shadows** of EAASP's L2/L3/L4 stack, used to validate Grid's contract compliance end-to-end without needing a live EAASP deployment. They are NOT the production EAASP.
+>
+> **Leg B — Grid independent product (DORMANT, planned).** `grid-platform` (multi-tenant server), `grid-server` (single-user workbench), `grid-desktop` (Tauri app), and `web/` / `web-platform/` frontends form Grid's own direct-to-customer offering for enterprises who want Grid without going through EAASP. Currently crate-scaffolding only, no active development. See ADR-V2-023 §P5 for activation triggers.
+>
+> This file is the **primary project memory for Claude Code**. If anything here goes stale, **update it immediately** — outdated instructions are worse than none.
 
 ---
 
-## Crate Dependency Graph & Build Order
+## Product legs at a glance (ADR-V2-023)
+
+| Dimension | Leg A — EAASP integration | Leg B — Grid independent |
+|-----------|--------------------------|--------------------------|
+| Status | **Active (primary focus)** | **Dormant** (crates compile, no feature work) |
+| Core | `grid-engine` + `grid-runtime` | `grid-engine` (shared) |
+| Toolchain | Exposed via gRPC to EAASP L2/L3/L4 | `grid-server`, `grid-platform`, `grid-desktop`, `grid-cli`, `grid-eval` |
+| EAASP shadows | Uses `tools/eaasp-*/` + `lang/*` as local test fixtures | **Does not use** them |
+| Phase focus | Phase 2 / 2.5 / 3 / 3.5 — contract hardening | Paused until activation criteria met |
+| Production customer | Enterprises buying EAASP, Grid is their L1 | Enterprises wanting Grid without EAASP |
+
+**Core rule (ADR-V2-023 P1):** changes to shared components (`grid-engine`, `grid-runtime`, `grid-types`, `grid-sandbox`, `grid-hook-bridge`) MUST work for both legs. No leg-specific branches in core code.
+
+---
+
+## EAASP v2 Architecture (L0–L4) — Leg A's target environment
 
 ```
-octo-types          (0) — Shared type definitions, no internal deps
-    ↓
-octo-sandbox        (1) — Sandbox runtime adapters (subprocess, WASM, Docker)
-    ↓                      depends on: octo-types
-octo-engine         (1) — Core engine: agent, memory, MCP, providers, tools
-    ↓                      depends on: octo-types
-octo-eval           (1) — Evaluation harness: suites, scorers, benchmarks
-    ↓                      depends on: octo-types, octo-engine
-octo-cli            (2) — Local CLI for agent interaction (binary)
-                           depends on: octo-types, octo-engine, octo-sandbox, octo-eval
-octo-server         (2) — Workbench HTTP/WS server (Axum)
-                           depends on: octo-types, octo-engine, octo-sandbox
-octo-platform-server(2) — Platform multi-tenant server (Axum + JWT auth)
-                           depends on: octo-types, octo-engine, octo-sandbox
+L4 Orchestration       tools/eaasp-l4-orchestration/        session lifecycle, SSE fan-out, governance gates
+L3 Governance          tools/eaasp-l3-governance/           policy DSL, risk classification, deny/allow
+L2 Memory & Skills     tools/eaasp-l2-memory-engine/        L2 memory (FTS + HNSW + time-decay hybrid)
+                       tools/eaasp-skill-registry/          skill manifest storage + MCP tool bridge
+                       tools/eaasp-mcp-orchestrator/        MCP server lifecycle across sessions
+                       tools/eaasp-certifier/               contract certification harness
+L1 Runtime (7 adapters) Grid primary + 6 comparison runtimes — see table below
+L0 Protocol            proto/eaasp/runtime/v2/              common.proto / runtime.proto / hook.proto
 ```
 
-**Build order**: `octo-types` → `octo-sandbox` / `octo-engine` (parallel) → `octo-server` or `octo-platform-server`
+**Important**: The `tools/eaasp-*/` in this repo are **local shadow implementations** used for Leg A's test harness. The real production EAASP L2/L3/L4 lives in a separate project owned by another team. Grid's job on Leg A is to ship `grid-engine` / `grid-runtime` that conforms to the L1 contract; EAASP handles the L2–L4 orchestration in production.
 
-Cargo workspace handles this automatically. No manual ordering needed for `cargo build`.
+L2–L4 talk to L1 via gRPC (`proto/eaasp/runtime/v2/runtime.proto`, 16 methods). L1 is substitutable — each adapter implements the same contract.
 
----
+### L1 Runtime adapters in this repo (1 + 6)
 
-## Crates & Modules
+| Name | Crate/Pkg | Language | Role | Notes |
+|------|-----------|----------|------|-------|
+| **grid-runtime** | `crates/grid-runtime/` | Rust | **Grid's flagship runtime** — full harness | The target Leg A L1 implementation |
+| **claude-code-runtime-python** | `lang/claude-code-runtime-python/` | Python | Comparison / sample | Anthropic SDK baseline |
+| **goose-runtime** | `crates/eaasp-goose-runtime/` + `crates/eaasp-scoped-hook-mcp/` | Rust | Comparison — Block goose via ACP subprocess | stdio MCP proxy for hook injection |
+| **nanobot-runtime-python** | `lang/nanobot-runtime-python/` | Python | Comparison — OpenAI-compat provider | Multi-turn loop, ADR-V2-006 hook envelope |
+| **pydantic-ai-runtime-python** | `lang/pydantic-ai-runtime-python/` | Python | Comparison | Phase 3 addition |
+| **claw-code-runtime** | `crates/eaasp-claw-code-runtime/` | Rust | Comparison | Phase 3 addition |
+| **ccb-runtime-ts** | `lang/ccb-runtime-ts/` | TypeScript (Bun) | Comparison | Phase 3 addition |
+| **hermes-runtime-python** | `lang/hermes-runtime-python/` | Python | **Frozen** | ADR-V2-017 — replaced by goose + nanobot |
 
-### `octo-types` — Shared Type Definitions
+The 6 comparison runtimes exist in this repo to validate that **the L1 contract is truly portable** — if another team implements `claude-code` / `goose` / `nanobot` / `pydantic-ai` / `claw-code` / `ccb` against the same proto and passes contract v1.1, then `grid-runtime` can't be secretly depending on undocumented behavior. They are **test fixtures for the contract**, not competitors and not products.
 
-Zero-dependency type crate shared by all other crates. Defines:
-- `message` — LLM message types (user, assistant, tool calls/results)
-- `tool` — Tool definition, parameters, execution result types
-- `execution` — Tool execution records
-- `provider` — Provider configuration types
-- `memory` — Memory entry types
-- `skill` — Skill manifest types
-- `sandbox` — Sandbox configuration types
-- `id` — Typed ID wrappers (TenantId, UserId, SessionId, etc.)
-- `error` — Shared error types
+Phase 3 sign-off (2026-04-18): all 7 runtimes pass `contract-v1.1.0` (42 PASS / 22 XFAIL each).
 
-### `octo-sandbox` — Sandboxed Code Execution
+### Rust crates
 
-Runtime adapters for executing untrusted code:
-- `native` — Native subprocess adapter
-- `traits` — Sandbox trait abstraction (`RuntimeAdapter`)
+Legend: **A** = used by Leg A (EAASP integration). **B** = used by Leg B (Grid independent product). **Shared** = used by both.
 
-Optional features: `sandbox-wasm` (Wasmtime), `sandbox-docker` (Bollard)
+| Crate | Leg | Role |
+|-------|-----|------|
+| `grid-types` | Shared | Shared type definitions (zero-dep) — messages, tools, sessions, sandbox, IDs, errors |
+| `grid-sandbox` (crate) | Shared | Sandbox runtime adapters (native subprocess; optional wasm / docker). **Note**: crate name collides with repo name — distinct concept |
+| `grid-engine` | Shared | Core engine — agent loop, context, memory (L0/L1/L2), MCP, providers, tools, skills, security, audit, metrics |
+| `grid-hook-bridge` | Shared | Hook event bridge between Rust and L2/L3 |
+| `grid-runtime` | A (primary) / B (in-process) | L1 runtime adapter wrapping `grid-engine`. Leg A exposes it via gRPC; Leg B uses it in-process |
+| `grid-cli` | A (aux) / B (primary) | CLI binary (`grid` command). Leg A uses EAASP's own CLI; Leg B uses this as the main client |
+| `grid-eval` | A (aux) / B (primary) | Evaluation harness — suites, scorers, benchmarks. Leg A uses EAASP eval; Leg B uses this |
+| `grid-server` | **B only (dormant)** | Single-user workbench HTTP/WS server (Axum) |
+| `grid-platform` | **B only (dormant)** | Multi-tenant platform server (Axum + JWT auth + quota) |
+| `grid-desktop` | **B only (dormant)** | Tauri desktop app (excluded from default build — `cargo build -p grid-desktop` to build) |
+| `eaasp-goose-runtime` | A | L1 adapter for Block goose (Rust) — comparison runtime |
+| `eaasp-claw-code-runtime` | A | L1 adapter for claw-code (Rust) — comparison runtime |
+| `eaasp-scoped-hook-mcp` | A | stdio MCP proxy that injects Pre/Post-ToolUse hooks per ADR-V2-006 |
 
-### `octo-engine` — Core Engine (21 modules)
+**Build order**: `grid-types` → `grid-sandbox` / `grid-engine` (parallel) → everything else. Cargo workspace handles this automatically.
 
-The heart of the system. All agent intelligence lives here.
+**Leg B dormancy (ADR-V2-023 P2)**: `grid-server`, `grid-platform`, `grid-desktop` crates compile and are maintained at skeleton level, but are **not** being feature-developed. New PRs touching these need justification (reviewer prompt: "is this really necessary now?"). Activation requires ADR-V2-023 P5 trigger conditions to be met.
 
-| Module | Responsibility |
-|--------|----------------|
-| `agent/` | AgentRuntime, AgentExecutor, AgentLoop, AgentCatalog, AgentStore — full agent lifecycle |
-| `context/` | SystemPromptBuilder, ContextBudgetManager, ContextPruner — context engineering |
-| `memory/` | WorkingMemory (L0), SessionMemory (L1), MemoryStore (L2), KnowledgeGraph, FtsStore |
-| `mcp/` | McpManager, McpClient (stdio/SSE), McpToolBridge, McpStorage |
-| `providers/` | Provider trait, Anthropic/OpenAI adapters, ProviderChain (failover/load-balance) |
-| `tools/` | ToolRegistry, built-in tools (bash, file_read, file_write, etc.), ToolExecutionRecorder |
-| `skills/` | SkillLoader (YAML manifests), SkillRegistry |
-| `skill_runtime/` | SkillRuntime, SkillContext — skill execution engine |
-| `session/` | SessionStore (SQLite/InMemory), session lifecycle |
-| `scheduler/` | Cron-based task scheduler with SQLite storage |
-| `event/` | EventBus — pub/sub for observability |
-| `db/` | SQLite Database wrapper (tokio-rusqlite) with migrations |
-| `auth/` | API key management, role-based auth, middleware |
-| `audit/` | AuditEvent, AuditRecord, AuditStorage — audit logging |
-| `security/` | SecurityPolicy, CommandRiskLevel, AutonomyLevel, ActionTracker |
-| `secret/` | Secret manager (AES-GCM encryption, optional keyring) |
-| `sandbox/` | SandboxManager — Subprocess, WASM, Docker adapters |
-| `extension/` | Extension system — WASM-based plugin host with hostcall intercept |
-| `metrics/` | MetricsRegistry — Counter, Gauge, Histogram |
-| `metering/` | Token usage metering and snapshots |
-| `logging/` | Structured logging initialization (pretty/JSON) |
-| `root/` | OctoRoot — unified directory management (global/project paths, DB resolution) |
+### EAASP Python/TS tools (`tools/`)
 
-### `octo-server` — Workbench API Server (binary)
+| Tool | Role |
+|------|------|
+| `eaasp-l2-memory-engine` | L2 memory: FTS5 + HNSW + time-decay, 7 MCP tools (search/read/write_file/write_anchor/confirm/list/delete) |
+| `eaasp-skill-registry` | Skill manifest storage, MCP tool bridge |
+| `eaasp-mcp-orchestrator` | MCP server lifecycle across sessions |
+| `eaasp-l3-governance` | Policy DSL + risk classification |
+| `eaasp-l4-orchestration` | Session orchestration, SSE streaming, governance gates |
+| `eaasp-cli-v2` | End-user CLI (`eaasp session run -s <skill> -r <runtime> "<prompt>"`) |
+| `eaasp-certifier` | Contract certification harness (Rust) |
+| `mock-scada` | Example external system for verification skills |
 
-Single-user Axum HTTP + WebSocket server. Modules:
+### Frontend (Leg B only, dormant)
 
-| Module | Responsibility |
-|--------|----------------|
-| `main.rs` | Server startup, config loading, AgentRuntime init, scheduler |
-| `config.rs` | Layered config (config.yaml < CLI < .env) |
-| `router.rs` | Axum router with all REST + WS routes |
-| `state.rs` | AppState — shared application state |
-| `ws.rs` | WebSocket handler for real-time streaming |
-| `middleware.rs` | Request middleware |
-| `session.rs` | Session HTTP helpers |
-| `api/` | REST endpoints: agents, sessions, memories, tools, executions, MCP servers/tools/logs, budget, config, scheduler, tasks, metrics, audit, providers, user_context |
+`web/` and `web-platform/` are both **Leg B components** (ADR-V2-023 P2). They hold scaffolding / `package.json` / `vite.config.ts` only — **no feature implementation**. Do NOT treat them as implementation targets until ADR-V2-023 P5 triggers Leg B activation.
 
-### `octo-cli` — Local CLI (binary)
-
-Command-line interface for local agent interaction. See [ADR-045](docs/adr/ADR-045-CLI_INTERFACE.md).
-
-| Command | Description |
-|---------|-------------|
-| `octo agent list` | List all available agents |
-| `octo agent info <id>` | Show agent details |
-| `octo session list` | List all sessions |
-| `octo session create` | Create new session |
-| `octo config show` | Display current configuration |
-| `octo config validate` | Validate configuration |
-| `octo eval list` | List available evaluation suites |
-| `octo eval config` | Show/validate eval.toml configuration |
-| `octo eval run --suite <NAME>` | Run single-model evaluation |
-| `octo eval compare --suite <NAME>` | Run multi-model comparison |
-| `octo eval benchmark` | Run multi-suite benchmark |
-| `octo eval history` | List past evaluation runs |
-| `octo eval report <RUN_ID>` | View run report (text/json/markdown) |
-| `octo eval trace <RUN_ID> <TASK_ID>` | View task trace timeline |
-| `octo eval diagnose <RUN_ID>` | Failure classification analysis |
-| `octo eval diff <RUN_A> <RUN_B>` | Compare two runs (regression) |
-| `octo eval watch --suite <NAME>` | Periodic evaluation re-run |
-| `octo init` | Initialize Octo project in current directory |
-| `octo root show` | Show all resolved OctoRoot paths |
-| `octo root init` | Initialize OctoRoot directories |
-
-### `octo-platform-server` — Platform Server (binary, WIP)
-
-Multi-tenant Axum server with JWT authentication. Modules:
-
-| Module | Responsibility |
-|--------|----------------|
-| `tenant/` | TenantManager, TenantRuntime, quota enforcement, tenant models |
-| `auth/` | JWT authentication, OAuth2/OIDC provider integration |
-| `api/` | REST endpoints: admin/tenants, users, sessions, MCP |
-| `db/` | User database operations |
-| `middleware/` | Quota enforcement middleware |
-| `agent_pool.rs` | Shared agent pool across tenants |
-| `user_runtime.rs` | Per-user runtime isolation |
-| `ws.rs` | WebSocket handler |
-
-### `web/` — Workbench Frontend (React + TypeScript)
-
-Single-page app with tab-based navigation:
-
-| Page/Component | Responsibility |
-|----------------|----------------|
-| `pages/Chat` | Chat interface with streaming AI responses |
-| `pages/Tools` | Tool execution history viewer |
-| `pages/Memory` | Multi-layer memory explorer |
-| `pages/Debug` | Token budget bar, EventBus viewer |
-| `pages/McpWorkbench` | MCP server management (add/remove/logs) |
-| `pages/Schedule` | Scheduled task management |
-| `pages/Tasks` | Task list viewer |
-| `components/chat/` | MessageList, MessageBubble, ChatInput, StreamingDisplay |
-| `components/mcp/` | ServerList, LogViewer, ToolInvoker |
-| `components/tools/` | ExecutionList, ExecutionDetail, JsonViewer, TimelineView |
-| `components/debug/` | TokenBudgetBar |
-| `atoms/` | Jotai state atoms |
-| `ws/` | WebSocket connection manager |
+| Path | Target product | Status |
+|------|----------------|--------|
+| `web/` | Single-user workbench UI (React + TypeScript + Vite + Jotai + Tailwind) | Dormant — scaffolding only |
+| `web-platform/` | Multi-tenant platform UI | Dormant — scaffolding only |
 
 ---
 
-## Tech Stack
+## Tech Stack (current)
 
-| Layer | Technologies |
-|-------|-------------|
-| **Backend runtime** | Rust 1.75+, Tokio 1.42, Axum 0.8 |
-| **Database** | SQLite via rusqlite 0.32 (sync) + tokio-rusqlite 0.6 (async) |
-| **LLM providers** | Anthropic, OpenAI (via reqwest HTTP client) |
-| **MCP SDK** | rmcp 0.16 (stdio + streamable HTTP client) |
-| **Sandbox** | Wasmtime 25 (WASM), Bollard 0.18 (Docker), native subprocess |
-| **Crypto** | AES-GCM, Argon2, SHA-256, JWT (jsonwebtoken 9) |
-| **Frontend** | React 19, TypeScript 5.7, Vite 6, Jotai 2.16, TailwindCSS 4 |
+| Layer | Technology |
+|-------|------------|
+| Rust toolchain | rust-version 1.75+, edition 2021, resolver = 2 |
+| Async | Tokio 1.42 (full features) |
+| HTTP/WS | Axum 0.8 + axum-extra 0.10 |
+| MCP SDK | rmcp 1 (client + server + stdio + streamable HTTP) |
+| Database | SQLite via `rusqlite` 0.32 + `tokio-rusqlite` 0.6 |
+| Vector | HNSW (in-process, ADR-V2-015) |
+| LLM providers | Anthropic + OpenAI-compat (OpenRouter, etc.) via `reqwest` |
+| Sandbox | native subprocess primary; optional Wasmtime / Bollard (Docker) |
+| Crypto | AES-GCM, Argon2, SHA-256, `jsonwebtoken` 9 |
+| Proto | tonic-build codegen; `prost-types` + `prost-build` |
+| Python runtimes | Python 3.12+, `uv` package manager, `grpcio` + `pydantic` |
+| TS runtime | Bun + TypeScript 5 (`lang/ccb-runtime-ts/`) |
+| Frontend (planned) | React 19, TypeScript 5.7, Vite 6, Jotai 2.16, Tailwind 4 |
 
 ---
 
-## Configuration System
+## Configuration
 
-### Priority Order (lowest to highest)
-1. **config.yaml** - Main configuration file
-2. **.env file** - Local development overrides
-3. **CLI arguments** - e.g., `--port 4000`
-4. **Shell environment variables** - Highest priority, overrides everything
+Priority (lowest to highest): `config.yaml` < `.env` (gitignored) < CLI args < shell env vars.
 
-### Configuration Files
-
-| File | Purpose | Version Control |
-|------|---------|----------------|
-| `.env` | Local dev overrides (NOT committed) | Ignored |
-| `.env.example` | Template for .env (committed) | Committed |
-| `config.yaml` | Main deployment config (committed) | Committed |
-| `config.default.yaml` | Auto-generated from code (re-generated on changes) | Committed |
-
-### Configuration Command
-
-**IMPORTANT**: Run `make config-gen` whenever `crates/octo-server/src/config.rs` is modified to keep `config.default.yaml` in sync.
-
-### Environment Variables
+**Generate `config.default.yaml` after changing `crates/grid-server/src/config.rs`:**
 
 ```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-xxxxx     # Anthropic API key
-OPENAI_API_KEY=sk-xxxxx             # OpenAI API key (if using openai provider)
+make config-gen
+```
+
+### Key env vars (prefix `GRID_*`)
+
+```bash
+# Required — LLM access
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+ANTHROPIC_BASE_URL=...       # optional — for OpenRouter or proxies
+ANTHROPIC_MODEL_NAME=...     # optional — overrides default model
+OPENAI_API_KEY=sk-xxxxx       # when using OpenAI-compat provider
+OPENAI_MODEL_NAME=gpt-4o     # OpenAI model (not LLM_MODEL; see MEMORY.md feedback)
 
 # Server
-OCTO_HOST=127.0.0.1                 # Server host (default: 127.0.0.1)
-OCTO_PORT=3001                      # Server port (default: 3001)
-OCTO_DB_PATH=./data/octo.db        # Database path (overrides OctoRoot resolution)
+GRID_HOST=127.0.0.1
+GRID_PORT=3001
+GRID_DB_PATH=./data/grid.db
+GRID_GLOBAL_ROOT=~/.grid
+GRID_LOG=grid_server=debug,grid_engine=debug
+GRID_LOG_FORMAT=pretty       # or json
 
-# OctoRoot path overrides
-OCTO_GLOBAL_ROOT=~/.octo            # Global root directory (default: ~/.octo)
-OCTO_PROJECT_ROOT=$PWD/.octo        # Project root directory (default: $PWD/.octo)
+# Auth / Security
+GRID_AUTH_MODE=...
+GRID_API_KEY=...
+GRID_API_KEY_USER=...
+GRID_HMAC_SECRET=...
+GRID_CORS_ORIGINS=...
+GRID_CORS_STRICT=...
 
-# Provider
-LLM_PROVIDER=anthropic              # Provider: anthropic (default) or openai
-OPENAI_MODEL_NAME=gpt-4o            # Model override (optional)
+# Hooks / policies
+GRID_HOOKS_FILE=...
+GRID_POLICIES_FILE=...
+GRID_ENABLE_EVENT_BUS=...
+GRID_MAX_BODY_SIZE=...
 
-# Logging
-RUST_LOG=octo_server=debug,octo_engine=debug
+# EAASP
+EAASP_PROMPT_EXECUTOR=...    # ADR-V2-XXX prompt execution mode
+EAASP_L2_DB_PATH=...
+EAASP_TOOL_FILTER=...        # deprecated in favor of skill-declared filter (ADR-V2-020)
+EAASP_DEPLOYMENT_MODE=...    # per-session vs shared-multi-session (ADR-V2-019)
 ```
+
+### Service ports (do NOT hardcode — use config)
+
+| Port | Service | Source |
+|------|---------|--------|
+| 3001 | Backend (`grid-server`) | `GRID_PORT` / `config.yaml` |
+| 5180 | Frontend Vite dev server | `web/vite.config.ts` (planned) |
+| 50051 | `grid-runtime` gRPC | runtime config |
+| 50052 | `claude-code-runtime-python` | runtime config |
+| 50053 | `goose-runtime` | runtime config |
+| 50054 | `nanobot-runtime` | runtime config |
 
 ---
 
-## Service Ports
+## Build & Test
 
-**DO NOT hardcode ports in code. Use configuration.**
-
-| Port | Service | Config Location |
-|------|---------|-----------------|
-| 3001 | Backend API | `OCTO_PORT` env or `config.yaml` |
-| 5180 | Frontend (Vite) | `web/vite.config.ts` |
-
-### Frontend Proxy Configuration
-
-In `web/vite.config.ts`:
-
-```typescript
-server: {
-  port: 5180,
-  proxy: {
-    "/api": { target: "http://127.0.0.1:3001" },
-    "/ws":  { target: "ws://127.0.0.1:3001", ws: true },
-  },
-}
-```
-
----
-
-## Build & Test Commands
-
-**ALWAYS update Makefile when adding/removing commands.**
+`make help` prints all targets. Key ones (Makefile has 130 targets total):
 
 ```bash
-# ── First-time Setup ──
-make setup               # Install frontend dependencies (npm install)
-cp .env.example .env     # Then fill in ANTHROPIC_API_KEY
+# Setup
+make setup                   # install frontend deps; cp .env.example .env first
 
-# ── Development ──
-make dev                 # Start backend + frontend concurrently
-make server              # Backend only (port 3001)
-make web                 # Frontend only (port 5180)
+# Dev loops
+make dev                     # grid-server + web concurrently
+make dev-eaasp               # all 4+ EAASP services with log rotation under .logs/latest/
+make dev-eaasp-stop          # stop everything dev-eaasp launched
+make server                  # backend only
+make web                     # frontend only
 
-# ── Building ──
-make check               # Fast Rust check (no binary output)
-make build               # Rust debug build
-make release             # Rust release build
-make web-build           # Frontend production build
-make all                 # Full build (backend + frontend)
+# Build
+make check                   # fast cargo check
+make build                   # debug
+make release                 # release
+make all                     # backend + frontend
+make build-eaasp-all         # all EAASP runtimes + tools
 
-# ── Testing ──
-make test                # Run all workspace tests (cargo test --workspace)
-make test-types          # Test octo-types only
-make test-engine         # Test octo-engine only
-make test-server         # Test octo-server only
+# Targeted tests
+make test                    # workspace (cargo test) — only use when asked, per behavioral rules
+make test-types / test-engine / test-sandbox / test-server
+make claude-runtime-test / goose-runtime-* / hermes-runtime-*
 
-# ── Code Quality ──
-make fmt                 # Format all Rust code (cargo fmt --all)
-make fmt-check           # Format check for CI (cargo fmt --all -- --check)
-make lint                # Clippy lint (cargo clippy --workspace -- -D warnings)
-make web-check           # TypeScript type check (tsc --noEmit)
-make web-lint            # ESLint frontend
+# Quality
+make fmt / fmt-check / lint
+make web-check / web-lint
 
-# ── Verification ──
-make verify              # Static: cargo check + tsc + vite build
-make verify-runtime      # Print manual runtime verification checklist
-make verify-api          # REST API endpoint smoke test (requires running server)
-make verify-api-mcp ID=x # MCP server-specific endpoint check
+# Verification
+make verify                  # static (cargo check + tsc + vite build)
+make verify-runtime          # print manual runtime verification checklist
+make verify-dual-runtime     # start both Rust + Python runtimes + certifier
 
-# ── Configuration ──
-make config-gen          # Generate config.yaml from code defaults
+# EAASP contract E2E
+make v2-phase2-e2e           # Phase 2 14 @assertions (SKIP_RUNTIMES=true default)
+make v2-phase2-e2e-full      # with runtime 6-step
+make v2-phase3-e2e           # Phase 3 B1-B8, 112 pytest
+make v2-phase3-e2e-rust      # Rust side regression
 
-# ── Container Images (octo-sandbox base/dev) ──
-make container-build           # Build base image (local, single platform)
-make container-build-dev       # Build dev image (local, single platform)
-make container-build-multi     # Build base image (multi-platform, push GHCR)
-make container-build-multi-dev # Build dev image (multi-platform, push GHCR)
-make container-list            # List images and running containers
-make container-clean           # Remove stopped containers and images
-make container-test            # Build and verify base image tools
+# CLI
+make cli / cli-ask / cli-session / cli-config / cli-doctor
+make studio-tui / studio-dashboard / studio
 
-# ── claude-code-runtime (Python EAASP L1 Runtime) ──
-make claude-runtime-setup  # Install Python deps (uv sync)
-make claude-runtime-proto  # Compile proto → Python stubs
-make claude-runtime-test   # Run Python tests (pytest)
-make claude-runtime-start  # Start gRPC server on :50052
-make claude-runtime-build  # Build Docker image
-make claude-runtime-run    # Run Docker container (needs ANTHROPIC_API_KEY)
+# Config
+make config-gen              # regenerate config.default.yaml from grid-server/src/config.rs
 
-# ── EAASP Verification ──
-make verify-dual-runtime   # Build + start both runtimes + certifier verify
+# Runtime containers
+make claude-runtime-build / claude-runtime-run
+make goose-runtime-container-build / goose-runtime-container-run
 
-# ── EAASP Enterprise SDK ──
-make sdk-setup             # Install Python SDK deps (uv pip install -e)
-make sdk-test              # Run SDK tests (pytest)
-make sdk-validate          # Validate HR example skill
-make sdk-build             # Build SDK package
-
-# ── Cleanup ──
-make clean               # Clean Rust build artifacts
-make clean-web           # Clean frontend (node_modules, dist)
-make clean-all           # Clean everything
+# Cleanup
+make clean / clean-web / clean-all
 ```
 
 ---
 
-## Key Design Documents
+## Phase & ADR Workflow
 
-The `docs/design/` directory contains architectural decision records and design documents (written in Chinese):
+Project development is **phase-driven**. Each phase lives in `docs/plans/YYYY-MM-DD-<topic>.md`, tracked via `dev-phase-manager`. Architecture decisions live in `docs/design/EAASP/adrs/` (ADR-V2-XXX format, enforced by ADR governance plugin).
 
-| Document | Topic |
-|----------|-------|
-| `ARCHITECTURE_DESIGN.md` | Overall system architecture |
-| `AGENT_RUNTIME_DESIGN.md` | AgentRuntime core design |
-| `AGENT_RUNTIME_ARCHITECTURE_AUDIT.md` | Architecture audit of AgentRuntime → AgentExecutor → AgentLoop |
-| `AGENT_LOOP_COMPARISON.md` | Agent loop comparison with peer frameworks |
-| `CONTEXT_ENGINEERING_DESIGN.md` | Context building, budget management, pruning |
-| `MCP_WORKBENCH_DESIGN.md` | MCP server management and tool bridge |
-| `MEMORY_PLAN.md` | Multi-layer memory architecture |
-| `ENTERPRISE_AGENT_SANDBOX_AUTH_DESIGN.md` | Enterprise sandbox and auth design |
-| `SANDBOX_SECURITY_DESIGN.md` | Sandbox security architecture (SandboxPolicy, Docker images, WASM/WASI, audit) |
-| `D5_SINGLETON_AGENT_CHANNEL_DESIGN.md` | Singleton agent communication channel |
-| `COMPETITIVE_ANALYSIS.md` | Competitive framework analysis (Goose, etc.) |
-| `PHASE_2_5_DESIGN.md` | Phase 2.5: Sandbox, auth, user isolation |
-| `PHASE_2_6_PROVIDER_CHAIN_DESIGN.md` | Provider chain failover/load-balance |
-| `PHASE_2_7_METRICS_AUDIT_DESIGN.md` | Metrics and audit subsystem |
-| `PHASE_2_8_AGENT_ENHANCEMENT_DESIGN.md` | Agent enhancement (catalog, skills) |
-| `RUST_BUILD_OPTIMIZATION.md` | Rust compile-time optimization strategies |
+### Phase state is external to the repo's own memory
 
-Implementation plans live in `docs/plans/` (date-prefixed).
+- **Active phase stack**: `docs/dev/.phase_stack.json`
+- **Current checkpoint**: `docs/plans/.checkpoint.json`
+- **Archived checkpoint (previous phase)**: `docs/plans/.checkpoint.archive.json`
+- **Work log (prepend-new-on-top)**: `docs/dev/WORK_LOG.md`
+- **Recent activity index**: `docs/dev/MEMORY_INDEX.md`
+- **Deferred ledger (cross-phase)**: `docs/design/EAASP/DEFERRED_LEDGER.md`
+
+### Skills to use (don't write phase logic by hand)
+
+| Task | Slash command / skill |
+|------|----------------------|
+| Start a new phase | `/dev-phase-manager:start-phase "<name>"` |
+| End / archive a phase | `/dev-phase-manager:end-phase` |
+| Checkpoint mid-phase | `/dev-phase-manager:checkpoint-progress` |
+| Resume after `/clear` | `/dev-phase-manager:resume-plan` |
+| Scan for unresolved `Deferred` items | `/dev-phase-manager:deferred-scan` |
+| Execute plan with reviewer loops | `/superpowers:subagent-driven-development` (same session) or `/superpowers:executing-plans` (parallel session) |
+
+**Never create or hand-edit `.phase_stack.json` / `.checkpoint.json` / `docs/dev/NEXT_SESSION_GUIDE.md` directly.** Use the skill. See user-global CLAUDE.md for the "Plugin/Skill State Files — 严禁臆造路径" precedent (the 2026-04-15 incident).
+
+### ADR workflow
+
+Project uses the global ADR governance plugin (`~/.claude/skills/adr-governance/`, meta-ADR: ADR-V2-022).
+
+| Task | Slash command |
+|------|---------------|
+| Session-start dashboard | `/adr:status` |
+| Check which ADRs constrain a file | `/adr:trace <path>` |
+| New ADR | `/adr:new --type contract\|strategy\|record` |
+| Accept a Proposed ADR (runs F1-F4 lint) | `/adr:accept <id>` |
+| Health + staleness review | `/adr:review --health` |
+| Full lint gate | `/adr:audit` |
+
+**Hard rules:**
+1. Before editing files listed in an Accepted `contract` ADR's `affected_modules`, run `/adr:trace`. PreToolUse hook `adr-guard.sh` also blocks violations automatically.
+2. Never write ADR frontmatter by hand — `/adr:new` enforces the schema.
+3. New contract ADRs without enforcement (`trace` array + CI / hook) fail F4 lint.
+
+Current ADR audit: `docs/design/EAASP/adrs/AUDIT-2026-04-19.md`. Re-run quarterly.
+
+Vendored plugin scripts live at `.adr-plugin/scripts/` so CI runs without the global plugin. Refresh after upstream update: `/adr:sync-scripts`.
 
 ---
 
-## Key Patterns
+## Key Design Docs
 
-### Agent Architecture
-- `AgentRuntime` → owns all components (provider, memory, tools, MCP, sessions)
-- `AgentExecutor` → per-session agent instance with cancel token
-- `AgentLoop` → single conversation turn: context build → LLM call → tool execution → repeat
-- `AgentCatalog` → agent registry with state machine (Created → Running → Paused → Stopped)
-- `AgentStore` → SQLite persistence for agent manifests
+Authoritative architecture + design material. If code diverges from these, update the doc as part of the same change.
 
-### State Management
-- Backend: `Arc<T>` for shared state, `tokio::sync::Mutex` for async locks
-- Frontend: Jotai atoms for UI state
+### EAASP v2 (active)
 
-### MCP Integration
-- `McpManager`: Runtime server lifecycle (start/stop)
-- `McpStorage`: SQLite persistence
-- `McpToolBridge`: Wraps MCP tools into unified `Tool` trait
+| Doc | Topic |
+|-----|-------|
+| **`ADR-V2-023-grid-two-leg-product-strategy.md`** | **Strategic anchor — product legs A/B, dormancy rules, rename deferral (READ FIRST for new contributors)** |
+| `docs/design/EAASP/adrs/` | 17 ADRs (V2-001 to V2-023), single source of truth for decisions |
+| `docs/design/EAASP/E2E_VERIFICATION_GUIDE.md` | Living spec for `scripts/eaasp-e2e.sh` + Makefile `v2-phase*-e2e` targets |
+| `docs/design/EAASP/DEFERRED_LEDGER.md` | Cross-phase Deferred D-items (single SSOT for debt) |
+| `docs/design/EAASP/L1_RUNTIME_ADAPTATION_GUIDE.md` | How to build a new L1 runtime adapter (§12 covers TS/Bun) |
+| `docs/design/EAASP/L1_RUNTIME_COMPARISON_MATRIX.md` | 7-runtime feature matrix |
+| `docs/design/EAASP/L1_RUNTIME_CANDIDATE_ANALYSIS.md` | Research → picks the 7 chosen |
 
-### Memory Layers
-- Layer 0: Working memory (current conversation)
-- Layer 1: Session memory (per-session)
-- Layer 2: Persistent memory (long-term)
-- Knowledge Graph: Entity-relation graph with FTS search
+### Grid core (still current)
 
-### Shared Design Tokens (Frontend)
-Both frontends share visual design via:
-- `design/tailwind.base.ts` — shared Tailwind config (colors, fonts, spacing)
-- `design/tokens.css` — CSS variables for theming
+| Doc | Topic |
+|-----|-------|
+| `docs/design/Grid/GRID_PRODUCT_DESIGN.md` | Product framing |
+| `docs/design/Grid/GRID_CRATE_SPLIT_DESIGN.md` | Why the crate boundary lands where it does |
+| `docs/design/Grid/GRID_UI_UX_DESIGN.md` | Target frontend UX (informs future `web/` work) |
+
+### Generic engine (may be partially stale — read with git blame)
+
+`docs/design/` has ~60 design docs covering agent harness, context engineering, MCP, memory, sandbox, security, provider chain, etc. Many predate the EAASP v2 pivot; when they disagree with EAASP ADRs, the ADR wins.
+
+---
+
+## Behavioral Rules
+
+**Absolute:**
+
+- Do what has been asked; nothing more, nothing less.
+- **Never** create files unless strictly required. Prefer editing over creating.
+- **Never** proactively create docs (`*.md`) or READMEs unless asked.
+- **Never** save working files, ad-hoc tests, or scratch markdown to the repo root.
+- **Never** commit secrets, credentials, or `.env` files.
+- **Never** run full test suites (`cargo test --workspace`, `make test`) unsolicited. Run only targeted tests for changed code. If a full run is needed, **ask first**.
+- **Always** read a file before editing it (the Edit tool enforces this anyway).
+- **Always** verify build succeeds before reporting work as complete.
+
+**Code style:**
+
+- Follow DDD with bounded contexts. Module boundaries already align with EAASP layers.
+- Typed interfaces for all public APIs (`pub fn` / `pub struct`).
+- Input validation at system boundaries (API, MCP tool invocations, CLI args, deserialization).
+- TDD-London (mock-first) preferred for new engine / runtime code.
+- Event sourcing for state changes where practical (see `grid-engine/src/event/`).
+- File length: aim for <500 LOC; large files (`harness.rs`, `agent_loop.rs`) are accepted when refactoring would break cohesion — prefer extracting modules over arbitrary splits.
+
+**File organization (project-specific, overrides none):**
+
+| Kind | Location |
+|------|----------|
+| Rust source | `crates/<crate>/src/` |
+| Rust tests | `crates/<crate>/tests/` (integration) or inline `#[cfg(test)]` (unit) |
+| Python runtime source | `lang/<runtime>/src/<pkg>/` |
+| Python runtime tests | `lang/<runtime>/tests/` |
+| TS runtime source | `lang/ccb-runtime-ts/src/` |
+| EAASP Python tools | `tools/eaasp-*/src/` |
+| Proto | `proto/eaasp/runtime/v2/` |
+| Design docs (Chinese) | `docs/design/{EAASP,Grid,AgentOS,claude-code-oss}/` |
+| ADRs | `docs/design/EAASP/adrs/` (for EAASP) or `docs/adr/` (legacy generic) |
+| Phase plans | `docs/plans/YYYY-MM-DD-<topic>.md` |
+| Work log | `docs/dev/WORK_LOG.md` |
+| Scripts | `scripts/` |
+| Examples / fixtures | `examples/` and `tools/*/tests/fixtures/` |
+
+---
+
+## Security Rules
+
+- Never hardcode API keys, credentials, or secrets in source. `.env` only.
+- Validate all user input at system boundaries.
+- Sanitize file paths (prevent directory traversal) — use `grid-engine/src/security/` helpers.
+- Tool execution goes through `SecurityPolicy` + `CommandRiskLevel` + `ActionTracker` (autonomy tiers).
+- When touching auth / crypto, check `ADR-003-API_KEY_HMAC.md` and `docs/design/EAASP/adrs/ADR-V2-XXX-*.md` first.
 
 ---
 
 ## Git Commit Guidelines
 
-**IMPORTANT**: Commit after meaningful work, not mechanically.
-
-### When to Commit
-
-1. **After Phase Management**
-   - After `/end-phase` or `/checkpoint-progress`: **ALWAYS commit**
-
-2. **After Task Completion**
-   - After completing a bug fix
-   - After implementing a feature or subtask
-   - After any code change you might want to reference later
-
-3. **Before Risky Operations**
-   - Before major refactoring
-   - Before switching branches
-
-### Commit Frequency Rule
-
-- **Minimum**: After each completed task/subtask
-- **Trigger**: When `git status` shows >3 modified files that form a logical unit
-- **Don't**: Commit mechanically before /clear just for the sake of committing
+- Commit after meaningful work — **not** mechanically before `/clear`.
+- **Always** commit after `/dev-phase-manager:end-phase` or `/checkpoint-progress`.
+- Message body answers *why*, not *what* (the diff tells you what).
+- Subject ≤72 chars; type prefixes: `feat:` `fix:` `chore:` `docs:` `refactor:` `test:` `perf:`.
+- **Every commit message ends with**:
+  ```
+  Generated-By: Claude (claude-<model>) via Claude Code CLI
+  Co-Authored-By: claude-flow <ruv@ruv.net>
+  ```
+- Before destructive operations (major refactor, branch switch), commit first.
+- Use a HEREDOC for the message to preserve formatting:
+  ```bash
+  git commit -m "$(cat <<'EOF'
+  subject line
+  body
+  EOF
+  )"
+  ```
 
 ---
 
-## Behavioral Rules (Always Enforced)
+## What Lives Where (global vs project)
 
-- Do what has been asked; nothing more, nothing less
-- NEVER create files unless they're absolutely necessary for achieving your goal
-- ALWAYS prefer editing an existing file to creating a new one
-- NEVER proactively create documentation files (*.md) or README files unless explicitly requested
-- NEVER save working files, text/mds, or tests to the root folder
-- Never continuously check status after spawning a swarm — wait for results
-- ALWAYS read a file before editing it
-- NEVER commit secrets, credentials, or .env files
+Project CLAUDE.md (this file) — Grid-specific: crates, EAASP layers, env vars, Makefile, phase state, design-doc index.
 
-## File Organization
+Global `~/.claude/CLAUDE.md` covers everything that's not project-specific:
+- Claude Code usage conventions (Context7, extended thinking, MCP priorities, verification tools)
+- Language-agnostic behavioral rules
+- Multi-agent orchestration guideline (scenario-based RuFlo guidance)
+- Memory / feedback management
+- General git + commit style
+- Plugin/skill state-file discipline
 
-- NEVER save to root folder — use the directories below
-- Use `/src` for source code files
-- Use `/tests` for test files
-- Use `/docs` for documentation and markdown files
-- Use `/config` for configuration files
-- Use `/scripts` for utility scripts
-- Use `/examples` for example code
+Do **not** duplicate global content here. If you need something project-specific, add it here. If it's general Claude Code behavior, add it to global.
 
-## Project Architecture
+---
 
-- Follow Domain-Driven Design with bounded contexts
-- Keep files under 500 lines
-- Use typed interfaces for all public APIs
-- Prefer TDD London School (mock-first) for new code
-- Use event sourcing for state changes
-- Ensure input validation at system boundaries
+## Quick Pointers
 
-### Project Config
-
-- **Topology**: hierarchical-mesh
-- **Max Agents**: 15
-- **Memory**: hybrid
-- **HNSW**: Enabled
-- **Neural**: Enabled
-
-## Build & Test
-
-```bash
-# Build
-npm run build
-
-# Test
-npm test
-
-# Lint
-npm run lint
-```
-
-- ALWAYS run tests after making code changes
-- ALWAYS verify build succeeds before committing
-
-## Security Rules
-
-- NEVER hardcode API keys, secrets, or credentials in source files
-- NEVER commit .env files or any file containing secrets
-- Always validate user input at system boundaries
-- Always sanitize file paths to prevent directory traversal
-- Run `npx @claude-flow/cli@latest security scan` after security-related changes
-
-## Concurrency: 1 MESSAGE = ALL RELATED OPERATIONS
-
-- All operations MUST be concurrent/parallel in a single message
-- Use Claude Code's Task tool for spawning agents, not just MCP
-- ALWAYS batch ALL todos in ONE TodoWrite call (5-10+ minimum)
-- ALWAYS spawn ALL agents in ONE message with full instructions via Task tool
-- ALWAYS batch ALL file reads/writes/edits in ONE message
-- ALWAYS batch ALL Bash commands in ONE message
-
-## Swarm Orchestration
-
-- MUST initialize the swarm using CLI tools when starting complex tasks
-- MUST spawn concurrent agents using Claude Code's Task tool
-- Never use CLI tools alone for execution — Task tool agents do the actual work
-- MUST call CLI tools AND Task tool in ONE message for complex work
-
-### 3-Tier Model Routing (ADR-026)
-
-| Tier | Handler | Latency | Cost | Use Cases |
-|------|---------|---------|------|-----------|
-| **1** | Agent Booster (WASM) | <1ms | $0 | Simple transforms (var→const, add types) — Skip LLM |
-| **2** | Haiku | ~500ms | $0.0002 | Simple tasks, low complexity (<30%) |
-| **3** | Sonnet/Opus | 2-5s | $0.003-0.015 | Complex reasoning, architecture, security (>30%) |
-
-- Always check for `[AGENT_BOOSTER_AVAILABLE]` or `[TASK_MODEL_RECOMMENDATION]` before spawning agents
-- Use Edit tool directly when `[AGENT_BOOSTER_AVAILABLE]`
-
-## Swarm Configuration & Anti-Drift
-
-- ALWAYS use hierarchical topology for coding swarms
-- Keep maxAgents at 6-8 for tight coordination
-- Use specialized strategy for clear role boundaries
-- Use `raft` consensus for hive-mind (leader maintains authoritative state)
-- Run frequent checkpoints via `post-task` hooks
-- Keep shared memory namespace for all agents
-
-```bash
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
-```
-
-## Swarm Execution Rules
-
-- ALWAYS use `run_in_background: true` for all agent Task calls
-- ALWAYS put ALL agent Task calls in ONE message for parallel execution
-- After spawning, STOP — do NOT add more tool calls or check status
-- Never poll TaskOutput or check swarm status — trust agents to return
-- When agent results arrive, review ALL results before proceeding
-
-## V3 CLI Commands
-
-### Core Commands
-
-| Command | Subcommands | Description |
-|---------|-------------|-------------|
-| `init` | 4 | Project initialization |
-| `agent` | 8 | Agent lifecycle management |
-| `swarm` | 6 | Multi-agent swarm coordination |
-| `memory` | 11 | AgentDB memory with HNSW search |
-| `task` | 6 | Task creation and lifecycle |
-| `session` | 7 | Session state management |
-| `hooks` | 17 | Self-learning hooks + 12 workers |
-| `hive-mind` | 6 | Byzantine fault-tolerant consensus |
-
-### Quick CLI Examples
-
-```bash
-npx @claude-flow/cli@latest init --wizard
-npx @claude-flow/cli@latest agent spawn -t coder --name my-coder
-npx @claude-flow/cli@latest swarm init --v3-mode
-npx @claude-flow/cli@latest memory search --query "authentication patterns"
-npx @claude-flow/cli@latest doctor --fix
-```
-
-## Available Agents (60+ Types)
-
-### Core Development
-`coder`, `reviewer`, `tester`, `planner`, `researcher`
-
-### Specialized
-`security-architect`, `security-auditor`, `memory-specialist`, `performance-engineer`
-
-### Swarm Coordination
-`hierarchical-coordinator`, `mesh-coordinator`, `adaptive-coordinator`
-
-### GitHub & Repository
-`pr-manager`, `code-review-swarm`, `issue-tracker`, `release-manager`
-
-### SPARC Methodology
-`sparc-coord`, `sparc-coder`, `specification`, `pseudocode`, `architecture`
-
-## Memory Commands Reference
-
-```bash
-# Store (REQUIRED: --key, --value; OPTIONAL: --namespace, --ttl, --tags)
-npx @claude-flow/cli@latest memory store --key "pattern-auth" --value "JWT with refresh" --namespace patterns
-
-# Search (REQUIRED: --query; OPTIONAL: --namespace, --limit, --threshold)
-npx @claude-flow/cli@latest memory search --query "authentication patterns"
-
-# List (OPTIONAL: --namespace, --limit)
-npx @claude-flow/cli@latest memory list --namespace patterns --limit 10
-
-# Retrieve (REQUIRED: --key; OPTIONAL: --namespace)
-npx @claude-flow/cli@latest memory retrieve --key "pattern-auth" --namespace patterns
-```
-
-## Quick Setup
-
-```bash
-claude mcp add claude-flow -- npx -y @claude-flow/cli@latest
-npx @claude-flow/cli@latest daemon start
-npx @claude-flow/cli@latest doctor --fix
-```
-
-## Claude Code vs CLI Tools
-
-- Claude Code's Task tool handles ALL execution: agents, file ops, code generation, git
-- CLI tools handle coordination via Bash: swarm init, memory, hooks, routing
-- NEVER use CLI tools as a substitute for Task tool agents
-
-## Support
-
-- Documentation: https://github.com/ruvnet/claude-flow
-- Issues: https://github.com/ruvnet/claude-flow/issues
-
-## ADR Governance (ADR-V2-022)
-
-This project uses the global ADR governance plugin at `~/.claude/skills/adr-governance/`.
-
-### Session start protocol
-
-At the start of each new Claude Code session that touches architectural decisions:
-1. Run `/adr:status` to see current ADR health + roadmap
-2. Check `~/.claude/skills/adr-governance/ROADMAP.md` for pending work
-
-### Before editing files under `affected_modules`
-
-Run `/adr:trace <file-path>` to see which ADRs constrain that file. Do NOT silently violate an Accepted ADR.
-
-### Creating new architectural decisions
-
-Use `/adr:new --type contract|strategy`. Never write ADRs by hand — the command enforces frontmatter + lint.
-
-### Audit
-
-Current audit: `docs/design/EAASP/adrs/AUDIT-2026-04-19.md`. Re-run via `/adr:review --health` quarterly.
+- **Where is X?** — `git grep "X"` or Grep tool. `docs/design/EAASP/adrs/` for why.
+- **How to run the full EAASP stack?** — `make dev-eaasp` (background services + log rotation under `.logs/latest/`).
+- **How to certify a runtime?** — `make verify-dual-runtime` or the L1 adaptation guide §Certification.
+- **What ADRs exist?** — `/adr:status` or `/adr:list`.
+- **What phase am I in?** — `/dev-phase-manager:resume-plan` or `cat docs/plans/.checkpoint.json | jq '.phase_name, .completed_tasks | length'`.
+- **Stale Django README at repo root?** — yes, that's a known cleanup item; ignore it.
