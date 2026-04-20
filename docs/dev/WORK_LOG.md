@@ -1,5 +1,84 @@
 # Grid Sandbox 工作日志
 
+## Phase 3.6 — Tech-debt Cleanup (2026-04-20 🟢 Completed 5/5 @ b81f455)
+
+### 主题
+
+清理 Phase 3.5 审查产生的 5 项 ready Deferred：Rust hook envelope 补齐 + Python refactor / toolchain / editor 清洁。全部低风险、低侵入改动，无 ADR/契约调整。
+
+### 已完成
+
+**T1 — D140 grid-engine HookContext::with_event retrofit** @ `38e2fa9`
+- `crates/grid-engine/src/agent/harness.rs` 三处 dispatch 位点 chain `.with_event(...).with_skill_id(...)`：PreToolUse @ L2236, PostToolUse @ L2390, Stop @ L1766。
+- 之前 Rust 侧 scoped-hook 子进程走 legacy full-struct projection，不符合 ADR-V2-006 §2/§3 envelope；Python 侧已自 Phase 2 S3.T5 合规。
+- 验证：parity tests 10/10 + grid-engine 2385/0 + contract test `test_hook_envelope.py --runtime=grid` Stop scope 2/2 翻转 xfail→PASS（Pre/Post 残 3 xfail 归 D136 独立 root cause）。
+
+**T2 — D145 session_orchestrator delta_buf dedup** @ `f7eab5f`
+- `tools/eaasp-l4-orchestration/.../session_orchestrator.py` 抽 `_accumulate_delta(...)` + `_record_coalesced_deltas(...)` 两个 helper。
+- 消除 `send_message` / `stream_message` 两处 ~35 LOC 闭包重复；yield（SSE 打字机 UX）+ `chunks.append`（ordered trace）非对称性保留在 call site，不下沉到 helper。
+- 验证：`test_chunk_coalescing.py` 7/7 + `test_session_orchestrator.py` 13/13 PASS。
+
+**T3 — D147 Python proto .pyi stubs（descoped）** @ `870f70c` + `5bb610d` + `7608860`
+- 调研后 descope：`grpcio-tools` 无 int-accepting stub flag，post-process 脚本脆弱，repo 还没 `pyrightconfig.json` 真正跑 strict。
+- 改做：12 处 `# type: ignore[arg-type]  # ADR-V2-021 ChunkType/proto enum int-on-wire` 注解（nanobot service.py 6 + pydantic-ai service.py 6 — ChunkType 10 处 + CredentialMode 2 处）。
+- 新增 **D152** 追踪真正根因（上游 grpcio-tools / mypy-protobuf int-accepting stubs）；留 claude-code:790 给 T5 Pyright 配置就位后统一 sweep。
+- 验证：nanobot 36/36 + pydantic-ai 4/4 pytest PASS。
+
+**T4 — D150 build_proto.py 四合一** @ `e24a024` + `47ecc12`
+- 4 份 `build_proto.py`（claude-code / nanobot / pydantic-ai / L4）抽到 `scripts/gen_runtime_proto.py` 单一 SSOT（`--package-name` 注册表 + `--proto-files` override）。
+- Makefile 4 target 对称（新增 `nanobot-runtime-proto` + `pydantic-ai-runtime-proto`，rewire `claude-runtime-proto` + `l4-proto-gen`）。
+- `lang/claude-code-runtime-python/Dockerfile` 用 `ln -s /build/src ...` 适配新 script 的 `<repo>/lang/<pkg>/src/<mod>/_proto` 布局假设。
+- Followup commit 加 Black reformat + 注册表 `pkg_prefix == f"{src_pkg}._proto"` import-time invariant assertion；新增 **D153** 追踪 `--out-dir` override flag 去除 Dockerfile symlink（Phase 4 Dockerfile 增殖前）。
+- 验证：regen 后 stub byte-parity 4/4 包 0 diff；pytest 85/85 PASS（claude-code 25 + nanobot 36 + pydantic-ai 4 + L4 subset 20）。
+
+**T5 — D146 Pyright workspace config per-venv** @ `d07f67d` + `b81f455`
+- 新建 `pyrightconfig.json`（116 LOC）@ 10 executionEnvironments（9 packages + `scripts`）with per-env `.venv/lib/python{ver}/site-packages` extraPaths 绑定 + per-env `pythonVersion`；exclude `lang/hermes-runtime-python/**`（ADR-V2-017 frozen）+ `tools/archive/**`；`strict: []` 关闭，`reportMissingTypeStubs: false` + `reportMissingModuleSource: none`。
+- 设计 pivot：scout 初稿用的 `pythonPath` 字段不是 Pyright schema 合法位点（Context7 查证），改 `venvPath` + `venv` 顶层 fallback + per-env `extraPaths`。
+- 验证：Pyright v1.1.408 本地跑 regression 236→8 warnings（import 全归位）；hermes `filesAnalyzed: 0`（真实跳过）；D152 annotations 继续有效（nanobot service.py 0/0/0）；pytest 56/56 PASS。
+- Followup commit 新增 **D154**（per-env pythonVersion 偏差 pyproject floor）+ **D155**（fresh-clone pyright prereq 检查）。
+
+### 本阶段新增 Deferred（5 项，全 🧹 tech-debt，Phase 4 前清）
+
+| ID | 摘要 | 触发 |
+|----|------|------|
+| D151 | harness.rs hook envelope 三处 dispatch 缺 call-site 回归测试，D136 xfail 掩码会掩盖 `.with_event(...)` 被误删 | T1 code review |
+| D152 | grpcio-tools `.pyi` 拒 int，12 处 `# type: ignore` 绕过；跟踪上游或写 post-process `.pyi` 脚本 | T3 descope |
+| D153 | `gen_runtime_proto.py` 假设 layout，Dockerfile 用 symlink 绕过；加 `--out-dir` override 去 hack | T4 code review |
+| D154 | pyrightconfig per-env pythonVersion 跟随 installed venv 而非 pyproject `>=3.12` floor | T5 code review |
+| D155 | fresh clone 缺 `.venv` 会让 pyright fallback 到根 venv 产生 500+ 假 unresolved | T5 code review |
+
+### 技术变更
+
+- `crates/grid-engine/src/agent/harness.rs`（+39/-6，3 处 dispatch wiring）
+- `tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/session_orchestrator.py`（+61/-60，helper 抽取）
+- `lang/{nanobot,pydantic-ai}-runtime-python/src/.../service.py`（+16/-13，12 处 `# type: ignore` 注解）
+- `scripts/gen_runtime_proto.py`（新建，174 LOC）
+- 4 份 `build_proto.py` 删除（`-295` LOC）
+- `Makefile`（+8/-2，4 个对称 proto-gen target）
+- `lang/claude-code-runtime-python/Dockerfile`（+11/-3，symlink 适配）
+- `pyrightconfig.json`（新建，116 LOC）
+- `docs/design/EAASP/DEFERRED_LEDGER.md`（D140/D145/D146/D147/D150 全 ✅ CLOSED + D151-D155 新增 + §状态变更日志 多行）
+
+### 测试结果
+
+- **Rust**: `cargo test -p grid-engine` 2385/0 fail/4 ignored；`grid-runtime` 109/0/2；parity tests 10/10。
+- **Python contract**: `pytest tests/contract/contract_v1/test_hook_envelope.py --runtime=grid` Stop 2/2 PASS（xfail flip，D140 closed signal），Pre/Post 残 3 xfail → D136。
+- **Python runtime suites**: nanobot 36/36 + pydantic-ai 4/4 + claude-code test_service 25/25 + L4 subset 20/20 = 85/85 PASS。
+- **Pyright**: v1.1.408 repo-wide 103 errors + 8 warnings（全部 pre-existing，与 T5 config 无关）；nanobot/pydantic-ai service.py 0/0/0（D152 annotations 生效）。
+- **Stub byte-parity**: `scripts/gen_runtime_proto.py` regen 后 4/4 包 `diff -r` 0 diff。
+
+### 未决项
+
+本阶段 5 项 Deferred（D140/D145/D146/D147/D150）全部关闭。新增 5 项全转入 Phase 4 前清单（D151-D155，全 🧹 tech-debt）。
+
+### 下一步建议
+
+1. 推 main（`git log origin/main..main` 查未推 commit 数，与 Phase 3.5 遗留 275 叠加）。
+2. Phase 4 启动前清 5 项新 Deferred（D151-D155）—— 预计 < 1 天。
+3. D148（pydantic-ai test bench 加厚）/ D149（ccb TS enum SoT 同步）仍是 P1-active，待 Phase 4 前处理。
+
+---
+
 ## Phase 3.5 — chunk_type Unification (2026-04-20 🟢 Completed 19/19 @ 5b13898)
 
 ### 主题
