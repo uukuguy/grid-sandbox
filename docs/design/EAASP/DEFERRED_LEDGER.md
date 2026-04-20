@@ -361,6 +361,7 @@
 | 2026-04-20 | D153 | **新增** 🧹 tech-debt | T4 code reviewer 发现 Dockerfile symlink 是 paper cut — 加 `--out-dir` override flag 可去除。Phase 4 runtime Dockerfile 增殖前完成。 |
 | 2026-04-20 | gen_runtime_proto.py | T4 followup | Black reformat（I1）+ 注册表 `pkg_prefix == f'{src_pkg}._proto'` import-time invariant assertion（I2）；byte-parity 验证仍 0 diff。 |
 | 2026-04-20 | D154, D155 | **新增** 🧹 tech-debt | T5 code reviewer 发现: D154 per-env pythonVersion 跟随 installed venv 而非 pyproject 声明的 `>=3.12` floor；D155 fresh clone 缺 `.venv` 时 pyright fallback 到根 `.venv`（无 grpc）→ 500+ 假 unresolved。 |
+| 2026-04-20 | D151 | 🧹 tech-debt → ✅ CLOSED | Phase 4a T1 — `crates/grid-engine/tests/harness_envelope_wiring_test.rs` 3 tests (PreToolUse / PostToolUse / Stop) with spy HookHandler + StopHook capturing ctx.event. 手工 delete .with_event(...) at any of harness.rs:1766/2236/2390 now fails the corresponding test. grid-engine regression 2385+3=2388 PASS. |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -376,7 +377,7 @@
 
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
-| ✅ **closed** | 32 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D146, D147, D150 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround)；Phase 3.6 T4 新增：D150；Phase 3.6 T5 新增：D146 |
+| ✅ **closed** | 33 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D146, D147, D150, D151 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround)；Phase 3.6 T4 新增：D150；Phase 3.6 T5 新增：D146；Phase 4a T1 新增：D151 |
 | 🔄 **superseded** | 3 | D27→D54, D40→D54, D50→D117 (renamed) | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
@@ -414,13 +415,13 @@
 | **D148** | pydantic-ai-runtime test bench 只有 4 个 scaffold 测试 — 与其它 runtime 的测试密度不匹配 | Phase 3.5 S1.T6 review | 🟡 P1-active | 补 sdk_wrapper 等价测试 + agent loop 覆盖；Phase 4 前 |
 | **D149** | ccb-runtime-ts `src/proto/types.ts` hand-written enum 无 SoT 同步保障 — proto 新增 variant 时 TS 不会自动失败 | Phase 3.5 S1.T7 review | 🟡 P1-active | 引入 @bufbuild/protoc-gen-es 或 protobuf.js + build step；或在 proto 加 guard 注释 + CI grep 对比 |
 | **D150** | `nanobot/pydantic-ai` 两份 `build_proto.py` 与 `claude-code-runtime-python/build_proto.py` 内容重复（仅包名不同） | Phase 3.5 S0 | ✅ CLOSED | Phase 3.6 T4 — 4 份 `build_proto.py`（含 `tools/eaasp-l4-orchestration/`）抽到 `scripts/gen_runtime_proto.py`（注册表 + `--package-name` + `--proto-files` override）；Makefile 4 target（含新增 `nanobot-runtime-proto` / `pydantic-ai-runtime-proto`）统一；Dockerfile `claude-code-runtime-python` 同步。regen 后 stub byte-parity 0 diff |
-| **D151** | harness.rs hook envelope 三处 dispatch 缺少 call-site 回归测试 — `.with_event(...)` 被误删后，D136 xfail 掩码会掩盖回归 | Phase 3.6 T1 code review | 🧹 tech-debt | 补 `harness_envelope_wiring_test.rs` 用 spy HookHandler / StopHook 断言收到的 ctx.event 字段等于 "PreToolUse"/"PostToolUse"/"Stop"（~50 LOC）；Phase 3.6 signoff 前 |
+| **D151** | harness.rs hook envelope 三处 dispatch 缺少 call-site 回归测试 — `.with_event(...)` 被误删后，D136 xfail 掩码会掩盖回归 | Phase 3.6 T1 code review | ✅ CLOSED | Phase 4a T1 — `crates/grid-engine/tests/harness_envelope_wiring_test.rs`（3 tests, spy `HookHandler` + spy `StopHook` 捕获 `ctx.event`），断言 PreToolUse / PostToolUse / Stop 三处 dispatch 均 surface ADR-V2-006 §2 literal。手工 delete `.with_event(...)` at harness.rs:1766/2236/2390 将分别令对应测试 fail。 |
 | **D152** | `grpcio-tools` proto3 enum `.pyi` stubs 拒绝 int 参数而 runtime 接受 — 当前用 `# type: ignore[arg-type]` 绕过，12 处（ChunkType + CredentialMode）| Phase 3.6 T3 descope | 🧹 tech-debt | 跟踪 `grpcio-tools` 或 `mypy-protobuf` 上游支持 int-accepting stubs；或写 post-process `.pyi` 脚本（在 T4 `scripts/gen_runtime_proto.py` 里）|
 | **D153** | `scripts/gen_runtime_proto.py` 假设 `<repo>/lang/<pkg>/src/<mod>/_proto` 输出布局 — Dockerfile 构建时用 `ln -s /build/src /build/lang/.../src` 绕过 layout mismatch，下次 nanobot/pydantic-ai Dockerfile 落地会重复 hack | Phase 3.6 T4 code review | 🧹 tech-debt | 加 `--out-dir` override flag（script 5 LOC）+ Dockerfile 去掉 symlink（-8 LOC，+1 flag arg）；Phase 4 新 runtime Dockerfile 前完成 |
 | **D154** | `pyrightconfig.json` per-env `pythonVersion` 锁到本机 installed venv（7×3.14 / 1×3.12），而 package `pyproject.toml` 都声明 `>=3.12` — 3.13+-only 语法会溜过检查，fresh clone 用 3.12 venv 时可能在 IDE 里亮红 | Phase 3.6 T5 code review | 🧹 tech-debt | 所有 per-env `pythonVersion: "3.12"`（与 declared floor 对齐）；或去掉 per-env version 让顶层 3.12 fallback 接管 |
 | **D155** | Fresh-clone / 缺 `.venv` 时 `pyright` 会 fallback 到仓库根 `.venv`（Python 3.12 无 grpc）造成 500+ unresolved imports 假失败 — 未来加 CI pyright gate 时会第一次踩 | Phase 3.6 T5 code review | 🧹 tech-debt | `scripts/check-pyright-prereqs.sh` 预检 9 个 venv 存在 + README/CLAUDE.md 一行说明；或 `make setup` 里 `uv sync` 覆盖全 9 包 |
 
-**合计新增：11 项 Deferred（4 ✅ CLOSED + 2 🟡 P1-active + 5 🧹 tech-debt）**
+**合计新增：11 项 Deferred（5 ✅ CLOSED + 2 🟡 P1-active + 4 🧹 tech-debt）**
 
 所有条目在 Phase 3.5 S2.T1 / S3.T1 / S3.T2 审查中由实现者或审查者提出，均为非阻塞性遗留，不影响 ADR-V2-021 的签收。
 
