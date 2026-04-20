@@ -357,6 +357,7 @@
 | 2026-04-20 | D152 | 扩围 10→12 | Phase 3.6 T3 follow-up — Pyright surfaced 2 个 credential_mode=0 site (nanobot/service.py:273, pydantic-ai/service.py:131)，同类 ADR-V2-021 proto enum int-on-wire 问题，annotated. |
 | 2026-04-20 | D152 | 备注扩展 | T3 reviewer 发现: (1) `[arg-type]` 是 mypy 语法；Pyright 当 blanket 接受（`# pyright: ignore[reportArgumentType]` 才是 tool-native），上游切换时需重写 12 处。(2) claude-code-runtime/service.py:790 `credential_mode=runtime_pb2.Capabilities.DIRECT` 疑似同类（attribute-access form），未 annotate — 等 T5 Pyright 配置就位后统一 sweep。hermes-runtime 已冻结（ADR-V2-017），不处理。 |
 | 2026-04-20 | D150 | 🧹 tech-debt → ✅ CLOSED | Phase 3.6 T4 — 4 份 build_proto.py（3 lang/*-python + 1 tools/eaasp-l4-orchestration）抽到 scripts/gen_runtime_proto.py 单一 SSOT（`--package-name` 注册表 + `--proto-files` override）；Makefile 4 target 对称（新增 `nanobot-runtime-proto` / `pydantic-ai-runtime-proto`）+ `l4-proto-gen` / `claude-runtime-proto` rewired；`lang/claude-code-runtime-python/Dockerfile` 同步。regen 后 stub 字节对齐（diff -r 0 diff，4/4 包）；pytest 85/85 PASS（claude-code 25 + nanobot 36 + pydantic-ai 4 + L4 subset 20）. |
+| 2026-04-20 | D146 | 🧹 tech-debt → ✅ CLOSED | Phase 3.6 T5 — `pyrightconfig.json` 落地 @ 10 package executionEnvironments（`.venv/lib/python{ver}/site-packages` extraPaths + per-env pythonVersion: 7×3.14 + mock-scada/scripts 3.12）+ exclude hermes（ADR-V2-017 frozen）+ `tools/archive/**` + `reportMissingTypeStubs: false` / `reportMissingModuleSource: none` + strict off. Pyright v1.1.408 本地 regression 236→8 warnings（import 归位）；D152 `# type: ignore` 继续生效（nanobot service.py 0 errors/0 warnings）. pytest 56/56 PASS（nanobot 36 + L4 chunk+orchestrator 20）. |
 | 2026-04-20 | D153 | **新增** 🧹 tech-debt | T4 code reviewer 发现 Dockerfile symlink 是 paper cut — 加 `--out-dir` override flag 可去除。Phase 4 runtime Dockerfile 增殖前完成。 |
 | 2026-04-20 | gen_runtime_proto.py | T4 followup | Black reformat（I1）+ 注册表 `pkg_prefix == f'{src_pkg}._proto'` import-time invariant assertion（I2）；byte-parity 验证仍 0 diff。 |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
@@ -374,7 +375,7 @@
 
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
-| ✅ **closed** | 31 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D147, D150 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround)；Phase 3.6 T4 新增：D150 |
+| ✅ **closed** | 32 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D146, D147, D150 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround)；Phase 3.6 T4 新增：D150；Phase 3.6 T5 新增：D146 |
 | 🔄 **superseded** | 3 | D27→D54, D40→D54, D50→D117 (renamed) | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
@@ -407,7 +408,7 @@
 | ID | 标题 | 引入 | 状态 | 去向 |
 |----|------|------|------|------|
 | **D145** | session_orchestrator.py `delta_buf` + `ctype == "text_delta"` 在 `send_message` / `stream_message` 重复 | Phase 3.5 S2.T1 review | ✅ CLOSED | Phase 3.6 T2 抽 `_accumulate_delta` + `_record_coalesced_deltas` helpers；S2.T2 已关闭 CLI 侧 |
-| **D146** | Pyright workspace config 未指向 per-package `.venv` — 编辑器 import 全报 unresolved | Phase 3.5 S2.T1 diagnostics | 🧹 tech-debt | 更新 pyrightconfig.json 或 workspace settings |
+| **D146** | Pyright workspace config 未指向 per-package `.venv` — 编辑器 import 全报 unresolved | Phase 3.5 S2.T1 diagnostics | ✅ CLOSED | Phase 3.6 T5 — `pyrightconfig.json` 落地 @ 10 package executionEnvironments（`.venv/lib/python{ver}/site-packages` extraPaths + per-env pythonVersion）+ exclude hermes（ADR-V2-017 frozen）+ `tools/archive/**` + `reportMissingTypeStubs: false` / `reportMissingModuleSource: none` + strict off. Pyright v1.1.408 本地 regression 236→8 warnings（import 归位）；D152 `# type: ignore` 继续生效 |
 | **D147** | Python proto3 enum `.pyi` stub 声明 `ChunkType \| str \| None` 拒绝 int，但 runtime 接受 — Pyright strict mode 噪音 | Phase 3.5 S0 → S1 diagnostics | ✅ CLOSED | Phase 3.6 T3 descope — 10 处 `# type: ignore[arg-type]  # ADR-V2-021 ChunkType int-on-wire` 绕过 grpcio-tools stub 限制；真正根因追踪见 D152 |
 | **D148** | pydantic-ai-runtime test bench 只有 4 个 scaffold 测试 — 与其它 runtime 的测试密度不匹配 | Phase 3.5 S1.T6 review | 🟡 P1-active | 补 sdk_wrapper 等价测试 + agent loop 覆盖；Phase 4 前 |
 | **D149** | ccb-runtime-ts `src/proto/types.ts` hand-written enum 无 SoT 同步保障 — proto 新增 variant 时 TS 不会自动失败 | Phase 3.5 S1.T7 review | 🟡 P1-active | 引入 @bufbuild/protoc-gen-es 或 protobuf.js + build step；或在 proto 加 guard 注释 + CI grep 对比 |
@@ -416,7 +417,7 @@
 | **D152** | `grpcio-tools` proto3 enum `.pyi` stubs 拒绝 int 参数而 runtime 接受 — 当前用 `# type: ignore[arg-type]` 绕过，12 处（ChunkType + CredentialMode）| Phase 3.6 T3 descope | 🧹 tech-debt | 跟踪 `grpcio-tools` 或 `mypy-protobuf` 上游支持 int-accepting stubs；或写 post-process `.pyi` 脚本（在 T4 `scripts/gen_runtime_proto.py` 里）|
 | **D153** | `scripts/gen_runtime_proto.py` 假设 `<repo>/lang/<pkg>/src/<mod>/_proto` 输出布局 — Dockerfile 构建时用 `ln -s /build/src /build/lang/.../src` 绕过 layout mismatch，下次 nanobot/pydantic-ai Dockerfile 落地会重复 hack | Phase 3.6 T4 code review | 🧹 tech-debt | 加 `--out-dir` override flag（script 5 LOC）+ Dockerfile 去掉 symlink（-8 LOC，+1 flag arg）；Phase 4 新 runtime Dockerfile 前完成 |
 
-**合计新增：9 项 Deferred（3 ✅ CLOSED + 2 🟡 P1-active + 4 🧹 tech-debt）**
+**合计新增：9 项 Deferred（4 ✅ CLOSED + 2 🟡 P1-active + 3 🧹 tech-debt）**
 
 所有条目在 Phase 3.5 S2.T1 / S3.T1 / S3.T2 审查中由实现者或审查者提出，均为非阻塞性遗留，不影响 ADR-V2-021 的签收。
 

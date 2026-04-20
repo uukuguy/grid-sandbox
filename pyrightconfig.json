@@ -1,0 +1,112 @@
+{
+  "include": [
+    "lang/claude-code-runtime-python/src",
+    "lang/nanobot-runtime-python/src",
+    "lang/pydantic-ai-runtime-python/src",
+    "tools/eaasp-l4-orchestration/src",
+    "tools/eaasp-l3-governance/src",
+    "tools/eaasp-l2-memory-engine/src",
+    "tools/eaasp-cli-v2/src",
+    "tools/mock-scada/src",
+    "sdk/python/src",
+    "scripts"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules",
+    "**/target",
+    "**/.venv",
+    "**/dist",
+    "**/build",
+    "lang/hermes-runtime-python/**",
+    "tools/archive/**"
+  ],
+  "pythonVersion": "3.12",
+  "venvPath": ".",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "lang/claude-code-runtime-python",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "lang/claude-code-runtime-python/.venv/lib/python3.14/site-packages",
+        "lang/claude-code-runtime-python/src"
+      ]
+    },
+    {
+      "root": "lang/nanobot-runtime-python",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "lang/nanobot-runtime-python/.venv/lib/python3.14/site-packages",
+        "lang/nanobot-runtime-python/src"
+      ]
+    },
+    {
+      "root": "lang/pydantic-ai-runtime-python",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "lang/pydantic-ai-runtime-python/.venv/lib/python3.14/site-packages",
+        "lang/pydantic-ai-runtime-python/src"
+      ]
+    },
+    {
+      "root": "tools/eaasp-l4-orchestration",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "tools/eaasp-l4-orchestration/.venv/lib/python3.14/site-packages",
+        "tools/eaasp-l4-orchestration/src"
+      ]
+    },
+    {
+      "root": "tools/eaasp-l3-governance",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "tools/eaasp-l3-governance/.venv/lib/python3.14/site-packages",
+        "tools/eaasp-l3-governance/src"
+      ]
+    },
+    {
+      "root": "tools/eaasp-l2-memory-engine",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "tools/eaasp-l2-memory-engine/.venv/lib/python3.14/site-packages",
+        "tools/eaasp-l2-memory-engine/src"
+      ]
+    },
+    {
+      "root": "tools/eaasp-cli-v2",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "tools/eaasp-cli-v2/.venv/lib/python3.14/site-packages",
+        "tools/eaasp-cli-v2/src"
+      ]
+    },
+    {
+      "root": "tools/mock-scada",
+      "pythonVersion": "3.12",
+      "extraPaths": [
+        "tools/mock-scada/.venv/lib/python3.12/site-packages",
+        "tools/mock-scada/src"
+      ]
+    },
+    {
+      "root": "sdk/python",
+      "pythonVersion": "3.14",
+      "extraPaths": [
+        "sdk/python/.venv/lib/python3.14/site-packages",
+        "sdk/python/src"
+      ]
+    },
+    {
+      "root": "scripts",
+      "pythonVersion": "3.12",
+      "extraPaths": [
+        ".venv/lib/python3.12/site-packages"
+      ]
+    }
+  ],
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "reportMissingModuleSource": "none",
+  "strict": []
+}
