@@ -58,6 +58,11 @@ setup:
 check-pyright-prereqs:
 	scripts/check-pyright-prereqs.sh
 
+# 校验 proto ChunkType 与 lang/ccb-runtime-ts/src/proto/types.ts 手写 enum 同步
+# Option B / D149: proto 新增 variant 必须同步到 TS side，否则 CI 失败
+check-ccb-types-ts-sync:
+	scripts/check-ccb-types-ts-sync.sh
+
 # ============================================================
 # 后端命令
 # ============================================================

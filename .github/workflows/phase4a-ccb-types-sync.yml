@@ -1,0 +1,37 @@
+name: Phase 4a — ccb-runtime-ts types.ts sync
+
+# D149 guard (Option B). ccb-runtime-ts uses @grpc/proto-loader for dynamic
+# messages but hand-mirrors the ChunkType enum in src/proto/types.ts. This
+# workflow fails the PR if the proto adds a CHUNK_TYPE_* variant that the
+# TS file has not echoed. Bash-only; no Python/Rust/Bun setup needed.
+#
+# Security note: the single run: step invokes a fixed script path. Inputs
+# to the script are two in-repo files; no github.event.* context is ever
+# interpolated into shell commands.
+
+on:
+  pull_request:
+    paths:
+      - 'proto/eaasp/runtime/v2/common.proto'
+      - 'lang/ccb-runtime-ts/src/proto/types.ts'
+      - 'scripts/check-ccb-types-ts-sync.sh'
+      - '.github/workflows/phase4a-ccb-types-sync.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'proto/eaasp/runtime/v2/common.proto'
+      - 'lang/ccb-runtime-ts/src/proto/types.ts'
+      - 'scripts/check-ccb-types-ts-sync.sh'
+      - '.github/workflows/phase4a-ccb-types-sync.yml'
+  workflow_dispatch:
+
+jobs:
+  ccb-types-sync:
+    name: ChunkType proto ↔ ts sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ccb-runtime-ts sync guard
+        run: bash scripts/check-ccb-types-ts-sync.sh

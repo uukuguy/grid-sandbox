@@ -126,6 +126,8 @@ message SessionPayload {
 // 关闭枚举 — 新增取值必须先改 proto + 同步扩展契约测试白名单，
 // 不允许在 runtime 层自行发送未定义值。
 // ADR-V2-021 (Phase 3.5 chunk_type 契约冻结).
+// @ccb-types-ts-sync  — must stay in sync with lang/ccb-runtime-ts/src/proto/types.ts
+//                       (D149, enforced by scripts/check-ccb-types-ts-sync.sh).
 enum ChunkType {
   CHUNK_TYPE_UNSPECIFIED           = 0;   // 禁止发送；proto 默认值占位
   CHUNK_TYPE_TEXT_DELTA            = 1;   // 流式 assistant 文本增量
