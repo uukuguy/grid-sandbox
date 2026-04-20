@@ -723,7 +723,13 @@ claude-runtime-setup:
 	cd lang/claude-code-runtime-python && uv sync --extra dev
 
 claude-runtime-proto:
-	cd lang/claude-code-runtime-python && uv run python build_proto.py
+	cd lang/claude-code-runtime-python && uv run python ../../scripts/gen_runtime_proto.py --package-name claude-code-runtime
+
+nanobot-runtime-proto:
+	cd lang/nanobot-runtime-python && uv run python ../../scripts/gen_runtime_proto.py --package-name nanobot-runtime
+
+pydantic-ai-runtime-proto:
+	cd lang/pydantic-ai-runtime-python && uv run python ../../scripts/gen_runtime_proto.py --package-name pydantic-ai-runtime
 
 claude-runtime-test:
 	cd lang/claude-code-runtime-python && uv run pytest tests/ -xvs
@@ -900,7 +906,7 @@ l4-setup:
 	cd tools/eaasp-l4-orchestration && uv venv .venv && uv pip install -e ".[dev]"
 
 l4-proto-gen:
-	cd tools/eaasp-l4-orchestration && uv run python build_proto.py
+	cd tools/eaasp-l4-orchestration && uv run python ../../scripts/gen_runtime_proto.py --package-name eaasp-l4-orchestration
 
 l4-start:
 	cd tools/eaasp-l4-orchestration && .venv/bin/python -m eaasp_l4_orchestration.main

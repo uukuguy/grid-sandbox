@@ -25,13 +25,21 @@ RUN uv sync --no-dev --frozen
 
 # Copy source
 COPY lang/claude-code-runtime-python/src/ src/
-COPY lang/claude-code-runtime-python/build_proto.py ./
+COPY scripts/gen_runtime_proto.py /build/scripts/gen_runtime_proto.py
 
 # Copy proto definitions
 COPY proto/ /proto/
 
-# Build proto stubs
-RUN PROTO_ROOT=/proto uv run python build_proto.py
+# Build proto stubs.
+# The consolidated script expects the repo-style layout `lang/<pkg>/src/<mod>`
+# under its REPO_ROOT (= parent of the scripts dir). Here /build is the fake
+# repo root and the runtime sources live directly under /build/src, so we
+# symlink /build/lang/claude-code-runtime-python/src → /build/src for the
+# script's output-path resolution.
+RUN mkdir -p /build/lang/claude-code-runtime-python && \
+    ln -s /build/src /build/lang/claude-code-runtime-python/src && \
+    PROTO_ROOT=/proto uv run python scripts/gen_runtime_proto.py \
+        --package-name claude-code-runtime
 
 # ── Runtime stage ──
 FROM python:3.12-slim-bookworm
