@@ -1,12 +1,12 @@
 # Grid Platform 下一会话指南
 
 **最后更新**: 2026-04-20 GMT+8
-**当前分支**: `main`（ahead `origin/main` by 275+11 commits — Phase 3.5 遗留 + Phase 3.6 新增）
-**当前状态**: EAASP v2.0 **Phase 3.6 🟢 COMPLETE 5/5** @ `b81f455` (sign-off 2026-04-20) → **Phase 4 待规划**
+**当前分支**: `main`（ahead `origin/main` by ~293 commits — Phase 3.5 遗留 + Phase 3.6 + Phase 4a）
+**当前状态**: EAASP v2.0 **Phase 4a 🟢 COMPLETE 7/7** @ `8629505` (sign-off 2026-04-20) → **Phase 4 待规划**
 
 ## 本会话重点
 
-**Phase 3.6 — Tech-debt Cleanup 完成**：5 项 Phase 3.5 审查遗留的 ready Deferred 全部关闭（D140/D145/D146/D147/D150），1–2 天工期、全低风险。详见 `docs/dev/WORK_LOG.md` 顶部条目。
+**Phase 4a — Pre-Phase-4 Debt Cleanup 完成**：7 项跨阶段 Deferred 全部关闭（D148/D149/D151/D152/D153/D154/D155）。5 commits landed this session 顶部（T5 + T5-fix + T6 + T6-fix + T7），T1-T4 在 prior session。Debt 水位归零，Phase 4 起点干净。详见 `docs/dev/WORK_LOG.md` 顶部条目。
 
 ## 项目进度
 
@@ -14,53 +14,47 @@
 - [x] Phase 2.5 — Container + MCP Pool（25/25 @ `844664d`）
 - [x] Phase 3 — L1 Runtime Functional Completeness（35/35 @ `8ee05fe`）
 - [x] Phase 3.5 — chunk_type Unification（19/19 @ `5b13898`）
-- [x] **Phase 3.6 — Tech-debt Cleanup（5/5 @ `b81f455`）← 本次**
-- [ ] Phase 4 — TBD（参考 ADR-V2-023 §P5 Leg B 激活条件 + `docs/plans/` backlog）
+- [x] Phase 3.6 — Tech-debt Cleanup（5/5 @ `b81f455`）
+- [x] **Phase 4a — Pre-Phase-4 Debt Cleanup（7/7 @ `8629505`）← 本次**
+- [ ] Phase 4 — TBD（参考 ADR-V2-023 §P5 Leg A vs Leg B 决策 + `docs/plans/` backlog）
 
 ## 下一步优先级
 
-1. **推 `origin/main`** —— 累积 286 unpushed commits（Phase 3.5 遗留 275 + Phase 3.6 新增 11）。先跑 `git log origin/main..main --oneline | wc -l` 确认数；再 `git push origin main`。
-2. **Phase 3.6 后续清单**（5 项新 Deferred，全 🧹 tech-debt，Phase 4 前完成）：
-   - **D151** — `crates/grid-engine/tests/harness_envelope_wiring_test.rs`：spy HookHandler/StopHook 断言 `ctx.event` 字段（~50 LOC）。阻止 D136 xfail 掩码掩盖 `.with_event(...)` 意外删除。
-   - **D152** — 上游 `grpcio-tools` / `mypy-protobuf` int-accepting stubs 跟踪；或 `scripts/gen_runtime_proto.py` 加 post-process `.pyi` 脚本。目前 12 处 `# type: ignore[arg-type]`。
-   - **D153** — `scripts/gen_runtime_proto.py` 加 `--out-dir` override flag（5 LOC）+ `lang/claude-code-runtime-python/Dockerfile` 去 symlink（-8 LOC）。Phase 4 runtime Dockerfile 增殖前完成。
-   - **D154** — `pyrightconfig.json` per-env `pythonVersion` 统一为 `"3.12"`（pyproject 声明的 floor）或完全去掉 per-env version 让顶层 3.12 fallback 接管。
-   - **D155** — `scripts/check-pyright-prereqs.sh` 预检 9 个 `.venv` 存在；或 `make setup` 覆盖全 9 包 `uv sync`。
-3. **Phase 4 前必清**（P1-active，跨阶段）：
-   - **D148** — pydantic-ai-runtime test bench 加厚（补 sdk_wrapper 等价测试 + agent loop 覆盖）。
-   - **D149** — `lang/ccb-runtime-ts/src/proto/types.ts` SoT 同步保障（@bufbuild/protoc-gen-es 或 proto guard 注释 + CI grep）。
+1. **推 `origin/main`（人决定时机）**—— 累积 ~293 unpushed commits（Phase 3.5 遗留 275 + Phase 3.6 新增 11 + Phase 4a 新增 7 + end-phase docs commit 1）。先 `git log origin/main..main --oneline | wc -l` 确认数，再 `git push origin main`。Phase 4a 明确列为 out-of-scope 保留人工决策。
+2. **Phase 4 产品范围讨论**（前置 ADR-V2-023）：
+   - **Leg A（EAASP 集成）continuation**：`grid-runtime` 作为 EAASP L1 flagship 继续硬化 —— 可能方向：multi-tenant isolation、performance tuning、skill catalog 扩展。
+   - **Leg B（Grid 独立产品）activation**：判断 ADR-V2-023 §P5 触发条件是否满足（当前 dormant crate `grid-platform` / `grid-server` / `grid-desktop` / `web*`）。
+   - 选择后 → `/dev-phase-manager:start-phase "Phase 4 - <topic>"` + `/gsd-discuss` 做 Socratic ideation。
+3. **可选清扫**（新 session 低优先）：
+   - `pydantic_ai.OpenAIModel → OpenAIChatModel` upstream rename（10 DeprecationWarnings 在 pydantic-ai 测试中，源头 `provider.py:39`）。
+   - claude-code-runtime `test_default_config` 预存 fail（`acceptEdits→bypassPermissions` drift from commit 6784994，MEMORY.md 已追踪）。
+   - 上游 `protocolbuffers/protobuf#25319` 如果 merge，`_loosen_enum_stubs` 变 no-op 可删。
 
 ## 关键代码路径
 
-- **Hook envelope (ADR-V2-006)**: `crates/grid-engine/src/hooks/context.rs`（struct/serialize）+ `crates/grid-engine/src/agent/harness.rs:1766/2236/2390`（3 个 `.with_event(...)` dispatch 位点）。
-- **Session orchestrator**: `tools/eaasp-l4-orchestration/src/eaasp_l4_orchestration/session_orchestrator.py:334-384`（`_accumulate_delta` + `_record_coalesced_deltas` helpers）+ `send_message` L438/L442/L468 / `stream_message` L535/L541/L567。
-- **Proto 生成 SSOT**: `scripts/gen_runtime_proto.py`（registry dict 4 行 + `--package-name` + `--proto-files`）+ Makefile `claude-runtime-proto` / `nanobot-runtime-proto` / `pydantic-ai-runtime-proto` / `l4-proto-gen` targets。
-- **Pyright 配置**: `pyrightconfig.json`（10 executionEnvironments，exclude hermes/archive，strict off）。
+- **Phase 4a 新增 scripts**:
+  - `scripts/check-ccb-types-ts-sync.sh` — ccb TS 枚举同步 guard（name + wire-int）。
+  - `scripts/check-pyright-prereqs.sh` — 9-venv 预检。
+  - `scripts/gen_runtime_proto.py:_loosen_enum_stubs` — proto3 enum union post-process。
+  - `scripts/gen_runtime_proto.py:--out-dir` — Dockerfile layout override flag。
+- **Phase 4a 新增 CI**:
+  - `.github/workflows/phase4a-ccb-types-sync.yml` — ccb 枚举 sync CI gate（轻量 bash workflow，~1s）。
+- **Phase 4a 新增 tests**:
+  - `crates/grid-engine/tests/harness_envelope_wiring_test.rs` — spy HookHandler/StopHook 回归（D151）。
+  - `lang/pydantic-ai-runtime-python/tests/test_provider.py` + `test_session.py` — 18 new tests（D148）。
+- **Proto stubs 已 widened**: 24 处 `_Union[EnumCls, str]` → `_Union[EnumCls, str, int]` 跨 4 Python 包。
 
 ## 关键文件
 
-- **Deferred 账本（SSOT）**: `docs/design/EAASP/DEFERRED_LEDGER.md` — 11 项 Phase 3.5-onward 新增（4 CLOSED + 2 P1-active + 5 tech-debt）
-- **ADR governance**: `/adr:status` 会话启动仪表盘；`/adr:trace <path>` 反查约束
-- **Phase stack**: `docs/dev/.phase_stack.json`（0 active 预期）
-- **归档 checkpoint**: `docs/plans/.checkpoint.archive.json`（Phase 3.6 被 end-phase 归档后覆盖 3.5 的）
-
-## ⚠️ Deferred 未清项（下次 session 启动时必查）
-
-> 本次 Phase 3.6 新增 5 项全部 🧹 tech-debt；加上 Phase 3.5 遗留的 D148/D149 P1-active，共 7 项待清。
-
-| 来源 Phase | ID | 摘要 | 类别 |
-|-----------|----|------|------|
-| Phase 3.5 S1.T6 | D148 | pydantic-ai-runtime 测试密度 | 🟡 P1-active |
-| Phase 3.5 S1.T7 | D149 | ccb TS enum SoT 同步 | 🟡 P1-active |
-| Phase 3.6 T1 | D151 | harness envelope call-site 回归测试 | 🧹 tech-debt |
-| Phase 3.6 T3 | D152 | grpcio-tools int-accepting stubs 上游跟踪 | 🧹 tech-debt |
-| Phase 3.6 T4 | D153 | Dockerfile symlink → `--out-dir` override | 🧹 tech-debt |
-| Phase 3.6 T5 | D154 | pyrightconfig pythonVersion 对齐 pyproject floor | 🧹 tech-debt |
-| Phase 3.6 T5 | D155 | fresh-clone pyright prereq 检查 | 🧹 tech-debt |
+- **Deferred 账本（SSOT）**: `docs/design/EAASP/DEFERRED_LEDGER.md` — Phase 4a 关闭 D148/D149/D152（+ T1-T4 已关 D151/D153/D154/D155）。0 P1-active 剩余。
+- **ADR governance**: `/adr:status` 会话启动仪表盘；`/adr:trace <path>` 反查约束；ADR-V2-023 是 Phase 4 前置决策。
+- **Phase stack**: `docs/dev/.phase_stack.json`（end-phase 后 0 active 预期）。
+- **归档 checkpoint**: `docs/plans/.checkpoint.archive.json`（Phase 4a 归档后覆盖 3.6 的）。
+- **本阶段 plan**: `docs/plans/2026-04-20-phase4a-debt-cleanup.md`（Verification Checklist 全 ✅）。
 
 ## 启动 checklist
 
-1. `/adr:status` — 看当前 ADR 健康度 + 近期变更
-2. `git log origin/main..main --oneline | wc -l` — 确认 unpushed commit 数（预期 ~286）
-3. `cat docs/dev/.phase_stack.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('active:', len(d['active_phases']))"` — 应为 0
-4. Phase 4 规划：参考 ADR-V2-023 §P5（Leg B 激活条件）+ `docs/plans/` 中待规划项
+1. `/adr:status` — 看当前 ADR 健康度 + 近期变更（ADR-V2-023 是 Phase 4 方向选择的前置）。
+2. `git log origin/main..main --oneline | wc -l` — 确认 unpushed commit 数（预期 ~293）。
+3. `cat docs/dev/.phase_stack.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('active:', len(d['active_phases']))"` — 应为 0。
+4. Phase 4 规划：读 ADR-V2-023 §P5（Leg B 激活条件）+ `docs/plans/` 中待规划项（若有），然后 `/gsd-discuss` 或 `/dev-phase-manager:start-phase`。
