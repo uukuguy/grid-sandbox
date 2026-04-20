@@ -1,5 +1,78 @@
 # Grid Sandbox 工作日志
 
+## Phase 3.5 — chunk_type Unification (2026-04-20 🟢 Completed 19/19 @ 5b13898)
+
+### 主题
+
+把 `SendResponse.chunk_type` 从自由 string 升级为 proto enum `ChunkType`（8 变体），一次性消除 7 个 L1 runtime 的取值漂移，让契约通过 CI 硬门守护。ADR-V2-021 Accepted 2026-04-20。
+
+### 已完成
+
+**Stage S0 — proto contract freeze** (1/1)
+- S0.T1 `common.proto` 新增 `ChunkType` 枚举（8 变体 incl. `CHUNK_TYPE_WORKFLOW_CONTINUATION=7` D87 observability）+ `runtime.proto` `SendResponse.chunk_type` string→enum；Python stub 全量再生（claude-code / nanobot / pydantic-ai / eaasp-l4-orchestration） @ `5cc0e4a`
+
+**Stage S1 — 7 runtime 发送端** (7/7 + 2 follow-ups)
+- S1.T1 grid-runtime `chunk_type_to_proto()` boundary helper，domain 层保留 lowercase 字符串为 SSOT @ `e9472e4`
+- S1.T2 claw-code-runtime @ `235c626`
+- S1.T3 goose-runtime @ `bbd0421`
+- S1.T4 claude-code-runtime @ `b3d1e4b`
+- S1.T5 nanobot-runtime @ `e7cc61c`
+- S1.T6 pydantic-ai-runtime @ `fba52c3`
+- S1.T7 ccb-runtime-ts @ `fec7c1d`
+- Follow-up: certifier 改 ChunkType enum consumer @ `0477f8f`
+- Follow-up: claude-code mapper 遇未知 chunk_type 做 tracing 记录 @ `917bbdc`
+
+**Stage S2 — consumer 消费端** (2/2)
+- S2.T1 L4 `_chunk_type_to_wire(int) → str` 描述符驱动单点映射；移除 Phase 3 `tool_call_start` drift tolerance；修好 R4 风险（response_text 永远空）；stash+re-run 反证非 tautological @ `5494af1`
+- S2.T2 CLI `_ALLOWED_CHUNK_TYPES` frozenset + `_render_chunk` unification + Rich markup escape fix @ `b3fc066`
+
+**Stage S3 — 契约测试硬门** (3/3)
+- S3.T1 `tests/contract/cases/test_chunk_type_contract.py` 参数化 `--runtime=<name>`，白名单本地冻结作契约 SSOT @ `6fe7f60`
+- S3.T2 `.github/workflows/phase3-contract.yml` 7-runtime matrix + 8 Makefile `v2-phase3-contract-<rt>` targets @ `9c31623`
+- S3.T3 full regression sweep — `make v2-phase3-e2e` 112p/5s + `make v2-phase3-e2e-rust` 34p PASS
+
+**Stage S4 — E2E 验证** (3/3)
+- S4.T1+T2 7-runtime contract sweep — 5 PASS + 2 DEP-SKIP (goose/ccb local 缺依赖，CI runs them) @ `0bf1cf8`
+- S4.T3 phase3-verification-log.txt Phase 3.5 entry
+- Live-LLM human E2E deferred；等价 mock-driven contract test PASS
+
+**Stage S5 — ADR 终结 & memory** (3/3)
+- S5.T1 ADR-V2-021 Proposed → Accepted + Implementation Record；Makefile `PYTHON` env override 修复；phase3-contract.yml ADR F2 trace 注释 @ `6cb3de0`
+- S5.T2 MEMORY.md 更新 Phase 3.5 条目
+- S5.T3 close-out checkpoint 19/19 + 合并入 main @ `5b13898`
+
+### 技术变更
+
+- **proto 契约冻结**：`proto/eaasp/runtime/v2/common.proto` 新增 `enum ChunkType`（8 变体）；`runtime.proto SendResponse.chunk_type` `string` → `ChunkType`（i32 wire）
+- **单点映射原则**：Rust 在 gRPC boundary `service.rs` 统一 `*_to_proto(&str) → i32`，domain 层保留 lowercase 字符串 SSOT；Python 在 L4 `l1_client.py` `_chunk_type_to_wire(int) → str` 描述符驱动反向映射
+- **白名单守护**：L4 / CLI / 契约测试三处 `ALLOWED_WIRE` frozenset（contract test 本地冻结，不从 consumer import）
+- **Drift 可观测**：未知值 Rust `tracing::error!` + Python 返回 `""` 让白名单拒绝，保证漂移以测试失败暴露而非静默
+- **D87 observability 保留**：`CHUNK_TYPE_WORKFLOW_CONTINUATION=7` 保留 `workflow_continuation` wire 名，是合法变体而非 cleanup 目标
+
+### 测试结果
+
+- `make v2-phase3-e2e` — 112 passed, 5 skipped, 3 warnings in 17.50s
+- `make v2-phase3-e2e-rust` — aggregate_spill 15 + compaction_pipeline 15 + retry_graduated 4 PASS
+- Contract 7-runtime — grid / claude-code / nanobot / pydantic-ai / claw-code PASS；goose + ccb local DEP-SKIP（CI 跑完整 7 路）
+- `cargo check` clean；Python `pytest` + TS `bun test` 全 PASS
+
+### 产出 Deferred
+
+- **D145** session_orchestrator.py `delta_buf` + `ctype == "text_delta"` duplication（🧹 tech-debt）
+- **D146** Pyright workspace config 未指向 per-package `.venv`（🧹 tech-debt）
+- **D147** Python proto3 enum `.pyi` stub 对 int 的严格度问题（🧹 tech-debt）
+- **D148** pydantic-ai test bench 只有 4 个 scaffold 测试（🟡 P1-active，Phase 4 前补齐）
+- **D149** ccb-runtime-ts hand-written enum 无 SoT 同步保障（🟡 P1-active，建议 protoc-gen-es 或 CI grep）
+- **D150** `nanobot/pydantic-ai` 两份 `build_proto.py` 重复（🧹 tech-debt，抽 `scripts/gen_runtime_proto.py`）
+
+### 下一步
+
+- Phase 3.5 合并完毕（main ahead origin/main 275 commits）
+- Push to origin 需用户确认
+- Phase 4 规划时优先处理 D148 (pydantic-ai thickening) + D149 (ccb drift guard)
+
+---
+
 ## Phase 3 — L1 Runtime Functional Completeness (2026-04-18 🟢 Completed 35/35 @ 8ee05fe)
 
 ### 已完成
