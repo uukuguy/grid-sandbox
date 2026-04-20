@@ -1,5 +1,39 @@
 {
-  "active_phases": [],
+  "active_phases": [
+    {
+      "name": "Phase 4a — Pre-Phase-4 Debt Cleanup (D148/D149/D151-D155)",
+      "started_at": "2026-04-20T18:36:16+08:00",
+      "checkpoint": "docs/plans/.checkpoint.json",
+      "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
+      "plan": "docs/plans/2026-04-20-phase4a-debt-cleanup.md",
+      "progress": "0/7",
+      "last_updated": "2026-04-20T18:36:16+08:00",
+      "theme": "Phase 4 开始前清 7 项 Deferred：Phase 3.6 review 产生的 5 项 tech-debt + Phase 3.5 遗留的 2 项 P1-active。将跨阶段 debt 水位归零再讨论 Phase 4 产品范围",
+      "tasks": [
+        "T1 D151 harness.rs envelope call-site regression test (Rust, ~50 LOC)",
+        "T2 D154 pyrightconfig pythonVersion align to pyproject >=3.12 floor",
+        "T3 D155 scripts/check-pyright-prereqs.sh + make setup note",
+        "T4 D153 gen_runtime_proto.py --out-dir + Dockerfile symlink drop",
+        "T5 D149 ccb-runtime-ts types.ts SoT sync (protoc-gen-es or CI grep guard)",
+        "T6 D148 pydantic-ai-runtime test bench thickening (>=12 tests)",
+        "T7 D152 grpcio-tools int-stub upstream decision (wait vs post-process)"
+      ],
+      "sign_off_criteria": [
+        "D148/D149/D151/D152/D153/D154/D155 全 ✅ CLOSED (D152 可 documented open)",
+        "cargo test -p grid-engine 2385+N / 0 fail (N ≈ 5 from T1)",
+        "pyright 本地跑 clean after T2/T3",
+        "make v2-phase3-e2e 112/112 PASS regression",
+        "pydantic-ai pytest count >= 12 (from current 4) after T6"
+      ],
+      "out_of_scope": [
+        "git push origin main (separate human decision)",
+        "Phase 4 product scope definition (Leg A vs Leg B)",
+        "Any new feature work"
+      ],
+      "swarm_topology": "sequential",
+      "estimated_duration": "2-3 days (10-22h wall-clock)"
+    }
+  ],
   "suspended_phases": [],
   "archived_phases": [
     {
