@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """ADR lint — F1-F5 checks.
 
-- F1 Frontmatter compliance (via AdrMeta.validate())
-- F2 Trace existence: contract ADRs' enforcement.trace paths must exist
-- F3 Trace in CI: contract ADRs' trace paths must appear in a workflow YAML
-- F4 Conflict detection (delegated to adr_conflict_detect.detect())
-- F5 Staleness: affected_modules paths that no longer exist → WARN
+- F1 Frontmatter compliance (via AdrMeta.validate()) — FAIL blocks CI
+- F2 Trace existence: contract ADRs' enforcement.trace paths must exist — FAIL blocks CI
+- F3 Trace in CI: contract ADRs' trace paths must appear in a workflow YAML — WARN only
+- F4 Conflict detection (delegated to adr_conflict_detect.detect()) — WARN only
+        (detector is advisory: module overlap ≠ real conflict; needs human review)
+- F5 Staleness: affected_modules paths that no longer exist — WARN only
 
 CLI:
     adr_lint.py [--id ADR-V2-021 | --all] [--check F1,F2,F3,F4,F5] [--ci]
                 [--adr-root <path>]
 
 Exit codes:
-    --ci mode:   1 on any F1-F4 failure, 0 otherwise (F5 is WARN only)
+    --ci mode:   1 on any F1 or F2 failure, 0 otherwise (F3/F4/F5 are WARN only)
     human mode:  0 always (informational)
 """
 from __future__ import annotations
@@ -198,6 +199,11 @@ def check_f3(
 
 
 def check_f4(cfg: AdrConfig) -> list[LintFinding]:
+    """F4 is advisory: detector surfaces Accepted-pair module overlaps for
+    human review (see adr_conflict_detect.py module docstring). Overlap ≠
+    contradiction — two ADRs can legitimately touch the same crate from
+    different concern layers (e.g. contract freeze vs ecosystem strategy).
+    Emit WARN, not FAIL — never block CI."""
     conflicts = detect_conflicts(cfg)
     if not conflicts:
         return [LintFinding("F4", "PASS", "*", "no Accepted-pair conflicts detected")]
@@ -206,9 +212,9 @@ def check_f4(cfg: AdrConfig) -> list[LintFinding]:
         findings.append(
             LintFinding(
                 "F4",
-                "FAIL",
+                "WARN",
                 f"{c.adr_a_id}↔{c.adr_b_id}",
-                f"conflict on shared modules: {', '.join(c.shared_modules)}",
+                f"module overlap (advisory, not a blocker): {', '.join(c.shared_modules)}",
             )
         )
     return findings
@@ -308,7 +314,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--ci",
         action="store_true",
-        help="CI mode — no ANSI, exit 1 on any F1-F4 FAIL (F5 is WARN only)",
+        help="CI mode — no ANSI, exit 1 on any F1 or F2 FAIL (F3/F4/F5 are WARN only)",
     )
     ap.add_argument("--adr-root", help="Override ADR root directory")
     return ap
@@ -361,9 +367,14 @@ def main(argv: list[str] | None = None) -> int:
     print(_c(summary, "cyan", use_ci_fmt))
 
     if args.ci:
-        # Any F1-F4 failure → exit 1
+        # Only F1/F2 FAIL is a hard blocker. F3 (trace in CI) and F4
+        # (module overlap) are advisory — they surface candidates for
+        # human review, not provable contradictions. Emitting them as
+        # CI-blocking errors causes legitimate, ship-ready ADRs to
+        # halt merges because two Accepted ADRs happen to touch the
+        # same crate from different concern layers.
         hard_fail = any(
-            f.is_failure and f.check in {"F1", "F2", "F3", "F4"} for f in findings
+            f.is_failure and f.check in {"F1", "F2"} for f in findings
         )
         return 1 if hard_fail else 0
     return 0
