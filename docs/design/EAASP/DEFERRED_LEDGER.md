@@ -352,6 +352,8 @@
 | 2026-04-18 | D144-B | **✅ CLOSED** | Phase 3 S3.T5 — nanobot-runtime contract v1.1 certified: 42 PASS / 22 XFAIL (all XFAILs are D136-D139 deferred-by-design). skill-extraction E2E 8/8 PASS. mcp_client + session Stop hooks + ConnectMCP wired in S3.T3-T4. |
 | 2026-04-20 | D140 | 🟡 P1-defer → ✅ CLOSED | Phase 3.6 T1 — `crates/grid-engine/src/agent/harness.rs` 三处 dispatch 位点（PreToolUse @ L2220, PostToolUse @ L2362, Stop @ L1755）chain `.with_event(...).with_skill_id(...)`，切入 ADR-V2-006 §2/§3 envelope。Parity tests 10/10 PASS, grid-engine regression 2385/2385 PASS, `test_hook_envelope.py --runtime=grid` Stop scope 2/2 翻转为 PASS（Pre/Post 残留 3 xfail 归 D136 独立 root cause）|
 | 2026-04-20 | D145 | 🧹 tech-debt → ✅ CLOSED | Phase 3.6 T2 — `session_orchestrator.py` 抽 `_accumulate_delta` + `_record_coalesced_deltas` helpers，消除 `send_message` / `stream_message` `delta_buf` 闭包重复；yield / `chunks.append` 非对称性保留在调用处。`test_chunk_coalescing.py` 7/7 PASS + `test_session_orchestrator.py` 13/13 PASS。 |
+| 2026-04-20 | D147 | 🧹 tech-debt → ✅ CLOSED (workaround) | Phase 3.6 T3 — 10 处 `# type: ignore[arg-type]  # ADR-V2-021 ChunkType int-on-wire` 绕过 grpcio-tools stub 限制（`nanobot-runtime-python/src/nanobot_runtime/service.py` 5 处 + `pydantic-ai-runtime-python/src/pydantic_ai_runtime/service.py` 5 处）. pytest 全 PASS (nanobot 36/36 + pydantic-ai 4/4). 真正根因追踪至 D152. |
+| 2026-04-20 | D152 | **新增** 🧹 tech-debt | D147 descope 副产物 — 跟踪 grpcio-tools 上游 int-accepting stubs. |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -367,7 +369,7 @@
 
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
-| ✅ **closed** | 29 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145 |
+| ✅ **closed** | 30 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D147 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround) |
 | 🔄 **superseded** | 3 | D27→D54, D40→D54, D50→D117 (renamed) | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
@@ -401,13 +403,14 @@
 |----|------|------|------|------|
 | **D145** | session_orchestrator.py `delta_buf` + `ctype == "text_delta"` 在 `send_message` / `stream_message` 重复 | Phase 3.5 S2.T1 review | ✅ CLOSED | Phase 3.6 T2 抽 `_accumulate_delta` + `_record_coalesced_deltas` helpers；S2.T2 已关闭 CLI 侧 |
 | **D146** | Pyright workspace config 未指向 per-package `.venv` — 编辑器 import 全报 unresolved | Phase 3.5 S2.T1 diagnostics | 🧹 tech-debt | 更新 pyrightconfig.json 或 workspace settings |
-| **D147** | Python proto3 enum `.pyi` stub 声明 `ChunkType \| str \| None` 拒绝 int，但 runtime 接受 — Pyright strict mode 噪音 | Phase 3.5 S0 → S1 diagnostics | 🧹 tech-debt | 上游 grpcio-tools stub generator 改进 / 或重新生成带 IntFlag 扩展的 stub |
+| **D147** | Python proto3 enum `.pyi` stub 声明 `ChunkType \| str \| None` 拒绝 int，但 runtime 接受 — Pyright strict mode 噪音 | Phase 3.5 S0 → S1 diagnostics | ✅ CLOSED | Phase 3.6 T3 descope — 10 处 `# type: ignore[arg-type]  # ADR-V2-021 ChunkType int-on-wire` 绕过 grpcio-tools stub 限制；真正根因追踪见 D152 |
 | **D148** | pydantic-ai-runtime test bench 只有 4 个 scaffold 测试 — 与其它 runtime 的测试密度不匹配 | Phase 3.5 S1.T6 review | 🟡 P1-active | 补 sdk_wrapper 等价测试 + agent loop 覆盖；Phase 4 前 |
 | **D149** | ccb-runtime-ts `src/proto/types.ts` hand-written enum 无 SoT 同步保障 — proto 新增 variant 时 TS 不会自动失败 | Phase 3.5 S1.T7 review | 🟡 P1-active | 引入 @bufbuild/protoc-gen-es 或 protobuf.js + build step；或在 proto 加 guard 注释 + CI grep 对比 |
 | **D150** | `nanobot/pydantic-ai` 两份 `build_proto.py` 与 `claude-code-runtime-python/build_proto.py` 内容重复（仅包名不同） | Phase 3.5 S0 | 🧹 tech-debt | 抽到 `scripts/gen_runtime_proto.py` 接受包名参数 |
 | **D151** | harness.rs hook envelope 三处 dispatch 缺少 call-site 回归测试 — `.with_event(...)` 被误删后，D136 xfail 掩码会掩盖回归 | Phase 3.6 T1 code review | 🧹 tech-debt | 补 `harness_envelope_wiring_test.rs` 用 spy HookHandler / StopHook 断言收到的 ctx.event 字段等于 "PreToolUse"/"PostToolUse"/"Stop"（~50 LOC）；Phase 3.6 signoff 前 |
+| **D152** | `grpcio-tools` proto3 enum `.pyi` stubs 拒绝 int 参数而 runtime 接受 — 当前用 `# type: ignore[arg-type]` 绕过，10 处 | Phase 3.6 T3 descope | 🧹 tech-debt | 跟踪 `grpcio-tools` 或 `mypy-protobuf` 上游支持 int-accepting stubs；或写 post-process `.pyi` 脚本（在 T4 `scripts/gen_runtime_proto.py` 里）|
 
-**合计新增：7 项 Deferred（1 ✅ CLOSED + 2 🟡 P1-active + 4 🧹 tech-debt）**
+**合计新增：8 项 Deferred（2 ✅ CLOSED + 2 🟡 P1-active + 4 🧹 tech-debt）**
 
 所有条目在 Phase 3.5 S2.T1 / S3.T1 / S3.T2 审查中由实现者或审查者提出，均为非阻塞性遗留，不影响 ADR-V2-021 的签收。
 
