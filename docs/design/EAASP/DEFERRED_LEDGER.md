@@ -354,7 +354,8 @@
 | 2026-04-20 | D145 | 🧹 tech-debt → ✅ CLOSED | Phase 3.6 T2 — `session_orchestrator.py` 抽 `_accumulate_delta` + `_record_coalesced_deltas` helpers，消除 `send_message` / `stream_message` `delta_buf` 闭包重复；yield / `chunks.append` 非对称性保留在调用处。`test_chunk_coalescing.py` 7/7 PASS + `test_session_orchestrator.py` 13/13 PASS。 |
 | 2026-04-20 | D147 | 🧹 tech-debt → ✅ CLOSED (workaround) | Phase 3.6 T3 — 10 处 `# type: ignore[arg-type]  # ADR-V2-021 ChunkType int-on-wire` 绕过 grpcio-tools stub 限制（`nanobot-runtime-python/src/nanobot_runtime/service.py` 5 处 + `pydantic-ai-runtime-python/src/pydantic_ai_runtime/service.py` 5 处）. pytest 全 PASS (nanobot 36/36 + pydantic-ai 4/4). 真正根因追踪至 D152. |
 | 2026-04-20 | D152 | **新增** 🧹 tech-debt | D147 descope 副产物 — 跟踪 grpcio-tools 上游 int-accepting stubs. |
-| 2026-04-20 | D152 | 扩围 10→12 | Phase 3.6 T3 follow-up — Pyright surfaced 2 个 credential_mode=0 site (nanobot/service.py:272, pydantic-ai/service.py:131)，同类 ADR-V2-021 proto enum int-on-wire 问题，annotated. |
+| 2026-04-20 | D152 | 扩围 10→12 | Phase 3.6 T3 follow-up — Pyright surfaced 2 个 credential_mode=0 site (nanobot/service.py:273, pydantic-ai/service.py:131)，同类 ADR-V2-021 proto enum int-on-wire 问题，annotated. |
+| 2026-04-20 | D152 | 备注扩展 | T3 reviewer 发现: (1) `[arg-type]` 是 mypy 语法；Pyright 当 blanket 接受（`# pyright: ignore[reportArgumentType]` 才是 tool-native），上游切换时需重写 12 处。(2) claude-code-runtime/service.py:790 `credential_mode=runtime_pb2.Capabilities.DIRECT` 疑似同类（attribute-access form），未 annotate — 等 T5 Pyright 配置就位后统一 sweep。hermes-runtime 已冻结（ADR-V2-017），不处理。 |
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
