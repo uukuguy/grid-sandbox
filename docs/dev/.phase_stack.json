@@ -1,9 +1,11 @@
 {
-  "active_phases": [
+  "active_phases": [],
+  "suspended_phases": [],
+  "archived_phases": [
     {
       "name": "Phase 3.5 — chunk_type Unification (ADR-V2-021)",
       "started_at": "2026-04-19T22:40:00+08:00",
-      "checkpoint": "docs/plans/.checkpoint.json",
+      "checkpoint": "docs/plans/.checkpoint.archive.json",
       "guide": "docs/dev/NEXT_SESSION_GUIDE.md",
       "plan": "docs/plans/2026-04-19-v2-chunk-type-unification.md",
       "adr": "docs/design/EAASP/adrs/ADR-V2-021-chunk-type-contract-freeze.md",
@@ -11,8 +13,8 @@
       "last_updated": "2026-04-20T07:30:00+08:00",
       "branch": "worktree-phase3.5-chunk-type",
       "worktree_path": ".claude/worktrees/phase3.5-chunk-type",
-      "sign_off_commit": "6cb3de0",
-      "commit_count": 16,
+      "sign_off_commit": "5b13898",
+      "commit_count": 17,
       "theme": "把 SendResponse.chunk_type 从自由 string 升级为 proto enum，一次性消除 7 个 L1 runtime 的取值漂移",
       "stages": [
         "S0 proto contract freeze 1/1 ✅",
@@ -38,11 +40,11 @@
         "make v2-phase3-e2e 全 PASS",
         "ADR-V2-021 → Accepted",
         "MEMORY.md 更新"
-      ]
-    }
-  ],
-  "suspended_phases": [],
-  "archived_phases": [
+      ],
+      "completed_at": "2026-04-20T11:45:00+08:00",
+      "archived_at": "2026-04-20T11:45:00+08:00",
+      "notes": "Phase 3.5 COMPLETE 19/19 @ 5b13898. 16 phase commits (5cc0e4a..6cb3de0) + 1 close-out ff-merged to main. ADR-V2-021 Accepted 2026-04-20. 6 Deferred D145-D150 filed. Pending: git push origin main (275 commits)."
+    },
     {
       "name": "Phase 3 — L1 Runtime Functional Completeness",
       "started_at": "2026-04-18T06:28:08+08:00",
@@ -91,7 +93,12 @@
           "PreToolUse hook adr-guard.sh globally enabled (3-layer defense)",
           "ADR-V2-021 chunk_type contract freeze Proposed (hands off to Phase 3.5)"
         ],
-        "commits": ["99efb61", "de6b3f9", "f3b4198", "3017478"],
+        "commits": [
+          "99efb61",
+          "de6b3f9",
+          "f3b4198",
+          "3017478"
+        ],
         "health_after": {
           "F1_frontmatter_violations": "0 (was 6)",
           "F2_stale_dates": "2 (V2-021 future-dated Proposed only)",
