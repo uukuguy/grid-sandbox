@@ -103,7 +103,7 @@ async def test_chat_returns_oai_shape_dict():
     fake_result = MagicMock()
     fake_result.output = "hello from pydantic-ai"
 
-    async def fake_run(self, prompt, **kwargs):  # noqa: ARG001
+    async def fake_run(_self, _prompt, **_kwargs):
         return fake_result
 
     with patch.object(Agent, "run", fake_run):
@@ -123,12 +123,12 @@ async def test_chat_returns_oai_shape_dict():
 
 async def test_chat_uses_last_user_message_as_prompt():
     """chat() must extract the latest user message for Agent.run prompt."""
-    captured_prompt: dict = {}
+    captured_prompt: dict = {"value": "<unset>"}
 
     fake_result = MagicMock()
     fake_result.output = "acknowledged"
 
-    async def fake_run(self, prompt, **kwargs):  # noqa: ARG001
+    async def fake_run(_self, prompt, **_kwargs):
         captured_prompt["value"] = prompt
         return fake_result
 
@@ -154,7 +154,7 @@ async def test_chat_surfaces_agent_run_exceptions():
     class BoomError(RuntimeError):
         pass
 
-    async def boom_run(self, prompt, **kwargs):  # noqa: ARG001
+    async def boom_run(_self, _prompt, **_kwargs):
         raise BoomError("simulated provider failure")
 
     with patch.object(Agent, "run", boom_run):
