@@ -2,11 +2,21 @@
   "phase_name": "Phase 4a — Pre-Phase-4 Debt Cleanup (D148/D149/D151-D155)",
   "plan_file": "docs/plans/2026-04-20-phase4a-debt-cleanup.md",
   "created_at": "2026-04-20T18:36:16+08:00",
-  "updated_at": "2026-04-20T18:36:16+08:00",
-  "status": "design_complete_ready_for_execution",
+  "updated_at": "2026-04-20T19:15:00+08:00",
+  "status": "in_progress",
   "execution_mode": "subagent-driven-development",
   "total_tasks": 7,
-  "completed_tasks": [],
-  "next_task": "T1 — D151 harness envelope call-site regression test",
-  "notes": "7 ready Deferred bundled: 5 tech-debt from Phase 3.6 review (D151-D155) + 2 P1-active from Phase 3.5 (D148/D149). Sequential execution. Same subagent-driven-development loop as Phase 3.6. Total est 10-22h wall-clock."
+  "completed_tasks": [
+    "T1 — D151 harness envelope call-site regression test (@ 94e4fc6 + 0543be0)",
+    "T2 — D154 pyrightconfig pythonVersion align to floor (@ d4ca92e)",
+    "T3 — D155 check-pyright-prereqs.sh (@ 9b05180)",
+    "T4 — D153 gen_runtime_proto --out-dir + Dockerfile drop symlink (@ 9cff967)"
+  ],
+  "next_task": "T5 — D149 ccb-runtime-ts types.ts SoT sync",
+  "remaining_tasks": [
+    "T5 — D149 ccb-runtime-ts types.ts SoT sync (~2-4h, needs Option A/B evaluation)",
+    "T6 — D148 pydantic-ai test bench thickening (~4-8h, target >=12 tests from 4)",
+    "T7 — D152 grpcio-tools int-stub upstream decision (2h time-boxed)"
+  ],
+  "notes": "Phase 4a: 4/7 complete. T1-T4 are quick wins (all shipped this session with two-stage review on T1). T5-T7 paused for fresh context — they need unhurried review bandwidth. Start with T5; may need Option A vs B decision on ccb approach. T1 review caught real fmt drift issue — watch for surgical-fmt discipline in Rust edits. Harmless fmt-drift gotcha: `cargo fmt -p grid-engine -- <path>` WITHOUT --check reformats the whole crate; use `cargo fmt -p grid-engine -- --check <path>` to inspect then Edit the file manually or scope fmt carefully."
 }
