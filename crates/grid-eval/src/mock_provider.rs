@@ -321,6 +321,7 @@ mod tests {
             max_tokens: 100,
             temperature: None,
             tools: vec![],
+            tool_choice: None,
             stream: false,
         };
 
@@ -344,6 +345,7 @@ mod tests {
             max_tokens: 100,
             temperature: None,
             tools: vec![],
+            tool_choice: None,
             stream: false,
         };
 
@@ -367,6 +369,7 @@ mod tests {
             max_tokens: 100,
             temperature: None,
             tools: vec![],
+            tool_choice: None,
             stream: false,
         };
 
@@ -428,6 +431,7 @@ mod tests {
             max_tokens: 100,
             temperature: None,
             tools: vec![],
+            tool_choice: None,
             stream: false,
         };
 

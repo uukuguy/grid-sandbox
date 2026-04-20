@@ -597,6 +597,7 @@ async fn test_mock_provider_call_tracking() {
         max_tokens: 100,
         temperature: None,
         tools: vec![],
+        tool_choice: None,
         stream: false,
     };
 
@@ -618,6 +619,7 @@ async fn test_mock_provider_request_recording() {
         max_tokens: 256,
         temperature: None,
         tools: vec![],
+        tool_choice: None,
         stream: false,
     };
 
@@ -645,6 +647,7 @@ async fn test_mock_provider_tool_then_text_sequence() {
         max_tokens: 100,
         temperature: None,
         tools: vec![],
+        tool_choice: None,
         stream: false,
     };
 
