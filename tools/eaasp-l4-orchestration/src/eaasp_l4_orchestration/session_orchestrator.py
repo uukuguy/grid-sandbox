@@ -333,6 +333,56 @@ class SessionOrchestrator:
             "payload": payload,
         }
 
+    # ─── Shared chunk-coalescing helpers (see D145) ──────────────────────────
+    def _accumulate_delta(
+        self,
+        delta_buf: dict[str, str],
+        chunk: dict[str, Any],
+        full_text_parts: list[str],
+    ) -> bool:
+        """Fold a ``text_delta`` / ``thinking`` chunk into ``delta_buf``.
+
+        Returns ``True`` if the chunk was a token-level delta (so the caller
+        should skip the non-delta flush branch), ``False`` otherwise. Also
+        appends ``text_delta`` content to ``full_text_parts`` so callers keep
+        a linear running transcript for the final response.
+        """
+        ctype = chunk.get("chunk_type", "")
+        if ctype == "text_delta":
+            full_text_parts.append(chunk.get("content", ""))
+        if ctype in ("text_delta", "thinking"):
+            delta_buf[ctype] = delta_buf.get(ctype, "") + chunk.get("content", "")
+            return True
+        return False
+
+    async def _record_coalesced_deltas(
+        self,
+        session_id: str,
+        delta_buf: dict[str, str],
+        events: list[dict[str, Any]],
+    ) -> None:
+        """Flush buffered delta runs as one ``RESPONSE_CHUNK`` per chunk_type.
+
+        Persists each accumulated run via ``event_stream.append``, mirrors it
+        onto the outer ``events`` list, and clears the buffer so subsequent
+        runs start fresh. Empty buffer is a no-op.
+        """
+        if not delta_buf:
+            return
+        for ctype, content in list(delta_buf.items()):
+            if not content:
+                continue
+            coalesced = {"chunk_type": ctype, "content": content}
+            seq_c = await self.event_stream.append(
+                session_id,
+                "RESPONSE_CHUNK",
+                coalesced,
+            )
+            events.append(
+                {"seq": seq_c, "event_type": "RESPONSE_CHUNK", **coalesced}
+            )
+        delta_buf.clear()
+
     # ─── Contract 5 (partial): send_message ──────────────────────────────────
     async def send_message(self, session_id: str, content: str) -> dict[str, Any]:
         """Send a user message to L1 via gRPC Send (server-streaming).
@@ -382,40 +432,14 @@ class SessionOrchestrator:
         # events per session and blows past API pagination limits.
         delta_buf: dict[str, str] = {}  # chunk_type -> accumulated content
 
-        async def _flush_deltas() -> None:
-            if not delta_buf:
-                return
-            for ctype, content in list(delta_buf.items()):
-                if not content:
-                    continue
-                coalesced = {"chunk_type": ctype, "content": content}
-                seq_c = await self.event_stream.append(
-                    session_id,
-                    "RESPONSE_CHUNK",
-                    coalesced,
-                )
-                events.append(
-                    {"seq": seq_c, "event_type": "RESPONSE_CHUNK", **coalesced}
-                )
-            delta_buf.clear()
-
         try:
             async for chunk in l1.send(l1_sid, content):
                 chunks.append(chunk)
-                ctype = chunk.get("chunk_type", "")
-                if ctype == "text_delta":
-                    full_text_parts.append(chunk.get("content", ""))
-
-                # Token-level chunks accumulate in the buffer; other chunks
-                # flush the buffer first, then get recorded as-is.
-                if ctype in ("text_delta", "thinking"):
-                    delta_buf[ctype] = delta_buf.get(ctype, "") + chunk.get(
-                        "content", ""
-                    )
+                if self._accumulate_delta(delta_buf, chunk, full_text_parts):
                     continue
 
                 # Non-delta chunk → flush pending delta runs first.
-                await _flush_deltas()
+                await self._record_coalesced_deltas(session_id, delta_buf, events)
 
                 seq = await self.event_stream.append(
                     session_id,
@@ -441,7 +465,7 @@ class SessionOrchestrator:
                             session_id, exc,
                         )
             # Stream ended — flush any trailing delta run.
-            await _flush_deltas()
+            await self._record_coalesced_deltas(session_id, delta_buf, events)
         except L1RuntimeError as exc:
             seq_err = await self.event_stream.append(
                 session_id,
@@ -504,41 +528,17 @@ class SessionOrchestrator:
         # aggregate RESPONSE_CHUNK per contiguous run (for DB persistence
         # only). The SSE stream still yields every delta so downstream
         # consumers (UI, SSE clients) keep the typewriter experience.
-        delta_buf_stream: dict[str, str] = {}
-
-        async def _flush_deltas_stream() -> None:
-            if not delta_buf_stream:
-                return
-            for ctype, content in list(delta_buf_stream.items()):
-                if not content:
-                    continue
-                coalesced = {"chunk_type": ctype, "content": content}
-                seq_c = await self.event_stream.append(
-                    session_id,
-                    "RESPONSE_CHUNK",
-                    coalesced,
-                )
-                events.append(
-                    {"seq": seq_c, "event_type": "RESPONSE_CHUNK", **coalesced}
-                )
-            delta_buf_stream.clear()
+        delta_buf: dict[str, str] = {}
 
         try:
             async for chunk in l1.send(l1_sid, content):
-                ctype = chunk.get("chunk_type", "")
-                if ctype == "text_delta":
-                    full_text_parts.append(chunk.get("content", ""))
-
-                if ctype in ("text_delta", "thinking"):
-                    delta_buf_stream[ctype] = delta_buf_stream.get(ctype, "") + chunk.get(
-                        "content", ""
-                    )
+                if self._accumulate_delta(delta_buf, chunk, full_text_parts):
                     # Yield delta to SSE client unchanged for real-time UX.
                     yield {"event": "chunk", "data": chunk}
                     continue
 
                 # Non-delta chunk → flush pending delta runs first.
-                await _flush_deltas_stream()
+                await self._record_coalesced_deltas(session_id, delta_buf, events)
 
                 seq = await self.event_stream.append(
                     session_id,
@@ -564,7 +564,7 @@ class SessionOrchestrator:
 
                 yield {"event": "chunk", "data": chunk}
             # Stream ended — flush any trailing delta run.
-            await _flush_deltas_stream()
+            await self._record_coalesced_deltas(session_id, delta_buf, events)
         except L1RuntimeError as exc:
             seq_err = await self.event_stream.append(
                 session_id,
