@@ -3,9 +3,9 @@
   "design_file": null,
   "adr_file": "docs/design/EAASP/adrs/ADR-V2-021-chunk-type-contract-freeze.md",
   "context_file": null,
-  "phase": "initialized",
+  "phase": "execution",
   "created_at": "2026-04-19T22:40:00+08:00",
-  "updated_at": "2026-04-19T22:40:00+08:00",
+  "updated_at": "2026-04-20T05:45:00+08:00",
   "phase_name": "Phase 3.5 — chunk_type Unification (ADR-V2-021)",
   "theme": "把 SendResponse.chunk_type 从自由 string 升级为 proto enum，一次性消除 7 个 L1 runtime 的取值漂移，让每个 runtime 遵守同一套契约成为 CI 硬门",
   "total_tasks": 19,
@@ -13,45 +13,86 @@
     "S0": {
       "name": "proto contract freeze（串行，先导）",
       "tasks": 1,
-      "completed": 0,
+      "completed": 1,
       "parallel": false
     },
     "S1": {
       "name": "6 runtime 并行改发送端",
       "tasks": 7,
-      "completed": 0,
+      "completed": 7,
       "parallel": true,
-      "note": "S1.T1-T7 可 6-coder 并行；grid 已合规（字段类型切换）"
+      "note": "Batched into one implementer (user choice) to honor plan R1 — no intermediate compilable state pushed. 7 runtime commits + certifier + mapper-log."
     },
     "S2": {
       "name": "consumer 消费端",
       "tasks": 2,
-      "completed": 0,
-      "parallel": true
+      "completed": 2,
+      "parallel": false,
+      "note": "Executed sequentially — T1 L4 boundary first (fixes int→str wire), T2 CLI whitelist after."
     },
     "S3": {
       "name": "契约测试硬门",
       "tasks": 3,
-      "completed": 0,
-      "parallel": false
+      "completed": 3,
+      "parallel": false,
+      "note": "T1 contract test + T2 CI workflow + T3 full regression (112 pytest + 34 rust all PASS)."
     },
     "S4": {
       "name": "人工 E2E 验证",
       "tasks": 3,
       "completed": 0,
-      "parallel": false
+      "parallel": false,
+      "note": "Awaiting user execution. Runbook at docs/plans/2026-04-20-phase3.5-s4-manual-runbook.md."
     },
     "S5": {
       "name": "ADR 终结 & memory",
       "tasks": 3,
       "completed": 0,
-      "parallel": false
+      "parallel": false,
+      "note": "Blocked on S4 sign-off."
     }
   },
-  "completed_tasks": [],
-  "current_task": null,
+  "completed_tasks": [
+    "S0.T1 proto freeze + stub regen (5cc0e4a)",
+    "S1.T1 grid-runtime (e9472e4)",
+    "S1.T2 eaasp-claw-code-runtime (235c626)",
+    "S1.T3 eaasp-goose-runtime (bbd0421)",
+    "S1.T4 claude-code-runtime (b3d1e4b)",
+    "S1.T5 nanobot-runtime (e7cc61c)",
+    "S1.T6 pydantic-ai-runtime (fba52c3)",
+    "S1.T7 ccb-runtime (fec7c1d)",
+    "S1 follow-up: certifier chunk_type consumers (0477f8f)",
+    "S1 follow-up: claude-code mapper log-on-unknown (917bbdc)",
+    "S2.T1 L4 SSE _chunk_type_to_wire + response_text accumulation (5494af1)",
+    "S2.T2 CLI whitelist + _render_chunk unification (b3fc066)",
+    "S3.T1 contract test parametrized 7 runtimes (6fe7f60)",
+    "S3.T2 phase3-contract.yml + 8 Makefile targets (9c31623)",
+    "S3.T3 full regression sweep: make v2-phase3-e2e 112p/5s + make v2-phase3-e2e-rust 34p PASS"
+  ],
+  "current_task": "S4.T1 nanobot threshold-calibration manual E2E (awaiting user execution per runbook)",
   "first_task": "S0.T1 proto contract freeze — 改 common.proto + runtime.proto + 重生成 stub",
-  "execution_mode": null,
+  "execution_mode": "subagent-driven-development",
+  "branch": "worktree-phase3.5-chunk-type",
+  "worktree_path": ".claude/worktrees/phase3.5-chunk-type",
+  "commits_landed": [
+    "5cc0e4a", "e9472e4", "235c626", "bbd0421", "b3d1e4b",
+    "e7cc61c", "fba52c3", "fec7c1d", "0477f8f", "917bbdc",
+    "5494af1", "b3fc066", "6fe7f60", "9c31623"
+  ],
+  "regression_evidence": {
+    "v2-phase3-e2e": "112 passed, 5 skipped, 3 warnings in 17.50s",
+    "v2-phase3-e2e-rust": "aggregate_spill 15 + compaction_pipeline 15 + retry_graduated 4 PASS",
+    "contract-test-local": "grid + claude-code PASS 3/3 each via make v2-phase3-contract-<rt>"
+  },
+  "deferred_items_opened_this_phase": [
+    "D146 session_orchestrator.py delta_buf duplication between send_message / stream_message (P3)",
+    "D147 Pyright workspace config: point at per-package .venv so editor imports resolve (P3)",
+    "D148 Python proto .pyi stub strictness rejects int for enum fields though runtime accepts (P3)",
+    "D149 pydantic-ai test bench thickening — only 4 scaffold tests (P2)",
+    "D150 ccb-runtime-ts proto enum drift guard — hand-written enum no SoT link (P2)",
+    "D151 build_proto.py extraction — nanobot + pydantic-ai duplicate claude-code's (P3)"
+  ],
+  "adr_amendment": "ADR-V2-021 enum extended to include CHUNK_TYPE_WORKFLOW_CONTINUATION=7 (D87 observability). Change in-tree but not yet committed; S5.T1 (ADR Accept) will finalize.",
   "swarm_topology": "hierarchical",
   "swarm_max_agents": 8,
   "swarm_strategy": "specialized",
@@ -108,6 +149,6 @@
     "R4 L4 done summary response_text=\"\" 是 bug，S2.T1 修",
     "R5 thinking chunk 可选，不强制发；契约测试只断言合法性"
   ],
-  "notes": "Phase 3.5 initialized 2026-04-19 22:40. Rollout: 单 PR 推 main，一次 merge，不做 feature flag / 双写 / 同义词兼容（用户明确否决）。ADR-V2-021 Proposed 2026-04-19；落地后 Accepted。执行模式待用户选择（推荐 subagent-driven via RuFlo swarm hierarchical max-agents=8 specialized）。",
-  "memory_status": "Phase 3.5 initialized — 0/19 tasks, S0.T1 first"
+  "notes": "Phase 3.5 checkpoint 2026-04-20: 6/12 tasks (15/19 plan items) complete. 14 commits on worktree branch. Full regression PASS. Awaiting user to run S4 runbook (docs/plans/2026-04-20-phase3.5-s4-manual-runbook.md) — nanobot threshold-calibration + 6-runtime smoke. On return, close S4.T3 + S5.T1-T3 (ADR Accept + MEMORY). Merge via single PR to main once S4 passes.",
+  "memory_status": "Phase 3.5 S0+S1+S2+S3 landed, S4 handed off — 6/12 tasks, S4.T1 current"
 }
