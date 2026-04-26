@@ -1,13 +1,13 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-27T01:35:00.000Z",
+  "timestamp": "2026-04-27T03:50:00.000Z",
   "context": "default",
-  "phase": "4.0",
-  "phase_name": "Phase 4.0 plan-phase complete; awaiting /gsd-execute-phase 4.0",
-  "phase_dir": ".planning/phases/04.0-bootstrap-cleanup-gsd",
-  "plan": "04.0-01",
+  "phase": "4.1",
+  "phase_name": "Phase 4.1 discuss-phase complete; awaiting /gsd-plan-phase 4.1",
+  "phase_dir": ".planning/phases/04.1-discuss-audit-p5",
+  "plan": null,
   "task": null,
-  "total_tasks": 12,
+  "total_tasks": 14,
   "status": "paused",
   "completed_tasks": [
     {"id": "GSD-S0",  "name": "Step 0 cutover housekeeping (legacy docs / freeze guide / ADR-V2-019)", "status": "done", "commits": ["d14893d", "40158b1"]},
@@ -20,45 +20,51 @@
     {"id": "SPEC-R4",   "name": "调度 skill 规范评审 — Subagent 4 skill 边界 工具/人/知识/系统/信创 (research)", "status": "done"},
     {"id": "SPEC-V01",  "name": "调度 skill 规范 v0.1 — 合成 (导读 + 紧凑/标准/完整 三份规范 + leader-reply)", "status": "done"},
     {"id": "HW-INTERNAL", "name": "EAASP 平台对调度 skill 规范 v0.1 承接评估(内部)", "status": "done", "commits": ["c6dadbc"], "output": "docs/external-review/2026-04-26-eaasp-skill-spec-coverage-internal.md (178 LOC) — 4/7/13/6 项 🟢/🟡/🔴/⚫ gap 分布"},
-    {"id": "AUDIT-AGENDA", "name": "Phase 4.1 baseline §F — 规范评估浮现的 audit agenda (Q1-Q4)", "status": "done", "commits": ["e1f27df"], "output": ".planning/phases/4.1-PRE-AUDIT-NOTES.md +75 LOC §F (Q1 EAASP 调度 vertical / Q2 governance workflow 升级 / Q3 ⚫ 接入位 / Q4 优先级)"},
-    {"id": "GSD-S4", "name": "Step 4 — /gsd-plan-phase 4.0 完整端到端 (discuss + research + patterns + plan + plan-checker)", "status": "done", "commits": ["73d08b7","6a6ef8d","c6bfebd","8b0b160","57f11a1"], "output": "5 文件 落 .planning/phases/04.0-bootstrap-cleanup-gsd/ : CONTEXT.md (167) / RESEARCH.md (594) / VALIDATION.md (109) / PATTERNS.md (391) / 04.0-01-PLAN.md (859). plan-checker ## VERIFICATION PASSED 一次过 0 issues. 5 task T1-T5 review_protocol = 4 skip + 1 gsd-standard + 0 superpowers (REVIEW_POLICY §2 11 triggers 0/11 命中)。3 OQs user A/A/A 全采纳 (chunk_type 7 行 / filesystem-correct CODEOWNERS / 零 diff dry-run)"}
+    {"id": "AUDIT-AGENDA", "name": "Phase 4.1 baseline §F — 规范评估浮现的 audit agenda (Q1-Q4)", "status": "done", "commits": ["e1f27df"], "output": ".planning/phases/4.1-PRE-AUDIT-NOTES.md +75 LOC §F (Q1-Q4)"},
+    {"id": "GSD-S4", "name": "Step 4 — /gsd-plan-phase 4.0 完整端到端 (discuss + research + patterns + plan + plan-checker)", "status": "done", "commits": ["73d08b7","6a6ef8d","c6bfebd","8b0b160","57f11a1","d9b9b67"], "output": "5 文件 落 .planning/phases/04.0-bootstrap-cleanup-gsd/"},
+    {"id": "GSD-S5", "name": "Step 5 — /gsd-execute-phase 4.0 (5 task atomic commits + verify + close-phase cascade)", "status": "done", "commits": ["54349d1","a5df8bb","7b00c6c","fcef926","269e373","c12f425","5504fa7"], "output": "Phase 4.0 ✅ COMPLETE: 5/5 SC + 7/7 must-haves PASS, 0 deviation; PROJECT/ROADMAP/STATE cascade 同步"},
+    {"id": "GSD-S6", "name": "Step 6 — /gsd-discuss-phase 4.1 (6 gray areas A/C/B/A/B/B locked)", "status": "done", "commits": ["9c87afa"], "output": ".planning/phases/04.1-discuss-audit-p5/04.1-CONTEXT.md (186 LOC) — D-A audit 独立文件 / D-B §P5 + §F 平行交叉 / D-C 三选一+框架修订建议 / D-D 顺势观察 / D-E 三档 evidence / D-F 4.1 末出 ADR-V2-024 Proposed"},
+    {"id": "PUSH-MAIN", "name": "git push origin main (累积 commits 全部推上去)", "status": "done", "output": "本 session 全部 18 commits 已 pushed, main 与 origin/main fully synced"}
   ],
   "remaining_tasks": [
-    {"id": "GSD-S5", "name": "Step 5 — /gsd-execute-phase 4.0 (跑 5 task atomic commits, 期望 4-5 commits)", "status": "not_started", "blocking_reason": null, "next_command": "/gsd-execute-phase 4.0"},
-    {"id": "SPEC-LEADER", "name": "调度 skill 规范 v0.1 — 等待领导反馈 → 决定 v0.2 方向", "status": "blocked", "blocking_reason": "外部反馈"},
-    {"id": "PUSH-MAIN",   "name": "git push origin main (累积 33 unpushed commits, 待 GSD-S5 完成后建议合并 push)", "status": "not_started", "blocking_reason": "保留人类决策时机"}
+    {"id": "GSD-S7", "name": "Step 7 — /gsd-plan-phase 4.1 (audit + ADR-V2-024 Proposed 草稿 plan)", "status": "not_started", "blocking_reason": null, "next_command": "/gsd-resume-work then /gsd-plan-phase 4.1 (在 fresh session 中)"},
+    {"id": "GSD-S8", "name": "Step 8 — /gsd-execute-phase 4.1 (audit doc + ADR-V2-024 Proposed)", "status": "not_started", "blocking_reason": "GSD-S7 未做"},
+    {"id": "SPEC-LEADER", "name": "调度 skill 规范 v0.1 — 等待领导反馈 → 决定 v0.2 方向", "status": "blocked", "blocking_reason": "外部反馈"}
   ],
   "blockers": [
-    {"description": "调度 skill 规范 v0.1 → v0.2 等领导反馈才能迭代", "type": "external", "workaround": "在领导反馈期间可推进 GSD-S5 execute-phase / 启动 Phase 4.1 audit (有 baseline §F)"}
+    {"description": "调度 skill 规范 v0.1 → v0.2 等领导反馈", "type": "external", "workaround": "Phase 4.1 audit 与领导反馈正交,可独立推进"}
   ],
   "human_actions_pending": [
     {"action": "把 leader-reply.md + skill-spec-v0.1.md(紧凑版)发给领导", "context": "推动 v0.1 评审", "blocking": false},
-    {"action": "决定何时 git push origin main", "context": "累积 33 unpushed,Phase 4a / 接管 / 评审 / 内部评估 / §F agenda / Phase 4.0 plan-phase commits 都在本地。建议在 GSD-S5 完成后合并 push 一次", "blocking": false},
-    {"action": "决定是否启动 Phase 4.1 audit (有 baseline §F Q1-Q4 喂入)", "context": "可在 GSD-S5 完成后启动,或与 GSD-S5 串行(GSD-S5 是 mechanical execute,先跑完无 risk)", "blocking": false},
-    {"action": "决定 GSD-S5 是否 /clear 后再跑", "context": "plan-checker 推荐 /clear first 因当前 session 已大量 subagent 上下文; 或直接 execute-phase 4.0 (信任当前 context)", "blocking": false}
+    {"action": "Phase 4.1 audit 中段 user 补 Open Items 业务事实 (D-E-04)", "context": "≥2 客户要求 / 团队规模 / EAASP 阻断信号 等只有 user 知道的业务事实, audit 标 unknown verdict 待 user 在 socratic / Phase 4.2 启动前补", "blocking": false},
+    {"action": "(可选) review 4 份对外文档 + 决定何时发给领导", "context": "docs/external-review/ 11 个未 commit 文件保留人决策发布形态", "blocking": false}
   ],
   "decisions": [
     {"decision": "GSD 接管,但 DEFERRED_LEDGER / WORK_LOG / ADR plugin 保留为 SSOT 例外", "rationale": "GSD backlog 是 999.x 散文件,会断 D87→D148→D152 cross-phase trace;ADR plugin 与 GSD 解耦", "phase": "GSD takeover"},
     {"decision": "132 个历史 plan + 14 archived phase 冻结不迁移", "rationale": "git history 已记录,迁入 ROADMAP 风险大价值低", "phase": "GSD takeover"},
     {"decision": "对外文档去掉对原方案的批评式措辞", "rationale": "立观点不立靶,降低尴尬转发风险", "phase": "调度 skill 规范评审"},
     {"decision": "L1.5 业务接口适配层 / 原子-SOP 二分 / Gotchas / 技能库治理 = 4 大创新点", "rationale": "Subagent 1-4 research 共同识别;在导读 / 标准版 / 完整版分别按深度展开", "phase": "调度 skill 规范评审"},
-    {"decision": "三份规范按内容深度递进,不是'标准版+附录=完整版'", "rationale": "之前的拼接式做法 review 时发现完整版反而比标准版小;改为标准版 = 紧凑版+反例+论述强化,完整版 = 标准版+实施附录", "phase": "调度 skill 规范评审"},
+    {"decision": "三份规范按内容深度递进,不是'标准版+附录=完整版'", "rationale": "review 时 LOC 失衡触发改写", "phase": "调度 skill 规范评审"},
     {"decision": "规范用 RFC 2119 + 轻量化结构,不按 GB/T 国标完整形式", "rationale": "v0.1 评审稿合适形态;v0.2 内容稳定后再由标准化办公室按 GB/T 1.1-2020 重排", "phase": "调度 skill 规范评审"},
-    {"decision": "正式名'电力调度 AI 智能体 Skill 规范',不叫'华为规范'", "rationale": "受众是国调中心 / 电力调度行业,不是华为公司层级;立靶错绑会扭曲领导转发语义", "phase": "命名校准"},
-    {"decision": "HW-INTERNAL 内部评估 §3 不写平台改动 backlog", "rationale": "写 backlog 会给 Phase 4.1 audit 注入先验,把 audit 降级为'复述结论'", "phase": "HW-INTERNAL 评估"},
-    {"decision": "§F agenda 不是 backlog — Q1-Q4 是 audit 必须显式回答的问题,不是动作清单", "rationale": "agenda(问题)与 backlog(动作)分离;具体改动等 audit 答 Q1-Q4 后再拆", "phase": "Phase 4.1 baseline §F"},
-    {"decision": "Phase 4.0 plan-phase 走完整 GSD 链路 (discuss + research + patterns + plan + plan-checker)", "rationale": "ROADMAP §Phase 4.1 success criteria #3 要求 GSD 端到端跑通至少一次, Phase 4.0 mechanical cleanup 性质合适做 plumbing 验证;实测一次过 0 iterations", "phase": "GSD-S4 plan-phase"},
-    {"decision": "RESEARCH OQ1 chunk_type 表用 ADR-V2-021 active 7 行全集 (text_delta/thinking/tool_start/tool_result/done/error/workflow_continuation)", "rationale": "CONTEXT.md D-01-03 意图是'对齐 ADR-V2-021', 加 thinking + workflow_continuation 是补全不是扩 scope; 5 行 (heading 5 种) 会让下游 runtime 作者读不到完整契约", "phase": "GSD-S4 plan-phase OQ1"},
-    {"decision": "RESEARCH OQ2 CODEOWNERS 用真实 filesystem 路径 (crates/grid-server/ 等), 不用 CONTEXT.md 原 /grid-server/", "rationale": "CONTEXT.md D-04-02 的 /grid-server/ 来自 ADR-V2-023 §P2 产品概念命名照抄, 但文件系统不存在; CODEOWNERS 写错路径 GitHub 不报错但 silently 失效。CONTEXT.md 已同步回填修正避免 SSOT 分歧", "phase": "GSD-S4 plan-phase OQ2"},
-    {"decision": "RESEARCH OQ3 GOVERNANCE-01 task action = verify, FAIL on invalid, no commit on pass (零 diff dry-run)", "rationale": "最干净语义 — dry-run 真正是 dry-run, 不为凑 commit 数加 placeholder; CONTEXT.md D-C-01 期望 5-6 commits 范围本来就是 5 下限 = pass / 6 上限 = fix-pass, 与零 diff 行为一致", "phase": "GSD-S4 plan-phase OQ3"},
-    {"decision": "Phase 4.0 PLAN.md = 单 plan 单 wave 5 task 串行 (T1→T2→T3→T4→T5)", "rationale": "5 task 零 file 重叠可 parallel, 但 CONTEXT.md D-C-03 优先 atomic-commit observability 而非并行加速; 单 plan 内 task 串行是 GSD 默认行为, T5 自然依赖 T1-T4 review_protocol annotation 存在", "phase": "GSD-S4 plan-phase wave"},
-    {"decision": "Phase 4.0 5 task review_protocol = 4 skip + 1 gsd-standard + 0 superpowers", "rationale": "REVIEW_POLICY §2 11 high-risk triggers 0/11 命中 (无 proto / agent loop / hooks / security policy / 跨 runtime / 新 CI workflow / 新 crate / proto stub codegen / ≥10 tests / >200 LOC); T3 CLEANUP-03 是 NEW file 跨 ADR 语义提取, 安全起见上 gsd-standard 单 reviewer", "phase": "GSD-S4 plan-phase review tier"}
+    {"decision": "正式名'电力调度 AI 智能体 Skill 规范',不叫'华为规范'", "rationale": "受众是国调中心 / 电力调度行业,不是华为公司层级", "phase": "命名校准"},
+    {"decision": "HW-INTERNAL §3 不写平台改动 backlog", "rationale": "写 backlog 会给 Phase 4.1 audit 注入先验", "phase": "HW-INTERNAL 评估"},
+    {"decision": "§F agenda 不是 backlog — Q1-Q4 是 audit 必须显式回答的问题", "rationale": "agenda(问题)与 backlog(动作)分离", "phase": "Phase 4.1 baseline §F"},
+    {"decision": "Phase 4.0 plan-phase 走完整 GSD 链路 (discuss + research + patterns + plan + plan-checker)", "rationale": "ROADMAP §Phase 4.1 SC#3 要求 GSD 端到端跑通至少一次, Phase 4.0 mechanical cleanup 性质合适做 plumbing 验证", "phase": "GSD-S4 plan-phase"},
+    {"decision": "Phase 4.0 5 task review_protocol = 4 skip + 1 gsd-standard + 0 superpowers", "rationale": "REVIEW_POLICY §2 11 high-risk triggers 0/11 命中", "phase": "GSD-S4 plan-phase review tier"},
+    {"decision": "Phase 4.0 OQ1 chunk_type 表用 ADR-V2-021 active 7 行全集", "rationale": "对齐 ADR-V2-021, 加 thinking + workflow_continuation 是补全不是扩 scope", "phase": "GSD-S4 OQ1"},
+    {"decision": "Phase 4.0 OQ2 CODEOWNERS 用真实 filesystem 路径 (crates/grid-server/ 等)", "rationale": "CONTEXT.md D-04-02 原 /grid-server/ 来自 ADR-V2-023 §P2 产品概念命名照抄, 文件系统不存在", "phase": "GSD-S4 OQ2"},
+    {"decision": "Phase 4.0 OQ3 GOVERNANCE-01 zero-diff dry-run", "rationale": "dry-run 真正是 dry-run, 不为凑 commit 数加 placeholder", "phase": "GSD-S4 OQ3"},
+    {"decision": "Phase 4.1 audit doc 走独立文件 (D-A)", "rationale": "DECIDE-01 优先选项, 让 ADR-V2-024 启动时纯净, audit doc 可独立维护", "phase": "GSD-S6 Phase 4.1 discuss"},
+    {"decision": "Phase 4.1 §P5 + §F 平行交叉对照 (D-B)", "rationale": "忠于 ADR 字面 + 引入心智修订, 工作量没真翻倍因 §F 已 baseline 化", "phase": "GSD-S6 Phase 4.1 discuss"},
+    {"decision": "Phase 4.1 audit 给三选一 + 框架修订建议 (D-C)", "rationale": "SC#2 严格满足 + 顺手提框架修订是 audit 真价值", "phase": "GSD-S6 Phase 4.1 discuss"},
+    {"decision": "Phase 4.1 GOVERNANCE-02/03 顺势观察, 不专门拆 task (D-D)", "rationale": "Phase 4.0 已实证 plumbing 端到端 OK, 4.1 是 design-heavy 验证 audit-heavy 性质 task 跑 GSD 是否仍顺畅", "phase": "GSD-S6 Phase 4.1 discuss"},
+    {"decision": "Phase 4.1 末启动 ADR-V2-024 Proposed 草稿 (D-F)", "rationale": "audit 拿到结论后自然写 Proposed; 4.2 接力推 Accepted, 遵守 ADR plugin 状态机", "phase": "GSD-S6 Phase 4.1 discuss"}
   ],
   "uncommitted_files": [
     "docs/external-review/2026-04-26-skill-spec-*.md (4 份对外规范 + 4 份 PDF + leader-reply + 早期内部评审)",
     "docs/external-review/2026-04-26-research-*.md (4 份 research 内部参考)",
     "docs/huawei-skill-define.docx (原方案文件)"
   ],
-  "next_action": "选 1 (推荐): /gsd-execute-phase 4.0 (跑 5 task, 期望 4-5 atomic commits, 验证 GSD plumbing tracer-bullet);选 2: /clear 后再 execute (fresh context window, plan-checker 建议);选 3: 启动 Phase 4.1 audit /gsd-discuss-phase 4.1 (有 baseline §F);选 4: git push origin main (33 commits);选 5: 暂停",
-  "context_notes": "本次 session(2026-04-26 → 04-27) 完成 12/12 任务 (GSD 接管 + 调度 skill 规范 v0.1 评审 + 内部 EAASP 承接评估 + Phase 4.1 baseline §F + Phase 4.0 plan-phase 端到端)。Phase 4.0 PLAN.md 已就绪 5 task 等执行, plan-checker 0 issues。下次 resume 时主线决策 = GSD-S5 execute-phase OR Phase 4.1 audit (二选一或并行)。33 unpushed commits 待人决策合并 push。"
+  "next_action": "[在 fresh session 中] /gsd-resume-work → /gsd-plan-phase 4.1 (Phase 4.1 design-heavy audit phase, fresh context 跑 research + planner 更专注)",
+  "context_notes": "本次 session(2026-04-26 → 04-27) 14/14 完成, Phase 4.0 ✅ COMPLETE end-to-end (discuss + plan + execute + verify + close cascade), Phase 4.1 discuss-phase ✅ DONE (CONTEXT.md 6 gray areas locked)。下次 fresh session resume 直接进 /gsd-plan-phase 4.1。Phase 4.1 是 audit-heavy phase, 包含 §P5 4 trigger + §F Q1-Q4 平行交叉 audit + ADR-V2-024 Proposed 草稿。预期 commits: 6-9 atomic (audit doc + ADR draft + WORK_LOG note + SUMMARY + 中段 checkpoints)。/gsd-resume-work 真测时点 = audit 中段(per D-D-04)。"
 }

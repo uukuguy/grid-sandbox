@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: milestone
-status: phase_complete
-stopped_at: "Phase 4.0 ✅ COMPLETE (executor + verifier PASSED; PROJECT.md / ROADMAP / REQUIREMENTS / STATE 全部 cascade 同步). 下一步 = `/gsd-discuss-phase 4.1` 启动 Phase 4.1 audit (baseline §F Q1-Q4 喂入)。"
-last_updated: "2026-04-27T03:30:00.000Z"
-last_activity: 2026-04-27 -- Phase 4.0 closed (PROJECT.md evolved + 6 commits pushed)
+status: discuss_complete
+stopped_at: "Phase 4.0 ✅ COMPLETE + Phase 4.1 discuss-phase ✅ DONE (CONTEXT.md 186 LOC, 6 gray areas A/C/B/A/B/B locked). 18 commits pushed, main ↔ origin/main synced. Next session: /clear → /gsd-resume-work → /gsd-plan-phase 4.1。"
+last_updated: "2026-04-27T03:55:00.000Z"
+last_activity: 2026-04-27 -- Phase 4.1 discuss-phase done; clean boundary for /clear
 progress:
   total_phases: 3
   completed_phases: 1
@@ -120,13 +120,20 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-27 (Phase 4.0 端到端 COMPLETE — discuss + plan + execute + verify 全跑通)
-Stopped at: Phase 4.0 ✅ 全部 5 task PASS, verifier `## VERIFICATION PASSED` 7/7 must-haves。下一步 = `/gsd-end-phase 4.0` 归档 → `/gsd-discuss-phase 4.1` 启动 Phase 4.1 audit (baseline §F Q1-Q4 已就绪)。
-Resume file: None (初始无 .continue-here)
-Local commits ahead of origin: 39+ (push deferred — Phase 4.0 5 commits + state refresh + 之前累积)
-Decisions snapshot: see `.planning/HANDOFF.json` `decisions[]` for 15 cross-phase 决策
+Last session: 2026-04-27 (Phase 4.0 ✅ COMPLETE + Phase 4.1 discuss-phase ✅ DONE; clean session boundary 准备 /clear)
+Stopped at: Phase 4.1 CONTEXT.md (186 LOC, 6 gray areas A/C/B/A/B/B) 已落盘 + commit `9c87afa` pushed; 等 fresh session 跑 `/gsd-plan-phase 4.1`。
+Resume file: None (初始无 .continue-here, HANDOFF.json + STATE.md frontmatter 是 SSOT)
+Local commits ahead of origin: **0** (本 session 全部 18 commits pushed, main ↔ origin/main fully synced)
+Decisions snapshot: see `.planning/HANDOFF.json` `decisions[]` for 19 cross-phase 决策
 
-**GSD plumbing tracer-bullet 验证结果 (Phase 4.0 success criterion #5):**
+**Resume 路径 (next session):**
+
+1. `/clear` (用户在 Claude Code 中执行)
+2. `/gsd-resume-work` — 自动读 STATE.md frontmatter + HANDOFF.json + .continue-here.md (如有), 恢复完整 Phase 4 上下文
+3. `/gsd-plan-phase 4.1` — 启动 Phase 4.1 plan-phase (research + patterns + plan + plan-checker)
+4. Phase 4.1 中段 audit 时点会显式 /clear 测 GOVERNANCE-03 (per D-D-04)
+
+**GSD plumbing tracer-bullet 验证结果 (Phase 4.0 success criterion #5 ✅):**
 
 - discuss → research → patterns → plan → plan-checker → execute → verifier 全链路一次过
 - 0 iteration loops (plan-checker / verifier 都首次 PASS)
@@ -134,4 +141,4 @@ Decisions snapshot: see `.planning/HANDOFF.json` `decisions[]` for 15 cross-phas
 - atomic-commit-per-task 实测命中 (4 cleanup + 1 SUMMARY)
 - review_protocol 三档 (4 skip + 1 gsd-standard + 0 superpowers) 反映 doc-only 性质准确
 - T5 zero-diff dry-run 行为符合 OQ3 决议
-- 结论: GSD 体系在本仓库 brownfield 适配良好,可用于 Phase 4.1 / 4.2
+- 结论: GSD 体系在本仓库 brownfield 适配良好,Phase 4.1 复用同套
