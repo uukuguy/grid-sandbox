@@ -10,32 +10,51 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 1 of 3 (Phase 4.0 — Bootstrap & Cleanup)
-Plan: 0 of N (plan-phase 待执行)
-Status: Pending start — ROADMAP.md 已生成,等 `/gsd-plan-phase 4.0` 拆分 task
-Last activity: 2026-04-26 — GSD takeover initialized; ROADMAP.md + STATE.md 落盘 by `/gsd-roadmapper`
+Plan: 1 of 1 (04.0-01-PLAN.md, 5 tasks T1-T5, ready for execute)
+Status: **Plan-phase complete**, awaiting `/gsd-execute-phase 4.0`
+Last activity: 2026-04-27 — `/gsd-plan-phase 4.0` end-to-end pass (discuss + research + patterns + plan + plan-checker), 4 plan-phase commits + Phase 4.1 baseline §F + HW-INTERNAL 评估
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20% (Phase 4.0 plan-phase complete, execute pending; milestone 1/3 phases planned)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: n/a
+- Total plans completed (executed): 0
+- Total plans planned (ready to execute): 1
+- Average duration: n/a (no plan executed yet)
 - Total execution time: 0 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 4.0 Bootstrap & Cleanup | 0 / TBD | n/a | n/a |
-| 4.1 Discuss & Audit | 0 / TBD | n/a | n/a |
-| 4.2 Decide & Document | 0 / TBD | n/a | n/a |
+| Phase | Plans | Status | Avg/Plan |
+|-------|-------|--------|----------|
+| 4.0 Bootstrap & Cleanup | 0 / 1 (1 planned) | Plan ready, exec pending | n/a |
+| 4.1 Discuss & Audit | 0 / TBD | Baseline §F written, audit pending | n/a |
+| 4.2 Decide & Document | 0 / TBD | Pending Phase 4.1 audit | n/a |
 
 **Recent Trend:**
-- Last 5 plans: n/a (milestone 第一个 plan 未跑)
+- Last 5 plans: n/a (no plan executed yet)
 - Trend: n/a
 
 *Updated after each plan completion*
+
+## Phase 4.0 Plan Snapshot (2026-04-27)
+
+**Files in `.planning/phases/04.0-bootstrap-cleanup-gsd/`:**
+- `04.0-CONTEXT.md` (167 LOC) — discuss-phase 5 gray areas locked, OQ2 path correction applied
+- `04.0-RESEARCH.md` (594 LOC) — 3 OQs resolved A/A/A by user
+- `04.0-VALIDATION.md` (109 LOC) — 5 grep assertions + Phase Gate composite
+- `04.0-PATTERNS.md` (391 LOC) — 5 file analogs + Phase 4a task block template
+- `04.0-01-PLAN.md` (859 LOC) — 5 tasks (T1-T5) with verbatim substitutions, plan-checker PASSED
+
+**5 tasks summary:**
+- T1 CLEANUP-01: chunk_type sweep (skip review)
+- T2 CLEANUP-02: D120 row-edit + ledger preamble convention (skip)
+- T3 CLEANUP-03: strategy-grid-two-leg-checklist.md NEW (gsd-standard review)
+- T4 CLEANUP-04: .github/CODEOWNERS NEW (skip)
+- T5 GOVERNANCE-01: dry-run review_protocol grep (skip, zero diff on pass)
+
+Expected: 4-5 atomic commits when `/gsd-execute-phase 4.0` runs.
 
 ## Accumulated Context
 
@@ -78,6 +97,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-26 (GSD takeover initialization)
-Stopped at: ROADMAP.md + STATE.md + REQUIREMENTS.md traceability 全部 written by `/gsd-roadmapper`. 下一步是 `/gsd-plan-phase 4.0` 拆 Phase 4.0 task 列表。
-Resume file: None (初始 session,无 .continue-here)
+Last session: 2026-04-27 (Phase 4.0 plan-phase complete + HW-INTERNAL EAASP 承接评估 + Phase 4.1 baseline §F audit agenda)
+Stopped at: `/gsd-plan-phase 4.0` 端到端通过 (CONTEXT/RESEARCH/PATTERNS/VALIDATION/PLAN 5 文件 + plan-checker `## VERIFICATION PASSED`)。下一步 = `/gsd-execute-phase 4.0` 跑 5 task atomic commits (期望 4-5 commits 落盘)。
+Resume file: None (初始无 .continue-here)
+Local commits ahead of origin: 33 (push deferred per user-controlled timing)
+Decisions snapshot: see `.planning/HANDOFF.json` `decisions[]` for 9 cross-phase 决策 (含 GSD-S5 plan-phase 完成 + 命名校准 + audit agenda 边界规则)
