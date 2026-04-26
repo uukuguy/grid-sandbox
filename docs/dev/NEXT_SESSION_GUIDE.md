@@ -1,8 +1,23 @@
 # Grid Platform 下一会话指南
 
+> ⚠️ **FROZEN 2026-04-26 — 项目转向 GSD 体系。**
+>
+> 此文件保留为 **EAASP v2.0 Phase 2 → 4a 的会话指南快照**(dev-phase-manager 时代,2026-04-14 至 2026-04-20)。
+>
+> **新会话上下文请读** `.planning/STATE.md`(由 `/gsd-new-project` 生成后)。
+>
+> 历史 phase 计划仍在 `docs/plans/2026-*-plan.md`(132 个,只读保留);
+> 历史 phase stack 仍在 `docs/dev/.phase_stack.json`(14 archived,不再更新);
+> WORK_LOG.md 继续 prepend 新条目(GSD 不接管这个);
+> DEFERRED_LEDGER 继续作为跨阶段 D-item SSOT(GSD backlog 不取代它,见 PROJECT.md 例外)。
+>
+> 切换原因:GSD workstreams + resume-work + plan-checker + map-codebase 在多 workstream / brownfield 场景比 dev-phase-manager 更适合。
+
+---
+
 **最后更新**: 2026-04-20 GMT+8
 **当前分支**: `main`（ahead `origin/main` by ~293 commits — Phase 3.5 遗留 + Phase 3.6 + Phase 4a）
-**当前状态**: EAASP v2.0 **Phase 4a 🟢 COMPLETE 7/7** @ `8629505` (sign-off 2026-04-20) → **Phase 4 待规划**
+**当前状态**: EAASP v2.0 **Phase 4a 🟢 COMPLETE 7/7** @ `8629505` (sign-off 2026-04-20) → **Phase 4 待规划(由 GSD 接管)**
 
 ## 本会话重点
 

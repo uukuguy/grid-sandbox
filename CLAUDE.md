@@ -326,9 +326,17 @@ Authoritative architecture + design material. If code diverges from these, updat
 | `docs/design/Grid/GRID_CRATE_SPLIT_DESIGN.md` | Why the crate boundary lands where it does |
 | `docs/design/Grid/GRID_UI_UX_DESIGN.md` | Target frontend UX (informs future `web/` work) |
 
-### Generic engine (may be partially stale — read with git blame)
+### Generic engine (PRE-EAASP-v2 LEGACY — read with skepticism)
 
-`docs/design/` has ~60 design docs covering agent harness, context engineering, MCP, memory, sandbox, security, provider chain, etc. Many predate the EAASP v2 pivot; when they disagree with EAASP ADRs, the ADR wins.
+`docs/design/` (root level, **excluding** `EAASP/` and `Grid/` subdirs) contains ~60 design docs from 2026-02 to 2026-03 covering agent harness, context engineering, MCP, memory, sandbox, security, provider chain, etc. **These predate the EAASP v2 pivot (2026-04-13)** and are kept for archaeological reference only.
+
+**Authoritative current sources (in priority order):**
+1. ADRs at `docs/design/EAASP/adrs/ADR-V2-*.md` — single source of truth for all decisions
+2. `docs/design/EAASP/*.md` — current EAASP-v2 design (L1 runtime, contract, deferred ledger)
+3. `docs/design/Grid/*.md` — current Grid product framing
+4. Code (always trumps stale docs)
+
+**When a root-level `docs/design/*.md` disagrees with any of the above, the ADR/EAASP/Grid doc wins. Do not cite root-level docs as current architecture without first confirming against an ADR.**
 
 ---
 
