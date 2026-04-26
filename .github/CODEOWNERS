@@ -1,0 +1,22 @@
+# CODEOWNERS — Leg-B dormancy reviewer per ADR-V2-023 §Enforcement
+#
+# Per ADR-V2-023 §P2, Leg-B components (grid-server, grid-platform, grid-desktop,
+# web, web-platform) are dormant. Any PR touching these paths must justify
+# necessity via docs/reviews/strategy-grid-two-leg-checklist.md.
+#
+# Reviewer: currently @firmwwwee (self-review during Leg-B dormancy; will be
+# rerouted to a team handle when ADR-V2-023 §P5 activation triggers fire).
+#
+# Path syntax: gitignore-like, last-match-wins, leading-slash anchors to repo
+# root. Trailing slash matches all under directory.
+#
+# Last sync: 2026-04-27 (Phase 4.0 CLEANUP-04 initial creation)
+
+# Leg-B Rust crates (dormant, ADR-V2-023 §P2)
+/crates/grid-server/        @firmwwwee
+/crates/grid-platform/      @firmwwwee
+/crates/grid-desktop/       @firmwwwee
+
+# Leg-B frontend scaffolding (dormant, ADR-V2-023 §P2)
+/web/                       @firmwwwee
+/web-platform/              @firmwwwee
