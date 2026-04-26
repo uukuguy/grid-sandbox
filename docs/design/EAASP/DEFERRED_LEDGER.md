@@ -268,6 +268,12 @@
 3. 在 commit message 引用 `Dxx`
 4. 在 [状态变更日志](#状态变更日志) 新增一行
 
+**关闭/状态变更流程** (新增 2026-04-27, Phase 4.0 CLEANUP-02):
+1. 在原 D-item row 直接修改 status 字段（例如 `🟡 P1-defer → ✅ closed`）
+2. 在 row 末尾追加 close-out trace（commit hash + Phase/Task 编号 + 一句话 closure summary）
+3. 在 [状态变更日志](#状态变更日志) 同步追加一行（保留历史时间线，append-only）
+4. 仅适用于**未来**新关闭的 D-item；**已关闭的历史 D-item 不强制 retroactive 改写**
+
 ---
 
 ## 状态变更日志
@@ -323,7 +329,7 @@
 | 2026-04-15 | D117 | **新增** 🟡 P1-defer | Prompt-body 执行器（LLM-driven yes/no），原 D50 重编号；S3.T5 blueprint §F 明确不收，等真实 skill 使用再落地 → Phase 2.5+ |
 | 2026-04-15 | D118 | **新增** 🔵 P3-defer | SkillDir materialization 在 session 结束无 cleanup（S3.T5 blueprint §G）→ S4 cleanup sweep |
 | 2026-04-15 | D119 | **新增** 🔵 P3-defer | Envelope `schema_version` 字段未强制（ADR-V2-006 §9）→ Phase 3 首次 breaking change 时引入 |
-| 2026-04-15 | D120 | **新增** 🟡 P1-defer | **Cross-runtime envelope parity**：Rust `HookContext::to_json/to_env_vars` 缺 ADR-V2-006 §2/§3 字段（`event` / `skill_id` / `draft_memory_id` / `evidence_anchor_id` / `created_at` / `GRID_EVENT` / `GRID_SKILL_ID`），Python 已符合。S3.T5 reviewer M1，前置 Phase 2.5 goose 契约测试 → 补 HookContext 扩展 + cross-runtime parity tests |
+| 2026-04-15 → 2026-04-16 | D120 | ✅ closed | **Cross-runtime envelope parity**：Rust `HookContext::to_json/to_env_vars` 缺 ADR-V2-006 §2/§3 字段（`event` / `skill_id` / `draft_memory_id` / `evidence_anchor_id` / `created_at` / `GRID_EVENT` / `GRID_SKILL_ID`），Python 已符合。S3.T5 reviewer M1。**Closed @ Phase 2.5 S0.T3 commit `7e083c7`** — HookContext 扩展 + 10 parity tests + byte-parity ADR §2.1/2.2/2.3 canonical JSON 锁定 |
 | 2026-04-15 | D121 | **新增** 🔵 P3-defer | `register_session_stop_hooks` 额外调用累加而非替换（S3.T5 reviewer M2）→ 加 dedupe 或 warn-on-duplicate semantics |
 | 2026-04-15 | D122 | **新增** 🔵 P3-defer | Python envelope 包含 top-level `hook_id` 字段，Rust 未含（S3.T5 reviewer M3）→ D120 统一修 |
 | 2026-04-15 | D123 | **新增** 🔵 P3-defer | `scoped_hook_wiring_integration.rs` 测试用 `std::env::set_var` + Mutex，poison 恢复静默（reviewer N5）→ 改为 RAII env guard |
