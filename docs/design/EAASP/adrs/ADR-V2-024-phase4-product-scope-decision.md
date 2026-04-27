@@ -2,8 +2,8 @@
 id: ADR-V2-024
 title: "Phase 4 Product Scope Decision (Leg A 硬化 / Leg B 激活 / 两腿)"
 type: strategy
-status: Proposed
-accepted_at: null
+status: Accepted
+accepted_at: 2026-04-28
 date: 2026-04-27
 phase: "Phase 4.1 — Leg Decision Audit (Phase 4.2 graduates to Accepted)"
 author: "Jiangwen Su"
@@ -31,11 +31,12 @@ related:
 
 # ADR-V2-024 — Phase 4 Product Scope Decision (Leg A 硬化 / Leg B 激活 / 两腿)
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-04-27
-**Phase:** Phase 4.1 — Leg Decision Audit (Phase 4.2 graduates to Accepted)
+**Accepted At:** 2026-04-28
+**Phase:** Phase 4.2 — Decide & Document (Accepted via Path B fallback per Phase 4.1 T5 deviation precedent)
 **Author:** Jiangwen Su
-**Related:** ADR-V2-017 (L1 ecosystem), ADR-V2-019 (L1 deployment), ADR-V2-023 (双腿战略 — 本 ADR 候选修订对象)
+**Related:** ADR-V2-017 (L1 ecosystem), ADR-V2-019 (L1 deployment), ADR-V2-023 (双腿战略 — supersedes 链回此 ADR)
 
 ---
 
@@ -220,3 +221,4 @@ ADR-V2-024 落盘 Phase 4 product scope 决定, 喂 Phase 4.2 PLAN.md 路径。
 | 日期 | 状态 | 变更说明 |
 |------|------|---------|
 | 2026-04-27 | Proposed | Phase 4.1 audit 完成后落盘草稿; Decision 段 verbatim 引用 audit §4.2 推荐措辞 + §0 verdict partial-needs-revision 要求 §5 co-equal; Enforcement/Alternatives 各 option Positive-Negative-Risks 段留 Phase 4.2 填实(per CONTEXT.md D-F-03) |
+| 2026-04-28 | Accepted | Phase 4.2 翻 Accepted; Decision 段 layered 锁文 (T1) + Alternatives 4 Option 展开 (T2) + Enforcement 段确认 + audit §6 Open Items 5 行 backfill (T3) + supersedes ADR-V2-023 (T4) + F4 lint pass (T5 Path B fallback per Phase 4.1 T5 deviation precedent — autonomous executor 模式下 `adr_lint.py --id ADR-V2-024 --check F1,F2,F3,F4 --ci` 替代 `/adr:accept` slash command) |
