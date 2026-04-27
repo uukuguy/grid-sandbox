@@ -4,8 +4,8 @@ milestone: v3.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 4.2 context gathered
-last_updated: "2026-04-27T17:02:27.536Z"
-last_activity: 2026-04-27 -- Phase 4.2 planning complete
+last_updated: "2026-04-27T17:26:04.812Z"
+last_activity: 2026-04-27 -- Phase 4.2 execution started
 progress:
   total_phases: 3
   completed_phases: 2
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** Grid 作为 substitutable L1 runtime,通过 16-method gRPC contract 被 EAASP L2-L4 调用,且任何符合 contract-v1.1 的对比 runtime 都能替换它。
-**Current focus:** Phase 4.2 — Decide & Document (ADR-V2-024 Proposed → Accepted + 实施 PLAN)
+**Current focus:** Phase 4.2 — Decide & Document / 决策落定
 
 ## Current Position
 
-Phase: 4.2
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 4.2 planning complete
+Phase: 4.2 (Decide & Document / 决策落定) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 4.2
+Last activity: 2026-04-27 -- Phase 4.2 execution started
 
 Progress: [███████░░░] 67% (2/3 milestone phases complete; Phase 4.2 待启动)
 
