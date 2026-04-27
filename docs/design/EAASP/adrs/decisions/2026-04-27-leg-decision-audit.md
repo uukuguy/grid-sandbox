@@ -38,8 +38,8 @@ Phase 4.1 audit, 系统化对照 ADR-V2-023 §P5 4 条 Leg B 激活触发条件 
 |---------|---------|---------|--------------|--------------|
 | §P5.1 | EAASP 项目延期/停滞/定价不合理 | partial (语义弱化) | ADR cross-ref + user 陈述 (PRE-AUDIT-NOTES §C.2) | §F.Q1 (EAASP 调度 vertical 决策同源) |
 | §P5.2 | ≥2 客户要求 Grid 独立买 | unknown (待 user 补) | user 陈述待补 | §F.Q4 (Grid vs EAASP 优先级) |
-| §P5.3 | 行业 agent runtime 标准出现 | (T2 填) | (T2 填) | (T2 填) |
-| §P5.4 | 团队富余 ≥30% | (T2 填) | (T2 填) | (T2 填) |
+| §P5.3 | 行业 agent runtime 标准出现 | no | 代码/文件级 (proto v2 仍 EAASP 内部) | §F.Q1 (vertical 决策连带) |
+| §P5.4 | 团队富余 ≥30% | partial (baseline 默认成立) | user 陈述 (PRE-AUDIT-NOTES §C.2 第 3 点) | §F.Q4 |
 
 ### §2.1 Trigger 1 — EAASP 项目延迟/停滞/定价不合理
 
@@ -77,5 +77,40 @@ Phase 4.1 audit, 系统化对照 ADR-V2-023 §P5 4 条 Leg B 激活触发条件 
 
 **Recommendation note**: 该 trigger 进入 §6 Open Items, Phase 4.2 启动 ADR-V2-024 Accepted 前必须 user 给真实数字(≥2 客户的具体名单 / 渠道 / 表达时点)。即便答数 0, 也要显式写 0, 不留空 — verdict=unknown 是诚实, verdict 一直空着是**未完成 audit**。
 
-<!-- T1 stop point — §2.0 总表 §2.1 §2.2 已落盘, §2.3 §2.4 由 T2 接手, §3 / §4 / §5 / §6 / §7 由 T4 接手。
-     T3 checkpoint(`/gsd-resume-work` 测试)在 T2 之后触发。 -->
+### §2.3 Trigger 3 — 行业 agent runtime 标准出现
+
+**Verdict**: no
+
+**Confidence**: high  <!-- per Fix #2: 公开可观察事实 (proto 状态 + 行业 RFC 进度), 高可信 -->
+**Corroboration**: yes  <!-- per Fix #2: proto v2 文件 evidence + 公开 RFC 状态双源 -->
+**Criticality**: informational  <!-- per Fix #2: no verdict 是稳态, 不进 Open Items, 不影响 §4 推荐 -->
+**ADR-block**: no  <!-- per Fix #2: no verdict 不是 unknown, 不阻塞 -->
+
+**Evidence**:
+- ADR cross-ref: ADR-V2-023 §P5 第 3 条 (L158) verbatim "行业标准演化：出现广泛采用的 agent runtime 标准（非 EAASP），Grid Platform 可以作为该标准的参考实现"
+- 代码/文件级 evidence: `proto/eaasp/runtime/v2/runtime.proto` 仍是 EAASP 内部 16 method gRPC 契约 — 业内尚无广泛采用的等效协议(Anthropic ACP, OpenAI Assistants API 等都未达"广泛采用 agent runtime 标准"门槛, 各家自定义 protocol 互不兼容)
+- 业务事实推断豁免(per D-E-02 边界): "行业是否存在标准" 是公开可观察事实, 不属于"audit 不可推断的业务事实", 当前结论 = 否(2026-04 行业仍处早期 RFC 阶段, MCP 是工具协议非 runtime 协议, A2A 等仍 RFC)
+- User 陈述未直接覆盖此条, PRE-AUDIT-NOTES §C.2 也未提及, 默认沿用 ADR-V2-023 字面假设(无标准则不激活)
+
+**Cross-ref §F**: 此 trigger 在 §F 框架下与 §F.Q1 (EAASP 是否做调度行业 vertical) 部分对应 — Q1 答"否"(EAASP 提供扩展点交厂商写 vertical) 时, 行业标准与 Grid Platform 参考实现的语义增强;Q1 答"是"时, EAASP 直接吸收 vertical 字段, 行业标准对 Grid 形态影响弱化。
+
+**Recommendation note**: 当前 verdict no 是稳态结论, **不需要进入 Open Items**(D-E-04 Open Items 仅收 unknown verdict)。Phase 4.2 ADR-V2-024 重新框定时此 trigger 可保留原措辞, 但建议添加"行业标准 watch list"注脚(MCP 演化 / A2A RFC 状态 / Anthropic ACP 走向 — phase 末或 milestone 末扫一次)避免长期 dormant 失明。
+
+### §2.4 Trigger 4 — 团队富余 ≥30%
+
+**Verdict**: partial (baseline 默认成立)
+
+**Confidence**: medium  <!-- per Fix #2: user 陈述 baseline 默认成立有, 精确百分比无 -->
+**Corroboration**: yes  <!-- per Fix #2: PRE-AUDIT-NOTES §B.2 + §C.2 第 3 点双源一致 (Grid 是工时主战场) -->
+**Criticality**: influences  <!-- per Fix #2: 精确百分比影响 Phase 4.2 工时分配 task 拆分粒度 -->
+**ADR-block**: no  <!-- per Fix #2: partial verdict + baseline 默认成立, ADR Accepted 可推进; 精确百分比 Open Item 是 Phase 4.2 优化项不阻塞 -->
+
+**Evidence**:
+- ADR cross-ref: ADR-V2-023 §P5 第 4 条 (L159) verbatim "团队能力富余：核心腿 A 已经稳定到可以释放出 ≥30% 工程投入给腿 B"
+- User 陈述 (PRE-AUDIT-NOTES §B.2): "重心在 Grid — user 自己工时主要投 Grid" + L43 "Grid 是工时主战场"
+- User 陈述 (PRE-AUDIT-NOTES §C.2 第 3 点): 此 trigger "在 user 心智中**默认成立**(Grid 一直就是工时重心), 不需要等"
+- 但精确百分比(Grid vs EAASP 实际工时切分)属业务事实(per D-E-02), audit 不可推断 — 进入 §6 Open Items 由 user 在 Phase 4.2 启动 ADR-V2-024 Accepted 前补真实工时切分百分比
+
+**Cross-ref §F**: 此 trigger 在 §F 框架下直接对应 §F.Q4 (Grid vs EAASP 优先级真实工时分配) — Q4 答"Grid 优先"或"并行" 时, 此 trigger 的 ≥30% 阈值在 baseline 已超(user 自陈 Grid 是主战场即 ≥50% 工时); Q4 答"EAASP 优先" 时, 此 trigger 的"团队能力富余"语义需重考(若 EAASP 优先则定义上 Grid 工时不富余反成限制)。
+
+**Recommendation note**: 此 trigger 与 baseline §B.2 切分表 + §C.1 "Grid 全栈是工时主战场" 同源, 当前 verdict partial 表示"baseline 默认成立 + 精确百分比待补"。Phase 4.2 ADR-V2-024 重新框定时建议把此条措辞从"团队能力富余 ≥30%"改写为"Grid 自评工时占比 ≥某阈值且 baseline 主战场地位稳定" — 摆脱"释放给腿 B"的从属表述, 改为 Grid 自身可独立产品化的资源充裕性判定。
