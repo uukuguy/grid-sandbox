@@ -13,11 +13,11 @@
 - [x] **CLEANUP-03**: 创建 `docs/reviews/strategy-grid-two-leg-checklist.md` —— ADR-V2-023 §Enforcement 引用了此文件但磁盘上不存在。文件应规范化 reviewer 在 PR 触碰 `grid-platform/` `grid-server/` `grid-desktop/` `web*/` 时的 dormancy-justification 检查清单。
 - [x] **CLEANUP-04**: 创建/补充 `.github/CODEOWNERS` 把 Leg-B crate / web 目录强制要求 reviewer 走 §P5 dormancy-justification 流程。
 
-### B. Phase 4 主决策(Leg A vs Leg B per ADR-V2-023 §P5)
+### B. Phase 4 主决策(engine 接入面 vs Grid 独立产品 per ADR-V2-024 §1 双轴模型, 原 Leg A vs Leg B per ADR-V2-023 §P5, see ADR-V2-024 supersedes ADR-V2-023)
 
-- [ ] **DECIDE-01**: 完成 ADR-V2-023 §P5 触发条件审计 —— 系统化检查 §P5 列出的 Leg B 激活条件(at least N concrete enterprise leads / EAASP 升级路径阻断 / 团队规模 / 等)是否满足。Output: 一份 `docs/design/EAASP/adrs/decisions/2026-04-XX-leg-decision-audit.md`(or 写进新 ADR-V2-024 草稿)记录每条触发条件的 yes/no/evidence。
-- [ ] **DECIDE-02**: 基于 §P5 审计结果,在 Phase 4.1 socratic discuss 收尾后,定 Phase 4 后续走向 —— 若 Leg A 继续硬化,产出 Phase 4.2 Leg-A-roadmap;若 Leg B 激活,产出 Phase 4.2 Leg-B-activation-plan。Output: `.planning/phases/4.2/PLAN.md` 内容反映决策。
-- [ ] **DECIDE-03**: 决策文档化 —— 新建 ADR(V2-024 候选)记录 "Phase 4 product scope 决定走 Leg A / Leg B / 两条腿都推进" 的最终选择 + Rationale。Status = Accepted。
+- [ ] **DECIDE-01**: 完成 ADR-V2-023 §P5 触发条件审计 —— 系统化检查 §P5 列出的 Grid 独立产品 (原 Leg B, see ADR-V2-024 supersedes ADR-V2-023) 激活条件(at least N concrete enterprise leads / EAASP 升级路径阻断 / 团队规模 / 等)是否满足。Output: 一份 `docs/design/EAASP/adrs/decisions/2026-04-XX-leg-decision-audit.md`(or 写进新 ADR-V2-024 草稿)记录每条触发条件的 yes/no/evidence。
+- [ ] **DECIDE-02**: 基于 §P5 审计结果,在 Phase 4.1 socratic discuss 收尾后,定 Phase 4 后续走向 —— 若 engine 接入面 (原 Leg A, see ADR-V2-024 supersedes ADR-V2-023) 继续硬化,产出 Phase 4.2 engine-接入面-roadmap;若 Grid 独立产品 (原 Leg B, see ADR-V2-024) 激活,产出 Phase 4.2 Grid-独立产品-activation-plan。Output: `.planning/phases/4.2/PLAN.md` 内容反映决策。
+- [ ] **DECIDE-03**: 决策文档化 —— 新建 ADR(V2-024 候选)记录 "Phase 4 product scope 决定走 engine 接入面 / Grid 独立产品 / 两条腿都推进" (原 Leg A / Leg B / 两条腿都推进, see ADR-V2-024 supersedes ADR-V2-023) 的最终选择 + Rationale。Status = Accepted。
 
 ### C. Workflow & Governance Bootstrap(GSD 体系基建)
 
@@ -31,15 +31,15 @@
 
 > 这些是 Phase 4 决策结果出来后才能定义具体 task 的项,以 milestone 占位符形式列。
 
-- v2 — **若 Leg A 继续**:multi-tenant isolation hardening / perf tuning / skill catalog 扩展 / EAASP shadow sync 自动化
-- v2 — **若 Leg B 激活**:`grid-platform` 多租户激活 / `web-platform/` 前端实现 / 单租户 `grid-server` 商用化路径 / Tauri `grid-desktop` MVP
+- v2 — **若 engine 接入面 继续** (原 Leg A, see ADR-V2-024 supersedes ADR-V2-023):multi-tenant isolation hardening / perf tuning / skill catalog 扩展 / EAASP shadow sync 自动化
+- v2 — **若 Grid 独立产品 激活** (原 Leg B, see ADR-V2-024 supersedes ADR-V2-023):`grid-platform` 多租户激活 / `web-platform/` 前端实现 / 单租户 `grid-server` 商用化路径 / Tauri `grid-desktop` MVP
 - v2 — Phase 4 哪条线都涵盖的:harness.rs 抽 sub-fn(可读性) / TUI key_handler.rs 拆分 / grid-eval EvalRunner 抽象
 - v2 — 文档规整:`docs/design/*.md` root-level 60+ legacy 文件迁档至 `docs/design/LEGACY/` 子目录(或加 `[STALE]` header)
 - v2 — `lang/hermes-runtime-python` 对齐 hatchling + ≥3.12(frozen 但成本极低)
 
 ## Out of Scope
 
-- **`grid-sandbox` 仓库改名** —— per ADR-V2-023 §P6,Leg B 激活前不动
+- **`grid-sandbox` 仓库改名** —— per ADR-V2-023 §P6,Grid 独立产品 (原 Leg B, see ADR-V2-024 supersedes ADR-V2-023) 激活前不动
 - **`git push origin main`** —— 累积 ~14 unpushed commits,push 时机由人决策
 - **132 个历史 plan 文件 + 14 archived phase 迁入 GSD ROADMAP.md** —— 冻结只读,git history 为准
 - **F4 lint 52 module-overlap 警告 reconcile** —— 已确认无 Decision-text 矛盾,advisory-only
@@ -61,7 +61,7 @@
 | CLEANUP-03 | Phase 4.0 | docs/reviews/strategy-grid-two-leg-checklist.md 落地 |
 | CLEANUP-04 | Phase 4.0 | .github/CODEOWNERS Leg-B dormancy reviewer 强制 |
 | DECIDE-01 | Phase 4.1 | ADR-V2-023 §P5 触发条件 audit doc(可单文件 OR ADR-V2-024 草稿 §Audit) |
-| DECIDE-02 | Phase 4.2 | .planning/phases/4.2/PLAN.md 反映 Leg A / Leg B / 两条腿 路径 |
+| DECIDE-02 | Phase 4.2 | .planning/phases/4.2/PLAN.md 反映 engine 接入面 / Grid 独立产品 / 两条腿 路径 (原 Leg A / Leg B, see ADR-V2-024 supersedes ADR-V2-023) |
 | DECIDE-03 | Phase 4.2 | ADR-V2-024 Accepted (Proposed → Accepted 同 phase 走完) |
 | GOVERNANCE-01 | Phase 4.0 | REVIEW_POLICY.md 与 cleanup 一起做 tracer-bullet 验证 GSD plumbing |
 | GOVERNANCE-02 | Phase 4.1 | GSD discuss → plan → execute → review 端到端跑通本仓库 brownfield |
