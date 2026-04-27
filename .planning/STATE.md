@@ -129,9 +129,9 @@ Decisions snapshot: see PROJECT.md Key Decisions table + Phase 4.1 SUMMARY/VERIF
 **Resume 路径 (next session):**
 
 1. `/clear` (用户在 Claude Code 中执行)
-2. `/gsd-resume-work` — 自动读 STATE.md frontmatter + HANDOFF.json + .continue-here.md (如有), 恢复完整 Phase 4 上下文
-3. `/gsd-plan-phase 4.1` — 启动 Phase 4.1 plan-phase (research + patterns + plan + plan-checker)
-4. Phase 4.1 中段 audit 时点会显式 /clear 测 GOVERNANCE-03 (per D-D-04)
+2. `/gsd-resume-work` — 自动读 STATE.md frontmatter, 恢复完整 Phase 4 上下文
+3. `/gsd-plan-phase 4.2` — 启动 Phase 4.2 plan-phase (research light + patterns + plan + plan-checker; CONTEXT.md 已落盘)
+4. Phase 4.2 T6 sweep task 中段会显式 /clear 测 GOVERNANCE-03 (per CONTEXT.md D-E-02)
 
 **GSD plumbing tracer-bullet 验证结果 (Phase 4.0 success criterion #5 ✅):**
 
