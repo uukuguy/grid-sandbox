@@ -49,16 +49,37 @@ ADR-V2-024 落盘 Phase 4 product scope 决定, 喂 Phase 4.2 PLAN.md 路径。
 
 ## Decision / 决策
 
-> "Phase 4 product scope 决定 = **两腿都推进**. 据 audit §3.4 Q4 verdict yes (Grid 优先 + 并行可行) + §2.4 §P5.4 partial baseline 默认成立 + §B.2 user 工时事实, Grid 全栈与 EAASP 引擎层均为 user 工时主战场, 不存在二选一前提 (Grid 已 active, EAASP 同仓孵化期间 user 自做引擎); Implication: Phase 4.2+ 子任务必须按 §5 双轴模型 (engine vs data/integration) 切, 而非按 Leg A/B 切, 见 §5 + Open Items §6 待 user 补 5 条精确工时分配。"
+> 采纳 audit §5 双轴模型 (engine vs data/integration) 作为 Phase 4 product scope 主框架, audit §4.2 推荐 (两腿都推进) 是双轴模型在产品形态层的具体实例化。下层 §1 (双轴 substance) 与 §2 (三选一推荐) 在本 ADR 中 co-equal 并存, 后续讨论必须同时引用; 仅引用 §1 会丢失 SC#2 三选一硬要求, 仅引用 §2 会丢失 audit §0 partial-needs-revision elevation 要求的 §5 substance。
 
-(per audit §4.2; §0 elevation status: partial-needs-revision — 需与 §5 双轴模型 co-equal 引用)
+### §1. 双轴模型 substance (engine vs data/integration — audit §5.1 + §5.5 verbatim)
 
-具体决策:
-- **三选一选择**: 两腿都推进 (per audit §4.1 推荐, evidence chain 见 audit §4.1 + §3.4 Q4 + §2.4 §P5.4 + §0)
-- **框架修订**: 是否采纳 audit §5 框架修订建议 (engine vs data/integration 双轴) — Phase 4.2 决定, 但本 audit §0 verdict partial-needs-revision elevation 要求 Phase 4.2 ADR-V2-024 §Decision 段必须**同时**引用 §4.2 推荐措辞 (产品形态切角) + §5.5 双轴模型 substance (职责切角), 不能仅取其一
-- **Rationale**: 引用 audit doc §2 §P5 4 条 verdict (1 partial 语义弱化 + 1 unknown + 1 no + 1 partial baseline) + audit doc §3 §F Q1-Q4 verdict (2 yes + 2 partial); 详见 References 段 audit doc 链接
+替代 ADR-V2-023 的 Leg A(EAASP 集成)/ Leg B(Grid 独立)二元切换, 本 ADR 采纳两轴 (per audit §5.1 verbatim):
 
-**草稿状态**: Phase 4.1 落盘 Proposed; Decision 段 verbatim 引用 audit §4.2 (audit recommended per §4.1 — 见下方 Alternatives Considered 段 Option C 标注); Phase 4.2 翻 Accepted 时锁定文本 + 填 Enforcement 段 + 决定是否 supersede ADR-V2-023 (per D-F-05)。
+**轴 1: engine vs data/integration**
+- engine = 可复用的核心组件, user 主战场(per PRE-AUDIT-NOTES §B.2 + §C.1)
+- data/integration = 场景特定的横切关注, 客户/厂商/他人接手
+
+**轴 2: Grid 全栈 vs EAASP 引擎层 vs 数据/集成横切**
+- Grid 全栈 = `grid-cli` / `grid-server` / `grid-desktop` / `grid-platform` / `web*` 全部 — 都是 user 工时主战场
+- EAASP 引擎层 = `tools/eaasp-l2-memory-engine/` + `eaasp-skill-registry/` + `eaasp-mcp-orchestrator/` + `eaasp-l3-governance/` + `eaasp-l4-orchestration/` 各自 engine 组件 — user 主战场之一
+- 数据/集成横切 = 客户语料 / vector 库 / 企业 policy 数据 / SSO / 第三方治理 / 工作流 / SaaS 集成 / signature backend / WORM 存储 / 信创 LLM 适配 — 他人接手
+
+**audit 推荐采纳理由** (per audit §5.5 verbatim): "§3 4 个 Q 的 verdict 在双轴下都自然归约且解释力强;§4 三选一推荐'两腿都推进'在 Leg A/B 框架下含糊('两腿都推进'是什么意思?), 在双轴下清晰('user 投 engine + 他人投 data/integration, Grid 全栈作为产品 leg 自然 active 但内部职责切清晰')。"
+
+**5+3 字段切分** (per Open Item #4 user 决议 + audit §3.1):
+- Engine 内置 (5 项, 走 proto wire-level + Level 2/3 操作): `priority_tier` (替代原 `dispatch_level` — 跨行业通用名) / `risk_class` / `latency_class` / `audit_trace` / `model_lock`
+- 厂商写 (3 项, 走 vendor skill / Path D): SCADA 接入适配 / 业务 KPI 定义 / 行业合规表
+- **架构承诺**: EAASP L3/L4 必须提供 extension hook API, 让行业扩展可访问并控制 5 个 engine 内置字段; 详细 API 推到 Phase 4.3+ 独立 ADR (合并 audit §3.3 Q3 ⚫ 6 项接入位 ADR 候选)
+
+### §2. 三选一推荐 (产品形态实例 — audit §4.2 verbatim)
+
+> "Phase 4 product scope 决定 = **两腿都推进**. 据 audit §3.4 Q4 verdict yes (Grid 优先 + 并行可行) + §2.4 §P5.4 partial baseline 默认成立 + §B.2 user 工时事实, Grid 全栈与 EAASP 引擎层均为 user 工时主战场, 不存在二选一前提 (Grid 已 active, EAASP 同仓孵化期间 user 自做引擎); Implication: Phase 4.2+ 子任务必须按 §5 双轴模型 (engine vs data/integration) 切, 而非按 Leg A/B 切, 见 §5 + Open Items §6 待 user 补 5 条精确工时分配。" (per audit §4.2; §0 elevation status: partial-needs-revision — 需与 §5 双轴模型 co-equal 引用)
+
+**工时 baseline** (per Open Item #2 user 决议 + audit §B.2 工时事实精确化): Grid 全栈 ≈60% / EAASP 引擎 ≈30% / 元工作 (planning/audit/governance) ≈10%
+
+**优先发力组合** (per Open Item #3 user 决议 + audit §3.4 §F.Q4): grid-cli + grid-server 优先发力, grid-desktop / grid-platform / web* 静态 dormant 到下个 milestone
+
+**草稿状态 → Accepted 翻转**: Phase 4.2 commit 当天 status: Proposed → Accepted + accepted_at 2026-04-XX + supersedes ADR-V2-023 (per T4 frontmatter delta).
 
 ## Consequences / 后果
 
