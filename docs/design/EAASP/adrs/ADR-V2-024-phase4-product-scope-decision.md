@@ -207,12 +207,12 @@ ADR-V2-024 落盘 Phase 4 product scope 决定, 喂 Phase 4.2 PLAN.md 路径。
 - audit Open Items 列出待 user 补 5 条 (audit §6)
 
 ### Phase 4.2 (Accepted 翻转):
-- audit Open Items user 补足 (per D-E-04; ADR-block:yes hard-stop §P5.2 必须先补)
-- Decision 段填实 (verbatim 替换 §4.2 引用为锁定文本 + 双轴模型 substance 段)
-- Enforcement 段填(F4 lint 要求)
-- Alternatives Considered 各选项展开 (Positive / Negative / Risks)
-- 决定是否 supersede ADR-V2-023 (per D-F-05)
-- F4 lint pass + `/adr:accept ADR-V2-024`
+- audit Open Items 5 条 user 已补 ✓ (T3 backfill, 见 audit §6 + 本 ADR §References)
+- Decision 段填实 ✓ (T1 layered 锁文 — 顶层 blockquote pin + §1 双轴 substance + §2 三选一推荐 H3)
+- Alternatives Considered 4 Option Positive/Negative/Risks 展开 ✓ (T2 — Option C 标 audit recommended + Option D 标 audit co-equal)
+- Enforcement 段确认 strategic level + review_checklist 非空 ✓ (T3, F4 lint 要求满足; level=strategic 允许 trace=[] per ADR-V2-019 + ADR-V2-023 precedent)
+- frontmatter supersedes ADR-V2-023 ✓ (T4 — ADR-V2-024 supersedes 多行 YAML list 含 V2-023 + V2-023 frontmatter flip Superseded + body Status 行同步)
+- F4 lint pass + status Proposed → Accepted ✓ (T5 — Path B fallback per Phase 4.1 T5 deviation precedent: autonomous executor 模式下 `.adr-plugin/scripts/adr_lint.py --check F1,F2,F3,F4 --ci` 替代 `/adr:accept` slash command; T5 step 5.6 final joint lint V2-023+V2-024)
 
 ## History
 
