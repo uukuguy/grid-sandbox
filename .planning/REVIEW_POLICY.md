@@ -45,6 +45,10 @@ GSD 自带 `/gsd-code-review` 是 phase-end 的**单 reviewer 批量扫**;superp
 9. **任何 LOC delta > 200 的 task**
 10. **新增 crate / 新 Python package** —— Cargo.toml workspace members 或 lang/* 新目录
 11. **proto stub codegen 后处理 / Python type stub 写入** —— 例如 Phase 4a T7 `_loosen_enum_stubs`,因为它影响 4 个 package 的 type 表达
+12. **ADR strategy 草稿创建 / 锁文 (Phase 4.1 + 4.2 实证)** — review_protocol: `audit-fidelity-grep` (per §3.5 modality table)
+    - **触发**: 创建 / 修改 ADR type=strategy 的 Decision / Alternatives / Enforcement 段
+    - **rationale**: cross-doc verbatim 引用 (eg. ADR Decision 段引用 audit doc 段) 的正确性用 grep PASS 证明; 独立 reviewer 复读两文档对比反而引入主观误判 (Phase 4.1 §7 Lesson 1 经验 3)
+    - **acceptance criteria template**: 每 cross-doc 引用必须 `grep -F '<verbatim phrase>' <target_file>` exit 0 + `grep -F '<verbatim phrase>' <source_file>` exit 0; 用 awk + line count 验证段级 verbatim 复制完整性
 
 **Review chain**:
 
@@ -116,6 +120,19 @@ implementer 自 review + commit
 ```
 
 **Cost**: 0。
+
+### §3.5 Review modality table (Phase 4.1 Lesson 1 实证扩展)
+
+| Modality | When to use | Cost | Coverage |
+|----------|-------------|------|---------|
+| `executor inline acceptance` | mechanical sweep / cleanup task; acceptance criteria 全 grep / lint / file-exist | low (no extra agent) | 等同 single-pass review for grep-verifiable artifacts |
+| `independent reviewer agent` | code change / architecture change / cross-vendor contract change | high (extra agent + tokens) | 高于 inline (catches subjective issues) |
+| `audit-fidelity-grep` | ADR Decision lock / cross-doc verbatim 引用 (eg. ADR-V2-024 Decision §4.2 + §5.5 引用 audit doc) | low | 等同 (cross-doc grep PASS = fidelity proven) |
+
+**适用规则** (Phase 4.1 §7 Lesson 1 经验 1+3 实证):
+- design-heavy phase task 在 single-agent autonomous executor 模式下默认 fallback `executor inline acceptance` (Phase 4.1 实证)
+- ADR strategy 草稿 / 锁文 类 task 走 `audit-fidelity-grep` 比独立 reviewer 更可靠 (Phase 4.1 T5 + Phase 4.2 T1 实证)
+- code change 类 task 仍走 `independent reviewer agent` (Phase 4.1 经验未实证此 modality, 保留 superpowers two-stage 路径)
 
 ---
 
@@ -342,6 +359,7 @@ cargo fmt -p grid-engine -- --check some/file.rs
 1. design-heavy phase 用 superpowers two-stage 4 次连击, **若 executor 是单 agent autonomous (gsd-execute-phase) 模式**, two-stage 自动 fallback 到 inline self-check + bash verify automated — 这本身是 GSD 适配实证: REVIEW_POLICY §3 应当显式区分 "executor inline acceptance" vs "independent reviewer agent" 两种 review modality, 各自对应不同 high-risk trigger 阈值。Phase 4.2+ plan-phase 时考虑增 §3.5 modality table。
 2. audit doc 类长文档 task 用 inline acceptance criteria 抓"covers all input items" 在 grep-assertion 粒度 (4 schema 字段 ≥ 9 occurrences, cross-ref ≥ 8, verdict 总表 4-state 白名单, LOC 区间 ±300 LOC margin) 已经把握 fidelity baseline — Phase 4.1 实证 acceptance criteria pre-commit 自动验证比独立 reviewer agent 在 short-form 文档 fidelity 上 marginal cost 低 / coverage 等同。建议 REVIEW_POLICY §2.9 LOC > 200 trigger 在 doc-only / audit-only task 上, 若 acceptance criteria ≥ 8 项 grep-assertion 已覆盖 schema 完整性, 可以放宽为 inline self-check 即可。
 3. ADR strategy 草稿 (T5) 验证 "Decision 段 fidelity to audit doc" 是关键 — Phase 4.1 实证 Fix #3 substitution 机制 (REC_PHRASE 来自 audit §4.1, 不在 PLAN hardcode) + acceptance criterion 6 grep `awk "/^## Decision/,/^## /" $ADR | grep -F "$REC_PHRASE"` 自动验证 Decision 段 verbatim 引用 audit phrase — 这种 cross-doc fidelity grep 比独立 quality reviewer 复读 audit + ADR 两文档对比更可靠。建议 REVIEW_POLICY §2 加新 trigger row §2.12 "ADR strategy 草稿创建": review_protocol = "audit-fidelity-grep" (新 modality, 用 acceptance criteria pre-commit grep 验证 Decision/Consequences/Alternatives 各段 cross-doc fidelity, 无需独立 reviewer agent)。
+4. (Phase 4.2 实证, commit `<T7_HASH>`) `audit-fidelity-grep` modality 在 Phase 4.2 T1 ADR-V2-024 Decision 段 layered 锁文 + T2 Alternatives Considered 4 Option 展开 + T3 audit §6 5 行 backfill 三 task 实证应用 — cross-doc 引用 audit §4.2 / §5.5 / §6 / §0 verbatim 完整复制, 8+8+8 grep acceptance criterion 全 PASS, 0 critical issue. 比独立 reviewer agent 复读两文档对比更可靠. §3.5 modality table + §2.12 trigger row 在本 phase 同步落地 (T7 inline patch).
 
 **翻 Active 的依据**: Phase 4.0 五 task 4 skip + 1 gsd-standard 实证 PLAN.md frontmatter `review_protocol:` 字段格式可用 (commit `c12f425` Phase 4.0 ✅ COMPLETE) + Phase 4.1 六 work tasks (T1+T2+T4+T5+T6+T7) 实证激活路径完整 (T3 SKIPPED per user, GOVERNANCE-03 deferred 但不影响 review_protocol 路径完整性) = REVIEW_POLICY §2 / §3 / §4 全段在 brownfield 项目工作 → 翻 Active。
 
@@ -361,4 +379,4 @@ cargo fmt -p grid-engine -- --check some/file.rs
 
 ---
 
-*Last updated: 2026-04-27 — Active 状态 translated from Draft 经 Phase 4.1 audit task 实证激活后。原 Phase 4a 起草内容 + Phase 4.0 dry-run 验证 + Phase 4.1 实证激活 三重证据。*
+*Last updated: 2026-04-28 — Phase 4.2 T7 milestone close cascade: §2 加第 12 trigger bullet (ADR strategy 草稿创建 → audit-fidelity-grep) + §3.5 modality table 加 + §7 Lesson 1 entry 4 (Phase 4.2 实证) prepended。原 Phase 4a 起草 + Phase 4.0 dry-run + Phase 4.1 实证激活 + Phase 4.2 实证扩展 四重证据。*

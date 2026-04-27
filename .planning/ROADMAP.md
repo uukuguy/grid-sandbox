@@ -49,12 +49,13 @@
 **Depends on**: Phase 4.1(audit doc 必须先存在,且 audit 结论已被 STATE.md 锁定)
 **Requirements**: DECIDE-02, DECIDE-03
 **Success Criteria** (what must be TRUE):
-  1. `.planning/phases/4.2/PLAN.md` 内容反映 Phase 4.1 audit 决策方向 —— 若推荐 engine 接入面 硬化 (原 Leg A 硬化, see ADR-V2-024 supersedes ADR-V2-023) 则 plan 列出 multi-tenant / perf / EAASP shadow sync 类 task;若 Grid 独立产品 激活 (原 Leg B 激活, see ADR-V2-024) 则 plan 列出 grid-platform / web-platform 启动 task;若两条腿则两块都列
-  2. 新 ADR(候选 ID `ADR-V2-024-phase4-product-scope-decision`)经 `/adr:new --type strategy` 创建,frontmatter F1-F4 lint 全 PASS,Decision 段明确写出选定 leg + Rationale 段引用 §P5 audit 中具体 evidence
-  3. ADR-V2-024 经 `/adr:accept` 进入 Accepted 状态(F1-F4 hard gates 通过 + audit doc 已被 §References 引用)
-  4. Phase 4.2 end-phase 时 PROJECT.md §Active 中的 "Phase 4 主决策" 行被划掉移入 §Validated,引用 ADR-V2-024 commit hash
-  5. Milestone 关闭检查点:CLEANUP-01..04 + DECIDE-01..03 + GOVERNANCE-01..03 全部在 traceability table 标记 ✅,debt water-line 没有新增 P0/P1-active 项
-**Plans**: TBD
+  1. ✅ `.planning/phases/4.2/PLAN.md` 内容反映 Phase 4.1 audit 决策方向 — 实施 5+3 切分 + grid-cli + grid-server 优先 + 双轴模型主框架 (per audit §4.1 §5.5 §F.Q1 §F.Q4 + Open Items §6 backfill T3 commit `6139a30`)
+  2. ✅ ADR-V2-024 经创建 (Phase 4.1 Proposed commit `0542139`) + Decision/Alternatives/Enforcement 段 Phase 4.2 填实 (T1 `7f08aa5` + T2 `784cc10` + T3 `6139a30`); F1-F4 lint exit 0 (T5 `f497eef`)
+  3. ✅ ADR-V2-024 status Accepted (T5 commit `f497eef` Path B fallback per Phase 4.1 T5 deviation precedent); supersedes ADR-V2-023 (T4 commit `6a19c46`)
+  4. ✅ PROJECT.md §Active "Phase 4 主决策" 行划掉移入 §Validated, 引用 ADR-V2-024 commit hash (T7 commit `<T7_HASH>`)
+  5. ✅ Milestone 关闭检查点: CLEANUP-01..04 (Phase 4.0) + DECIDE-01..03 (Phase 4.1+4.2) + GOVERNANCE-01..03 (Phase 4.0+4.1+4.2) 全部 traceability ✅; debt water-line 无新增 P0/P1-active 项 (T7 commit + T8 SUMMARY)
+**Plans**: 1 plan
+  - [x] 04.2-01-PLAN.md — DECIDE-02 + DECIDE-03 + GOVERNANCE-03 (8 atomic tasks T1-T8 incl ADR-V2-024 layered 锁文 + supersedes V2-023 + 5-file Leg A/B sweep + milestone close cascade)
 **UI hint**: no
 
 ## Phase 之外的 milestone 关闭后续
@@ -72,23 +73,23 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 4.0 Bootstrap & Cleanup | 1/1 ✅ | Complete (5/5 SC, 7/7 must-haves PASS) | 2026-04-27 |
-| 4.1 Discuss & Audit | 0/1 (planned 2026-04-27) | Planned — 7 atomic tasks expected 6-9 commits | - |
-| 4.2 Decide & Document | 0/0 (TBD by plan-phase) | Not started | - |
+| 4.1 Discuss & Audit | 1/1 ✅ | Complete (14/15 must-haves PASS, SC#4 GOVERNANCE-03 deferred to 4.2) | 2026-04-27 |
+| 4.2 Decide & Document | 1/1 ✅ | Complete (5/5 SC ✅, ADR-V2-024 Accepted, milestone closed) | 2026-04-28 |
 
 ## Coverage
 
 | REQ-ID | Phase | Notes |
 |--------|-------|-------|
-| CLEANUP-01 | 4.0 | L1 adaptation guide §4 chunk_type sweep |
-| CLEANUP-02 | 4.0 | D120 ledger ambiguity + row-edit-on-close convention |
-| CLEANUP-03 | 4.0 | strategy-grid-two-leg-checklist.md 落地 |
-| CLEANUP-04 | 4.0 | .github/CODEOWNERS 落地 |
-| DECIDE-01 | 4.1 | §P5 触发条件 audit doc |
-| DECIDE-02 | 4.2 | Phase 4.2 path PLAN.md(engine 接入面 or Grid 独立产品 or both, 原 Leg A or Leg B, see ADR-V2-024 supersedes ADR-V2-023) |
-| DECIDE-03 | 4.2 | ADR-V2-024 Accepted |
-| GOVERNANCE-01 | 4.0 | REVIEW_POLICY.md(GSD 接管 Step 3 同时落) |
-| GOVERNANCE-02 | 4.1 | GSD discuss→plan→execute 端到端验证 |
-| GOVERNANCE-03 | 4.1 | /gsd-resume-work 至少触发一次 |
+| ✅ CLEANUP-01 | 4.0 | L1 adaptation guide §4 chunk_type sweep (commit `54349d1`) |
+| ✅ CLEANUP-02 | 4.0 | D120 ledger ambiguity + row-edit-on-close convention (commit `a5df8bb`) |
+| ✅ CLEANUP-03 | 4.0 | strategy-grid-two-leg-checklist.md 落地 (commit `7b00c6c`) |
+| ✅ CLEANUP-04 | 4.0 | .github/CODEOWNERS 落地 (commit `fcef926`) |
+| ✅ DECIDE-01 | 4.1 | §P5 触发条件 audit doc (Phase 4.1 commits, audit §0–§7 完整) |
+| ✅ DECIDE-02 | 4.2 | PLAN.md + 5+3 切分 + grid-cli/server 优先 (T6+T7) |
+| ✅ DECIDE-03 | 4.2 | ADR-V2-024 Accepted (T1-T5 commits `7f08aa5`/`784cc10`/`6139a30`/`6a19c46`/`f497eef`) |
+| ✅ GOVERNANCE-01 | 4.0 | REVIEW_POLICY.md draft (commit `165cab4`) |
+| ✅ GOVERNANCE-02 | 4.1 | GSD 端到端 (Phase 4.1 SUMMARY) |
+| ✅ GOVERNANCE-03 | 4.1+4.2 | Phase 4.1 deferred → Phase 4.2 T6 trigger gate (commit `eff7f68` + cleanup `8524821`) |
 
 **Total v1 requirements:** 10
 **Mapped:** 10/10 ✓

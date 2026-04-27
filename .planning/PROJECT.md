@@ -39,12 +39,13 @@
 - ✓ **AgentLoop 通用性**(ADR-V2-016) —— capability matrix + Eager probe + tool_choice=Required + 不支持 provider 优雅退出
 - ✓ **Phase-driven 开发流水**(Phase 2 → 4a 共 14 个归档 phase) —— ADR governance plugin + Deferred ledger SSOT
 - ✓ **Debt 水位归零**(2026-04-20 @ commit `8629505`) —— D148/D149/D151/D152/D153/D154/D155 全 ✅ CLOSED 后无新 P1-active
+- ✓ **Phase 4 主决策**(2026-04-28) —— 走"双轴模型(engine vs data/integration)主框架 + 两腿都推进(产品形态实例)" 路径; 详见 ADR-V2-024 (commit `f497eef`, status: Accepted, supersedes ADR-V2-023) + audit doc `docs/design/EAASP/adrs/decisions/2026-04-27-leg-decision-audit.md`
 
 ### Active
 
-<!-- Phase 4 待办 — Phase 4.0 4 项 cleanup + GOVERNANCE-01 已 validated 移到上面 §Validated。 -->
+<!-- Phase 4 待办 — Phase 4.0 4 项 cleanup + GOVERNANCE-01 已 validated 移到上面 §Validated; Phase 4.2 主决策已 validated → ADR-V2-024 Accepted 2026-04-28 commit `f497eef`。 -->
 
-- [ ] **Phase 4 主决策:engine vs data/integration 切分 + EAASP 分仓 graduation criteria + Grid 自身产品化路径**(详见 `.planning/phases/4.1-PRE-AUDIT-NOTES.md` §C.3 + §F audit agenda Q1-Q4)—— Phase 4.1 先 socratic discuss + §P5 重新框定 → ADR-V2-024 strategy-record
+- [ ] *(Phase 4 milestone 已闭, 等待下一个 milestone 由 ADR-V2-024 决策结果驱动新 active items.)*
 
 ### Out of Scope
 
