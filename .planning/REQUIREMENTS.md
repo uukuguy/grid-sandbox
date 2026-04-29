@@ -77,37 +77,37 @@
 
 ## Traceability
 
-> Filled by `/gsd-roadmapper` after Step 10 — ROADMAP.md 生成时回填。每条 REQ-ID 1-to-1 映射到 ROADMAP.md `Phase Details` 中一个 phase。
+> Filled by `/gsd-roadmapper` after Step 10 (✅ filled 2026-04-29 via `/gsd-roadmapper`). 每条 REQ-ID 1-to-1 映射到 ROADMAP.md `Phase Details` 中一个 phase。
 
 | REQ-ID | Phase | Notes |
 |--------|-------|-------|
-| CLI-01 | TBD | (待 roadmapper 填) |
-| CLI-02 | TBD | |
-| CLI-03 | TBD | |
-| CLI-04 | TBD | |
-| CLI-05 | TBD | |
-| CLI-06 | TBD | |
-| SERVER-01 | TBD | |
-| SERVER-02 | TBD | |
-| SERVER-03 | TBD | |
-| SERVER-04 | TBD | |
-| SERVER-05 | TBD | |
-| CONTRACT-00 | TBD | (ADR-V2-025 候选) |
-| CONTRACT-01 | TBD | (ChunkType 扩展, contract-v1.2.0 升级) |
-| CONTRACT-02 | TBD | (Hook event 扩展, ADR-V2-026 候选) |
-| WATCH-00 | TBD | (D120 — Phase 5 早期 phase 必修, D134 前置) |
-| WATCH-01 | TBD | (D109) |
-| WATCH-02 | TBD | (D134 — must fix, D120 修完后顺接) |
-| WATCH-03 | TBD | (D136) |
-| WATCH-04 | TBD | (D142 + D143) |
-| WATCH-05 | TBD | (NEW-D2) |
-| WATCH-06 | TBD | (NEW-E2) |
-| WATCH-07 | TBD | (NEW-E3 — D142/D143 关闭后顺接) |
-| INTERFACE-01 | TBD | (ADR-only, 新 ADR-V2-026 待定 ID) |
+| CLI-01 | 5.2 | |
+| CLI-02 | 5.2 | |
+| CLI-03 | 5.2 | |
+| CLI-04 | 5.2 | |
+| CLI-05 | 5.2 | |
+| CLI-06 | 5.2 | |
+| SERVER-01 | 5.4 | |
+| SERVER-02 | 5.4 | |
+| SERVER-03 | 5.4 | |
+| SERVER-04 | 5.4 | |
+| SERVER-05 | 5.4 | |
+| CONTRACT-00 | 5.1 | (ADR-V2-025 候选) |
+| CONTRACT-01 | 5.3 | (ChunkType 扩展, contract-v1.2.0 升级) |
+| CONTRACT-02 | 5.3 | (Hook event 扩展, ADR-V2-026 候选) |
+| WATCH-00 | 5.0 | (D120 — Phase 5 早期 phase 必修, D134 前置) |
+| WATCH-01 | 5.3 | (D109) |
+| WATCH-02 | 5.0 | (D134 — must fix, D120 修完后顺接) |
+| WATCH-03 | 5.3 | (D136) |
+| WATCH-04 | 5.4 | (D142 + D143) |
+| WATCH-05 | 5.1 | (NEW-D2) |
+| WATCH-06 | 5.5 | (NEW-E2) |
+| WATCH-07 | 5.4 | (NEW-E3 — D142/D143 关闭后顺接) |
+| INTERFACE-01 | 5.5 | (ADR-only, 新 ADR-V2-026 待定 ID) |
 
-**Total v3.1 requirements:** 22 REQ-IDs (CLI 6 + SERVER 5 + CONTRACT 3 + WATCHLIST 8 + INTERFACE 1)
+**Total v3.1 requirements:** 23 REQ-IDs (CLI 6 + SERVER 5 + CONTRACT 3 + WATCHLIST 8 + INTERFACE 1)
 **Granularity:** 6 phases (Phase 5.0 → 5.5)
-**Mapping density:** ~3.7 REQ/phase (在 GSD standard 3-5 plans/phase 范围)
+**Mapping density:** ~3.8 REQ/phase (23 REQ / 6 phase, 在 GSD standard 3-5 plans/phase 范围)
 **Watchlist strategy:** spread (8 watchlist items 分散到相关 phase 顺手解决)
 
 ---
