@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
 status: ready-to-plan
-stopped_at: Phase 5.0 context gathered — 3 gray areas discussed, all deferred to planning
-last_updated: "2026-05-19T00:00:00.000Z"
-last_activity: 2026-05-19 -- Phase 5.0 discuss-phase complete (CONTEXT.md + DISCUSSION-LOG.md committed)
+stopped_at: Phase 5.0 execute complete — D134 GA1 resolved, summary created
+last_updated: "2026-05-19T14:50:00.000Z"
+last_activity: 2026-05-19 -- Phase 5.0 1/1 plan COMPLETE (D134 dead code removed, stop scope test added, 11 tests pass)
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
+  percent: 17
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 ## Current Position
 
-Phase: 5.0 of 5.5 (Hook Envelope Baseline) — ready to plan
-Plan: — (TBD by `/gsd-plan-phase 5.0`)
-Status: Ready to plan (discuss-phase complete — 3 gray areas deferred)
-Last activity: 2026-05-19 -- Phase 5.0 discuss-phase complete (CONTEXT.md + DISCUSSION-LOG.md committed; all 3 gray areas deferred to planning)
+Phase: 5.0 of 5.5 (Hook Envelope Baseline) — COMPLETE ✅
+Plan: 05.0-01 ✅ (1/1 complete)
+Status: Phase 5.0 done — D134 GA1 resolved, ready for Phase 5.1
+Last activity: 2026-05-19 -- Phase 5.0 1/1 plan COMPLETE (commit 584b1cf)
 
-Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.0 ready for `/gsd-plan-phase 5.0`)
+Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5.1 ready to plan)
 
 **Previous milestone closure**: Phase 4 milestone v3.0 ✅ CLOSED 2026-04-28 — 3/3 phases (4.0/4.1/4.2), ADR-V2-024 Accepted (双轴模型), 16 commits pushed to origin/main.
 
@@ -38,7 +38,7 @@ Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.
 
 **Velocity:**
 
-- Total plans completed (executed): 2 ✅
+- Total plans completed (executed): 3 ✅
 - Total plans planned (ready to execute): 0
 - Average duration: ~75 min (Phase 4.0 ~25 min mechanical + Phase 4.1 ~3.5h audit + 4 plan iterations + cross-AI review)
 - Total execution time: ~4h cumulative
@@ -50,8 +50,8 @@ Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.
 | 4.0 Bootstrap & Cleanup | **1/1 ✅** | COMPLETE 2026-04-27 (5 commits + SUMMARY) | 5/5 SC PASS, 7/7 must-haves PASS, 0 deviations |
 | 4.1 Discuss & Audit | **1/1 ✅** | COMPLETE 2026-04-27 (8 commits + SUMMARY + VERIFICATION) | 14/15 must-haves PASS, SC#4 GOVERNANCE-03 deferred per cross-AI Q4 consensus + user decision; 4-iteration plan 经过 cross-AI review (4 reviewers: claude/gemini/opencode-glm5.4/codex) + 5 fixes + B1+B2 fixes |
 | 4.2 Decide & Document | **1/1 ✅** | COMPLETE 2026-04-28 (13 commits + SUMMARY + Phase Gate PASS) | 8/8 tasks PASS, 5/5 SC ✅, ADR-V2-024 Accepted (supersedes V2-023), GOVERNANCE-03 闭环 (3/3 ✓ verdict in SUMMARY §T6), audit-fidelity-grep modality 实证 (T1+T2+T3) |
-| 5.0 Hook Envelope Baseline | 0/1 | Not started — ready to plan | Plan 待 `/gsd-plan-phase 5.0` 创建 |
-| 5.1 Runtime Tier ADR + Contract Test Parametrization | 0/1 | Not started | Depends on 5.0 |
+| 5.0 Hook Envelope Baseline | **1/1 ✅** | COMPLETE 2026-05-19 (commit 584b1cf) | D134 GA1 resolved, stop scope test added, 11 tests PASS |
+| 5.1 Runtime Tier ADR + Contract Test Parametrization | 0/1 | Not started — ready to plan | Depends on 5.0 ✅ |
 | 5.2 CLI Hardening | 0/TBD | Not started | Depends on 5.0 |
 | 5.3 Contract Evolution | 0/TBD | Not started | Depends on 5.1 |
 | 5.4 Server Hardening | 0/TBD | Not started | Depends on 5.3 |
@@ -59,7 +59,7 @@ Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.
 
 **Recent Trend:**
 
-- Last 5 plans: [04.0-01 ✅ 2026-04-27, 04.1-01 ✅ 2026-04-27, 04.2-01 ✅ 2026-04-28]
+- Last 5 plans: [05.0-01 ✅ 2026-05-19, 04.0-01 ✅ 2026-04-27, 04.1-01 ✅ 2026-04-27, 04.2-01 ✅ 2026-04-28]
 - Trend: design-heavy phase 跑通 — cross-AI review (4 reviewers + 7 fixes) 显著提升 audit 框架严谨性,catch 到 B1 pre-committed verdict 隐患 (T4 hardcoded "两腿都推进" 被 Path 1 fix 改成 verdict-format regex + runtime substitution)
 
 *Updated after each plan completion*
