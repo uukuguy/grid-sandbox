@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
-status: ready-to-plan
-stopped_at: Phase 5.0 execute complete — D134 GA1 resolved, summary created
-last_updated: "2026-05-19T14:50:00.000Z"
-last_activity: 2026-05-19 -- Phase 5.0 1/1 plan COMPLETE (D134 dead code removed, stop scope test added, 11 tests pass)
+status: executing
+stopped_at: Phase 5.1 plan created — ready to execute
+last_updated: "2026-05-19T15:00:00.000Z"
+last_activity: 2026-05-19 -- Phase 5.1 plan 05.1-01 (1/1) ready to execute
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 1
+  total_plans: 2
   completed_plans: 1
   percent: 17
 ---
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 Phase: 5.0 of 5.5 (Hook Envelope Baseline) — COMPLETE ✅
 Plan: 05.0-01 ✅ (1/1 complete)
-Status: Phase 5.0 done — D134 GA1 resolved, ready for Phase 5.1
-Last activity: 2026-05-19 -- Phase 5.0 1/1 plan COMPLETE (commit 584b1cf)
+Status: Ready to execute
+Last activity: 2026-05-01 -- Phase 5.1 planning complete
 
 Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5.1 ready to plan)
 
