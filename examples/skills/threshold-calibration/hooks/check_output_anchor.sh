@@ -10,25 +10,14 @@
 #     "event": "Stop",
 #     "session_id": "...",
 #     "skill_id": "threshold-calibration",
-#     "evidence_anchor_id": "anc_...",   <-- the field we check
+#     "evidence_anchor_id": "anc_...",
 #     ...
 #   }
-#
-# Some older engines / runtimes nested the final assistant output under
-# `.output.evidence_anchor_id`. Accept either for forward/backward compat.
 set -euo pipefail
 
 input="$(cat)"
 
-has_top_anchor() {
-  echo "$input" | jq -e '(.evidence_anchor_id // "") | length > 0' >/dev/null 2>&1
-}
-
-has_output_anchor() {
-  echo "$input" | jq -e '(.output // {} | .evidence_anchor_id // "") | length > 0' >/dev/null 2>&1
-}
-
-if has_top_anchor || has_output_anchor; then
+if echo "$input" | jq -e '(.evidence_anchor_id // "") | length > 0' >/dev/null 2>&1; then
   echo '{"decision":"allow"}'
   exit 0
 fi

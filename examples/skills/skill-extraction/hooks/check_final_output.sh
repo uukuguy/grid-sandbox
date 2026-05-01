@@ -15,26 +15,13 @@
 #     "evidence_anchor_id": "anc_...",
 #     ...
 #   }
-#
-# Older engines nested the final assistant output under `.output.*`.
-# Accept either for forward/backward compat.
 set -euo pipefail
 
 input="$(cat)"
 
-has_top_both() {
-  echo "$input" | jq -e \
-    '(.draft_memory_id // "" | length > 0)
-     and (.evidence_anchor_id // "" | length > 0)' >/dev/null 2>&1
-}
-
-has_output_both() {
-  echo "$input" | jq -e \
-    '(.output // {} | .draft_memory_id // "" | length > 0)
-     and (.output // {} | .evidence_anchor_id // "" | length > 0)' >/dev/null 2>&1
-}
-
-if has_top_both || has_output_both; then
+if echo "$input" | jq -e \
+  '(.draft_memory_id // "" | length > 0)
+   and (.evidence_anchor_id // "" | length > 0)' >/dev/null 2>&1; then
   echo '{"decision":"allow"}'
   exit 0
 fi

@@ -129,6 +129,51 @@ fn hook_envelope_stop_matches_adr_example() {
     assert_eq!(actual, expected, "Stop envelope mismatch");
 }
 
+/// Verifies Stop scope IDs are flat top-level keys — NOT nested under
+/// `.output.*` or `.memory.*`. This guards against the backward-compat
+/// dual-path that older engines emitted. D120 regression.
+#[test]
+fn hook_envelope_stop_flat_key_structure() {
+    let ctx = HookContext::new()
+        .with_event("Stop")
+        .with_session("sess-xyz")
+        .with_skill_id("threshold-calibration")
+        .with_draft_memory_id("mem-abc")
+        .with_evidence_anchor_id("anchor-def");
+
+    let json = ctx.to_json();
+
+    // Must be top-level
+    assert!(
+        json.get("draft_memory_id").is_some(),
+        "draft_memory_id must be top-level key"
+    );
+    assert!(
+        json.get("evidence_anchor_id").is_some(),
+        "evidence_anchor_id must be top-level key"
+    );
+
+    // Must NOT be nested under .output or .memory
+    assert!(
+        json.get("output").is_none(),
+        "Stop envelope must NOT contain .output (D120 dead-code guard)"
+    );
+    assert!(
+        json.get("memory").is_none(),
+        "Stop envelope must NOT contain .memory (D120 dead-code guard)"
+    );
+
+    // Env vars must also be flat (no output./memory. prefixes)
+    let env: HashMap<String, String> = ctx.to_env_vars().into_iter().collect();
+    for key in env.keys() {
+        assert!(
+            !key.starts_with("GRID_OUTPUT_")
+                && !key.starts_with("GRID_MEMORY_"),
+            "env var {key} must not use .output./.memory. prefix (D120)"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // §2.3 optional fields default to empty string (NOT null, NOT missing)
 // ---------------------------------------------------------------------------
