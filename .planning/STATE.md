@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
 status: ready-to-plan
-stopped_at: Milestone v3.1 ROADMAP.md created — Phase 5.0 ready to plan
-last_updated: "2026-04-29T01:00:00.000Z"
-last_activity: 2026-04-29 -- Milestone v3.1 ROADMAP.md created (6 phases, 23/23 REQ-IDs mapped, watchlist-spread strategy)
+stopped_at: Phase 5.0 context gathered — 3 gray areas discussed, all deferred to planning
+last_updated: "2026-05-19T00:00:00.000Z"
+last_activity: 2026-05-19 -- Phase 5.0 discuss-phase complete (CONTEXT.md + DISCUSSION-LOG.md committed)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 Phase: 5.0 of 5.5 (Hook Envelope Baseline) — ready to plan
 Plan: — (TBD by `/gsd-plan-phase 5.0`)
-Status: Ready to plan (ROADMAP.md created, REQUIREMENTS.md Traceability table filled)
-Last activity: 2026-04-29 -- Milestone v3.1 ROADMAP.md created (6 phases 5.0/5.1/5.2/5.3/5.4/5.5, 23/23 REQ-IDs mapped, 0 orphans)
+Status: Ready to plan (discuss-phase complete — 3 gray areas deferred)
+Last activity: 2026-05-19 -- Phase 5.0 discuss-phase complete (CONTEXT.md + DISCUSSION-LOG.md committed; all 3 gray areas deferred to planning)
 
-Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.0 ready to enter `/gsd-plan-phase 5.0`)
+Progress: [░░░░░░░░░░] 0% (0/6 milestone phases — Phase 5.0 ready for `/gsd-plan-phase 5.0`)
 
 **Previous milestone closure**: Phase 4 milestone v3.0 ✅ CLOSED 2026-04-28 — 3/3 phases (4.0/4.1/4.2), ADR-V2-024 Accepted (双轴模型), 16 commits pushed to origin/main.
 
