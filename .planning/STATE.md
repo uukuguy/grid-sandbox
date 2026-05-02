@@ -4,14 +4,14 @@ milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
 status: executing
 stopped_at: Phase 5.1 plan 05.1-01 ready to execute — proceeding to /gsd-execute-phase 5.1
-last_updated: "2026-05-02T07:50:20.163Z"
-last_activity: 2026-05-02 -- Phase 05.1 execution started
+last_updated: "2026-05-02T08:14:17.220Z"
+last_activity: 2026-05-02
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 ## Current Position
 
-Phase: 05.1 (runtime-tier-adr) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 05.1
-Last activity: 2026-05-02 -- Phase 05.1 execution started
+Phase: 5.1 of 5.5 (Runtime Tier ADR + Contract Test Parametrization) — COMPLETE ✅
+Next phase: 5.2 (CLI Hardening) — ready to plan
+Status: Phase 5.1 complete; awaiting next-phase decision
+Last activity: 2026-05-02 -- Phase 5.1 verified 4/4 must-haves PASSED
 
-Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5.1 ready to plan)
+Progress: [▓▓▓░░░░░░░] 33% (2/6 milestone phases complete — 5.0 + 5.1)
 
 **Previous milestone closure**: Phase 4 milestone v3.0 ✅ CLOSED 2026-04-28 — 3/3 phases (4.0/4.1/4.2), ADR-V2-024 Accepted (双轴模型), 16 commits pushed to origin/main.
 
@@ -51,7 +51,7 @@ Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5
 | 4.1 Discuss & Audit | **1/1 ✅** | COMPLETE 2026-04-27 (8 commits + SUMMARY + VERIFICATION) | 14/15 must-haves PASS, SC#4 GOVERNANCE-03 deferred per cross-AI Q4 consensus + user decision; 4-iteration plan 经过 cross-AI review (4 reviewers: claude/gemini/opencode-glm5.4/codex) + 5 fixes + B1+B2 fixes |
 | 4.2 Decide & Document | **1/1 ✅** | COMPLETE 2026-04-28 (13 commits + SUMMARY + Phase Gate PASS) | 8/8 tasks PASS, 5/5 SC ✅, ADR-V2-024 Accepted (supersedes V2-023), GOVERNANCE-03 闭环 (3/3 ✓ verdict in SUMMARY §T6), audit-fidelity-grep modality 实证 (T1+T2+T3) |
 | 5.0 Hook Envelope Baseline | **1/1 ✅** | COMPLETE 2026-05-19 (commit 584b1cf) | D134 GA1 resolved, stop scope test added, 11 tests PASS |
-| 5.1 Runtime Tier ADR + Contract Test Parametrization | 0/1 | Not started — ready to plan | Depends on 5.0 ✅ |
+| 5.1 Runtime Tier ADR + Contract Test Parametrization | **1/1 ✅** | COMPLETE 2026-05-02 (5 task commits + SUMMARY + VERIFICATION) | 4/4 SC PASS, 4/4 must-haves PASS, NEW-D2 closed, ADR-V2-025 Accepted, CONTRACT-00 + WATCH-05 ✓ |
 | 5.2 CLI Hardening | 0/TBD | Not started | Depends on 5.0 |
 | 5.3 Contract Evolution | 0/TBD | Not started | Depends on 5.1 |
 | 5.4 Server Hardening | 0/TBD | Not started | Depends on 5.3 |
@@ -59,7 +59,7 @@ Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5
 
 **Recent Trend:**
 
-- Last 5 plans: [05.0-01 ✅ 2026-05-19, 04.0-01 ✅ 2026-04-27, 04.1-01 ✅ 2026-04-27, 04.2-01 ✅ 2026-04-28]
+- Last 5 plans: [05.1-01 ✅ 2026-05-02, 05.0-01 ✅ 2026-05-19, 04.0-01 ✅ 2026-04-27, 04.1-01 ✅ 2026-04-27, 04.2-01 ✅ 2026-04-28]
 - Trend: design-heavy phase 跑通 — cross-AI review (4 reviewers + 7 fixes) 显著提升 audit 框架严谨性,catch 到 B1 pre-committed verdict 隐患 (T4 hardcoded "两腿都推进" 被 Path 1 fix 改成 verdict-format regex + runtime substitution)
 
 *Updated after each plan completion*
@@ -130,10 +130,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-02T07:45:00.000Z (resumed)
-Stopped at: Phase 5.1 plan 05.1-01 ready to execute — proceeding to /gsd-execute-phase 5.1
-Resume file: .planning/phases/05.1-runtime-tier-adr/05.1-01-PLAN.md
-Local commits ahead of origin: 7 (Phase 5.0 + 5.1 plan artifacts unpushed)
+Last session: 2026-05-02T08:14:00.000Z
+Stopped at: Phase 5.1 COMPLETE — verified 4/4, awaiting next-phase decision (5.2 CLI Hardening recommended)
+Resume file: .planning/phases/05.1-runtime-tier-adr/05.1-VERIFICATION.md
+Local commits ahead of origin: 14 (Phase 5.0 + 5.1 unpushed; user controls push timing)
 Decisions snapshot: see PROJECT.md Key Decisions table + ADR-V2-024 Accepted (commit `f497eef`) + ROADMAP.md §Granularity 备注
 
 **Resume 路径 (next session — milestone v3.1 ready to plan):**

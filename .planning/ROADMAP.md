@@ -28,7 +28,7 @@
 **Milestone Goal:** 在 ADR-V2-024 双轴模型下推进 engine 接入面 (grid-cli + grid-server 优先发力组合) 的硬化, 同时把 cross-milestone watchlist P1 项分散到相关 phase 顺手解决, 并定义 data/integration 横切层接入面 ADR-only 规约。
 
 - [ ] **Phase 5.0: Hook Envelope Baseline** — D120 (HookContext schema 补全) + D134 (shipped skill hooks key-path 改正), engine 侧 hook envelope baseline 健康度补丁解锁 5.3/5.4
-- [ ] **Phase 5.1: Runtime Tier ADR + Contract Test Parametrization** — ADR-V2-025 候选 (主力/样板/参考/冻结四档执行强度) + test_chunk_type_contract.py 7-runtime 参数化
+- [x] **Phase 5.1: Runtime Tier ADR + Contract Test Parametrization** — ADR-V2-025 Accepted (主力/样板/参考/冻结四档执行强度 × 7 runtime) + test_chunk_type_contract.py 7-runtime 参数化 (✅ 2026-05-02)
 - [ ] **Phase 5.2: CLI Hardening** — `grid` 命令树 / streaming output / error+exit code / TUI 拆分 / session lifecycle / `grid doctor` 6 项 grid-cli 硬化
 - [ ] **Phase 5.3: Contract Evolution** — ChunkType + Hook event 扩展 (升级 contract-v1.2.0 主力档强制), 顺带 D109 + D136 收尾
 - [ ] **Phase 5.4: Server Hardening** — WebSocket / L1 gRPC 集成 / session+L2 持久化 / auth+audit / config hot-reload 5 项 grid-server 硬化, 顺带 D142+D143 + ADR-V2-019 → Accepted
@@ -61,6 +61,7 @@
   3. `tests/contract/cases/test_chunk_type_contract.py` 改为 pytest parametrize 跑 7 runtime; CI workflow `.github/workflows/phase3-contract.yml` (或 phase5 后续) 7-runtime matrix run 全部按 ADR-V2-025 tier 设定 (主力档 must PASS / 样板档 PASS-or-xfail / 参考档 v1.1 baseline / 冻结档 skip) 行为正确
   4. NEW-D2 在 DEFERRED_LEDGER 标 ✅ CLOSED 并附 commit hash; `pytest tests/contract/cases/test_chunk_type_contract.py -v` 输出 7 runtime case 数 ≥ 21 (3 cases × 7 runtime)
 **Plans**: 1 plan
+- [x] 05.1-01-PLAN.md — Runtime Tier ADR + Contract Test Parametrization
 **UI hint**: no
 
 ### Phase 5.2: CLI Hardening
