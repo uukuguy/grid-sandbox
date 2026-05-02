@@ -3,7 +3,7 @@
 > **Single Source of Truth** — 本文件是所有 Deferred 项的唯一权威登记处。
 > 新增 / 关闭 / 迁移 D 编号都必须同步更新本文件，并在 commit message 引用 `Dxx`。
 
-**最后更新**: 2026-04-20 (Phase 4a T6 — pydantic-ai-runtime 测试加厚; D148 ✅ CLOSED)
+**最后更新**: 2026-05-02 (Phase 5.1 T2 — test_chunk_type_contract.py 7-runtime 参数化; NEW-D2 ✅ CLOSED + ADR-V2-025 Accepted)
 **维护规则**: 每次 end-phase 或 Deferred 状态变更时更新 [状态变更日志](#状态变更日志) 并同步 [全局活跃清单](#全局活跃清单-eaasp-v20)。
 
 ---
@@ -374,6 +374,7 @@
 | 2026-04-20 | D149 | 🟡 P1-active → ✅ CLOSED | Phase 4a T5 — Option B grep guard：proto `enum ChunkType` 块上加 `// @ccb-types-ts-sync` 标记 + `scripts/check-ccb-types-ts-sync.sh`（~90 LOC bash，awk 解析 proto 块 + grep `^ *<NAME> *=` 匹配 TS 块）+ `.github/workflows/phase4a-ccb-types-sync.yml`（独立 bash-only gate，triggers 锁到 proto/common.proto + types.ts + 脚本 + workflow）+ Makefile target `check-ccb-types-ts-sync`. 本地 PASS `OK: 8 ChunkType variants in sync`；drift test（删 `WORKFLOW_CONTINUATION = 7`）exit=1 + 明列缺失 `CHUNK_TYPE_WORKFLOW_CONTINUATION` + 修复指引。零 toolchain add，契合 ccb `@grpc/proto-loader` 动态消息架构。 |
 | 2026-04-20 | D148 | 🟡 P1-active → ✅ CLOSED | Phase 4a T6 — `lang/pydantic-ai-runtime-python/tests/test_provider.py`（10 tests, 178 LOC）+ `tests/test_session.py`（8 tests, 218 LOC）。provider 覆盖：构造 happy path / `/v1` 双重后缀防护 / 带路径前缀 gateway / `make_provider()` env 读取 + defaults / `chat()` OAI-shape 契约（`patch.object(Agent, 'run', ...)` monkeypatch）/ last-user-message 提取 / 异常传播 / `aclose()` 幂等。session 覆盖：纯文本 CHUNK+STOP / 单轮工具调用序列 / 多轮工具调用 / `max_turns` 超限→ERROR / provider 异常→ERROR / Stop hook allow / deny（真实 bash subprocess）/ `EventType` 字符串契约锁定（ADR-V2-021 并行）。22/22 PASS（18 新 + 4 scaffold 保留）in 0.78s. 零新依赖，零 live-LLM。 |
 | 2026-04-20 | D152 | 🧹 tech-debt → ✅ CLOSED | Phase 4a T7 — 决策：Option (a) post-process `.pyi` script。上游 `protocolbuffers/protobuf#25319` "Fix message constructor enum typing"（fixes #23670）OPEN 自 2026-01-14, REVIEW_REQUIRED, 未 merge — 等不得。`scripts/gen_runtime_proto.py` 加 `_loosen_enum_stubs(out_dir)` 后处理：正则 `_Union\[<EnumCls>, str\]` → `_Union[<EnumCls>, str, int]`（只命中 enum 字段构造签名；不命中 `_Union[X, _Mapping]` nested message；带负向 lookahead 保证幂等）。`make claude-runtime-proto nanobot-runtime-proto pydantic-ai-runtime-proto l4-proto-gen` 分别 loosen 7/7/7/3 处 stub。12 处 `# type: ignore[arg-type]` 全删（nanobot 6 处 + pydantic-ai 6 处）。验证：nanobot 36/36 PASS + pydantic-ai 22/22 PASS + claude-code-runtime 104/105 PASS（唯一 fail 是 `test_default_config` 预存 drift，commit 6784994 `permission_mode acceptEdits→bypassPermissions`，与本次无关）+ `make v2-phase3-e2e` 112/112 PASS + chunk_type contract 2/2 PASS. |
+| 2026-05-02 | NEW-D2 | 🟠 P1 → ✅ CLOSED | Phase 5.1 T2 @ `3ba59a1` — `tests/contract/cases/test_chunk_type_contract.py` 加 `@pytest.mark.parametrize("runtime_name", ADR_V2_025_ACTIVE_RUNTIMES)` (7 active runtimes)。pytest `--collect-only` 现展示 9 items（7 parametrized 主 test + 2 unparametrized guard test, 21 cases by ROADMAP SC interpretation = 3 functions × 7 runtimes upper bound）。配套 ADR-V2-025 (Phase 5.1 T1 @ `7293868`, Accepted) 给 7 runtime 划分 主力档/样板档/参考档/冻结档；CI workflow `.github/workflows/phase3-contract.yml` (Phase 5.1 T3 @ `e6c993b`) include 表新增 tier/xfail/continue-on-error 字段，把 ADR-V2-025 §CI 规则 落地为 PR gate（primary 阻塞 / sample-reference continue / hermes 跳过）。|
 | 2026-04-14 | — | **ledger 创建** | 收敛 D1–D89 到 single source of truth |
 | 2026-04-12 | D1, D2 | active → ✅ closed | ADR-V2-004 S4.T2 4b-lite |
 | 2026-04-12 | D47, D49, D52 | active → ✅ closed | S4.T2 前置修复 |
@@ -390,6 +391,7 @@
 | 状态 | 数量 | D 编号 | 含义 |
 |------|------|--------|------|
 | ✅ **closed** | 38 | D1, D2, D4, D7, D47, D49, D51, D52, D53, D54, D60, D78, D83, D84, D85, D86, D87, D89, D94, D98, D108, D117, D120, D124, D125, D130, D140, D145, D146, D147, D148, D149, D150, D151, D153, D154, D155 + S3.T5 legacy D50→D117 renamed | Phase 3 S2 新增：D78 @ 4633c0b, D94 @ 4633c0b, D98 @ e77833d, D108 @ 00e64e7, D117 @ 688bf4d, D125 @ 0ce0294, D130 @ af71c99；Phase 3.6 T1 新增：D140；Phase 3.6 T2 新增：D145；Phase 3.6 T3 新增：D147 (workaround)；Phase 3.6 T4 新增：D150；Phase 3.6 T5 新增：D146；Phase 4a T1 新增：D151；Phase 4a T2 新增：D154；Phase 4a T3 新增：D155；Phase 4a T4 新增：D153；Phase 4a T5 新增：D149；Phase 4a T6 新增：D148 |
+| ✅ **closed (NEW- 命名空间)** | 1 | NEW-D2 | Phase 5.1 T2 @ `3ba59a1` — `test_chunk_type_contract.py` 7-runtime parametrize + ADR-V2-025 tier strategy。NEW- 命名空间是 Phase 4a project review 引入的独立编号空间（与 EAASP D# 不混计，本表合计行不含此条）。 |
 | 🔄 **superseded** | 3 | D27→D54, D40→D54, D50→D117 (renamed) | 被其他 D 或 ADR 取代 |
 | ⏸️ **frozen** | 2 | D66, D88 | hermes 冻结，Phase 2.5 goose 替代 |
 | 🔥 **P0-active** | 0 | — | Phase 2 S4 全部归档 |
@@ -436,6 +438,20 @@
 **合计新增：11 项 Deferred（10 ✅ CLOSED + 1 🧹 tech-debt）**
 
 所有条目在 Phase 3.5 S2.T1 / S3.T1 / S3.T2 审查中由实现者或审查者提出，均为非阻塞性遗留，不影响 ADR-V2-021 的签收。
+
+---
+
+### NEW-D2 / WATCH-05: Phase 4a project review → Phase 5.1 关闭（NEW- 命名空间）
+
+> **NEW- 命名空间**: Phase 4a project review 期间(2026-04-26) 引入的新发现项, 与 D-序号独立编号。其中 NEW-D 为 Functional/Contract gap, NEW-E 为 ADR governance, NEW-C 为 Refactor。NEW-D2 是 contract test 覆盖度差距, 在 Phase 5.1 由 ADR-V2-025 + 7-runtime 参数化共同关闭。
+
+| ID | 标题 | 引入 | 状态 | 去向 |
+|----|------|------|------|------|
+| **NEW-D2** | `tests/contract/cases/test_chunk_type_contract.py` 仅 3 tests, not 7-runtime × 21 cases as conftest claimed | Phase 4a project review | ✅ CLOSED | **Phase 5.1 T2** @ `3ba59a1` — `@pytest.mark.parametrize("runtime_name", ADR_V2_025_ACTIVE_RUNTIMES)` 加到 `test_chunk_type_contract`，pytest --collect-only 现展示 9 items（7 parametrized 主 test + 2 unparametrized guard test）。**ADR-V2-025** (Phase 5.1 T1, Accepted 2026-05-02) 给 7 runtime 划分主力档/样板档/参考档/冻结档，明确每个 parametrized case 的执行强度。CI 通过 `--runtime=<one>` 选 matching parametrize value 并 skip 6 个不匹配的 case，保留 session 级 runtime 单 launch 语义。`.github/workflows/phase3-contract.yml` (Phase 5.1 T3) include 表 + tier/xfail/continue-on-error 字段把 ADR-V2-025 §CI 规则 落地为机器可执行的 PR gate（primary block / sample-reference continue / frozen skip）。 |
+
+**合计新增：1 项 NEW-D（NEW-D2 ✅ CLOSED in Phase 5.1）**
+
+WATCH-05 (REQUIREMENTS.md Active 项) 与 NEW-D2 一一对应，关闭后由 Phase 5.1 SUMMARY.md 引用本行 + ROADMAP.md Coverage 表反向回填。
 
 ## 附录 A: Legacy-Octo D 编号（pre-EAASP, 独立命名空间）
 
