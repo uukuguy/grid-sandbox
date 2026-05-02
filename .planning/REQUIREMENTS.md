@@ -27,7 +27,7 @@
 
 ### C. CONTRACT — L1 runtime contract 中等扩展
 
-- [ ] **CONTRACT-00**: 7 runtime 分级 review + 契约执行强度策略 ADR — 新 ADR 候选 `ADR-V2-025-l1-runtime-contract-tier-strategy.md` (type: strategy), 评估 7 runtime 现状, 划分 **主力档** (强制 v1.2 全 PASS) / **样板档** (鼓励但允许 xfail) / **参考档** (可降级到 v1.1 baseline) / **冻结档** (免审, 现 hermes-runtime); ADR-V2-017 三轨产品策略基础上增加契约执行强度差异化策略。
+- [x] **CONTRACT-00**: 7 runtime 分级 review + 契约执行强度策略 ADR — 新 ADR 候选 `ADR-V2-025-l1-runtime-contract-tier-strategy.md` (type: strategy), 评估 7 runtime 现状, 划分 **主力档** (强制 v1.2 全 PASS) / **样板档** (鼓励但允许 xfail) / **参考档** (可降级到 v1.1 baseline) / **冻结档** (免审, 现 hermes-runtime); ADR-V2-017 三轨产品策略基础上增加契约执行强度差异化策略。
 - [ ] **CONTRACT-01**: ChunkType 扩展点 (1-2 新 enum 值) — 评估并落地新 ChunkType (例如 `THINKING_TRACE` / `ATTACHMENT_REF`), 走完 proto 改动 + codegen + 主力档 runtime 实现 + L4 mapper + CLI whitelist + contract test + ADR-V2-021 增量更新流程; 升级到 contract-v1.2.0 (主力档强制, 样板/参考档按 ADR-V2-025 策略)。
 - [ ] **CONTRACT-02**: Hook event 扩展 (1-2 新 event) — 例如 `SubagentStart` / `TaskCheckpoint` (对接 Phase 4.1 §F.Q3 audit ⚫ 6 项接入位 ADR 候选之一), 走完 proto 改动 + envelope schema + 主力档 runtime fire site + L3 governance trigger + cross-runtime parity test + 新 ADR (V2-026 候选)。
 
@@ -38,7 +38,7 @@
 - [ ] **WATCH-02**: D134 — Shipped skill hooks `.payload.output.X` → `.output.X` 改正 (per ADR-V2-006 §2.3 top-level), 修 7 个 example skill hook 脚本; 锁定 must-fix per 用户 Phase 5 决策 (D120 修完后顺接)。
 - [ ] **WATCH-03**: D136 — grid-runtime hook 在 probe turn 不触发 (3 contract xfails) 修正 (CONTRACT phase 顺手, 跟 ADR-V2-016 capability matrix probe turn 协同)。
 - [ ] **WATCH-04**: D142 + D143 — grid-runtime + claude-code-runtime EAASP_DEPLOYMENT_MODE 接入 + max_sessions=1 gate (~20 LOC each, SERVER phase 顺手)。
-- [ ] **WATCH-05**: NEW-D2 — test_chunk_type_contract.py 7-runtime 参数化 (现 仅 3 tests, CONTRACT phase 顺手, 与 CONTRACT-00 runtime 分级 review 同步用)。
+- [x] **WATCH-05**: NEW-D2 — test_chunk_type_contract.py 7-runtime 参数化 (现 仅 3 tests, CONTRACT phase 顺手, 与 CONTRACT-00 runtime 分级 review 同步用)。
 - [ ] **WATCH-06**: NEW-E2 — F3 ADR enforcement.trace 29 missing items 补 (advisory, 任一 phase 顺手)。
 - [ ] **WATCH-07**: NEW-E3 — ADR-V2-019 Proposed → Accepted (blocks on D142+D143; closes after WATCH-04, SERVER phase 收尾)。
 
