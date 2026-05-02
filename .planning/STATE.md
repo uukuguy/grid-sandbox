@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
-status: executing
-stopped_at: Phase 5.1 plan 05.1-01 ready to execute — proceeding to /gsd-execute-phase 5.1
-last_updated: "2026-05-02T08:14:17.220Z"
-last_activity: 2026-05-02
+status: completed
+stopped_at: Phase 5.2 context gathered
+last_updated: "2026-05-02T10:16:29.637Z"
+last_activity: 2026-05-02 -- Phase 5.1 verified 4/4 must-haves PASSED
 progress:
   total_phases: 6
   completed_phases: 2
@@ -130,9 +130,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-02T08:14:00.000Z
-Stopped at: Phase 5.1 COMPLETE — verified 4/4, awaiting next-phase decision (5.2 CLI Hardening recommended)
-Resume file: .planning/phases/05.1-runtime-tier-adr/05.1-VERIFICATION.md
+Last session: 2026-05-02T10:16:29.634Z
+Stopped at: Phase 5.2 context gathered
+Resume file: .planning/phases/05.2-cli-hardening/05.2-CONTEXT.md
 Local commits ahead of origin: 14 (Phase 5.0 + 5.1 unpushed; user controls push timing)
 Decisions snapshot: see PROJECT.md Key Decisions table + ADR-V2-024 Accepted (commit `f497eef`) + ROADMAP.md §Granularity 备注
 
