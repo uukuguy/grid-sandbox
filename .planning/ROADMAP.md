@@ -46,7 +46,8 @@
   2. `examples/skills/*/hooks/*.sh` 7 个 example skill hook 脚本中所有读 `.payload.output.*` 的位置改为读 ADR-V2-006 §2.3 top-level `.output.*`; grep `.payload.output` 在 `examples/skills/` 路径下 0 hit (lock-in regression test)
   3. D120 + D134 在 `docs/design/EAASP/DEFERRED_LEDGER.md` 标 ✅ CLOSED 并附 commit hash, ledger row-edit-on-close convention 遵守 (per Phase 4.0 CLEANUP-02 precedent)
   4. Phase 5.0 后跑 `make verify-runtime` (或 7 runtime contract test 子集 covering HookContext envelope 字段) 不引入新 xfail; D136 (probe turn 不 fire hook 的 3 contract xfails) 保持原状, 留给 Phase 5.3 处理
-**Plans**: 1 plan (TBD by `/gsd-plan-phase 5.0`)
+**Plans**: 1 plan
+- [x] 05.0-01-PLAN.md — Hook envelope baseline: fix GA1 dead code, confirm D120 parity, close D134
 **UI hint**: no
 
 ### Phase 5.1: Runtime Tier ADR + Contract Test Parametrization
@@ -59,7 +60,7 @@
   2. ADR-V2-025 §References 引用 ADR-V2-017 (产品三轨) + ADR-V2-021 (chunk_type contract) + ADR-V2-024 (双轴 framework) + Phase 4a project review 中 NEW-D2 议题
   3. `tests/contract/cases/test_chunk_type_contract.py` 改为 pytest parametrize 跑 7 runtime; CI workflow `.github/workflows/phase3-contract.yml` (或 phase5 后续) 7-runtime matrix run 全部按 ADR-V2-025 tier 设定 (主力档 must PASS / 样板档 PASS-or-xfail / 参考档 v1.1 baseline / 冻结档 skip) 行为正确
   4. NEW-D2 在 DEFERRED_LEDGER 标 ✅ CLOSED 并附 commit hash; `pytest tests/contract/cases/test_chunk_type_contract.py -v` 输出 7 runtime case 数 ≥ 21 (3 cases × 7 runtime)
-**Plans**: 1 plan (TBD by `/gsd-plan-phase 5.1`)
+**Plans**: 1 plan
 **UI hint**: no
 
 ### Phase 5.2: CLI Hardening

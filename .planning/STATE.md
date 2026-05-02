@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: Phase 5 — Engine Hardening (grid-cli + grid-server)
 status: executing
-stopped_at: Phase 5.1 plan created — ready to execute
-last_updated: "2026-05-19T15:00:00.000Z"
-last_activity: 2026-05-19 -- Phase 5.1 plan 05.1-01 (1/1) ready to execute
+stopped_at: Phase 5.1 plan 05.1-01 ready to execute — proceeding to /gsd-execute-phase 5.1
+last_updated: "2026-05-02T07:50:20.163Z"
+last_activity: 2026-05-02 -- Phase 05.1 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 2
   completed_plans: 1
-  percent: 17
+  percent: 50
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** Grid 作为 substitutable L1 runtime,通过 16-method gRPC contract 被 EAASP L2-L4 调用,且任何符合 contract-v1.1 的对比 runtime 都能替换它。
-**Current focus:** Milestone v3.1 — Phase 5 Engine Hardening (grid-cli + grid-server 优先发力组合; watchlist-spread; 6 phases)
+**Current focus:** Phase 05.1 — runtime-tier-adr
 
 ## Current Position
 
-Phase: 5.0 of 5.5 (Hook Envelope Baseline) — COMPLETE ✅
-Plan: 05.0-01 ✅ (1/1 complete)
-Status: Ready to execute
-Last activity: 2026-05-01 -- Phase 5.1 planning complete
+Phase: 05.1 (runtime-tier-adr) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 05.1
+Last activity: 2026-05-02 -- Phase 05.1 execution started
 
 Progress: [▓░░░░░░░░░] 17% (1/6 milestone phases — Phase 5.1 ready to plan)
 
@@ -130,10 +130,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-04-29T01:00:00.000Z
-Stopped at: Milestone v3.1 ROADMAP.md created — Phase 5.0 ready to plan
-Resume file: .planning/ROADMAP.md §Phase Details §Phase 5.0 (Hook Envelope Baseline)
-Local commits ahead of origin: 0 (origin/main synced as of post-Phase-4.2 push)
+Last session: 2026-05-02T07:45:00.000Z (resumed)
+Stopped at: Phase 5.1 plan 05.1-01 ready to execute — proceeding to /gsd-execute-phase 5.1
+Resume file: .planning/phases/05.1-runtime-tier-adr/05.1-01-PLAN.md
+Local commits ahead of origin: 7 (Phase 5.0 + 5.1 plan artifacts unpushed)
 Decisions snapshot: see PROJECT.md Key Decisions table + ADR-V2-024 Accepted (commit `f497eef`) + ROADMAP.md §Granularity 备注
 
 **Resume 路径 (next session — milestone v3.1 ready to plan):**
