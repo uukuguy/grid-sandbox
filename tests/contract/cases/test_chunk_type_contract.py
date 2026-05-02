@@ -11,6 +11,21 @@ existing ``runtime_launcher`` / ``runtime_grpc_stub`` fixtures in
 missing; no new fixtures needed.
 
 Phase 3.5 S3.T1.
+
+Phase 5.1 S1.T2 — ADR-V2-025 tier parametrization (NEW-D2):
+- 主力档 (grid, claude-code): MUST PASS.
+- 样板档 (nanobot, goose): PASS-or-xfail.
+- 参考档 (pydantic-ai, claw-code, ccb): v1.1 baseline 不退步.
+- 冻结档 hermes: skip per ADR-V2-017.
+
+The live-runtime test ``test_chunk_type_contract`` is parametrized
+with the 7 active runtime names so ``pytest --collect-only`` surfaces
+the full per-runtime contract surface (≥7 cases) regardless of which
+``--runtime=<name>`` the CI matrix selects. Cases whose parametrize
+value does not match ``--runtime`` skip cleanly to avoid double-launch
+of the runtime subprocess. The two guard tests (whitelist + UNSPECIFIED)
+remain unparametrized — they are proto schema invariants independent of
+runtime.
 """
 
 from __future__ import annotations
@@ -28,6 +43,19 @@ if TYPE_CHECKING:
     from claude_code_runtime._proto.eaasp.runtime.v2 import runtime_pb2_grpc
 
 pytestmark = pytest.mark.contract_v1
+
+
+# ADR-V2-025 §Decision 主表 — 7 active runtimes (hermes frozen, skipped at CI level).
+# Order matches the ADR table to make collection output match the strategy doc.
+ADR_V2_025_ACTIVE_RUNTIMES = [
+    "grid",
+    "claude-code",
+    "nanobot",
+    "pydantic-ai",
+    "goose",
+    "claw-code",
+    "ccb",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -105,9 +133,9 @@ def test_unspecified_is_zero() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("runtime_name", ADR_V2_025_ACTIVE_RUNTIMES)
 def test_chunk_type_contract(
-    runtime_launcher,  # noqa: ARG001 — required to keep subprocess alive
-    runtime_grpc_stub: "runtime_pb2_grpc.RuntimeServiceStub",
+    request: pytest.FixtureRequest,
     runtime_name: str,
 ) -> None:
     """ADR-V2-021: chunks carry ChunkType enum, wire strings in whitelist.
@@ -121,7 +149,37 @@ def test_chunk_type_contract(
     THINKING / TOOL_START / TOOL_RESULT are all optional — a pure text
     reply to "hello" may legitimately emit only TEXT_DELTA + DONE, and
     that is conformant.
+
+    Phase 5.1 S1.T2 — ADR-V2-025 NEW-D2: parametrized over the 7 active
+    runtimes. The CI matrix passes ``--runtime=<one>`` per job; the
+    parametrize IDs that don't match the CLI option skip cleanly so the
+    session-scoped runtime subprocess launches at most once per pytest
+    invocation. When ``--runtime`` is unset (e.g. local ``--collect-only``
+    or smoke runs) all parametrize IDs skip via the existing
+    ``runtime_name`` fixture's pytest.skip path.
     """
+    cli_runtime = request.config.getoption("--runtime")
+    if cli_runtime is None:
+        pytest.skip(
+            "--runtime not supplied; ADR-V2-025 tier matrix requires "
+            "--runtime=<name> from the CI job to pick the active runtime."
+        )
+    if cli_runtime != runtime_name:
+        pytest.skip(
+            f"parametrized runtime={runtime_name!r} does not match CI "
+            f"--runtime={cli_runtime!r}; this case runs in a different "
+            f"matrix job per ADR-V2-025."
+        )
+
+    # Resolve the heavy session fixtures lazily AFTER the skip guard so
+    # the subprocess + gRPC stub are spun up at most once per session.
+    runtime_grpc_stub: "runtime_pb2_grpc.RuntimeServiceStub" = (
+        request.getfixturevalue("runtime_grpc_stub")
+    )
+    # Keep launcher reference live for the duration of the test (the
+    # session fixture would teardown otherwise).
+    request.getfixturevalue("runtime_launcher")
+
     payload = common_pb2.SessionPayload(
         session_id="chunk-type-contract-1",
         user_id="u",
