@@ -8,6 +8,16 @@ name: Phase 3 Contract Matrix
 # Per-runtime venv/build setup mirrors phase2_5-contract.yml and extends
 # to pydantic-ai / ccb / claw-code (Phase 3 additions).
 #
+# Phase 5.1 S1.T3 — ADR-V2-025 tier-based gating:
+#   - Primary tier (grid + claude-code): xfail=false, no continue-on-error
+#     -> failures BLOCK the PR.
+#   - Sample tier (nanobot + goose): xfail=true with continue-on-error
+#     -> reviewer investigates regressions but does not block.
+#   - Reference tier (pydantic-ai + claw-code + ccb): xfail=true with
+#     continue-on-error -> only v1.1 baseline regressions matter.
+#   - Frozen tier (hermes per ADR-V2-017): explicit early-return step,
+#     no build / no test invocation.
+#
 # Security note: all run: steps consume only trusted inputs (matrix.runtime
 # is a fixed static list; secrets are injected via env:). No github.event.*
 # context is interpolated into shell commands.
@@ -25,6 +35,8 @@ on:
       - 'tests/contract/**'
       - 'proto/eaasp/runtime/v2/**'
       - 'crates/grid-engine/src/hooks/**'
+      - 'docs/design/EAASP/adrs/ADR-V2-025*.md'
+      - 'Makefile'
   push:
     branches:
       - main
@@ -32,21 +44,58 @@ on:
       - 'tests/contract/**'
       - 'proto/eaasp/runtime/v2/**'
       - '.github/workflows/phase3-contract.yml'
+      - 'docs/design/EAASP/adrs/ADR-V2-025*.md'
+      - 'Makefile'
   workflow_dispatch:
 
 jobs:
   contract:
-    name: Contract v1.1 — ${{ matrix.runtime }}
+    name: "Contract v1.1 [${{ matrix.tier }}] — ${{ matrix.runtime }}"
     runs-on: ubuntu-latest
+    # Primary tier blocks the PR; sample/reference allow regressions to
+    # surface without blocking (ADR-V2-025 §Decision §CI 执行规则).
+    continue-on-error: ${{ matrix.xfail == 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        runtime: [grid, claude-code, goose, nanobot, pydantic-ai, ccb, claw-code]
+        include:
+          - runtime: grid
+            tier: primary
+            xfail: 'false'
+          - runtime: claude-code
+            tier: primary
+            xfail: 'false'
+          - runtime: nanobot
+            tier: sample
+            xfail: 'true'
+          - runtime: goose
+            tier: sample
+            xfail: 'true'
+          - runtime: pydantic-ai
+            tier: reference
+            xfail: 'true'
+          - runtime: claw-code
+            tier: reference
+            xfail: 'true'
+          - runtime: ccb
+            tier: reference
+            xfail: 'true'
+          - runtime: hermes
+            tier: frozen
+            xfail: 'skip'
 
     steps:
+      - name: Skip hermes (frozen per ADR-V2-017)
+        if: matrix.runtime == 'hermes'
+        run: |
+          echo "::notice::hermes-runtime is frozen per ADR-V2-017 / ADR-V2-025 frozen tier — no contract gate applies."
+          echo "Frozen-tier runtimes do not run contract suites; this job is a no-op marker."
+
       - uses: actions/checkout@v4
+        if: matrix.runtime != 'hermes'
 
       - name: Set up Python
+        if: matrix.runtime != 'hermes'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -70,6 +119,7 @@ jobs:
         uses: oven-sh/setup-bun@v1
 
       - name: Install contract test dependencies (Python)
+        if: matrix.runtime != 'hermes'
         run: make v2-phase2_5-ci-setup
 
       - name: Build runtime binary (grid)
@@ -115,7 +165,10 @@ jobs:
 
       # ADR-V2-021 trace: tests/contract/cases/test_chunk_type_contract.py
       # runs as part of the Makefile target below (contract_v1/ + cases/*.py).
+      # ADR-V2-025: hermes (frozen tier) is skipped via the early-return
+      # step at the top; the Makefile target below is not invoked for it.
       - name: Run contract v1.1 + chunk_type contract
+        if: matrix.runtime != 'hermes'
         run: make v2-phase3-contract-${{ matrix.runtime }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
